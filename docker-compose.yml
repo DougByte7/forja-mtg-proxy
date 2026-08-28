@@ -1,0 +1,13 @@
+services:
+  forja-backend:
+    build: .
+    container_name: forja-backend
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - forja-data:/app/data
+    ports:
+      - "8000:8000"
+
+volumes:
+  forja-data:

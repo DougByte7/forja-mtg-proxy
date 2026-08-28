@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Segredos e configuração local
+.env
+.env.local
+!.env.example
+docker-compose.snippet.yml
+
+# Dados da aplicação (SQLite, PDFs gerados, uploads)
+data/
+*.db
+*.sqlite3
+
+# Editores / SO
+.vscode/
+.idea/
+*.swp
+.DS_Store

@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forja de Proxies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F0D17;
+    --surface:#1B1730;
+    --surface-2:#241F3D;
+    --border:#382F5C;
+    --text:#EDE6D6;
+    --text-muted:#A79BC7;
+    --gold:#C9A227;
+    --gold-light:#E4C767;
+    --purple:#8B6BFF;
+    --green:#4C9A6B;
+    --red:#D9634A;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 15% 0%, rgba(139,107,255,0.12), transparent 45%),
+      radial-gradient(circle at 85% 100%, rgba(201,162,39,0.10), transparent 45%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:560px;margin:0 auto;}
+
+  header{display:flex;align-items:center;margin-bottom:28px;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand .rune{
+    width:38px;height:38px;border:1.5px solid var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Cinzel',serif;color:var(--gold-light);font-size:18px;
+    transform:rotate(45deg);flex-shrink:0;
+  }
+  .brand .rune span{transform:rotate(-45deg);}
+  .brand h1{font-family:'Cinzel',serif;font-weight:700;font-size:20px;letter-spacing:0.03em;margin:0;color:var(--text);}
+  .brand p{margin:2px 0 0;font-size:12px;color:var(--text-muted);}
+
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:24px;box-shadow:0 20px 40px -20px rgba(0,0,0,0.6);
+  }
+  .step{margin-bottom:22px;}
+  .step:last-of-type{margin-bottom:0;}
+  .step-label{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;
+    color:var(--gold-light);text-transform:uppercase;margin-bottom:8px;display:block;
+  }
+  .step h3{font-size:15px;font-weight:600;margin:0 0 10px;}
+
+  input:focus-visible, button:focus-visible{
+    outline:2px solid var(--gold);outline-offset:1px;
+  }
+
+  .file-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .file-row label.filebtn{
+    font-size:13px;font-weight:600;color:var(--purple);border:1.5px dashed var(--purple);
+    padding:14px 18px;border-radius:9px;cursor:pointer;transition:border-color .15s,background .15s;
+    background:rgba(139,107,255,0.06);flex:1;text-align:center;min-width:200px;
+  }
+  .file-row label.filebtn:hover{border-color:var(--gold);color:var(--gold-light);background:rgba(201,162,39,0.06);}
+  .file-row input[type=file]{display:none;}
+  .file-name{font-size:12px;color:var(--text-muted);width:100%;}
+
+  .lam-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .lam-opt{
+    border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;
+    background:var(--surface-2);transition:border-color .15s,background .15s;
+  }
+  .lam-opt.active{border-color:var(--gold);background:rgba(201,162,39,0.08);}
+  .lam-opt input{display:none;}
+  .lam-opt .t{font-weight:600;font-size:13px;}
+  .lam-opt .p{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gold-light);margin-top:4px;}
+
+  .hint{
+    margin-top:18px;padding:12px 14px;border:1px dashed var(--border);border-radius:9px;
+    background:var(--surface-2);color:var(--text-muted);font-size:12px;text-align:center;
+  }
+  .hint.hide{display:none;}
+
+  .error{
+    background:rgba(217,99,74,0.12);border:1px solid var(--red);color:#F2AFA1;
+    border-radius:8px;padding:10px 12px;font-size:13px;margin-top:14px;display:none;
+  }
+  .error.show{display:block;}
+
+  .perf{
+    display:flex;align-items:center;gap:8px;margin:26px 0 20px;color:var(--text-muted);
+  }
+  .perf::before,.perf::after{content:"";flex:1;border-top:1px dashed var(--border);}
+  .perf span{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;}
+
+  .result{display:none;}
+  .result.show{display:block;}
+  .receipt-row{
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:'IBM Plex Mono',monospace;font-size:13px;padding:6px 0;color:var(--text-muted);
+  }
+  .receipt-row b{color:var(--text);font-weight:600;}
+  .grid-preview{display:grid;grid-template-columns:repeat(3,16px);gap:3px;}
+  .slot{width:16px;height:16px;border-radius:2px;}
+  .slot.filled{background:var(--gold);}
+  .slot.blank{border:1px dashed var(--text-muted);background:transparent;}
+
+  .total-row{
+    display:flex;justify-content:space-between;align-items:baseline;
+    margin-top:12px;padding-top:12px;border-top:1px solid var(--border);
+  }
+  .total-row .label{font-family:'Cinzel',serif;font-size:13px;color:var(--text-muted);letter-spacing:.05em;}
+  .total-row .value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;color:var(--gold-light);}
+
+  .actions{display:flex;flex-direction:column;gap:10px;margin-top:20px;}
+  .pix-btn{
+    background:var(--gold);color:#1A1408;border:none;border-radius:9px;padding:12px;
+    font-weight:700;font-size:14px;cursor:pointer;
+  }
+  .pix-btn:hover{filter:brightness(1.08);}
+  .pix-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .secondary-row{display:flex;gap:10px;}
+  .sec-btn{
+    flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted);
+    border-radius:9px;padding:10px;font-size:12px;cursor:pointer;transition:border-color .15s,color .15s;
+  }
+  .sec-btn:hover{border-color:var(--gold);color:var(--gold-light);}
+  .copied{color:var(--green) !important;border-color:var(--green) !important;}
+
+  .note{font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:10px;}
+
+  /* --- Revisão da folha (prévia + editor, tudo no navegador) --- */
+  .review-btn{
+    width:100%;background:transparent;border:1.5px solid var(--purple);color:var(--purple);
+    border-radius:9px;padding:12px;font-weight:600;font-size:13px;cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .review-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);background:rgba(201,162,39,0.06);}
+  .review-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .review-badge{
+    display:none;margin-top:10px;font-size:11px;color:var(--green);
+    border:1px dashed var(--green);border-radius:8px;padding:8px 10px;line-height:1.5;
+  }
+  .review-badge.show{display:block;}
+
+  .modal{
+    position:fixed;inset:0;z-index:50;background:rgba(8,6,16,.84);
+    display:none;align-items:center;justify-content:center;padding:12px;
+  }
+  .modal.show{display:flex;}
+  .modal-box{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    width:min(1080px,100%);height:min(94vh,100%);display:flex;flex-direction:column;overflow:hidden;
+  }
+  .modal-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);}
+  .modal-head h2{font-family:'Cinzel',serif;font-size:16px;margin:0;flex:1;min-width:0;letter-spacing:.03em;}
+  .modal-head .sub{display:block;font-family:'Inter',sans-serif;font-size:11px;font-weight:400;color:var(--text-muted);margin-top:3px;letter-spacing:0;}
+  .icon-btn{
+    background:transparent;border:1px solid var(--border);color:var(--text-muted);
+    border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer;white-space:nowrap;
+    transition:border-color .15s,color .15s;
+  }
+  .icon-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
+  .icon-btn:disabled{opacity:.32;cursor:not-allowed;}
+
+  .modal-body{flex:1;display:grid;grid-template-columns:322px 1fr;min-height:0;}
+  .deck-pane{border-right:1px solid var(--border);overflow-y:auto;padding:14px;}
+  .sheet-pane{overflow-y:auto;padding:18px 14px;background:var(--bg);}
+  .pane-title{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--gold-light);margin:0 0 10px;
+  }
+
+  .ci{
+    display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--border);
+    border-radius:10px;background:var(--surface-2);margin-bottom:8px;
+  }
+  .ci.hl{border-color:var(--gold);}
+  .ci-block{margin-bottom:8px;}
+  .ci-block .ci{margin-bottom:4px;}
+  .ci-sub{
+    margin-left:20px;border-style:dashed;border-color:rgba(139,107,255,.5);
+    background:rgba(139,107,255,0.05);
+  }
+  .ci-sub .ci-thumb{width:26px;height:36px;}
+  .ci-sub .ci-name{font-weight:500;color:var(--text-muted);}
+  .ci-sub.vazia{opacity:.55;}
+  .ci-info{flex:1;min-width:0;}
+  .ci-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ci-meta{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:3px;}
+  .qty{display:flex;align-items:center;gap:4px;flex-shrink:0;}
+  .qty button{
+    width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--surface);
+    color:var(--text);font-size:15px;line-height:1;cursor:pointer;padding:0;
+  }
+  .qty button:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
+  .qty button:disabled{opacity:.3;cursor:not-allowed;}
+  .qty .n{font-family:'IBM Plex Mono',monospace;font-size:13px;min-width:20px;text-align:center;}
+  .ci-del{
+    background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;
+    padding:4px 2px;line-height:1;flex-shrink:0;
+  }
+  .ci-del:hover:not(:disabled){color:var(--red);}
+  .ci-del:disabled{opacity:.3;cursor:not-allowed;}
+
+  .art{
+    position:relative;display:flex;align-items:center;justify-content:center;
+    background:#0B0913;overflow:hidden;
+  }
+  .art img{width:100%;height:100%;object-fit:cover;display:block;}
+  .art .fb{
+    font-family:'IBM Plex Mono',monospace;font-size:8px;line-height:1.25;color:#8F86AD;
+    padding:3px;text-align:center;word-break:break-word;
+  }
+  .ci-thumb{width:34px;height:47px;border-radius:3px;}
+
+  .pg-wrap{max-width:520px;margin:0 auto 24px;}
+  .pg-label{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--text-muted);margin-bottom:6px;
+  }
+  .pg{
+    position:relative;aspect-ratio:210/297;background:#FDFCF8;border-radius:3px;overflow:hidden;
+    box-shadow:0 12px 32px -14px rgba(0,0,0,.9);
+  }
+  .pg-slot{position:absolute;overflow:hidden;}
+  .pg-slot .art{position:absolute;inset:0;}
+  .pg-slot.empty{
+    border:1px dashed #C4BEAF;display:flex;align-items:center;justify-content:center;
+  }
+  .pg-slot.empty span{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#A69F8D;}
+  .pg-badge{
+    position:absolute;left:0;top:0;z-index:2;background:rgba(139,107,255,.94);color:#FFF;
+    font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.08em;padding:2px 5px;
+  }
+  .pg-ctrl{
+    position:absolute;left:0;right:0;bottom:0;z-index:2;display:flex;gap:5px;justify-content:center;
+    padding:5px;background:linear-gradient(transparent,rgba(8,6,16,.88));opacity:0;transition:opacity .12s;
+  }
+  .pg-slot:hover .pg-ctrl,.pg-slot:focus-within .pg-ctrl{opacity:1;}
+  @media (hover:none){.pg-ctrl{opacity:1;}}
+  .pg-ctrl button{
+    width:24px;height:24px;border-radius:5px;border:1px solid rgba(255,255,255,.4);
+    background:rgba(15,13,23,.88);color:#FFF;font-size:14px;line-height:1;cursor:pointer;padding:0;
+  }
+  .pg-ctrl button:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
+  .pg-ctrl button:disabled{opacity:.35;cursor:not-allowed;}
+  .pg-guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;}
+
+  .modal-foot{
+    border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  }
+  .foot-sum{
+    flex:1;min-width:210px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+    color:var(--text-muted);line-height:1.7;
+  }
+  .foot-sum b{color:var(--text);font-weight:600;}
+  .foot-sum .price{color:var(--gold-light);}
+  .foot-msg{
+    width:100%;font-size:11px;color:var(--red);margin:0;min-height:0;
+  }
+  .confirm-btn{
+    background:var(--gold);color:#1A1408;border:none;border-radius:9px;padding:11px 18px;
+    font-weight:700;font-size:13px;cursor:pointer;
+  }
+  .confirm-btn:hover{filter:brightness(1.08);}
+
+  @media (max-width:820px){
+    .modal{padding:0;}
+    .modal-box{height:100vh;border-radius:0;border:none;}
+    .modal-body{grid-template-columns:1fr;grid-template-rows:minmax(110px,34%) 1fr;}
+    .deck-pane{border-right:none;border-bottom:1px solid var(--border);}
+  }
+
+  @media (prefers-reduced-motion: reduce){*{transition:none !important;}}
+  @media (max-width:420px){.lam-options{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="rune"><span>⛨</span></div>
+      <div>
+        <h1>Forja de Proxies</h1>
+        <p>XML do MPC Fill → orçamento, Pix e impressão</p>
+      </div>
+    </div>
+  </header>
+
+  <div class="card">
+
+    <div class="step">
+      <span class="step-label">Passo 1</span>
+      <h3>Selecione o XML do MPC Fill</h3>
+      <div class="file-row">
+        <label class="filebtn" for="fileInput">Selecionar arquivo .xml</label>
+        <input type="file" id="fileInput" accept=".xml,text/xml">
+        <span class="file-name" id="fileName">Nenhum arquivo selecionado</span>
+      </div>
+    </div>
+
+    <div class="step">
+      <span class="step-label">Passo 2</span>
+      <h3>Seu nome</h3>
+      <input type="text" id="customerName" maxlength="30" placeholder="Como você quer se identificar no pedido" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:11px 12px;font-family:'Inter',sans-serif;font-size:14px;">
+    </div>
+
+    <div class="step">
+      <span class="step-label">Passo 3</span>
+      <h3>Tipo de laminação</h3>
+      <div class="lam-options">
+        <label class="lam-opt" id="optSingle">
+          <input type="radio" name="lam" value="single">
+          <div class="t">Um lado</div>
+          <div class="p">R$ 2,50 / pág</div>
+        </label>
+        <label class="lam-opt active" id="optDouble">
+          <input type="radio" name="lam" value="double" checked>
+          <div class="t">Dois lados</div>
+          <div class="p">R$ 3,33 / pág</div>
+        </label>
+      </div>
+    </div>
+
+    <div class="error" id="errorBox"></div>
+    <div class="hint" id="hintBox">Selecione o XML e escreva seu nome</div>
+
+    <div class="result" id="resultBox">
+      <div class="perf"><span>RESUMO DO PEDIDO</span></div>
+
+      <div class="receipt-row"><span>Pedido de</span><b id="rName">–</b></div>
+      <div class="receipt-row"><span>Cartas solicitadas</span><b id="rQty">–</b></div>
+      <div class="receipt-row" id="backsRow" style="display:none;"><span>Versos especiais (dupla-face)</span><b id="rBacks">–</b></div>
+      <div class="receipt-row"><span>Páginas necessárias (9/pág)</span><b id="rPages">–</b></div>
+      <div class="receipt-row">
+        <span>Cartas em branco na última pág.</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <b id="rBlank">–</b>
+          <div class="grid-preview" id="gridPreview"></div>
+        </div>
+      </div>
+      <div class="receipt-row"><span>Laminação</span><b id="rLam">–</b></div>
+
+      <div class="total-row">
+        <span class="label">TOTAL</span>
+        <span class="value" id="rTotal">R$ 0,00</span>
+      </div>
+
+      <div class="actions">
+        <button class="review-btn" id="reviewBtn">Revisar a folha antes de pagar</button>
+        <button class="pix-btn" id="pixBtn">Gerar cobrança Pix</button>
+        <div class="secondary-row">
+          <button class="sec-btn" id="downloadBtn">Baixar XML</button>
+          <button class="sec-btn" id="copyBtn">Copiar resumo</button>
+        </div>
+        <div class="review-badge" id="reviewBadge"></div>
+      </div>
+
+      <div id="pixBox" style="display:none;margin-top:16px;padding-top:16px;border-top:1px dashed var(--border);text-align:center;">
+        <img id="pixQrImg" style="width:180px;height:180px;border-radius:8px;background:#fff;padding:8px;" alt="QR code Pix">
+        <p style="font-size:12px;color:var(--text-muted);margin:10px 0 4px;">Valor desta cobrança:</p>
+        <p style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--gold-light);margin:0 0 6px;" id="pixAmount">–</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">Código do pedido: <span id="pixHash" style="font-family:'IBM Plex Mono',monospace;color:var(--text);">–</span></p>
+        <button class="sec-btn" id="copyPixBtn" style="width:100%;">Copiar Pix Copia e Cola</button>
+        <button class="pix-btn" id="notifyBtn" style="width:100%;margin-top:10px;">Pagamento realizado, enviar notificação</button>
+        <p class="note" id="notifyNote" style="display:none;"></p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Revisão da folha: prévia do PDF e editor de cópias, 100% no navegador.
+     Nada aqui fala com o backend — o que sai daqui é o XML revisado, que
+     só vai pro servidor quando o cliente gerar a cobrança. -->
+<div class="modal" id="reviewModal" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+  <div class="modal-box">
+
+    <div class="modal-head">
+      <h2 id="reviewTitle">Revisar a folha
+        <span class="sub">É exatamente assim que o PDF vai sair na impressora — 9 cartas por página A4, com as guias de corte.</span>
+      </h2>
+      <button class="icon-btn" id="undoBtn" disabled title="Desfazer a última ação (Ctrl+Z)">↶ Desfazer</button>
+      <button class="icon-btn" id="closeReviewBtn" title="Fechar sem aplicar (Esc)">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="deck-pane">
+        <p class="pane-title">Cartas do pedido</p>
+        <div id="deckList"></div>
+      </div>
+      <div class="sheet-pane" id="sheetPane">
+        <div id="previewPages"></div>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <div class="foot-sum" id="footSum"></div>
+      <button class="icon-btn" id="cancelReviewBtn">Cancelar</button>
+      <button class="confirm-btn" id="confirmReviewBtn">Confirmar revisão</button>
+      <p class="foot-msg" id="footMsg"></p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // Laminação
+  const optSingle = document.getElementById('optSingle');
+  const optDouble = document.getElementById('optDouble');
+  [optSingle, optDouble].forEach(opt=>{
+    opt.addEventListener('click', ()=>{
+      optSingle.classList.remove('active');
+      optDouble.classList.remove('active');
+      opt.classList.add('active');
+      opt.querySelector('input').checked = true;
+      recalc();
+    });
+  });
+
+  // Upload de arquivo
+  const fileInput = document.getElementById('fileInput');
+  const fileName = document.getElementById('fileName');
+  let loadedXmlText = '';
+  let parsedOrder = null;   // {qty, backsCount} do XML atual
+  let xmlError = '';        // mensagem de erro do XML atual, se houver
+  fileInput.addEventListener('change', ()=>{
+    const f = fileInput.files[0];
+    if(!f) return;
+    fileName.textContent = f.name;
+    const reader = new FileReader();
+    reader.onload = e => {
+      loadedXmlText = (e.target.result || '').trim();
+      // parseia uma vez por arquivo — o recálculo a cada tecla usa o cache
+      try{
+        parsedOrder = parseOrder(loadedXmlText);
+        buildSheetModel(loadedXmlText);
+        xmlError = '';
+      }catch(err){
+        parsedOrder = null;
+        clearSheetModel();
+        xmlError = err.message;
+      }
+      recalc();
+    };
+    reader.onerror = () => {
+      loadedXmlText = '';
+      parsedOrder = null;
+      clearSheetModel();
+      xmlError = 'Não consegui ler esse arquivo. Tenta selecionar de novo.';
+      recalc();
+    };
+    reader.readAsText(f);
+  });
+
+  // Cálculo
+  const errorBox = document.getElementById('errorBox');
+  const resultBox = document.getElementById('resultBox');
+  const hintBox = document.getElementById('hintBox');
+  const nameInput = document.getElementById('customerName');
+
+  let lastState = null;
+
+  function showError(msg){
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+    resultBox.classList.remove('show');
+    hintBox.classList.add('hide');
+  }
+  function clearError(){
+    errorBox.classList.remove('show');
+    errorBox.textContent = '';
+  }
+
+  function parseOrder(xmlText){
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'text/xml');
+    if(doc.querySelector('parsererror')){
+      throw new Error('Esse XML não é válido. Confere se selecionou o arquivo completo exportado do MPC Fill.');
+    }
+
+    let qty = null;
+    const qtyTag = doc.querySelector('details > quantity');
+    if(qtyTag && qtyTag.textContent.trim()){
+      const n = parseInt(qtyTag.textContent.trim(), 10);
+      if(!isNaN(n) && n > 0) qty = n;
+    }
+    if(qty === null){
+      // fallback: soma os slots das cartas em fronts
+      const slotsTags = doc.querySelectorAll('fronts > card > slots');
+      let total = 0;
+      slotsTags.forEach(s=>{
+        total += s.textContent.split(',').filter(x=>x.trim() !== '').length;
+      });
+      if(total > 0) qty = total;
+    }
+    if(qty === null){
+      throw new Error('Não encontrei a quantidade de cartas nesse XML. Confirma se é um XML de pedido exportado do MPC Fill.');
+    }
+
+    // cartas de dupla-face (MDFC) têm um verso próprio na seção <backs>.
+    // esse verso não pode usar o verso genérico da folha — precisa ser
+    // impresso à parte e depois colado, então ele consome um espaço
+    // "em branco" da folha.
+    let backsCount = 0;
+    doc.querySelectorAll('backs > card > slots').forEach(s=>{
+      backsCount += s.textContent.split(',').filter(x=>x.trim() !== '').length;
+    });
+
+    return {qty, backsCount};
+  }
+
+  function formatBRL(n){
+    return n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  function resetResult(hintMsg){
+    lastState = null;
+    resultBox.classList.remove('show');
+    document.getElementById('pixBox').style.display = 'none';
+    if(hintMsg){
+      hintBox.textContent = hintMsg;
+      hintBox.classList.remove('hide');
+    } else {
+      hintBox.classList.add('hide');
+    }
+  }
+
+  // Recalcula o resumo inteiro a partir do estado atual dos campos.
+  // Chamado sempre que arquivo, nome ou laminação mudam.
+  function recalc(){
+    if(xmlError){
+      showError(xmlError);
+      resetResult('');
+      return;
+    }
+    clearError();
+
+    const customerName = nameInput.value.trim();
+    if(!parsedOrder && !customerName){
+      resetResult('Selecione o XML e escreva seu nome — o resumo aparece sozinho.');
+      return;
+    }
+    if(!parsedOrder){
+      resetResult('Falta selecionar o arquivo .xml do MPC Fill.');
+      return;
+    }
+    if(!customerName){
+      resetResult('Falta escrever seu nome no passo 2.');
+      return;
+    }
+    hintBox.classList.add('hide');
+
+    const {qty, backsCount} = parsedOrder;
+    const lam = document.querySelector('input[name=lam]:checked').value;
+    const {pages, lastPageFilled, blanks, total, lamLabel} =
+      computeTotals(qty, backsCount, lam);
+
+    document.getElementById('rName').textContent = customerName;
+    document.getElementById('rQty').textContent = qty;
+    document.getElementById('rPages').textContent = pages;
+    document.getElementById('rBlank').textContent = blanks;
+    document.getElementById('rLam').textContent = lamLabel;
+    document.getElementById('rTotal').textContent = 'R$ ' + formatBRL(total);
+
+    const backsRow = document.getElementById('backsRow');
+    if(backsCount > 0){
+      document.getElementById('rBacks').textContent = backsCount;
+      backsRow.style.display = 'flex';
+    } else {
+      backsRow.style.display = 'none';
+    }
+
+    const gridPreview = document.getElementById('gridPreview');
+    gridPreview.innerHTML = '';
+    for(let i=0;i<9;i++){
+      const d = document.createElement('div');
+      d.className = 'slot ' + (i < lastPageFilled ? 'filled' : 'blank');
+      gridPreview.appendChild(d);
+    }
+
+    // a cobrança Pix já gerada vale só para o pedido exato que a originou;
+    // qualquer mudança de nome, XML ou laminação invalida o QR na tela.
+    const signature = [qty, backsCount, lam, customerName, xmlRevision].join('|');
+    if(!lastState || lastState.signature !== signature){
+      document.getElementById('pixBox').style.display = 'none';
+    }
+
+    lastState = {qty, backsCount, pages, blanks, total, lamLabel, lam, customerName, xmlText: loadedXmlText, signature};
+    resultBox.classList.add('show');
+    updateReviewUi();
+  }
+
+  nameInput.addEventListener('input', recalc);
+
+  // Cobrança Pix (mesmo servidor, caminho relativo)
+  document.getElementById('pixBtn').addEventListener('click', async ()=>{
+    if(!lastState) return;
+    const btn = document.getElementById('pixBtn');
+    const original = btn.textContent;
+    btn.textContent = 'Gerando cobrança...';
+    btn.disabled = true;
+    try{
+      const form = new FormData();
+      form.append('xml_file', new Blob([lastState.xmlText], {type:'text/xml'}), 'pedido.xml');
+      form.append('lamination', lastState.lam);
+      form.append('customer_name', lastState.customerName);
+      const resp = await fetch('/orders', {method:'POST', body: form});
+      if(!resp.ok){
+        const errText = await resp.text();
+        throw new Error(errText);
+      }
+      const data = await resp.json();
+      document.getElementById('pixQrImg').src = `data:image/png;base64,${data.pix_qr_base64}`;
+      document.getElementById('pixAmount').textContent = 'R$ ' + formatBRL(data.amount);
+      document.getElementById('pixHash').textContent = data.deck_hash;
+      document.getElementById('pixBox').style.display = 'block';
+      document.getElementById('copyPixBtn').onclick = async ()=>{
+        try{
+          await navigator.clipboard.writeText(data.pix_copia_cola);
+          document.getElementById('copyPixBtn').textContent = 'Copiado!';
+          setTimeout(()=> document.getElementById('copyPixBtn').textContent = 'Copiar Pix Copia e Cola', 1800);
+        }catch(e){ alert('Não consegui copiar. Copia manualmente.'); }
+      };
+      setupNotifyButton(data.order_id);
+    }catch(e){
+      alert('Não consegui gerar a cobrança no backend: ' + e.message);
+    }finally{
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  });
+
+  // "Pagamento realizado, enviar notificação" — só dispara o e-mail de aviso.
+  // A conferência do Pix e a impressão continuam do lado do operador, pelo
+  // link que vai nesse e-mail.
+  const NOTIFY_LABEL = 'Pagamento realizado, enviar notificação';
+
+  function setupNotifyButton(orderId){
+    const btn = document.getElementById('notifyBtn');
+    const note = document.getElementById('notifyNote');
+    btn.disabled = false;
+    btn.textContent = NOTIFY_LABEL;
+    note.style.display = 'none';
+    note.textContent = '';
+
+    btn.onclick = async ()=>{
+      btn.disabled = true;
+      btn.textContent = 'Enviando aviso...';
+      try{
+        const resp = await fetch(`/orders/${orderId}/notify-payment`, {method:'POST'});
+        const data = await resp.json().catch(()=> ({}));
+        if(!resp.ok) throw new Error(data.detail || 'erro no servidor');
+        btn.textContent = 'Aviso enviado ✓';
+        note.style.color = 'var(--green)';
+        note.textContent = data.message || 'Aviso enviado.';
+        note.style.display = 'block';
+      }catch(e){
+        btn.disabled = false;
+        btn.textContent = NOTIFY_LABEL;
+        note.style.color = 'var(--red)';
+        note.textContent = 'Não deu pra enviar o aviso: ' + e.message + '. Tenta de novo em instantes — se insistir, avisa direto pelo contato de sempre.';
+        note.style.display = 'block';
+      }
+    };
+  }
+
+  // Baixar XML
+  document.getElementById('downloadBtn').addEventListener('click', ()=>{
+    if(!lastState) return;
+    const blob = new Blob([lastState.xmlText], {type:'text/xml'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = sheetEdited ? 'pedido-proxies-revisado.xml' : 'pedido-proxies.xml';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // Copiar resumo
+  document.getElementById('copyBtn').addEventListener('click', async ()=>{
+    if(!lastState) return;
+    const msg = `Cartas: ${lastState.qty} | Páginas: ${lastState.pages} | Laminação: ${lastState.lamLabel} | Em branco: ${lastState.blanks} | Total: R$ ${formatBRL(lastState.total)}`;
+    try{
+      await navigator.clipboard.writeText(msg);
+      const btn = document.getElementById('copyBtn');
+      const original = btn.textContent;
+      btn.textContent = 'Copiado!';
+      btn.classList.add('copied');
+      setTimeout(()=>{ btn.textContent = original; btn.classList.remove('copied'); }, 1800);
+    }catch(e){
+      alert('Não consegui copiar automaticamente. Copia manualmente o resumo na tela.');
+    }
+  });
+
+  // ===================================================================
+  //  Revisão da folha — prévia do PDF e editor de cópias, no navegador
+  // ===================================================================
+  // Nada aqui fala com o backend. A prévia usa as miniaturas do Google
+  // Drive (os mesmos ids que já estão no XML) e copia a geometria do
+  // app/pdf_generator.py: A4, cartas de 63x88 mm numa grade 3x3 centrada,
+  // marcas de corte nas margens e cruzes verdes nos cantos. O que sai
+  // daqui é o XML revisado — quem monta o PDF de verdade continua sendo
+  // o backend, na hora de imprimir.
+
+  const CARDS_PER_PAGE = 9;
+  const PAGE_W_MM = 210, PAGE_H_MM = 297;
+  const CARD_W_MM = 63,  CARD_H_MM = 88;
+  const COLS = 3, ROWS = 3;
+  const MARGIN_X_MM = (PAGE_W_MM - CARD_W_MM * COLS) / 2;   // 10,5 mm
+  const MARGIN_Y_MM = (PAGE_H_MM - CARD_H_MM * ROWS) / 2;   // 16,5 mm
+  const CROSS_ARM_MM = 3;
+
+  // Tamanhos de pedido do MPC Fill. Não muda nada por aqui, mas mantém o
+  // XML revisado válido pra reabrir no site deles depois.
+  const MPC_BRACKETS = [18,36,55,72,90,108,126,144,162,180,198,216,
+                        234,252,270,288,306,324,342,360,396,504,612];
+
+  // Mesma conta do app/calc.py — usada tanto no resumo do pedido quanto no
+  // rodapé do editor, pra os dois nunca discordarem.
+  function computeTotals(qty, backsCount, lam){
+    const slotsNeeded = qty + backsCount;
+    const pages = Math.ceil(slotsNeeded / CARDS_PER_PAGE);
+    const resto = slotsNeeded % CARDS_PER_PAGE;
+    const lastPageFilled = resto === 0 ? CARDS_PER_PAGE : resto;
+    const blanks = resto === 0 ? 0 : CARDS_PER_PAGE - lastPageFilled;
+    const total = lam === 'single'
+      ? pages * 2.50
+      : Math.round(pages * 3.3333 * 100) / 100;
+    return {slotsNeeded, pages, lastPageFilled, blanks, total,
+            lamLabel: lam === 'single' ? 'Um lado' : 'Dois lados'};
+  }
+
+  // --- Modelo da folha -------------------------------------------------
+  // sheetSlots[i] = { front:{id,name,query}, back:{id,name,query}|null }
+  // O índice do array É o slot da folha: renumerar é só mexer no array.
+  // Frente e verso andam juntos de propósito — numa carta dupla-face, cada
+  // cópia física precisa do seu próprio verso impresso.
+  let origDoc = null;          // XML original, pra preservar o que não conhecemos
+  let sheetSlots = [];
+  let editHistory = [];        // pilha de desfazer
+  let loadedSignature = '';    // assinatura do modelo que gerou o loadedXmlText
+  let xmlRevision = 0;
+  let sheetEdited = false;
+  let openSnapshot = null, openHistory = null;   // pra o botão Cancelar
+  // Verso conhecido de cada frente: {idDaFrente -> Map(idDoVerso -> meta)}.
+  // Guardado à parte de propósito — quando o cliente tira o último verso de
+  // uma carta, o modelo esquece que ele existia, mas a linha dele continua
+  // na lista com contador 0 pra dar pra colocar de volta sem desfazer nada.
+  let backCatalog = new Map();
+
+  function catalogBack(frontId, meta){
+    let m = backCatalog.get(frontId);
+    if(!m){ m = new Map(); backCatalog.set(frontId, m); }
+    if(!m.has(meta.id)) m.set(meta.id, meta);
+  }
+
+  function childText(el, tag){
+    const n = el.querySelector(':scope > ' + tag);
+    return n ? (n.textContent || '').trim() : '';
+  }
+
+  function readSection(doc, section){
+    const out = [];
+    doc.querySelectorAll(section + ' > card').forEach(el => {
+      const meta = {id: childText(el, 'id'),
+                    name: childText(el, 'name'),
+                    query: childText(el, 'query')};
+      if(!meta.id) return;
+      childText(el, 'slots').split(',').forEach(bruto => {
+        const s = bruto.trim();
+        if(/^\d+$/.test(s)) out.push({slot: parseInt(s, 10), meta});
+      });
+    });
+    return out;
+  }
+
+  function buildSheetModel(xmlText){
+    const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+    if(doc.querySelector('parsererror')){
+      throw new Error('Esse XML não é válido.');
+    }
+    const versos = new Map();
+    readSection(doc, 'backs').forEach(b => versos.set(b.slot, b.meta));
+    const frentes = readSection(doc, 'fronts').sort((a, b) => a.slot - b.slot);
+
+    origDoc = doc;
+    sheetSlots = frentes.map(f => ({front: f.meta, back: versos.get(f.slot) || null}));
+    backCatalog = new Map();
+    sheetSlots.forEach(slot => { if(slot.back) catalogBack(slot.front.id, slot.back); });
+    editHistory = [];
+    sheetEdited = false;
+    loadedSignature = sheetSignature(sheetSlots);
+  }
+
+  function clearSheetModel(){
+    origDoc = null;
+    sheetSlots = [];
+    backCatalog = new Map();
+    editHistory = [];
+    loadedSignature = '';
+    sheetEdited = false;
+  }
+
+  // Só a assinatura usa isto: ela precisa enxergar a frente E o verso, pra
+  // "tirei um verso" contar como revisão e reescrever o XML.
+  function groupKey(slot){
+    return slot.front.id + '||' + (slot.back ? slot.back.id : '');
+  }
+
+  function sheetSignature(lista){
+    return lista.map(groupKey).join(',');
+  }
+
+  // Cartas agrupadas pela FRENTE, na ordem em que aparecem na folha. Os
+  // versos ficam dentro do grupo, cada um com a sua própria contagem: numa
+  // carta dupla-face dá pra ter 4 frentes e só 2 versos, por exemplo, e é
+  // isso que deixa mexer num sem mexer no outro.
+  function sheetGroups(){
+    const mapa = new Map();
+    sheetSlots.forEach((slot, i) => {
+      let g = mapa.get(slot.front.id);
+      if(!g){
+        g = {key: slot.front.id, front: slot.front, idx: [], backs: new Map()};
+        mapa.set(slot.front.id, g);
+      }
+      g.idx.push(i);
+      if(slot.back){
+        let b = g.backs.get(slot.back.id);
+        if(!b){ b = {id: slot.back.id, meta: slot.back, idx: []}; g.backs.set(slot.back.id, b); }
+        b.idx.push(i);
+      }
+    });
+    // versos que o cliente zerou continuam listados, com contador 0
+    mapa.forEach((g, frontId) => {
+      (backCatalog.get(frontId) || new Map()).forEach((meta, backId) => {
+        if(!g.backs.has(backId)) g.backs.set(backId, {id: backId, meta, idx: []});
+      });
+    });
+    return Array.from(mapa.values());
+  }
+
+  function findGroup(key){
+    return sheetGroups().find(g => g.key === key) || null;
+  }
+
+  // Verso que uma cópia nova dessa frente deve levar: só herda quando TODAS
+  // as cópias de agora têm o mesmo verso. Se o cliente já separou frente e
+  // verso na mão, a cópia nova sai sem verso, em vez de desfazer a escolha.
+  function backHerdado(g){
+    const comVerso = Array.from(g.backs.values()).filter(b => b.idx.length);
+    if(comVerso.length !== 1) return null;
+    return comVerso[0].idx.length === g.idx.length ? comVerso[0].meta : null;
+  }
+
+  // --- Ações ------------------------------------------------------------
+  function pushHistory(){
+    // Snapshot barato: array novo, mas os slots são imutáveis (nunca são
+    // alterados no lugar, só criados e descartados), então dá pra
+    // compartilhar as referências.
+    editHistory.push(sheetSlots.slice());
+    if(editHistory.length > 200) editHistory.shift();
+  }
+
+  function addCopy(key){
+    const g = findGroup(key);
+    if(!g) return;
+    pushHistory();
+    // A cópia nova entra logo depois da última do mesmo grupo, pra as
+    // cópias ficarem juntas na folha em vez de espalhadas.
+    sheetSlots.splice(g.idx[g.idx.length - 1] + 1, 0,
+                      {front: g.front, back: backHerdado(g)});
+    afterEdit();
+  }
+
+  function removeCopy(key){
+    const g = findGroup(key);
+    if(!g) return;
+    if(sheetSlots.length <= 1){
+      footMessage('O pedido precisa ter pelo menos uma carta.');
+      return;
+    }
+    pushHistory();
+    // Sai primeiro uma cópia SEM verso próprio: tirar uma frente não pode
+    // levar junto um verso que o cliente quis manter. Quando todas as
+    // cópias têm verso, aí não tem jeito — o verso é colado na frente, sem
+    // a frente ele não vai pra lugar nenhum.
+    const semVerso = g.idx.filter(i => !sheetSlots[i].back);
+    const alvo = semVerso.length ? semVerso[semVerso.length - 1]
+                                 : g.idx[g.idx.length - 1];
+    const levouVerso = !!sheetSlots[alvo].back;
+    sheetSlots.splice(alvo, 1);
+    afterEdit();
+    if(levouVerso){
+      footMessage('Todas as cópias tinham verso próprio, então essa saiu com o verso dela.');
+    }
+  }
+
+  function removeGroup(key){
+    const g = findGroup(key);
+    if(!g) return;
+    if(g.idx.length >= sheetSlots.length){
+      footMessage('O pedido precisa ter pelo menos uma carta.');
+      return;
+    }
+    pushHistory();
+    const fora = new Set(g.idx);
+    sheetSlots = sheetSlots.filter((_, i) => !fora.has(i));
+    afterEdit();
+  }
+
+  // --- Versos, contados à parte da frente --------------------------------
+  // O verso mora no slot da frente (é assim que o XML do MPC Fill amarra os
+  // dois), então mexer num verso é trocar o slot inteiro por um igual com
+  // outro verso — nunca alterar o slot no lugar, senão os snapshots do
+  // desfazer enxergariam a mudança.
+  function trocaVerso(i, meta){
+    sheetSlots[i] = {front: sheetSlots[i].front, back: meta};
+  }
+
+  function addBack(frontKey, backId){
+    const g = findGroup(frontKey);
+    const b = g && g.backs.get(backId);
+    if(!b) return;
+    const livre = g.idx.find(i => !sheetSlots[i].back);
+    if(livre === undefined){
+      footMessage('Já tem um verso pra cada cópia dessa carta. Pra caber mais '
+                + 'um verso, adicione outra cópia da frente.');
+      return;
+    }
+    pushHistory();
+    trocaVerso(livre, b.meta);
+    afterEdit();
+  }
+
+  function removeBack(frontKey, backId){
+    const g = findGroup(frontKey);
+    const b = g && g.backs.get(backId);
+    if(!b || !b.idx.length) return;
+    pushHistory();
+    trocaVerso(b.idx[b.idx.length - 1], null);
+    afterEdit();
+  }
+
+  function removeAllBacks(frontKey, backId){
+    const g = findGroup(frontKey);
+    const b = g && g.backs.get(backId);
+    if(!b || !b.idx.length) return;
+    pushHistory();
+    b.idx.forEach(i => trocaVerso(i, null));
+    afterEdit();
+  }
+
+  function undoEdit(){
+    if(!editHistory.length) return;
+    sheetSlots = editHistory.pop();
+    afterEdit();
+  }
+
+  function afterEdit(){
+    footMessage('');
+    renderReview();
+  }
+
+  // --- Desenho ----------------------------------------------------------
+  function cardTitle(meta){
+    const nome = (meta.name || '').replace(/\.(png|jpe?g|webp|gif)$/i, '').trim();
+    return nome || (meta.query || '').trim() || meta.id;
+  }
+
+  // Miniatura do Drive. Igual ao download do backend, não é API oficial —
+  // por isso tem um endereço alternativo e, se os dois falharem, o nome da
+  // carta aparece no lugar da arte (a prévia continua servindo pra conferir
+  // as quantidades).
+  function cardArt(meta, largura, classe){
+    const box = document.createElement('div');
+    box.className = 'art' + (classe ? ' ' + classe : '');
+    const fontes = [
+      'https://drive.google.com/thumbnail?id=' + encodeURIComponent(meta.id) + '&sz=w' + largura,
+      'https://lh3.googleusercontent.com/d/' + encodeURIComponent(meta.id) + '=w' + largura
+    ];
+    let tentativa = 0;
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.referrerPolicy = 'no-referrer';
+    img.alt = cardTitle(meta);
+    img.onerror = () => {
+      tentativa++;
+      if(tentativa < fontes.length){ img.src = fontes[tentativa]; return; }
+      img.remove();
+      const fb = document.createElement('span');
+      fb.className = 'fb';
+      fb.textContent = cardTitle(meta);
+      box.appendChild(fb);
+    };
+    img.src = fontes[0];
+    box.appendChild(img);
+    return box;
+  }
+
+  function botao(texto, titulo, acao){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = texto;
+    b.title = titulo;
+    b.setAttribute('aria-label', titulo);
+    b.addEventListener('click', acao);
+    return b;
+  }
+
+  // Uma linha por FRENTE e, embaixo dela, uma linha por verso próprio —
+  // cada uma com o seu contador. É o que deixa tirar o verso sem tirar a
+  // carta, e vice-versa.
+  function renderDeckList(){
+    const host = document.getElementById('deckList');
+    host.textContent = '';
+    sheetGroups().forEach(g => {
+      const bloco = document.createElement('div');
+      bloco.className = 'ci-block';
+
+      const titulo = cardTitle(g.front);
+      const nVersos = Array.from(g.backs.values()).reduce((soma, b) => soma + b.idx.length, 0);
+
+      const linha = linhaBase('ci', g.front, titulo,
+        g.idx.length + (g.idx.length === 1 ? ' cópia' : ' cópias')
+          + (nVersos ? ' · ' + nVersos + ' com verso próprio' : ''),
+        {
+          valor: g.idx.length,
+          menos: {rotulo: 'Remover uma cópia de ' + titulo,
+                  acao: () => removeCopy(g.key),
+                  travado: sheetSlots.length <= 1},
+          mais:  {rotulo: 'Adicionar uma cópia de ' + titulo,
+                  acao: () => addCopy(g.key)},
+          tirar: {rotulo: 'Tirar ' + titulo + ' do pedido (frente e verso)',
+                  acao: () => removeGroup(g.key),
+                  travado: g.idx.length >= sheetSlots.length}
+        });
+      bloco.appendChild(linha);
+
+      g.backs.forEach(b => {
+        const nomeVerso = cardTitle(b.meta);
+        const sub = linhaBase('ci ci-sub' + (b.idx.length ? '' : ' vazia'), b.meta, nomeVerso,
+          'verso de ' + titulo + ' · ' + b.idx.length + ' de ' + g.idx.length,
+          {
+            valor: b.idx.length,
+            menos: {rotulo: 'Remover um verso de ' + titulo,
+                    acao: () => removeBack(g.key, b.id),
+                    travado: b.idx.length === 0},
+            mais:  {rotulo: 'Adicionar um verso de ' + titulo,
+                    acao: () => addBack(g.key, b.id),
+                    travado: b.idx.length >= g.idx.length},
+            tirar: {rotulo: 'Tirar todos os versos de ' + titulo,
+                    acao: () => removeAllBacks(g.key, b.id),
+                    travado: b.idx.length === 0}
+          });
+        bloco.appendChild(sub);
+      });
+
+      host.appendChild(bloco);
+    });
+  }
+
+  function linhaBase(classe, meta, titulo, descricao, ctrl){
+    const linha = document.createElement('div');
+    linha.className = classe;
+    linha.appendChild(cardArt(meta, 120, 'ci-thumb'));
+
+    const info = document.createElement('div');
+    info.className = 'ci-info';
+    const nome = document.createElement('div');
+    nome.className = 'ci-name';
+    nome.textContent = titulo;
+    nome.title = titulo;
+    const desc = document.createElement('div');
+    desc.className = 'ci-meta';
+    desc.textContent = descricao;
+    info.append(nome, desc);
+    linha.appendChild(info);
+
+    const qty = document.createElement('div');
+    qty.className = 'qty';
+    const menos = botao('−', ctrl.menos.rotulo, ctrl.menos.acao);
+    menos.disabled = !!ctrl.menos.travado;
+    const n = document.createElement('span');
+    n.className = 'n';
+    n.textContent = ctrl.valor;
+    const mais = botao('+', ctrl.mais.rotulo, ctrl.mais.acao);
+    mais.disabled = !!ctrl.mais.travado;
+    qty.append(menos, n, mais);
+    linha.appendChild(qty);
+
+    const tirar = botao('✕', ctrl.tirar.rotulo, ctrl.tirar.acao);
+    tirar.className = 'ci-del';
+    tirar.disabled = !!ctrl.tirar.travado;
+    linha.appendChild(tirar);
+
+    return linha;
+  }
+
+  // Mesma ordem do _build_print_queue do backend: as frentes em ordem de
+  // slot, depois os versos especiais, também em ordem de slot.
+  function printQueue(){
+    const fila = sheetSlots.map(slot => ({tipo: 'front', meta: slot.front,
+                                          frontKey: slot.front.id}));
+    sheetSlots.forEach(slot => {
+      if(slot.back) fila.push({tipo: 'back', meta: slot.back,
+                               frontKey: slot.front.id, backId: slot.back.id});
+    });
+    return fila;
+  }
+
+  // Guias de corte e cruzes, nas mesmas coordenadas em mm que o reportlab
+  // usa lá no backend. É sempre o mesmo desenho, então monta uma vez só.
+  const GUIDES_SVG = (() => {
+    const xs = [], ys = [];
+    for(let i = 0; i <= COLS; i++) xs.push(MARGIN_X_MM + i * CARD_W_MM);
+    for(let i = 0; i <= ROWS; i++) ys.push(MARGIN_Y_MM + i * CARD_H_MM);
+    const traco = (x1, y1, x2, y2, cor) =>
+      `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${cor}" stroke-width="0.2"/>`;
+    const linhas = [];
+    // marcas de corte: só nas margens, indo até a borda do papel
+    xs.forEach(x => {
+      linhas.push(traco(x, 0, x, MARGIN_Y_MM, '#000'));
+      linhas.push(traco(x, PAGE_H_MM - MARGIN_Y_MM, x, PAGE_H_MM, '#000'));
+    });
+    ys.forEach(y => {
+      linhas.push(traco(0, y, MARGIN_X_MM, y, '#000'));
+      linhas.push(traco(PAGE_W_MM - MARGIN_X_MM, y, PAGE_W_MM, y, '#000'));
+    });
+    // cruzes verdes em cada canto de carta, por cima da arte
+    xs.forEach(x => ys.forEach(y => {
+      linhas.push(traco(x - CROSS_ARM_MM, y, x + CROSS_ARM_MM, y, '#8aff0c'));
+      linhas.push(traco(x, y - CROSS_ARM_MM, x, y + CROSS_ARM_MM, '#8aff0c'));
+    }));
+    return `<svg class="pg-guides" viewBox="0 0 ${PAGE_W_MM} ${PAGE_H_MM}" aria-hidden="true">`
+           + linhas.join('') + '</svg>';
+  })();
+
+  function pct(valor, total){
+    return (valor / total * 100).toFixed(4) + '%';
+  }
+
+  function buildPage(itens, indice, totalPaginas){
+    const wrap = document.createElement('div');
+    wrap.className = 'pg-wrap';
+
+    const label = document.createElement('div');
+    label.className = 'pg-label';
+    label.textContent = `Página ${indice + 1} de ${totalPaginas}`;
+    wrap.appendChild(label);
+
+    const pg = document.createElement('div');
+    pg.className = 'pg';
+
+    for(let i = 0; i < CARDS_PER_PAGE; i++){
+      const col = i % COLS, lin = Math.floor(i / COLS);
+      const slot = document.createElement('div');
+      slot.className = 'pg-slot';
+      slot.style.left   = pct(MARGIN_X_MM + col * CARD_W_MM, PAGE_W_MM);
+      slot.style.top    = pct(MARGIN_Y_MM + lin * CARD_H_MM, PAGE_H_MM);
+      slot.style.width  = pct(CARD_W_MM, PAGE_W_MM);
+      slot.style.height = pct(CARD_H_MM, PAGE_H_MM);
+
+      const item = itens[i];
+      if(!item){
+        slot.classList.add('empty');
+        const vazio = document.createElement('span');
+        vazio.textContent = 'vazio';
+        slot.appendChild(vazio);
+      } else {
+        slot.appendChild(cardArt(item.meta, 400));
+        const ctrl = document.createElement('div');
+        ctrl.className = 'pg-ctrl';
+        if(item.tipo === 'back'){
+          // O verso tem contador próprio: dá pra tirar o verso e deixar a
+          // frente na folha (o cliente que já tem o verso, ou que vai usar
+          // o verso genérico), ou o contrário.
+          const tag = document.createElement('span');
+          tag.className = 'pg-badge';
+          tag.textContent = 'VERSO';
+          slot.appendChild(tag);
+          const grupo = findGroup(item.frontKey);
+          const b = grupo && grupo.backs.get(item.backId);
+          const menos = botao('−', 'Remover este verso, mantendo a frente',
+                              () => removeBack(item.frontKey, item.backId));
+          const mais = botao('+', 'Adicionar mais um verso desta carta',
+                             () => addBack(item.frontKey, item.backId));
+          mais.disabled = !grupo || !b || b.idx.length >= grupo.idx.length;
+          ctrl.append(menos, mais);
+        } else {
+          const menos = botao('−', 'Remover uma cópia de ' + cardTitle(item.meta),
+                              () => removeCopy(item.frontKey));
+          menos.disabled = sheetSlots.length <= 1;
+          const mais = botao('+', 'Adicionar uma cópia de ' + cardTitle(item.meta),
+                             () => addCopy(item.frontKey));
+          ctrl.append(menos, mais);
+        }
+        slot.appendChild(ctrl);
+      }
+      pg.appendChild(slot);
+    }
+
+    pg.insertAdjacentHTML('beforeend', GUIDES_SVG);
+    wrap.appendChild(pg);
+    return wrap;
+  }
+
+  function renderPages(){
+    const pane = document.getElementById('sheetPane');
+    const host = document.getElementById('previewPages');
+    const rolagem = pane.scrollTop;   // não pular pro topo a cada + ou −
+    host.textContent = '';
+    const fila = printQueue();
+    const totalPaginas = Math.max(1, Math.ceil(fila.length / CARDS_PER_PAGE));
+    for(let p = 0; p < totalPaginas; p++){
+      host.appendChild(buildPage(fila.slice(p * CARDS_PER_PAGE, (p + 1) * CARDS_PER_PAGE),
+                                 p, totalPaginas));
+    }
+    pane.scrollTop = rolagem;
+  }
+
+  function renderFoot(){
+    const lam = document.querySelector('input[name=lam]:checked').value;
+    const versos = sheetSlots.filter(s => s.back).length;
+    const t = computeTotals(sheetSlots.length, versos, lam);
+    // só números entram aqui — nome de carta nunca, pra não precisar escapar
+    document.getElementById('footSum').innerHTML =
+      `<div><b>${sheetSlots.length}</b> carta(s)`
+      + (versos ? ` · <b>${versos}</b> verso(s) próprio(s)` : '')
+      + ` · <b>${t.pages}</b> página(s) · <b>${t.blanks}</b> espaço(s) vazio(s)</div>`
+      + `<div>${t.lamLabel} · <span class="price">R$ ${formatBRL(t.total)}</span></div>`;
+  }
+
+  function footMessage(msg){
+    document.getElementById('footMsg').textContent = msg || '';
+  }
+
+  function renderReview(){
+    renderDeckList();
+    renderPages();
+    renderFoot();
+    document.getElementById('undoBtn').disabled = editHistory.length === 0;
+  }
+
+  // --- Abrir, cancelar, confirmar ---------------------------------------
+  function openReview(){
+    if(!sheetSlots.length) return;
+    openSnapshot = sheetSlots.slice();
+    openHistory = editHistory.slice();
+    footMessage('');
+    document.getElementById('reviewModal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+    renderReview();
+    document.getElementById('sheetPane').scrollTop = 0;
+  }
+
+  function closeReview(){
+    document.getElementById('reviewModal').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  function cancelReview(){
+    if(openSnapshot){ sheetSlots = openSnapshot; editHistory = openHistory; }
+    closeReview();
+  }
+
+  function confirmReview(){
+    const assinatura = sheetSignature(sheetSlots);
+    if(assinatura !== loadedSignature){
+      loadedXmlText = buildXmlFromModel();
+      loadedSignature = assinatura;
+      xmlRevision++;          // invalida a cobrança Pix que já estiver na tela
+      sheetEdited = true;
+      try{
+        parsedOrder = parseOrder(loadedXmlText);
+        xmlError = '';
+      }catch(err){
+        parsedOrder = null;
+        xmlError = err.message;
+      }
+    }
+    closeReview();
+    recalc();
+  }
+
+  // --- XML revisado ------------------------------------------------------
+  function bracketFor(n){
+    for(const b of MPC_BRACKETS){ if(n <= b) return b; }
+    return n;
+  }
+
+  function novoEl(doc, tag, texto){
+    const el = doc.createElement(tag);
+    el.textContent = texto;
+    return el;
+  }
+
+  function escreverSecao(doc, root, tag, mapa){
+    let secao = root.querySelector(':scope > ' + tag);
+    if(mapa.size === 0){
+      if(secao) root.removeChild(secao);
+      return;
+    }
+    if(!secao){
+      secao = doc.createElement(tag);
+      // insertBefore(x, null) é o mesmo que appendChild
+      root.insertBefore(secao, root.querySelector(':scope > cardback'));
+    }
+    while(secao.firstChild) secao.removeChild(secao.firstChild);
+    mapa.forEach(entrada => {
+      const card = doc.createElement('card');
+      card.appendChild(novoEl(doc, 'id', entrada.meta.id));
+      card.appendChild(novoEl(doc, 'slots', entrada.slots.join(',')));
+      if(entrada.meta.name)  card.appendChild(novoEl(doc, 'name',  entrada.meta.name));
+      if(entrada.meta.query) card.appendChild(novoEl(doc, 'query', entrada.meta.query));
+      secao.appendChild(card);
+    });
+  }
+
+  function buildXmlFromModel(){
+    const doc = origDoc.cloneNode(true);
+    const root = doc.documentElement;
+
+    // Um <card> por id com todos os slots dele, que é como o MPC Fill
+    // escreve e como o backend lê. Os slots são renumerados 0..n-1 na
+    // ordem da folha, sem buracos.
+    const frentes = new Map(), versos = new Map();
+    const acumula = (mapa, meta, i) => {
+      let e = mapa.get(meta.id);
+      if(!e){ e = {meta, slots: []}; mapa.set(meta.id, e); }
+      e.slots.push(i);
+    };
+    sheetSlots.forEach((slot, i) => {
+      acumula(frentes, slot.front, i);
+      if(slot.back) acumula(versos, slot.back, i);
+    });
+
+    escreverSecao(doc, root, 'fronts', frentes);
+    escreverSecao(doc, root, 'backs', versos);
+
+    // A quantidade tem que acompanhar: é ela que o backend usa pra cobrar.
+    let details = root.querySelector(':scope > details');
+    if(!details){
+      details = doc.createElement('details');
+      root.insertBefore(details, root.firstChild);
+    }
+    let quantity = details.querySelector(':scope > quantity');
+    if(!quantity){
+      quantity = doc.createElement('quantity');
+      details.insertBefore(quantity, details.firstChild);
+    }
+    quantity.textContent = String(sheetSlots.length);
+    const bracket = details.querySelector(':scope > bracket');
+    if(bracket) bracket.textContent = String(bracketFor(sheetSlots.length));
+
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + serializarEl(root, 0) + '\n';
+  }
+
+  function escaparXml(txt){
+    return String(txt).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Serializador próprio em vez do XMLSerializer: reaproveitar o documento
+  // original preserva tudo que não conhecemos (stock, foil, cardback…), mas
+  // deixa pra trás a indentação do arquivo antigo, e o resultado sai todo
+  // grudado. Reindentar aqui devolve um XML limpo, do jeito que o MPC Fill
+  // escreve. Serve porque esse XML não tem conteúdo misto — texto e
+  // elementos nunca dividem o mesmo pai.
+  function serializarEl(el, nivel){
+    const recuo = '    '.repeat(nivel);
+    const attrs = Array.from(el.attributes || [])
+      .map(a => ` ${a.name}="${escaparXml(a.value).replace(/"/g, '&quot;')}"`).join('');
+    const filhos = Array.from(el.children);
+    if(!filhos.length){
+      const texto = (el.textContent || '').trim();
+      return texto
+        ? `${recuo}<${el.nodeName}${attrs}>${escaparXml(texto)}</${el.nodeName}>`
+        : `${recuo}<${el.nodeName}${attrs}/>`;
+    }
+    return `${recuo}<${el.nodeName}${attrs}>\n`
+           + filhos.map(f => serializarEl(f, nivel + 1)).join('\n')
+           + `\n${recuo}</${el.nodeName}>`;
+  }
+
+  // --- Ligações ----------------------------------------------------------
+  function updateReviewUi(){
+    document.getElementById('reviewBtn').disabled = sheetSlots.length === 0;
+    const badge = document.getElementById('reviewBadge');
+    if(sheetEdited){
+      badge.textContent = 'Folha revisada';
+      badge.classList.add('show');
+    } else {
+      badge.classList.remove('show');
+    }
+  }
+
+  document.getElementById('reviewBtn').addEventListener('click', openReview);
+  document.getElementById('undoBtn').addEventListener('click', undoEdit);
+  document.getElementById('closeReviewBtn').addEventListener('click', cancelReview);
+  document.getElementById('cancelReviewBtn').addEventListener('click', cancelReview);
+  document.getElementById('confirmReviewBtn').addEventListener('click', confirmReview);
+  document.getElementById('reviewModal').addEventListener('click', e => {
+    if(e.target.id === 'reviewModal') cancelReview();   // clique fora da caixa
+  });
+  document.addEventListener('keydown', e => {
+    if(!document.getElementById('reviewModal').classList.contains('show')) return;
+    if(e.key === 'Escape'){
+      cancelReview();
+    } else if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){
+      e.preventDefault();
+      undoEdit();
+    }
+  });
+
+  // Primeira pintura da tela. Fica aqui no fim de propósito: o recalc()
+  // usa as constantes declaradas acima, e `const` não é içada como as
+  // funções — chamar antes daqui estouraria.
+  recalc();
+</script>
+</body>
+</html>
