@@ -74,9 +74,9 @@ como o Asaas (cadastro simples de pessoa física, tem webhook) resolve esse
 ponto sem mexer no resto — o `pix.py` viraria uma chamada de API em vez de
 gerar o BR Code na mão.
 
-## Revisar a folha antes de pagar
+## Revisar o pedido antes de pagar
 
-Antes de gerar a cobrança, o botão **"Revisar a folha antes de pagar"** abre um
+Antes de gerar a cobrança, o botão **"Revisar o pedido antes de pagar"** abre um
 editor que roda **inteiro no navegador** — nenhuma chamada ao backend, nenhum
 pedido criado ainda:
 
@@ -92,7 +92,7 @@ pedido criado ainda:
   quem já tem o verso impresso, ou pra quem vai usar o verso genérico da folha
   em vez do verso próprio.
 - **Desfazer** a última ação (ou `Ctrl+Z`), quantas vezes precisar.
-- O rodapé mostra, ao vivo, quantas páginas, quantos **espaços vazios** sobram
+- O rodapé mostra, ao vivo, quantas páginas, quantos **espaços livres** sobram
   na última página e quanto vai custar — que é justamente o que faz o cliente
   decidir se completa a folha com mais uma cópia de alguma coisa.
 

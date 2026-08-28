@@ -135,6 +135,10 @@
   .copied{color:var(--green) !important;border-color:var(--green) !important;}
 
   .note{font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:10px;}
+  .note.falha{
+    color:#F2AFA1;background:rgba(217,99,74,0.12);border:1px solid var(--red);
+    border-radius:8px;padding:9px 11px;
+  }
 
   /* --- Revisão da folha (prévia + editor, tudo no navegador) --- */
   .review-btn{
@@ -149,6 +153,7 @@
     border:1px dashed var(--green);border-radius:8px;padding:8px 10px;line-height:1.5;
   }
   .review-badge.show{display:block;}
+  .review-badge.atencao{color:var(--gold-light);border-color:var(--gold);}
 
   .modal{
     position:fixed;inset:0;z-index:50;background:rgba(8,6,16,.84);
@@ -264,7 +269,7 @@
   .foot-sum b{color:var(--text);font-weight:600;}
   .foot-sum .price{color:var(--gold-light);}
   .foot-msg{
-    width:100%;font-size:11px;color:var(--red);margin:0;min-height:0;
+    width:100%;font-size:11px;color:var(--gold-light);margin:0;min-height:0;
   }
   .confirm-btn{
     background:var(--gold);color:#1A1408;border:none;border-radius:9px;padding:11px 18px;
@@ -291,7 +296,7 @@
       <div class="rune"><span>⛨</span></div>
       <div>
         <h1>Forja de Proxies</h1>
-        <p>XML do MPC Fill → orçamento, Pix e impressão</p>
+        <p>Orçamento na hora, pagamento por Pix</p>
       </div>
     </div>
   </header>
@@ -339,10 +344,10 @@
 
       <div class="receipt-row"><span>Pedido de</span><b id="rName">–</b></div>
       <div class="receipt-row"><span>Cartas solicitadas</span><b id="rQty">–</b></div>
-      <div class="receipt-row" id="backsRow" style="display:none;"><span>Versos especiais (dupla-face)</span><b id="rBacks">–</b></div>
-      <div class="receipt-row"><span>Páginas necessárias (9/pág)</span><b id="rPages">–</b></div>
+      <div class="receipt-row" id="backsRow" style="display:none;"><span>Versos próprios (dupla-face)</span><b id="rBacks">–</b></div>
+      <div class="receipt-row"><span>Páginas (9 cartas por página)</span><b id="rPages">–</b></div>
       <div class="receipt-row">
-        <span>Cartas em branco na última pág.</span>
+        <span>Espaços livres na última página</span>
         <div style="display:flex;align-items:center;gap:10px;">
           <b id="rBlank">–</b>
           <div class="grid-preview" id="gridPreview"></div>
@@ -356,13 +361,14 @@
       </div>
 
       <div class="actions">
-        <button class="review-btn" id="reviewBtn">Revisar a folha antes de pagar</button>
+        <button class="review-btn" id="reviewBtn">Revisar o pedido antes de pagar</button>
         <button class="pix-btn" id="pixBtn">Gerar cobrança Pix</button>
         <div class="secondary-row">
           <button class="sec-btn" id="downloadBtn">Baixar XML</button>
           <button class="sec-btn" id="copyBtn">Copiar resumo</button>
         </div>
         <div class="review-badge" id="reviewBadge"></div>
+        <p class="note falha" id="pixError" style="display:none;"></p>
       </div>
 
       <div id="pixBox" style="display:none;margin-top:16px;padding-top:16px;border-top:1px dashed var(--border);text-align:center;">
@@ -386,11 +392,11 @@
   <div class="modal-box">
 
     <div class="modal-head">
-      <h2 id="reviewTitle">Revisar a folha
-        <span class="sub">É exatamente assim que o PDF vai sair na impressora — 9 cartas por página A4, com as guias de corte.</span>
+      <h2 id="reviewTitle">Revisar o pedido
+        <span class="sub">Confira as cartas e ajuste as quantidades. Cada página leva 9 cartas.</span>
       </h2>
       <button class="icon-btn" id="undoBtn" disabled title="Desfazer a última ação (Ctrl+Z)">↶ Desfazer</button>
-      <button class="icon-btn" id="closeReviewBtn" title="Fechar sem aplicar (Esc)">✕</button>
+      <button class="icon-btn" id="closeReviewBtn" title="Descartar as alterações (Esc)">✕</button>
     </div>
 
     <div class="modal-body">
@@ -469,6 +475,8 @@
   const nameInput = document.getElementById('customerName');
 
   let lastState = null;
+  // true quando o pedido mudou depois de uma cobrança já gerada
+  let cobrancaVencida = false;
 
   function showError(msg){
     errorBox.textContent = msg;
@@ -527,6 +535,7 @@
     lastState = null;
     resultBox.classList.remove('show');
     document.getElementById('pixBox').style.display = 'none';
+    limparFalhaPix();
     if(hintMsg){
       hintBox.textContent = hintMsg;
       hintBox.classList.remove('hide');
@@ -590,9 +599,13 @@
 
     // a cobrança Pix já gerada vale só para o pedido exato que a originou;
     // qualquer mudança de nome, XML ou laminação invalida o QR na tela.
+    // Quando isso acontece com um QR na tela, o cliente precisa saber por
+    // que ele sumiu — senão parece que a página quebrou.
     const signature = [qty, backsCount, lam, customerName, xmlRevision].join('|');
     if(!lastState || lastState.signature !== signature){
-      document.getElementById('pixBox').style.display = 'none';
+      const pixBox = document.getElementById('pixBox');
+      if(pixBox.style.display === 'block') cobrancaVencida = true;
+      pixBox.style.display = 'none';
     }
 
     lastState = {qty, backsCount, pages, blanks, total, lamLabel, lam, customerName, xmlText: loadedXmlText, signature};
@@ -609,36 +622,56 @@
     const original = btn.textContent;
     btn.textContent = 'Gerando cobrança...';
     btn.disabled = true;
+    limparFalhaPix();
     try{
       const form = new FormData();
       form.append('xml_file', new Blob([lastState.xmlText], {type:'text/xml'}), 'pedido.xml');
       form.append('lamination', lastState.lam);
       form.append('customer_name', lastState.customerName);
       const resp = await fetch('/orders', {method:'POST', body: form});
-      if(!resp.ok){
-        const errText = await resp.text();
-        throw new Error(errText);
-      }
+      if(!resp.ok) throw new Error(await motivoDaFalha(resp));
       const data = await resp.json();
       document.getElementById('pixQrImg').src = `data:image/png;base64,${data.pix_qr_base64}`;
       document.getElementById('pixAmount').textContent = 'R$ ' + formatBRL(data.amount);
       document.getElementById('pixHash').textContent = data.deck_hash;
       document.getElementById('pixBox').style.display = 'block';
+      cobrancaVencida = false;
       document.getElementById('copyPixBtn').onclick = async ()=>{
         try{
           await navigator.clipboard.writeText(data.pix_copia_cola);
-          document.getElementById('copyPixBtn').textContent = 'Copiado!';
-          setTimeout(()=> document.getElementById('copyPixBtn').textContent = 'Copiar Pix Copia e Cola', 1800);
-        }catch(e){ alert('Não consegui copiar. Copia manualmente.'); }
+          avisoNoBotao('copyPixBtn', 'Copiado!', 'Copiar Pix Copia e Cola');
+        }catch(e){ avisoNoBotao('copyPixBtn', 'Selecione o código e copie', 'Copiar Pix Copia e Cola'); }
       };
       setupNotifyButton(data.order_id);
     }catch(e){
-      alert('Não consegui gerar a cobrança no backend: ' + e.message);
+      mostrarFalhaPix(e.message);
     }finally{
       btn.textContent = original;
       btn.disabled = false;
     }
   });
+
+  // Só o que o cliente pode resolver chega até a tela. Detalhe técnico de
+  // resposta de servidor não ajuda quem está tentando pagar.
+  async function motivoDaFalha(resp){
+    try{
+      const data = await resp.json();
+      if(typeof data.detail === 'string' && data.detail.trim()) return data.detail.trim();
+    }catch(e){ /* resposta sem JSON: cai na mensagem genérica */ }
+    return '';
+  }
+
+  function mostrarFalhaPix(motivo){
+    const box = document.getElementById('pixError');
+    box.textContent = motivo
+      ? motivo + ' Ajuste e tente de novo.'
+      : 'Não deu pra gerar a cobrança agora. Tente de novo em instantes.';
+    box.style.display = 'block';
+  }
+
+  function limparFalhaPix(){
+    document.getElementById('pixError').style.display = 'none';
+  }
 
   // "Pagamento realizado, enviar notificação" — só dispara o e-mail de aviso.
   // A conferência do Pix e a impressão continuam do lado do operador, pelo
@@ -658,8 +691,8 @@
       btn.textContent = 'Enviando aviso...';
       try{
         const resp = await fetch(`/orders/${orderId}/notify-payment`, {method:'POST'});
+        if(!resp.ok) throw new Error(await motivoDaFalha(resp));
         const data = await resp.json().catch(()=> ({}));
-        if(!resp.ok) throw new Error(data.detail || 'erro no servidor');
         btn.textContent = 'Aviso enviado ✓';
         note.style.color = 'var(--green)';
         note.textContent = data.message || 'Aviso enviado.';
@@ -668,7 +701,8 @@
         btn.disabled = false;
         btn.textContent = NOTIFY_LABEL;
         note.style.color = 'var(--red)';
-        note.textContent = 'Não deu pra enviar o aviso: ' + e.message + '. Tenta de novo em instantes — se insistir, avisa direto pelo contato de sempre.';
+        note.textContent = 'Não deu pra enviar o aviso.' + (e.message ? ' ' + e.message : '')
+                         + ' Tenta de novo em instantes — se insistir, avisa direto pelo contato de sempre.';
         note.style.display = 'block';
       }
     };
@@ -692,14 +726,20 @@
     try{
       await navigator.clipboard.writeText(msg);
       const btn = document.getElementById('copyBtn');
-      const original = btn.textContent;
-      btn.textContent = 'Copiado!';
       btn.classList.add('copied');
-      setTimeout(()=>{ btn.textContent = original; btn.classList.remove('copied'); }, 1800);
+      avisoNoBotao('copyBtn', 'Copiado!', 'Copiar resumo');
     }catch(e){
-      alert('Não consegui copiar automaticamente. Copia manualmente o resumo na tela.');
+      avisoNoBotao('copyBtn', 'Selecione o resumo e copie', 'Copiar resumo');
     }
   });
+
+  // Retorno no próprio botão que a pessoa acabou de apertar — é onde ela
+  // está olhando, e não interrompe o que ela estava fazendo.
+  function avisoNoBotao(id, aviso, rotulo){
+    const btn = document.getElementById(id);
+    btn.textContent = aviso;
+    setTimeout(()=>{ btn.textContent = rotulo; btn.classList.remove('copied'); }, 1800);
+  }
 
   // ===================================================================
   //  Revisão da folha — prévia do PDF e editor de cópias, no navegador
@@ -900,7 +940,7 @@
     sheetSlots.splice(alvo, 1);
     afterEdit();
     if(levouVerso){
-      footMessage('Todas as cópias tinham verso próprio, então essa saiu com o verso dela.');
+      footMessage('Essa cópia tinha verso próprio, então o verso saiu junto com ela.');
     }
   }
 
@@ -932,8 +972,8 @@
     if(!b) return;
     const livre = g.idx.find(i => !sheetSlots[i].back);
     if(livre === undefined){
-      footMessage('Já tem um verso pra cada cópia dessa carta. Pra caber mais '
-                + 'um verso, adicione outra cópia da frente.');
+      footMessage('Cada verso vai colado numa cópia, e todas as cópias já têm o '
+                + 'seu. Adicione mais uma cópia pra caber mais um verso.');
       return;
     }
     pushHistory();
@@ -1036,13 +1076,11 @@
         {
           valor: g.idx.length,
           menos: {rotulo: 'Remover uma cópia de ' + titulo,
-                  acao: () => removeCopy(g.key),
-                  travado: sheetSlots.length <= 1},
+                  acao: () => removeCopy(g.key)},
           mais:  {rotulo: 'Adicionar uma cópia de ' + titulo,
                   acao: () => addCopy(g.key)},
-          tirar: {rotulo: 'Tirar ' + titulo + ' do pedido (frente e verso)',
-                  acao: () => removeGroup(g.key),
-                  travado: g.idx.length >= sheetSlots.length}
+          tirar: {rotulo: 'Tirar ' + titulo + ' do pedido',
+                  acao: () => removeGroup(g.key)}
         });
       bloco.appendChild(linha);
 
@@ -1056,8 +1094,7 @@
                     acao: () => removeBack(g.key, b.id),
                     travado: b.idx.length === 0},
             mais:  {rotulo: 'Adicionar um verso de ' + titulo,
-                    acao: () => addBack(g.key, b.id),
-                    travado: b.idx.length >= g.idx.length},
+                    acao: () => addBack(g.key, b.id)},
             tirar: {rotulo: 'Tirar todos os versos de ' + titulo,
                     acao: () => removeAllBacks(g.key, b.id),
                     travado: b.idx.length === 0}
@@ -1174,7 +1211,7 @@
       if(!item){
         slot.classList.add('empty');
         const vazio = document.createElement('span');
-        vazio.textContent = 'vazio';
+        vazio.textContent = 'livre';
         slot.appendChild(vazio);
       } else {
         slot.appendChild(cardArt(item.meta, 400));
@@ -1188,18 +1225,14 @@
           tag.className = 'pg-badge';
           tag.textContent = 'VERSO';
           slot.appendChild(tag);
-          const grupo = findGroup(item.frontKey);
-          const b = grupo && grupo.backs.get(item.backId);
           const menos = botao('−', 'Remover este verso, mantendo a frente',
                               () => removeBack(item.frontKey, item.backId));
           const mais = botao('+', 'Adicionar mais um verso desta carta',
                              () => addBack(item.frontKey, item.backId));
-          mais.disabled = !grupo || !b || b.idx.length >= grupo.idx.length;
           ctrl.append(menos, mais);
         } else {
           const menos = botao('−', 'Remover uma cópia de ' + cardTitle(item.meta),
                               () => removeCopy(item.frontKey));
-          menos.disabled = sheetSlots.length <= 1;
           const mais = botao('+', 'Adicionar uma cópia de ' + cardTitle(item.meta),
                              () => addCopy(item.frontKey));
           ctrl.append(menos, mais);
@@ -1234,10 +1267,17 @@
     const t = computeTotals(sheetSlots.length, versos, lam);
     // só números entram aqui — nome de carta nunca, pra não precisar escapar
     document.getElementById('footSum').innerHTML =
-      `<div><b>${sheetSlots.length}</b> carta(s)`
-      + (versos ? ` · <b>${versos}</b> verso(s) próprio(s)` : '')
-      + ` · <b>${t.pages}</b> página(s) · <b>${t.blanks}</b> espaço(s) vazio(s)</div>`
+      `<div>${plural(sheetSlots.length, 'carta', 'cartas')}`
+      + (versos ? ` · <b>${versos}</b> com verso próprio` : '')
+      + ` · ${plural(t.pages, 'página', 'páginas')}`
+      + (t.blanks ? ` · sobram ${plural(t.blanks, 'espaço livre', 'espaços livres')}`
+                  : ' · última página completa')
+      + `</div>`
       + `<div>${t.lamLabel} · <span class="price">R$ ${formatBRL(t.total)}</span></div>`;
+  }
+
+  function plural(n, um, muitos){
+    return `<b>${n}</b> ` + (n === 1 ? um : muitos);
   }
 
   function footMessage(msg){
@@ -1395,12 +1435,12 @@
   function updateReviewUi(){
     document.getElementById('reviewBtn').disabled = sheetSlots.length === 0;
     const badge = document.getElementById('reviewBadge');
-    if(sheetEdited){
-      badge.textContent = 'Folha revisada';
-      badge.classList.add('show');
-    } else {
-      badge.classList.remove('show');
-    }
+    const recado = cobrancaVencida
+      ? 'O pedido mudou — gere a cobrança de novo.'
+      : (sheetEdited ? 'Pedido revisado' : '');
+    badge.textContent = recado;
+    badge.classList.toggle('show', !!recado);
+    badge.classList.toggle('atencao', cobrancaVencida);
   }
 
   document.getElementById('reviewBtn').addEventListener('click', openReview);
