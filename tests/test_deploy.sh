@@ -38,6 +38,11 @@ case "$1 ${2:-}" in
   "compose version") exit 0 ;;
   "image prune")     exit 0 ;;
 esac
+if [ "$1" = "inspect" ]; then
+  cat "$BANCADA/DONO_DO_CONTAINER" 2>/dev/null
+  [ -f "$BANCADA/DONO_DO_CONTAINER" ] || exit 1
+  exit 0
+fi
 for arg in "$@"; do
   if [ "$arg" = "up" ]; then
     echo "$(cat "$BANCADA/servidor/marca.txt" 2>/dev/null || echo '?')" \
@@ -98,6 +103,10 @@ eq "publicação bem-sucedida sai com 0" "$codigo" "0"
 eq "o servidor ficou no commit novo" "$(commit_do_servidor)" "v2"
 check "reconstruiu o container" \
   "$(grep -qc 'compose .*up -d --build' "$BANCADA/chamadas.txt" >/dev/null; echo $?)"
+# O compose pode ser o grande do servidor: publicar a Forja não pode reiniciar
+# os vizinhos do homelab.
+check "não encostou nos outros serviços do compose (--no-deps)" \
+  "$(grep -q 'up -d --build --no-deps forja-backend' "$BANCADA/chamadas.txt"; echo $?)"
 check "conferiu se a página respondeu" \
   "$(grep -q 'curl .*forja-deploy' "$BANCADA/chamadas.txt"; echo $?)"
 check "limpou as imagens velhas SÓ com o filtro da label" \
@@ -128,6 +137,36 @@ novo_commit v4
 codigo=$(publicar)
 eq "depois de desfazer, a publicação seguinte funciona" "$codigo" "0"
 eq "e chega no commit novo" "$(commit_do_servidor)" "v4"
+
+# --------------------------------------------------------------------------
+# 2b. O `up` em si falhando (nome de container em uso, imagem que não builda)
+# --------------------------------------------------------------------------
+# Isto já escapou uma vez: com `set -e`, um `up` que falha abortava o script
+# ANTES do log e do desfazer. Falha de subir tem que ser tratada igual a
+# falha de responder.
+: > "$BANCADA/builds.txt"
+touch "$BANCADA/SUBIR_FALHA"
+echo "/home/eu/homelab/docker-compose.yml" > "$BANCADA/DONO_DO_CONTAINER"
+novo_commit v5-nao-sobe
+codigo=$(publicar)
+eq "up que falha sai com erro" "$codigo" "1"
+eq "up que falha também desfaz" "$(commit_do_servidor)" "v4"
+check "e mostra o log do container" \
+  "$(grep -q 'compose .*logs --tail' "$BANCADA/chamadas.txt"; echo $?)"
+check "e aponta o compose que É dono do container" \
+  "$(grep -q 'FORJA_COMPOSE=/home/eu/homelab/docker-compose.yml' "$BANCADA/saida.txt"; echo $?)"
+rm -f "$BANCADA/SUBIR_FALHA" "$BANCADA/DONO_DO_CONTAINER"
+
+# Sem dono declarado (container criado na mão, sem label), a dica não aparece
+# — palpite errado atrapalha mais que silêncio.
+touch "$BANCADA/SUBIR_FALHA"
+novo_commit v5b
+codigo=$(publicar)
+check "sem label de compose, nenhuma dica é inventada" \
+  "$(grep -q 'FORJA_COMPOSE=' "$BANCADA/saida.txt" && echo 1 || echo 0)"
+rm -f "$BANCADA/SUBIR_FALHA"
+touch "$BANCADA/SAUDE_OK"
+publicar > /dev/null    # volta pro verde antes do próximo cenário
 
 # --------------------------------------------------------------------------
 # 3. Desfazer desligado: fica no commit novo e falha alto

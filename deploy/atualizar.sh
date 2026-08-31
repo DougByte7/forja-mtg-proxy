@@ -115,7 +115,10 @@ fi
 # Container
 # --------------------------------------------------------------------------
 subir(){
-  "${COMPOSE[@]}" -f "$FORJA_COMPOSE" up -d --build "$FORJA_SERVICE"
+  # `--no-deps` porque o compose costuma ser o GRANDE do servidor, com os
+  # outros serviços do homelab dentro. Publicar a Forja não pode reiniciar o
+  # vizinho de baixo — só o serviço nomeado aqui é tocado.
+  "${COMPOSE[@]}" -f "$FORJA_COMPOSE" up -d --build --no-deps "$FORJA_SERVICE"
 }
 
 # Espera a página responder de verdade. Sem isto, "deploy ok" significa só
@@ -139,10 +142,11 @@ esta_no_ar(){
   return 1
 }
 
+# Dentro do `if` de propósito: comando que falha aí não dispara o `set -e`.
+# Solto, um `up` que desse errado abortaria o script na hora — sem log, sem
+# desfazer, sem dica. Era o que acontecia.
 diz "reconstruindo e subindo o serviço $FORJA_SERVICE…"
-subir
-
-if esta_no_ar; then
+if subir && esta_no_ar; then
   if [ "$FORJA_PRUNE" != "0" ]; then
     # Cada rebuild deixa a imagem anterior pra trás, sem tag. Num servidor de
     # casa isso vira dezenas de GB em alguns meses. O filtro por label é o que
@@ -158,7 +162,24 @@ fi
 # --------------------------------------------------------------------------
 # Não subiu
 # --------------------------------------------------------------------------
-echo "ERRO: o serviço não respondeu depois de subir. Últimas linhas do log:" >&2
+# O tropeço clássico quando a Forja é um serviço do compose grande do
+# servidor: o container que está rodando pertence a OUTRO arquivo compose, e o
+# docker recusa criar outro com o mesmo nome ("name is already in use").
+# Publicar pelo compose errado nunca ia atualizar o container certo, então a
+# dica é a correção de verdade, não um contorno.
+dono="$("$MOTOR" inspect "$FORJA_SERVICE" \
+        --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' \
+        2>/dev/null || true)"
+if [ -n "$dono" ] && [ "$dono" != "$FORJA_COMPOSE" ]; then
+  echo "DICA: o container '$FORJA_SERVICE' que está rodando foi criado por outro" >&2
+  echo "      compose:  $dono" >&2
+  echo "      e esta publicação usou:  $FORJA_COMPOSE" >&2
+  echo "      Aponte FORJA_COMPOSE pra ele no .env do runner (e reinicie o" >&2
+  echo "      serviço do runner):" >&2
+  echo "      FORJA_COMPOSE=$dono" >&2
+fi
+
+echo "ERRO: o serviço não subiu ou não respondeu. Últimas linhas do log:" >&2
 "${COMPOSE[@]}" -f "$FORJA_COMPOSE" logs --tail 50 "$FORJA_SERVICE" >&2 || true
 
 if [ "$FORJA_ROLLBACK" = "0" ] || [ "$ANTES" = "$DEPOIS" ]; then
