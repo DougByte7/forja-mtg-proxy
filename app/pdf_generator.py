@@ -26,11 +26,21 @@ import requests
 from PIL import Image
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from reportlab import rl_config
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+
+# O reportlab embute os JPEGs sem recomprimir (o stream sai como DCTDecode, a
+# imagem passa intacta), mas por padrão ele codifica cada stream em ASCII85 —
+# que é texto, e infla os bytes em exatamente 1,25x. Num PDF que é quase só
+# imagem, isso é 25% de peso morto sem um pixel de qualidade em troca, e num
+# pedido grande são dezenas de MB atravessando o túnel à toa. Desligar deixa
+# o stream binário, que todo leitor de PDF entende, e ainda corta o tempo de
+# montagem — codificar em A85 é a parte cara do `drawImage`.
+rl_config.useA85 = 0
 
 CARD_W = 63 * mm
 CARD_H = 88 * mm

@@ -150,6 +150,11 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
      montar o link Imprimir. Tem que ser um endereço que você consiga abrir
      do celular (o domínio do Cloudflare Tunnel). Se ficar em `localhost`, o
      link só funciona na máquina onde o serviço roda.
+   - `LOCAL_BASE_URL` — opcional, o endereço do backend **na rede local**
+     (`http://192.168.x.y:8000`). Liga um link extra "Ver PDF (rede local)"
+     no e-mail e na tela do admin, pra conferir a folha de dentro de casa sem
+     mandar o arquivo pro túnel e trazer de volta. Veja *Como o PDF volta pro
+     navegador*.
    - `CUPS_HOST` e `PRINTER_QUEUE` — endereço do CUPS na rede
      (`IP-DO-SERVIDOR:631`, ou vazio pra falar pelo socket local) e o nome da
      fila da sua impressora.
@@ -301,6 +306,7 @@ estado e uma busca que casa com nome, id do pedido ou código do deck.
 | Botão | O que faz |
 |---|---|
 | **Ver PDF** | abre a folha montada numa aba nova (mesmo link assinado do e-mail) |
+| **Ver PDF (rede local)** | a mesma folha pelo IP do homelab, sem passar pelo túnel. Só aparece com `LOCAL_BASE_URL` no `.env` — ver *Como o PDF volta pro navegador* |
 | **Montar PDF** | manda montar antes da hora e mostra o progresso ali mesmo (`12 de 60 imagens baixadas`) |
 | **Refazer PDF** | remonta do zero — é o que se usa depois de arrumar uma arte no Drive |
 | **Imprimir** | marca como pago e manda pra fila do CUPS. Pede confirmação |
@@ -914,17 +920,26 @@ página).
 Duas metades independentes:
 
 **No PDF** — as imagens entram como JPEG `JPEG_QUALITY` (95) com subamostragem
-de cor desligada (4:4:4), por padrão na resolução original do Drive (`PRINT_DPI=0`).
-Subamostragem é o que borra borda fina e texto pequeno de carta, por isso fica
-desligada. O teto de nitidez é a imagem de origem: uma de 800 px de largura dá
-~323 DPI em 63 mm, que é o padrão de foto. Impressora nenhuma inventa detalhe
-acima disso.
+de cor desligada (4:4:4). Subamostragem é o que borra borda fina e texto pequeno
+de carta, por isso fica desligada. O teto de nitidez é a imagem de origem: uma
+de 800 px de largura dá ~323 DPI em 63 mm, que é o padrão de foto. Impressora
+nenhuma inventa detalhe acima disso.
 
-`PRINT_DPI` reamostra pra um teto antes de montar. As artes do MPC Fill vêm com
-~3264 px de largura, que viram ~2976 px depois de tirada a sangria — ~1200 DPI
-em 63 mm, 4x além do que a impressora resolve. Medido com as artes reais: **3,6 MB por carta com `PRINT_DPI=0`, 1,1 MB
-com `PRINT_DPI=600`**. Num pedido grande é a diferença entre um PDF de ~200 MB e
-um de ~60 MB atravessando o túnel, e o papel fica igual.
+`PRINT_DPI` reamostra pra um teto antes de montar, e o `.env` vem com **600**.
+As artes do MPC Fill chegam com ~3264 px de largura, que viram ~2976 px depois
+de tirada a sangria — ~1200 DPI em 63 mm, 4x além do que a impressora resolve;
+os outros 3/4 só engordam o arquivo. Medido com as artes reais: **3,6 MB por
+carta em resolução original, 1,1 MB em 600 DPI**. Num pedido grande é a
+diferença entre um PDF de ~200 MB e um de ~60 MB subindo pelo link de casa, com
+o papel idêntico. `PRINT_DPI=0` desliga e mantém a resolução do Drive.
+
+O gerador também desliga o **ASCII85** do reportlab (`rl_config.useA85 = 0`).
+Os JPEGs já entram sem recompressão (o stream sai como `DCTDecode`, a imagem
+passa intacta), mas por padrão o reportlab embrulha cada stream em ASCII85 —
+que é texto, e infla os bytes em exatamente 1,25x. Num arquivo que é quase só
+imagem, isso era 25% de peso morto sem um pixel de qualidade em troca, e ainda
+custava tempo de montagem (codificar em A85 é a parte cara do `drawImage`).
+Stream binário é PDF válido e todo leitor entende.
 
 ### A sangria do MPC Fill (por que a carta saía menor)
 
@@ -1045,6 +1060,41 @@ com `-m everywhere`:
 ⚠️ **Nunca use `A4.Borderless`.** Impressão sem margem amplia a imagem 2–3%
 pra garantir sangria — exatamente o que tira a carta dos 63×88 mm. A folha
 já tem 10,5 mm de margem lateral de propósito.
+
+### Como o PDF volta pro navegador
+
+O arquivo é grande e sobe por um link doméstico, então a entrega importa tanto
+quanto a montagem. `GET /orders/{id}/pdf` faz três coisas que o `FileResponse`
+do Starlette 0.38 não faz sozinho:
+
+**Range.** A resposta anuncia `Accept-Ranges: bytes` e atende pedido de faixa
+com `206`. Sem isso o visualizador não consegue ler o índice do fim do arquivo
+pra desenhar a primeira página antes do resto: ele baixa **tudo** e só então
+mostra alguma coisa — e conexão que cai no meio recomeça do zero em vez de
+retomar. Faixa fora do arquivo devolve `416`; várias faixas de uma vez caem pro
+arquivo inteiro, que é resposta legítima e poupa o `multipart/byteranges`.
+
+**Revalidação.** O `Cache-Control` era `no-store`, e cada reabertura da mesma
+folha pagava o download inteiro de novo. Agora é `private, max-age=0,
+must-revalidate` com ETag (mtime + tamanho do arquivo): reabrir custa um `304`
+de uns poucos bytes enquanto nada mudou, e o "Refazer PDF" troca o ETag
+sozinho, então não há como o navegador mostrar uma folha velha. O `If-Range`
+também é conferido — retomar um download pela metade só vale se for o mesmo
+arquivo, senão sairia um PDF emendado de duas montagens diferentes.
+
+**Link da rede local.** Com `LOCAL_BASE_URL` no `.env`, o e-mail de aviso e a
+tela do admin ganham um botão **"Ver PDF (rede local)"** ao lado do "Ver PDF"
+normal. É a mesma folha, com o mesmo token assinado, mas pelo IP do homelab: o
+link público manda o arquivo até a Cloudflare e traz de volta, ou seja, gasta a
+subida doméstica duas vezes pra chegar numa máquina que está do lado. Fora de
+casa esse botão não abre — o de fora continua sendo o "Ver PDF" normal.
+
+`tests/test_pdf_range.py` trava esse comportamento (faixas, 416, 304,
+`If-Range`, e a porta continuar exigindo token). Roda sem rede:
+
+```
+python tests/test_pdf_range.py
+```
 
 ## Limpeza automática dos PDFs
 

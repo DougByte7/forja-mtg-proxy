@@ -38,6 +38,9 @@ ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 # URL pública do backend, usada pra montar os links do e-mail.
 # Ex: https://forja.exemplo.com  (sem barra no fim)
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
+# Endereço do backend na rede local (ex.: http://192.168.3.47:8000). Vazio
+# desliga o link extra de conferir a folha por dentro de casa.
+LOCAL_BASE_URL = os.environ.get("LOCAL_BASE_URL", "").rstrip("/")
 
 
 def _token(purpose: str, order_id: str) -> str:
@@ -67,6 +70,26 @@ def pdf_url(order_id: str, fresh: bool = False, base: str | None = None) -> str:
     raiz = PUBLIC_BASE_URL if base is None else base
     url = f"{raiz}/orders/{order_id}/pdf?token={_token('view', order_id)}"
     return url + "&fresh=1" if fresh else url
+
+
+def pdf_url_local(order_id: str) -> str | None:
+    """O mesmo link de conferir a folha, mas pelo IP do homelab na rede local.
+
+    Devolve None quando LOCAL_BASE_URL não está configurada.
+
+    Existe por causa do tamanho do arquivo. Aberto de dentro de casa, o link
+    público manda o PDF do homelab até a Cloudflare e de volta pra uma
+    máquina que está na mesma rede — gasta a subida doméstica duas vezes, e
+    num pedido grande são centenas de MB. Este vai direto na máquina.
+
+    O token é o mesmo, então quem tem este link tem exatamente o mesmo poder
+    de quem tem o outro: conferir a folha, e nada além disso (imprimir usa
+    outro token). Ele trafega em claro na LAN, o que é o mesmo risco de já
+    servir a tela do admin por HTTP na rede de casa.
+    """
+    if not LOCAL_BASE_URL:
+        return None
+    return pdf_url(order_id, base=LOCAL_BASE_URL)
 
 
 def print_url(order_id: str) -> str:

@@ -27,7 +27,8 @@ LAM_LABELS = {"single": "Um lado", "double": "Dois lados"}
 
 
 def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,
-                             pdf_fresh_url: str):
+                             pdf_fresh_url: str,
+                             pdf_local_url: str | None = None):
     """
     O cliente clicou em "Pagamento realizado, enviar notificação".
 
@@ -39,6 +40,12 @@ def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,
 
     O PDF vai como link, não como anexo: pedido grande passa fácil do limite
     de 25 MB do Gmail.
+
+    `pdf_local_url` (opcional, vem do LOCAL_BASE_URL) é a MESMA folha pelo IP
+    do homelab. Vale a pena quando o e-mail é aberto de dentro de casa: o link
+    público sobe o arquivo até a Cloudflare e traz de volta, e o PDF de um
+    pedido grande tem centenas de MB. Sem LOCAL_BASE_URL o e-mail sai igual ao
+    de antes, com dois botões.
     """
     lam = LAM_LABELS.get(order["lamination"], order["lamination"])
 
@@ -60,13 +67,31 @@ def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,
         f"Espaços em branco na última página: {order['blanks']}\n"
         f"Laminação: {lam}\n"
         f"Valor cobrado: R$ {order['amount']:.2f}\n\n"
-        f"1) Confere a folha antes de gastar papel:\n{pdf_url}\n\n"
+        f"1) Confere a folha antes de gastar papel:\n{pdf_url}\n"
+        + (f"   Em casa, direto pelo IP (bem mais rápido, não passa pelo "
+           f"túnel):\n   {pdf_local_url}\n" if pdf_local_url else "")
+        + "\n"
         f"2) Se o Pix caiu e o PDF está certo, imprime:\n{print_url}\n\n"
         f"Só abrir o PDF não marca nada como pago. Quem faz isso — e manda pra "
         f"fila da impressora — é o link 2.\n\n"
         f"Alguma carta saiu como \"FALHA NO DOWNLOAD\"? Gera o PDF de novo:\n"
         f"{pdf_fresh_url}"
     )
+
+    # Botão e explicação extras só quando há LOCAL_BASE_URL configurada; sem
+    # ela o e-mail sai exatamente como antes. Tracejado de propósito, pra não
+    # competir com o "Ver PDF" de fora, que é o que funciona de qualquer lugar.
+    botao_local = (
+        f"""<a href="{pdf_local_url}"
+       style="background:#ffffff;color:#1b1730;text-decoration:none;
+              border:2px dashed #1b1730;padding:12px 22px;border-radius:8px;
+              font-weight:bold;display:inline-block;margin:0 8px 10px 0;">Ver PDF (rede local)</a>"""
+        if pdf_local_url else "")
+    nota_local = (
+        """<b>Ver PDF (rede local)</b> é a mesma folha pelo IP do homelab —
+    em casa abre bem mais rápido, porque não sobe pelo túnel e volta. Fora
+    de casa esse link não funciona.<br>"""
+        if pdf_local_url else "")
 
     msg.add_alternative(
         f"""\
@@ -89,6 +114,7 @@ def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,
        style="background:#ffffff;color:#1b1730;text-decoration:none;
               border:2px solid #1b1730;padding:12px 22px;border-radius:8px;
               font-weight:bold;display:inline-block;margin:0 8px 10px 0;">Ver PDF</a>
+    {botao_local}
     <a href="{print_url}"
        style="background:#C9A227;color:#1A1408;text-decoration:none;
               padding:14px 24px;border:2px solid #C9A227;border-radius:8px;
@@ -97,6 +123,7 @@ def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,
   <p style="font-size:12px;color:#666;line-height:1.6;">
     <b>Ver PDF</b> abre a folha pra você conferir antes de gastar papel — não
     marca nada como pago.<br>
+    {nota_local}
     <b>Imprimir</b> marca o pedido como pago e manda pra fila da impressora.<br>
     Alguma carta saiu como "FALHA NO DOWNLOAD"?
     <a href="{pdf_fresh_url}" style="color:#666;">Gerar o PDF de novo.</a>

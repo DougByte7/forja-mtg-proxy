@@ -502,6 +502,14 @@ function acoesDoPedido(p) {
   if (p.pdf_url) {
     div.appendChild(botao("Ver PDF", () => window.open(p.pdf_url, "_blank")));
   }
+  // Mesma folha pelo IP do homelab (LOCAL_BASE_URL no .env). O botão acima é
+  // relativo, então já vai direto quando esta tela foi aberta pela rede local
+  // — mas quando ela vem pelo túnel, o PDF inteiro sobe e volta por ele. Este
+  // atalho tira o túnel do caminho, e some quando não há LOCAL_BASE_URL.
+  if (p.pdf_url_local) {
+    div.appendChild(botao("Ver PDF (rede local)",
+                          () => window.open(p.pdf_url_local, "_blank")));
+  }
   div.appendChild(botao("Montar PDF", (b) => montarPdf(p, b)));
   div.appendChild(botao("Refazer PDF", (b) => montarPdf(p, b, true)));
 
