@@ -573,14 +573,22 @@ funciona atrás do NAT e do Cloudflare Tunnel do jeito que já está.
 2. **Diga onde o projeto mora.** Crie um `.env` na pasta do runner (não é o
    `.env` da Forja — é outro arquivo, na pasta do `actions-runner`). O runner
    injeta isso em todo job, e é o que mantém o caminho do seu servidor fora
-   de um repositório público:
+   de um repositório público.
+
+   **Caminho absoluto**, sempre: o job não roda no seu home, e sim em
+   `_work/<repo>/<repo>`. Um `../forja-backend` que parece certo quando você
+   está no terminal aponta pra outro lugar lá dentro. O workflow recusa
+   caminho relativo dizendo isso, mas é melhor não esbarrar.
 
    ```
-   FORJA_DIR=/caminho/no/homelab/forja-backend
+   FORJA_DIR=/home/SEU_USUARIO/forja-backend
    # Opcionais, quando a Forja é um serviço do compose grande do servidor:
-   # FORJA_COMPOSE=/caminho/no/homelab/docker-compose.yml
+   # FORJA_COMPOSE=/home/SEU_USUARIO/docker-compose.yml
    # FORJA_HEALTH_URL=http://localhost:8000/
    ```
+
+   O runner lê esse `.env` **quando o serviço sobe**. Depois de editar:
+   `sudo ./svc.sh stop && sudo ./svc.sh start`.
 
 3. **Suba como serviço**, pra voltar sozinho quando a máquina reiniciar:
 
@@ -597,10 +605,23 @@ funciona atrás do NAT e do Cloudflare Tunnel do jeito que já está.
    ```
 
 4. **Confira o clone do servidor**: o `FORJA_DIR` tem que ser um clone git
-   desta origem (HTTPS basta, o repositório é público), com o `.env` da Forja
-   no lugar e o `deploy/atualizar.sh` executável. É esse clone que o deploy
-   atualiza — o runner nunca faz checkout por conta própria, justamente pra
-   não duplicar o `.env` nem os volumes.
+   desta origem, com o `.env` da Forja no lugar e o `deploy/atualizar.sh`
+   executável. É esse clone que o deploy atualiza — o runner nunca faz
+   checkout por conta própria, justamente pra não duplicar o `.env` nem os
+   volumes.
+
+   **O remoto tem que ser HTTPS, não SSH.** O repositório é público, então
+   HTTPS puxa sem chave nenhuma; SSH funcionaria quando você mesmo roda o
+   comando (sua sessão tem agente de chave), mas o runner roda como serviço,
+   sem agente — e falha com `Permission denied (publickey)`. Se o clone já
+   existe com remoto SSH:
+
+   ```sh
+   git -C ~/forja-backend remote set-url origin \
+       https://github.com/DougByte7/forja-mtg-proxy.git
+   ```
+
+   O script diz isso, com o comando pronto, se esbarrar no caso.
 
 Depois disso, `git push` na main e acompanhe em **Actions**. O resumo do job
 diz o commit que ficou em produção.

@@ -152,15 +152,44 @@ eq "e não reconstruiu nada" "$(wc -l < "$BANCADA/builds.txt")" "0"
 check "explica o que fazer" "$(grep -q 'não commitadas' "$BANCADA/saida.txt"; echo $?)"
 git -C "$SERVIDOR" checkout -q -- docker-compose.yml
 
+# Arquivo que ninguém rastreia (o .claude/ do editor, um .env.bak) NÃO pode
+# barrar a publicação: ele não atrapalha o `git pull --ff-only`, e num servidor
+# sempre aparece um. Isto já travou uma publicação de verdade.
+mkdir -p "$SERVIDOR/.claude"
+echo '{}' > "$SERVIDOR/.claude/settings.local.json"
+echo "backup" > "$SERVIDOR/.env.bak"
+novo_commit v6
+codigo=$(publicar)
+eq "arquivo não rastreado NÃO barra a publicação" "$codigo" "0"
+eq "e o código chega no commit novo" "$(commit_do_servidor)" "v6"
+check "e o arquivo continua lá, intocado" \
+  "$([ -f "$SERVIDOR/.claude/settings.local.json" ] && echo 0 || echo 1)"
+rm -rf "$SERVIDOR/.claude" "$SERVIDOR/.env.bak"
+
 # --------------------------------------------------------------------------
 # 5. Sem conferência de saúde: publica no escuro, mas publica
 # --------------------------------------------------------------------------
 rm -f "$BANCADA/SAUDE_OK"          # o curl responderia erro, se fosse chamado
 : > "$BANCADA/chamadas.txt"
-novo_commit v6
+novo_commit v7
 codigo=$(FORJA_HEALTH_URL= "$SERVIDOR/deploy/atualizar.sh" > "$BANCADA/saida.txt" 2>&1; echo $?)
 eq "FORJA_HEALTH_URL vazia publica assim mesmo" "$codigo" "0"
 check "e não chama o curl" "$(grep -q 'curl ' "$BANCADA/chamadas.txt" && echo 1 || echo 0)"
+
+# Clone com remoto SSH: na mão funciona (tem agente de chave na sessão), pelo
+# runner não (roda como serviço, sem agente). O erro do git sozinho não diz o
+# que fazer, então a dica tem que sair junto — e colável.
+antes="$(commit_do_servidor)"
+git -C "$SERVIDOR" remote set-url origin git@github.com:DougByte7/forja-mtg-proxy.git
+codigo=$(GIT_SSH_COMMAND=false publicar)      # ssh falha na hora, sem rede
+eq "remoto SSH inalcançável faz parar" "$codigo" "1"
+eq "e não mexeu no código" "$(commit_do_servidor)" "$antes"
+check "explica que o runner não tem agente de chave" \
+  "$(grep -q 'sem agente de chave' "$BANCADA/saida.txt"; echo $?)"
+check "e dá o comando pronto pra trocar por HTTPS" \
+  "$(grep -q "remote set-url origin https://github.com/DougByte7/forja-mtg-proxy.git" \
+     "$BANCADA/saida.txt"; echo $?)"
+git -C "$SERVIDOR" remote set-url origin "$BANCADA/origem.git"
 
 # --------------------------------------------------------------------------
 # 6. Recados de configuração errada

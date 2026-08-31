@@ -38,6 +38,16 @@ jobs:
                  "pasta do projeto no servidor. Ver README, 'Publicação automática'."
             exit 1
           fi
+          # Caminho relativo aqui é armadilha: o job não roda no home do
+          # usuário, e sim em _work/<repo>/<repo>. Um "../forja-backend" que
+          # parece certo no terminal aponta pra outro lugar aqui dentro.
+          case "$FORJA_DIR" in
+            /*) ;;
+            *) echo "::error::FORJA_DIR='$FORJA_DIR' é caminho relativo. Este job"\
+                    "roda em $(pwd), não no seu home — use o caminho absoluto"\
+                    "(ex: /home/$USER/forja-backend) no .env do runner."
+               exit 1 ;;
+          esac
           if [ ! -x "$FORJA_DIR/deploy/atualizar.sh" ]; then
             echo "::error::não achei $FORJA_DIR/deploy/atualizar.sh (ou ele não"\
                  "tem permissão de execução). FORJA_DIR aponta pro clone certo?"

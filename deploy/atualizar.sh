@@ -63,11 +63,16 @@ Se a Forja é um serviço do compose grande do servidor, aponte FORJA_COMPOSE pr
 
 cd "$FORJA_DIR"
 
-# Mudança feita na mão no servidor faria o pull falhar no meio. Melhor parar
+# Arquivo RASTREADO mexido na mão faria o pull falhar no meio. Melhor parar
 # aqui, com o nome dos arquivos na tela, do que no meio da atualização.
-if [ -n "$(git status --porcelain -- . ':!data')" ]; then
-  git status --short
-  morre "há mudanças não commitadas em $FORJA_DIR. \
+#
+# `--untracked-files=no` de propósito: arquivo que ninguém rastreia (um
+# `.claude/` do editor, um `.env.bak`) não atrapalha o `git pull --ff-only`.
+# Barrar por causa dele seria travar a publicação por um arquivo que não tem
+# nada a ver com o código — e num servidor sempre aparece um.
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  git status --short --untracked-files=no
+  morre "há mudanças não commitadas em arquivos versionados de $FORJA_DIR. \
 Resolva na mão (git stash, git checkout) antes de publicar."
 fi
 
@@ -80,7 +85,23 @@ diz "commit atual: $(git log -1 --format='%h %s' "$ANTES")"
 diz "puxando o código novo…"
 # --ff-only: se não der pra avançar em linha reta, alguma coisa está errada
 # (commit local no servidor, força na main). Melhor falhar que criar merge.
-git pull --ff-only
+if ! git pull --ff-only; then
+  # O tropeço clássico: clone feito com remoto SSH. Na mão funciona, porque
+  # existe agente de chave na sessão; pelo runner não, porque ele roda como
+  # serviço, sem agente nenhum. Como o repositório é público, HTTPS resolve
+  # sem chave, sem token e sem nada guardado no servidor.
+  case "$(git remote get-url origin 2>/dev/null)" in
+    git@*|ssh://*)
+      https="$(git remote get-url origin \
+               | sed -E 's#^(ssh://)?git@([^:/]+)[:/]#https://\2/#')"
+      echo "DICA: o remoto é SSH, e quem puxa aqui é o runner rodando como" >&2
+      echo "      serviço — sem agente de chave. O repositório é público," >&2
+      echo "      então HTTPS resolve sem credencial nenhuma:" >&2
+      echo "      git -C '$FORJA_DIR' remote set-url origin $https" >&2
+      ;;
+  esac
+  morre "não consegui puxar o código novo (veja o erro do git acima)."
+fi
 
 DEPOIS="$(git rev-parse HEAD)"
 if [ "$ANTES" = "$DEPOIS" ]; then
