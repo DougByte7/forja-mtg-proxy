@@ -10,6 +10,28 @@ não precisa de outro container nem configurar URL nenhuma. Ao abrir
 `http://IP-DO-SERVIDOR:8000/` (ou o domínio do seu Cloudflare Tunnel) já
 cai direto na "Forja de Proxies" chamando a API na mesma origem.
 
+## Isto não é uma loja
+
+A página tem preço, botão de pagar e QR code de Pix — parece uma loja e não
+é. É ferramenta privada, para o dono do sistema e o grupo de jogo dele
+imprimirem proxies de playtest.
+
+Por isso a tela tem duas travas, nessa ordem:
+
+1. Um **banner vermelho no topo**, antes de qualquer outra coisa: "isto NÃO é
+   uma loja; se você não me conhece, não gere uma cobrança".
+2. Um **checkbox obrigatório** logo acima do botão de cobrança — "Declaro que
+   conheço o dono do sistema" —, sem o qual o botão nasce e continua
+   desabilitado.
+
+**As duas são travas de TELA.** A rota `POST /orders` continua aberta pra
+quem chamar direto por `curl`. Elas não existem pra barrar quem quer burlar;
+existem pro caso real, que é alguém achar o link, entender que é loja, e
+pagar um Pix esperando receber carta em casa.
+
+Se um dia isso precisar virar trava de verdade, o caminho é pôr a criação de
+pedido atrás de autenticação — não endurecer o front-end.
+
 ## Como o pagamento é confirmado
 
 Sem passar por um provedor de pagamento (Mercado Pago, Asaas, EFI etc.), não
@@ -34,16 +56,6 @@ existe uma API que confirme "foi pago" — e o banco não notifica nada. Então
 O PDF vai como **link, não como anexo**: um pedido grande passaria fácil do
 limite de 25 MB do Gmail. Como o arquivo abre no celular, dá pra imprimir
 por ali também, pelo app da impressora, em vez de usar o botão Imprimir.
-
-O clique do cliente não imprime nada nem marca nada como pago — é só um
-aviso. Alguém clicar no botão sem ter pago não te custa papel nenhum.
-
-Como é só pra você e seus amigos, o valor da cobrança **não é mexido** — fica
-exatamente o preço calculado (o que quer dizer que pedidos diferentes vão
-colidir no mesmo valor com frequência, já que o preço só depende do número de
-páginas). Por isso cada pedido carrega o **nome** de quem pediu e um **hash
-curto do deck** (baseado nos nomes das cartas do XML): é assim que você sabe
-qual Pix da sua lista corresponde a qual e-mail.
 
 Os dois links são assinados com HMAC da `ADMIN_TOKEN`, com **tokens
 diferentes** pra cada um: quem tem o link de conferir não consegue disparar
@@ -153,9 +165,11 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
    apontando pra `forja-backend:8000`, do jeito que os outros serviços já
    são expostos.
 
-5. **Teste antes de usar de verdade**: gere um pedido de teste, escaneie o QR
-   com seu próprio celular (ou com um segundo app bancário) e confirme que
-   o valor e a chave batem antes de mandar pra qualquer cliente.
+5. **Teste antes de usar de verdade**: marque o "Declaro que conheço o dono
+   do sistema" (sem ele o botão de cobrança fica desabilitado), gere um
+   pedido de teste, escaneie o QR com seu próprio celular (ou com um segundo
+   app bancário) e confirme que o valor e a chave batem antes de mandar pra
+   qualquer pessoa do grupo.
 
 ## Estrutura
 
@@ -174,8 +188,26 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 - `app/printer.py` — envia o PDF pra fila CUPS.
 - `app/cleanup.py` — apaga os PDFs antigos do disco de tempos em tempos.
 - `app/main.py` — API que costura tudo.
+- `app/cotacao.py` — escolhe a oferta mais barata de cada carta e soma o
+  total. Não sabe de onde vem o preço: a função de busca chega por parâmetro.
+- `app/ligamagic.py` — lê as ofertas das lojas brasileiras na LigaMagic.
+  **Leia o aviso no topo do arquivo antes de mexer.**
+- `app/scryfall.py` — segunda fonte, via API oficial (preços em dólar).
+- `app/cotacao_job.py` — roda a cotação em segundo plano e guarda o andamento.
+- `app/cache_precos.py` — cache em disco das ofertas, **por carta**,
+  compartilhado pelas duas fontes.
+- `app/identidade.py` — monta o `User-Agent` das consultas de preço a partir
+  do `SMTP_USER`/`NOTIFY_TO`, pra não ter e-mail escrito no código.
 - `tests/test_bleed.py` — confere o recorte da sangria e o tamanho da carta no
   PDF (63 × 88 mm). Roda sem rede e sem pytest: `python tests/test_bleed.py`.
+- `tests/test_cotacao.py` — leitura da decklist do XML e a matemática da
+  cotação: `python tests/test_cotacao.py`.
+- `tests/test_ligamagic.py` — decodificação do preço da LigaMagic contra uma
+  página sintética: `python tests/test_ligamagic.py`.
+- `tests/test_cache_precos.py` — o cache de ofertas por carta:
+  `python tests/test_cache_precos.py`.
+- `tests/test_identidade.py` — o `User-Agent` sai do `.env` e não do código:
+  `python tests/test_identidade.py`.
 
 ### Rotas
 
@@ -189,6 +221,120 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
 | `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, pra descobrir o `PRINTER_QUEUE` certo |
 | `POST /admin/cleanup` | você (`X-Admin-Token`) | roda a faxina dos PDFs antigos na hora |
+| `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
+| `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
+
+## Cotação de preços das cartas
+
+Além de orçar a **impressão**, a tela cota quanto custaria **comprar** as
+cartas de verdade. É o que responde "vale a pena proxiar?".
+
+Aparece um botão **Cotar preços das cartas** no resumo do pedido. Ele mostra,
+por carta, o menor preço em duas fontes lado a lado, e o total de cada uma.
+
+### Como usar
+
+1. Suba o XML do MPC Fill normalmente.
+2. Se for um Commander, escolha o comandante no select. É opcional; quando
+   escolhido, ele **sai da conta**, porque é assim que o **Commander 500**
+   conta — o teto de preço do formato vale para o deck sem ele.
+3. Clique em **Cotar preços das cartas**. Só o clique dispara a consulta —
+   subir o XML sozinho não faz acesso nenhum.
+4. Deck grande leva minutos (uma requisição por carta, com intervalo entre
+   elas). A página mostra o andamento e pode ficar aberta.
+
+A tabela mostra as **10 cartas mais caras** e esconde o resto atrás de um
+"ver mais" — um Commander cotado inteiro passa de 60 linhas e empurraria o
+total pra fora da tela.
+
+### O que fica de fora do total (regra do Commander 500)
+
+- **Terreno básico, sempre.** Reconhece os nomes em inglês e em português,
+  com e sem "Snow-Covered" / "nevado".
+- **O comandante, se você escolher um.**
+
+Isso não é escolha de gosto: é o critério do **Commander 500**, cujo teto de
+preço se aplica ao deck sem o comandante e sem os terrenos básicos. É o que
+faz o total daqui ser o número que se compara com o teto — mexer nesse filtro
+quebra essa comparação.
+
+As duas coisas aparecem listadas embaixo da tabela, com o motivo. Elas não
+somem caladas: um total que não cobre o deck inteiro precisa dizer por quê.
+
+### Cache
+
+As ofertas ficam em cache **por carta**, compartilhado pelas
+duas fontes, por 12 h. Isso significa que trocar uma carta da lista só custa
+aquela carta, e que dois decks parecidos aproveitam um o cache do outro —
+importante porque cada carta nova é um acesso a mais na LigaMagic.
+
+Clicar em cotar de novo refaz a conta, mas passa inteiro pelo cache e volta
+em segundos, sem tocar na rede. Na prática, num deck de 12 cartas: 31 s na
+primeira vez, 2 s nas seguintes — inclusive depois de trocar o comandante.
+
+### As duas fontes
+
+| Fonte | Mercado | Moeda | Observação |
+|---|---|---|---|
+| **LigaMagic** | lojas brasileiras | R$ | é o preço que interessa pra comprar aqui |
+| **Scryfall / TCGplayer** | EUA | US$ | serve de comparação e de conferência |
+
+Os dois totais **não se somam**: são mercados e moedas diferentes. A segunda
+coluna está ali pra dar ordem de grandeza, pegar carta que a Liga não tem, e
+denunciar se a LigaMagic começar a devolver número estranho. `USD_BRL` no
+`.env` converte a coluna da Scryfall pra real só pra facilitar a leitura — é
+taxa fixa que você põe na mão, sem imposto, frete nem IOF.
+
+### Riscos conhecidos — leia antes de depender disso
+
+**A LigaMagic não tem API e não quer ser lida por robô.** Isto não é
+integração: é scraping, e contra duas travas explícitas.
+
+1. **O `robots.txt` deles pede `Crawl-delay: 360`** — seis minutos entre
+   requisições. Como é uma requisição por carta, respeitar isso ao pé da
+   letra faria um deck de 20 cartas levar 2 horas. O padrão aqui é
+   `LIGAMAGIC_DELAY_SEGUNDOS=3`. **Isso é uma divergência consciente do que o
+   site pede**, não descuido — a decisão é de quem toca o projeto, e está
+   registrada em `SCRAPING_NOTES.md`. Se for rodar isso com frequência ou
+   abrir pra muita gente, converse com eles antes.
+2. **O preço não vem como texto.** Vem desenhado num sprite de CSS, com a
+   imagem, os nomes das classes e as coordenadas sorteados a cada requisição.
+   Ler exige reconhecer os dígitos na imagem. É uma trava feita sob medida
+   contra exatamente este uso.
+
+Daí decorre o resto:
+
+- **Vai quebrar sem aviso** quando eles mudarem qualquer coisa. Por isso o
+  `ligamagic.py` levanta exceção com mensagem explicando o quê, em vez de
+  devolver preço aproximado: cotação que falhou é recuperável, preço errado
+  calado não. `SCRAPING_NOTES.md` tem a tabela de "que mensagem quer dizer o
+  quê" e como consertar.
+- **O `User-Agent` identifica o projeto e um e-mail de contato.** O endereço
+  sai do `SMTP_USER` (ou, na falta dele, do `NOTIFY_TO`) que você já preenche
+  pro e-mail de aviso — não tem e-mail escrito no código, então quem clonar
+  o projeto não sai batendo lá com o endereço de outra pessoa. Com o `.env`
+  vazio o cabeçalho ainda diz o que é, só sem contato, e o backend avisa isso
+  no log. `LIGAMAGIC_USER_AGENT`/`SCRYFALL_USER_AGENT` sobrescrevem tudo.
+- Se voltar `HTTP 429`, o cliente espera 5x mais antes de tentar de novo. Se
+  isso virar rotina, suba o `LIGAMAGIC_DELAY_SEGUNDOS` em vez de insistir.
+
+**O total não inclui frete.** Ele é a soma da oferta mais barata de cada
+carta, e cada carta pode vir de uma loja diferente — cada uma com o seu
+frete. Numa cotação de 30 cartas espalhadas por 12 lojas, o custo real de
+comprar é bem maior que o número mostrado. Consolidar em menos lojas costuma
+sair mais barato mesmo pagando um pouco mais por carta; essa comparação ainda
+não está feita.
+
+Outras limitações menores:
+
+- A escolha ignora HP e Danificada por padrão (`COTACAO_CONDICOES`) — sem
+  isso a cotação enche de carta destruída, que é sempre a mais barata.
+- O estoque é preferência, não corte: se ninguém tem as 4 cópias, ele mostra
+  a mais barata mesmo assim e marca com `!` na tabela.
+- A Scryfall não sabe estoque de ninguém, então a coluna dela nunca marca.
+
+Pra desligar tudo isso, `COTACAO_LIGAMAGIC=0` (só Scryfall) ou
+`COTACAO_SCRYFALL=0` (só LigaMagic).
 
 ## Quando a impressão falha
 

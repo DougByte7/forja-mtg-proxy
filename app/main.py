@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import calc, cleanup, fulfillment, notify, pix, printer, storage
+from . import (calc, cleanup, cotacao_job, fulfillment, notify, pix, printer,
+               storage)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -292,6 +293,46 @@ def _status_page(title: str, message: str, ok: bool = True) -> str:
     <p style="margin:0;font-size:14px;line-height:1.6;color:#A79BC7;">{message}</p>
   </div>
 </body></html>"""
+
+
+@app.post("/cotacao")
+async def start_cotacao(xml_file: UploadFile, commander: str = Form(default="")):
+    """
+    Começa a cotar os preços das cartas do XML. NÃO cria pedido nem cobra
+    nada — é só consulta de preço.
+
+    Só roda quando alguém clica no botão da tela, nunca junto do upload: a
+    cotação faz uma requisição por carta na LigaMagic, com intervalo mínimo
+    entre elas, e quem só queria orçar a impressão não deve pagar esse custo.
+
+    `commander` é opcional e sai da conta quando vem — junto com os terrenos
+    básicos, que saem sempre. É o critério do Commander 500, cujo teto de
+    preço vale para o deck sem eles. As duas coisas voltam listadas em
+    `excluidas`, pra tela poder dizer o que ficou de fora do total.
+
+    Responde na hora com o `job_id` e o andamento; o resultado sai no GET
+    abaixo. Deck grande leva minutos, e esperar dentro da requisição estoura
+    o teto do túnel (mesma história do PDF).
+    """
+    try:
+        xml_text = (await xml_file.read()).decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(400, "Esse arquivo não é um XML em UTF-8.")
+    try:
+        return cotacao_job.iniciar(xml_text, commander.strip() or None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/cotacao/{job_id}")
+def get_cotacao(job_id: str):
+    """Andamento ou resultado de uma cotação. A tela chama isso em laço
+    enquanto o estado for "cotando"."""
+    atual = cotacao_job.estado(job_id)
+    if not atual:
+        raise HTTPException(404, "Cotação não encontrada (ou o backend "
+                                 "reiniciou). Clique em cotar de novo.")
+    return atual
 
 
 @app.get("/admin/orders")

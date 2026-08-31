@@ -119,7 +119,30 @@
   .total-row .label{font-family:'Cinzel',serif;font-size:13px;color:var(--text-muted);letter-spacing:.05em;}
   .total-row .value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;color:var(--gold-light);}
 
+  /* Aviso de que a página não é uma loja. Vermelho e no topo de propósito:
+     ela tem preço, botão de pagar e QR de Pix, então quem chega de fora
+     precisa ler isto antes de chegar no botão. */
+  .banner-privado{
+    background:rgba(217,99,74,0.14);border:1px solid var(--red);border-radius:10px;
+    padding:12px 14px;margin-bottom:18px;font-size:13px;line-height:1.6;color:#F2AFA1;
+  }
+  .banner-privado b{color:#FFD3C8;display:block;margin-bottom:3px;
+    font-family:'Cinzel',serif;letter-spacing:.03em;}
+
   .actions{display:flex;flex-direction:column;gap:10px;margin-top:20px;}
+  /* Trava do botão de cobrança. É só uma trava de tela — quem chamar a API
+     direto passa por cima —, mas resolve o caso que importa: alguém que caiu
+     aqui por acaso e ia clicar em "Gerar cobrança" sem ler o aviso. */
+  .conheco{
+    display:flex;align-items:flex-start;gap:9px;cursor:pointer;
+    font-size:12px;line-height:1.5;color:var(--text-muted);
+    background:var(--surface-2);border:1px solid var(--border);
+    border-radius:9px;padding:10px 12px;
+  }
+  .conheco input{margin:1px 0 0;width:15px;height:15px;accent-color:var(--gold);
+    flex:none;cursor:pointer;}
+  .conheco:hover{border-color:var(--gold);}
+  .conheco.marcado{border-color:var(--green);color:var(--text);}
   .pix-btn{
     background:var(--gold);color:#1A1408;border:none;border-radius:9px;padding:12px;
     font-weight:700;font-size:14px;cursor:pointer;
@@ -139,6 +162,66 @@
     color:#F2AFA1;background:rgba(217,99,74,0.12);border:1px solid var(--red);
     border-radius:8px;padding:9px 11px;
   }
+
+  /* --- Cotação de preços das cartas (LigaMagic + Scryfall) ---
+     Só roda quando o cliente clica: cada cotação faz uma requisição por
+     carta num site que pede pra gente ir devagar. */
+  .cot-btn{
+    width:100%;background:transparent;border:1.5px solid var(--green);color:var(--green);
+    border-radius:9px;padding:12px;font-weight:600;font-size:13px;cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .cot-btn:hover:not(:disabled){background:rgba(76,154,107,0.10);filter:brightness(1.15);}
+  .cot-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .cot-cmd{display:flex;flex-direction:column;gap:5px;}
+  .cot-cmd label{font-size:11px;color:var(--text-muted);}
+  .cot-cmd select{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:9px 10px;font-family:'Inter',sans-serif;font-size:13px;
+    width:100%;
+  }
+  .cot-cmd select:focus{outline:none;border-color:var(--gold);}
+  #cotBox{display:none;margin-top:16px;padding-top:16px;border-top:1px dashed var(--border);}
+  #cotBox.show{display:block;}
+  .cot-status{font-size:12px;color:var(--text-muted);line-height:1.6;}
+  .cot-bar{height:4px;background:var(--surface-2);border-radius:2px;overflow:hidden;margin:8px 0;}
+  .cot-bar > i{display:block;height:100%;background:var(--green);width:0;transition:width .4s;}
+  .cot-fontes{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  .cot-fonte{
+    flex:1;min-width:150px;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:9px;padding:10px 12px;
+  }
+  .cot-fonte h4{margin:0 0 2px;font-size:12px;color:var(--text);font-weight:600;}
+  .cot-fonte .v{font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--gold-light);}
+  .cot-fonte .obs{font-size:10px;color:var(--text-muted);line-height:1.45;margin-top:4px;}
+  /* A tabela rola sozinha na horizontal: em tela de celular ela não cabe,
+     e deixar a PÁGINA rolar de lado quebra o resto do layout. */
+  .cot-tabela-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  table.cot{border-collapse:collapse;width:100%;font-size:12px;min-width:420px;}
+  table.cot th,table.cot td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--border);}
+  table.cot th{
+    font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);
+    font-weight:600;white-space:nowrap;
+  }
+  table.cot td.num{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  table.cot td.carta{color:var(--text);}
+  table.cot .loja{display:block;font-size:10px;color:var(--text-muted);}
+  table.cot tr.faltou td{color:var(--text-muted);}
+  table.cot td .aviso{color:#F2AFA1;}
+  /* Acordeão: começa mostrando 10 linhas. Um Commander cotado inteiro passa
+     de 60 linhas e empurraria o total pra fora da tela. */
+  table.cot tr.oculta{display:none;}
+  .cot-mais{
+    width:100%;background:transparent;border:1px dashed var(--border);color:var(--text-muted);
+    border-radius:8px;padding:8px;font-size:11px;cursor:pointer;margin-top:8px;
+    transition:border-color .15s,color .15s;
+  }
+  .cot-mais:hover{border-color:var(--gold);color:var(--gold-light);}
+  .cot-fora{
+    font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:10px;
+    border:1px dashed var(--border);border-radius:8px;padding:8px 10px;
+  }
+  .cot-fora b{color:var(--text);}
 
   /* --- Revisão da folha (prévia + editor, tudo no navegador) --- */
   .review-btn{
@@ -301,6 +384,15 @@
     </div>
   </header>
 
+  <!-- Fica no topo, antes de tudo, porque a página parece uma loja: tem
+       preço, botão de pagar e QR code de Pix. Quem cair aqui de fora precisa
+       ler isto ANTES de chegar no botão. -->
+  <div class="banner-privado" role="alert">
+    <b>ATENÇÃO: isto NÃO é uma loja.</b>
+    Se você não me conhece, não gere uma cobrança. Este sistema é para uso
+    exclusivo meu e do meu grupo, para facilitar nossos playtestes.
+  </div>
+
   <div class="card">
 
     <div class="step">
@@ -362,13 +454,30 @@
 
       <div class="actions">
         <button class="review-btn" id="reviewBtn">Revisar o pedido antes de pagar</button>
-        <button class="pix-btn" id="pixBtn">Gerar cobrança Pix</button>
+        <label class="conheco" for="conhecoDono">
+          <input type="checkbox" id="conhecoDono">
+          <span>Declaro que conheço o dono do sistema.</span>
+        </label>
+        <button class="pix-btn" id="pixBtn" disabled>Gerar cobrança Pix</button>
         <div class="secondary-row">
           <button class="sec-btn" id="downloadBtn">Baixar XML</button>
           <button class="sec-btn" id="copyBtn">Copiar resumo</button>
         </div>
+        <div class="cot-cmd">
+          <label for="cmdSelect">Comandante (opcional — não conta no teto do Commander 500)</label>
+          <select id="cmdSelect"><option value="">— nenhum —</option></select>
+        </div>
+        <button class="cot-btn" id="cotBtn">Cotar preços das cartas</button>
         <div class="review-badge" id="reviewBadge"></div>
         <p class="note falha" id="pixError" style="display:none;"></p>
+      </div>
+
+      <!-- Cotação: preço de comprar as cartas de verdade, não de imprimir.
+           Fica atrás de um clique de propósito — ver o comentário no JS. -->
+      <div id="cotBox">
+        <div class="cot-status" id="cotStatus"></div>
+        <div class="cot-bar" id="cotBar" style="display:none;"><i></i></div>
+        <div id="cotResultado"></div>
       </div>
 
       <div id="pixBox" style="display:none;margin-top:16px;padding-top:16px;border-top:1px dashed var(--border);text-align:center;">
@@ -474,6 +583,23 @@
   const hintBox = document.getElementById('hintBox');
   const nameInput = document.getElementById('customerName');
 
+  // Trava do botão de cobrança: só libera com a declaração marcada E com um
+  // pedido válido na tela. Vale repetir que isto é trava de TELA — a rota
+  // POST /orders continua aberta pra quem chamar direto. O que ela resolve é
+  // o caso real: alguém que caiu aqui por acaso, achou que é loja, e ia
+  // clicar em "Gerar cobrança" sem ler o aviso vermelho lá em cima.
+  const conhecoDono = document.getElementById('conhecoDono');
+  const pixBtnEl = document.getElementById('pixBtn');
+
+  function atualizarBotaoPix(){
+    const declarou = !!(conhecoDono && conhecoDono.checked);
+    pixBtnEl.disabled = !(declarou && lastState);
+    const rotulo = conhecoDono ? conhecoDono.closest('.conheco') : null;
+    if(rotulo) rotulo.classList.toggle('marcado', declarou);
+  }
+
+  if(conhecoDono) conhecoDono.addEventListener('change', atualizarBotaoPix);
+
   let lastState = null;
   // true quando o pedido mudou depois de uma cobrança já gerada
   let cobrancaVencida = false;
@@ -533,8 +659,10 @@
 
   function resetResult(hintMsg){
     lastState = null;
+    atualizarBotaoPix();
     resultBox.classList.remove('show');
     document.getElementById('pixBox').style.display = 'none';
+    limparCotacao();
     limparFalhaPix();
     if(hintMsg){
       hintBox.textContent = hintMsg;
@@ -547,6 +675,12 @@
   // Recalcula o resumo inteiro a partir do estado atual dos campos.
   // Chamado sempre que arquivo, nome ou laminação mudam.
   function recalc(){
+    // O select do comandante e a cotação na tela seguem o deck atual: a
+    // revisão da folha pode ter mudado quantidades, e uma cotação feita
+    // antes disso passa a mostrar número errado.
+    atualizarSelectComandante();
+    if(cotAssinatura && cotAssinatura !== loadedSignature) limparCotacao();
+
     if(xmlError){
       showError(xmlError);
       resetResult('');
@@ -611,6 +745,7 @@
     lastState = {qty, backsCount, pages, blanks, total, lamLabel, lam, customerName, xmlText: loadedXmlText, signature};
     resultBox.classList.add('show');
     updateReviewUi();
+    atualizarBotaoPix();
   }
 
   nameInput.addEventListener('input', recalc);
@@ -647,7 +782,7 @@
       mostrarFalhaPix(e.message);
     }finally{
       btn.textContent = original;
-      btn.disabled = false;
+      atualizarBotaoPix();
     }
   });
 
@@ -672,6 +807,255 @@
   function limparFalhaPix(){
     document.getElementById('pixError').style.display = 'none';
   }
+
+  // --- Cotação de preços das cartas -------------------------------------
+  //
+  // Preço de COMPRAR as cartas, que é outra conta que a desta página (aqui
+  // se cobra impressão). Serve pra decidir se vale a pena proxiar.
+  //
+  // Fica atrás de um botão, e nunca dispara sozinho ao subir o XML, porque
+  // cada cotação faz uma requisição por carta na LigaMagic — um deck grande
+  // vira dezenas de acessos. Quem só quer orçar a impressão não paga esse
+  // custo, e o site não leva tranco de quem nem pediu cotação.
+  const cotBtn = document.getElementById('cotBtn');
+  const cotBox = document.getElementById('cotBox');
+  const cotStatus = document.getElementById('cotStatus');
+  const cotBar = document.getElementById('cotBar');
+  const cotResultado = document.getElementById('cotResultado');
+  const cmdSelect = document.getElementById('cmdSelect');
+  const COT_LABEL = 'Cotar preços das cartas';
+  const COT_VISIVEIS = 10;   // linhas antes do "ver mais"
+  let cotTimer = null;
+  let cotAssinatura = '';    // deck que a cotação desenhada reflete
+
+  function limparCotacao(){
+    if(cotTimer){ clearTimeout(cotTimer); cotTimer = null; }
+    cotAssinatura = '';
+    cotBox.classList.remove('show');
+    cotResultado.innerHTML = '';
+    cotStatus.textContent = '';
+    cotBar.style.display = 'none';
+    cotBtn.disabled = false;
+    cotBtn.textContent = COT_LABEL;
+  }
+
+  // O nome que o backend vai enxergar. Tem que seguir a MESMA regra do
+  // `calc._card_name` (o <query> na frente, o nome do arquivo como reserva),
+  // senão o comandante escolhido aqui não casa com a carta lá e o filtro não
+  // tira nada. Note que é diferente do `cardTitle`, que prefere o arquivo
+  // porque ali o que importa é a arte, não o nome da carta.
+  function nomeParaCotacao(meta){
+    const q = (meta.query || '').trim().replace(/\s+/g, ' ');
+    if(q) return q;
+    return (meta.name || '').trim().replace(/\s+/g, ' ');
+  }
+
+  // Repovoa o select do comandante a partir do deck atual, preservando a
+  // escolha se a carta continuar na lista (a revisão da folha pode ter
+  // mexido nas quantidades sem tirar o comandante).
+  function atualizarSelectComandante(){
+    if(!cmdSelect) return;
+    const anterior = cmdSelect.value;
+    const nomes = [];
+    const vistos = new Set();
+    sheetGroups().forEach(g => {
+      const nome = nomeParaCotacao(g.front);
+      if(!nome || g.idx.length === 0) return;
+      const chave = nome.toLowerCase();
+      if(vistos.has(chave)) return;
+      vistos.add(chave);
+      nomes.push(nome);
+    });
+    nomes.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    cmdSelect.innerHTML = '<option value="">— nenhum —</option>'
+      + nomes.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    if(nomes.some(n => n === anterior)) cmdSelect.value = anterior;
+  }
+
+  function moeda(valor, sigla){
+    const n = valor.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+    return (sigla === 'BRL' ? 'R$ ' : sigla === 'USD' ? 'US$ ' : sigla + ' ') + n;
+  }
+
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"]/g,
+      c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+
+  function desenharCotacao(r){
+    const fontes = r.fontes || [];
+    const cabecalho = fontes.map(f => `
+      <div class="cot-fonte">
+        <h4>${esc(f.rotulo)}</h4>
+        <div class="v">${moeda(f.total, f.moeda)}</div>
+        <div class="obs">${esc(f.observacao)}${
+          f.cartas_faltando ? ` · ${f.cartas_faltando} carta(s) sem preço` : ''}</div>
+      </div>`).join('');
+
+    const colunas = fontes.map(f => `<th>${esc(f.rotulo)}</th>`).join('');
+    const todas = r.linhas || [];
+    const linhas = todas.map((l, i) => {
+      const achou = fontes.some(f => !(l.precos[f.id] || {}).erro);
+      const celulas = fontes.map(f => {
+        const p = l.precos[f.id] || {};
+        if(p.erro) return `<td class="num"><span class="aviso">—</span></td>`;
+        // Mostra o unitário; a quantidade já está numa coluna própria, e o
+        // subtotal se faz de cabeça. O que interessa comparar entre as duas
+        // fontes é o preço da carta, não o produto.
+        const alerta = p.estoque_suficiente ? '' :
+          ' <span class="aviso" title="a loja não tem todas as cópias">!</span>';
+        return `<td class="num">${moeda(p.preco_unitario, f.moeda)}${alerta}
+                <span class="loja">${esc(p.loja)}${
+                  p.condicao ? ' · ' + esc(p.condicao) : ''}</span></td>`;
+      }).join('');
+      // Da 11ª linha em diante nasce escondida. Como as linhas vêm ordenadas
+      // do subtotal maior pro menor, as 10 primeiras já são onde o dinheiro
+      // está — o resto é conferência.
+      const oculta = i >= COT_VISIVEIS ? ' oculta' : '';
+      return `<tr class="${achou ? '' : 'faltou'}${oculta}">
+        <td class="carta">${esc(l.nome)}</td>
+        <td class="num">${l.quantidade}x</td>${celulas}</tr>`;
+    }).join('');
+
+    const escondidas = Math.max(0, todas.length - COT_VISIVEIS);
+    const botaoMais = escondidas
+      ? `<button class="cot-mais" id="cotMais" data-aberto="0">
+           Ver mais ${escondidas} carta(s)</button>`
+      : '';
+
+    // O que ficou de fora do total, e por quê. Sem isso o total parece menor
+    // do que é sem explicação nenhuma.
+    const fora = r.excluidas || [];
+    let aviso = '';
+    if(fora.length){
+      const porMotivo = new Map();
+      fora.forEach(c => {
+        const atual = porMotivo.get(c.motivo) || {linhas: 0, copias: 0};
+        atual.linhas++;
+        atual.copias += c.quantidade;
+        porMotivo.set(c.motivo, atual);
+      });
+      const partes = [];
+      porMotivo.forEach((v, motivo) => {
+        partes.push(motivo === 'comandante'
+          ? `o comandante (${fora.filter(c => c.motivo === 'comandante')
+               .map(c => esc(c.nome)).join(', ')})`
+          : `${v.copias} ${esc(motivo)}${v.copias > 1 ? 's' : ''}`);
+      });
+      aviso = `<div class="cot-fora"><b>Fora da cotação:</b> ${partes.join(' e ')}.
+        É como o Commander 500 conta: o teto de preço vale para o deck sem o
+        comandante e sem os terrenos básicos.</div>`;
+    }
+
+    cotResultado.innerHTML = `
+      <div class="cot-fontes">${cabecalho}</div>
+      <div class="cot-tabela-wrap">
+        <table class="cot">
+          <thead><tr><th>Carta</th><th>Qtd</th>${colunas}</tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+      ${botaoMais}
+      ${aviso}
+      <p class="note">
+        Cada total é a soma da oferta mais barata de cada carta na fonte
+        correspondente e <b>não inclui frete</b> — as cartas podem vir de
+        lojas diferentes, cada uma com o seu. Os dois totais são de mercados
+        e moedas diferentes: dá pra comparar, não pra somar.
+      </p>`;
+
+    const btnMais = document.getElementById('cotMais');
+    if(btnMais){
+      btnMais.addEventListener('click', ()=>{
+        const aberto = btnMais.dataset.aberto === '1';
+        cotResultado.querySelectorAll('table.cot tbody tr').forEach((tr, i) => {
+          if(i >= COT_VISIVEIS) tr.classList.toggle('oculta', aberto);
+        });
+        btnMais.dataset.aberto = aberto ? '0' : '1';
+        btnMais.textContent = aberto
+          ? `Ver mais ${escondidas} carta(s)`
+          : 'Ver menos';
+      });
+    }
+    cotAssinatura = loadedSignature;
+  }
+
+  async function acompanharCotacao(jobId){
+    try{
+      const resp = await fetch(`/cotacao/${jobId}`);
+      if(!resp.ok) throw new Error(await motivoDaFalha(resp));
+      const data = await resp.json();
+
+      if(data.estado === 'cotando'){
+        const pct = data.total ? Math.round(100 * data.feitas / data.total) : 0;
+        cotStatus.textContent =
+          `Consultando ${data.cartas} carta(s)… ${data.feitas} de ${data.total} `
+          + `consultas (${data.decorrido}s). Pode deixar a página aberta.`;
+        cotBar.style.display = 'block';
+        cotBar.firstElementChild.style.width = pct + '%';
+        cotTimer = setTimeout(()=> acompanharCotacao(jobId), 2000);
+        return;
+      }
+
+      cotBar.style.display = 'none';
+      cotBtn.disabled = false;
+      cotBtn.textContent = COT_LABEL;
+      if(data.estado === 'erro'){
+        cotStatus.innerHTML = `<span class="aviso">Não consegui cotar: `
+          + `${esc(data.detalhe)}</span>`;
+        return;
+      }
+      cotStatus.textContent = '';
+      desenharCotacao(data.resultado);
+    }catch(err){
+      cotBar.style.display = 'none';
+      cotBtn.disabled = false;
+      cotBtn.textContent = COT_LABEL;
+      cotStatus.innerHTML = `<span class="aviso">Perdi o contato com a `
+        + `cotação${err.message ? ': ' + esc(err.message) : ''}. Tente de novo.</span>`;
+    }
+  }
+
+  // Trocar o comandante muda o que entra na conta, então a cotação que está
+  // na tela deixa de valer na hora.
+  if(cmdSelect) cmdSelect.addEventListener('change', limparCotacao);
+
+  cotBtn.addEventListener('click', async ()=>{
+    if(!loadedXmlText){ showError('Selecione o XML primeiro.'); return; }
+    if(cotTimer){ clearTimeout(cotTimer); cotTimer = null; }
+    cotBox.classList.add('show');
+    cotResultado.innerHTML = '';
+    cotBtn.disabled = true;
+    cotBtn.textContent = 'Cotando…';
+    cotStatus.textContent = 'Começando…';
+    cotBar.style.display = 'block';
+    cotBar.firstElementChild.style.width = '0%';
+    try{
+      const form = new FormData();
+      form.append('xml_file', new Blob([loadedXmlText], {type:'text/xml'}), 'deck.xml');
+      form.append('commander', cmdSelect ? cmdSelect.value : '');
+      const resp = await fetch('/cotacao', {method:'POST', body: form});
+      if(!resp.ok) throw new Error(await motivoDaFalha(resp));
+      const data = await resp.json();
+      // Um resultado ainda fresco volta pronto na hora: o backend
+      // reaproveita a cotação do mesmo deck em vez de varrer tudo de novo.
+      if(data.estado === 'pronto'){
+        cotBar.style.display = 'none';
+        cotBtn.disabled = false;
+        cotBtn.textContent = COT_LABEL;
+        cotStatus.textContent = '';
+        desenharCotacao(data.resultado);
+        return;
+      }
+      acompanharCotacao(data.job_id);
+    }catch(err){
+      cotBar.style.display = 'none';
+      cotBtn.disabled = false;
+      cotBtn.textContent = COT_LABEL;
+      cotStatus.innerHTML = `<span class="aviso">Não consegui começar a `
+        + `cotação${err.message ? ': ' + esc(err.message) : ''}.</span>`;
+    }
+  });
 
   // "Pagamento realizado, enviar notificação" — só dispara o e-mail de aviso.
   // A conferência do Pix e a impressão continuam do lado do operador, pelo

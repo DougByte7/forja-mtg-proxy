@@ -87,3 +87,60 @@ def compute_cost(qty: int, backs_count: int, lamination: str) -> dict:
         "total": total,
     }
 
+
+def _card_name(card: ET.Element) -> str:
+    """Nome da carta num <card> do MPC Fill: a tag <query> é a busca que o
+    usuário digitou lá e é o que mais se parece com o nome real; <name> é o
+    nome do ARQUIVO da arte ("Sol Ring (Commander 2017).png"), então só serve
+    de reserva."""
+    query = card.findtext("query")
+    if query and query.strip():
+        return " ".join(query.split())
+    name = card.findtext("name") or ""
+    return " ".join(name.split())
+
+
+def parse_card_list(xml_text: str) -> list[dict]:
+    """Lista de `{"nome", "quantidade"}` a partir do XML do MPC Fill.
+
+    Serve de entrada pro cotador: o mesmo arquivo que o cliente já sobe pra
+    orçar a impressão também diz quais cartas ele quer, então não faz sentido
+    pedir a decklist de novo.
+
+    A quantidade é o número de SLOTS, não o número de tags <card>: o MPC Fill
+    junta cópias da mesma arte num <card> só com `slots` `0,1,2,3`. É o mesmo
+    critério que o `parse_order` usa pra cobrar, então cotação e cobrança
+    contam a mesma coisa.
+
+    Cartas repetidas em <card> diferentes (mesma carta, artes diferentes) são
+    somadas numa entrada só — pra cotar preço o que importa é o nome. A ordem
+    de saída é a do primeiro slot de cada carta, que é a ordem da folha.
+
+    Só olha `fronts`: `backs` são versos de dupla face, que não são cartas
+    separadas pra comprar.
+    """
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as e:
+        raise ValueError(f"XML inválido: {e}")
+
+    por_nome: dict[str, dict] = {}
+    for card in root.findall("fronts/card"):
+        nome = _card_name(card)
+        if not nome:
+            continue
+        slots = [s.strip() for s in (card.findtext("slots") or "").split(",")]
+        slots = [int(s) for s in slots if s.isdigit()]
+        if not slots:
+            continue
+        chave = nome.lower()
+        entrada = por_nome.get(chave)
+        if entrada is None:
+            por_nome[chave] = {"nome": nome, "quantidade": len(slots),
+                               "_ordem": min(slots)}
+        else:
+            entrada["quantidade"] += len(slots)
+            entrada["_ordem"] = min(entrada["_ordem"], min(slots))
+
+    ordenadas = sorted(por_nome.values(), key=lambda c: c["_ordem"])
+    return [{"nome": c["nome"], "quantidade": c["quantidade"]} for c in ordenadas]
