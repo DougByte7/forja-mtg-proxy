@@ -174,6 +174,8 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 - `app/printer.py` — envia o PDF pra fila CUPS.
 - `app/cleanup.py` — apaga os PDFs antigos do disco de tempos em tempos.
 - `app/main.py` — API que costura tudo.
+- `tests/test_bleed.py` — confere o recorte da sangria e o tamanho da carta no
+  PDF (63 × 88 mm). Roda sem rede e sem pytest: `python tests/test_bleed.py`.
 
 ### Rotas
 
@@ -251,10 +253,53 @@ desligada. O teto de nitidez é a imagem de origem: uma de 800 px de largura dá
 acima disso.
 
 `PRINT_DPI` reamostra pra um teto antes de montar. As artes do MPC Fill vêm com
-~3264 px de largura, o que dá ~1315 DPI em 63 mm — 4x além do que a impressora
-resolve. Medido com as artes reais: **3,6 MB por carta com `PRINT_DPI=0`, 1,1 MB
+~3264 px de largura, que viram ~2976 px depois de tirada a sangria — ~1200 DPI
+em 63 mm, 4x além do que a impressora resolve. Medido com as artes reais: **3,6 MB por carta com `PRINT_DPI=0`, 1,1 MB
 com `PRINT_DPI=600`**. Num pedido grande é a diferença entre um PDF de ~200 MB e
 um de ~60 MB atravessando o túnel, e o papel fica igual.
+
+### A sangria do MPC Fill (por que a carta saía menor)
+
+A arte que o MPC Fill guarda no Drive **não é a carta**: é o gabarito de
+impressão da MakePlayingCards, 2,72 × 3,70 pol (69,1 × 94,0 mm), com **3,05 mm
+de sangria em cada borda**. Na fábrica esse contorno vai embora no refile e
+sobram os 2,48 × 3,46 pol (63 × 88 mm) do meio.
+
+Enfiar essa arte inteira no slot de 63 × 88 mm imprime a sangria junto e
+encolhe a carta: o desenho sai com **57,5 × 82,4 mm**, e ainda espremido,
+porque a sangria come 4,4% da largura contra 3,2% da altura. Era exatamente o
+sintoma de "carta pequena" — e nenhum ajuste de impressora conserta, porque o
+erro já está dentro do PDF.
+
+Então cada imagem tem a sangria recortada antes de entrar no PDF, **uma a uma,
+na escala dela** (as artes chegam em resoluções diferentes, então o corte é uma
+fração das dimensões da imagem, nunca um número fixo de pixels). A decisão é
+por imagem, pela proporção:
+
+| Proporção da imagem | O que acontece |
+|---|---|
+| ~0,735 (gabarito 2,72 × 3,70) | recorta 4,41% da largura e 3,24% da altura em cada borda |
+| ~0,717 (carta 2,48 × 3,46) | passa intacta — já veio cortada, recortar de novo comeria a arte |
+| qualquer outra | passa intacta e avisa no log; é arte de fora do MPC Fill |
+
+| Variável | Padrão | O que faz |
+|---|---|---|
+| `CROP_BLEED` | `1` | `0` desliga o recorte e volta a carta pequena; só serve pra comparar |
+| `BLEED_RATIO_TOL` | `0.01` | folga na proporção pra imagem ainda contar como gabarito |
+
+Pra conferir no papel: depois de recortada, uma carta impressa tem que medir
+**63 × 88 mm** na régua, igual a uma carta de verdade.
+
+Pra conferir sem gastar papel, `tests/test_bleed.py` monta um PDF com artes
+sintéticas e lê de volta o tamanho com que cada carta foi desenhada:
+
+```
+python tests/test_bleed.py
+```
+
+Não precisa de rede (o download é substituído) nem de pytest; só do Pillow e
+do reportlab que já estão no `requirements.txt`. Sai com código 1 se alguma
+checagem falhar.
 
 ### Download das imagens
 
@@ -388,6 +433,10 @@ Dá pra ajustar tudo pelo `.env`, sem mexer no código:
 **Na hora de imprimir, desligue "ajustar à página" e use "tamanho real"
 (100%)** — tanto no CUPS quanto no app do celular. É o erro mais comum:
 o ajuste automático encolhe a folha uns 4% e as cartas saem fora de medida.
+
+Se a carta sair menor mesmo com "tamanho real", o problema não é a impressora:
+é a sangria do MPC Fill dentro do PDF — veja
+[A sangria do MPC Fill](#a-sangria-do-mpc-fill-por-que-a-carta-saía-menor).
 
 ## Limitação conhecida do download de imagens
 

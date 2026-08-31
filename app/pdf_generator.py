@@ -2,6 +2,10 @@
 Monta o PDF A4 (3x3 por página) pra impressão, baixando as imagens direto
 do Google Drive usando os IDs que já estão no XML do MPC Fill.
 
+As artes vêm no gabarito de impressão da MPC, maior que a carta: cada uma
+tem a sangria recortada aqui antes de entrar na folha, senão a carta sai
+menor que os 63x88 mm (veja `_crop_bleed`).
+
 AVISO: baixar imagens do Google Drive por link direto não é uma API oficial
 suportada — funciona bem na maioria dos casos, mas pode falhar por limite de
 taxa. As artes do MPC Fill são PNGs de ~10 MB cada, então o download é a
@@ -34,6 +38,35 @@ COLS, ROWS = 3, 3
 PAGE_W, PAGE_H = A4
 OUTPUT_DIR = os.environ.get("PDF_OUTPUT_DIR", "/tmp")
 
+# --- Sangria (bleed) do MPC Fill ---
+# A arte que o MPC Fill guarda no Drive está no gabarito de IMPRESSÃO da
+# MakePlayingCards, que é maior que a carta: 2,72 x 3,70 pol (69,1 x 94,0 mm),
+# sendo 0,12 pol (3,05 mm) de sangria em CADA borda. Na fábrica esse contorno
+# vai embora no refile e sobram os 2,48 x 3,46 pol (63 x 88 mm) do meio.
+#
+# Desenhar a arte inteira dentro do slot de 63 x 88 mm — que era o que este
+# arquivo fazia — imprime a sangria junto e portanto ENCOLHE a carta: o
+# desenho que deveria medir 63 x 88 mm sai com 57,5 x 82,4 mm, e ainda
+# espremido, porque a sangria come 4,4% da largura contra 3,2% da altura.
+#
+# A correção é recortar a sangria de cada imagem antes de ela entrar no PDF,
+# cada uma pelo seu próprio tamanho em pixels — as artes não vêm todas na
+# mesma resolução, então o recorte é uma FRAÇÃO das dimensões da imagem, não
+# um número fixo de pixels.
+MPC_FULL_W_IN, MPC_FULL_H_IN = 2.72, 3.70   # gabarito com sangria
+MPC_TRIM_W_IN, MPC_TRIM_H_IN = 2.48, 3.46   # o que sobra do refile
+BLEED_X_FRAC = (MPC_FULL_W_IN - MPC_TRIM_W_IN) / 2 / MPC_FULL_W_IN  # 4,41%
+BLEED_Y_FRAC = (MPC_FULL_H_IN - MPC_TRIM_H_IN) / 2 / MPC_FULL_H_IN  # 3,24%
+FULL_RATIO = MPC_FULL_W_IN / MPC_FULL_H_IN  # 0,7351 — com sangria
+TRIM_RATIO = MPC_TRIM_W_IN / MPC_TRIM_H_IN  # 0,7168 — já cortada
+# Quanto a proporção da imagem pode fugir do gabarito e ainda ser tratada
+# como gabarito. As duas proporções acima diferem em 0,019, então 0,01 separa
+# uma da outra com folga e ainda deixa de fora arte de origem esquisita.
+BLEED_RATIO_TOL = float(os.environ.get("BLEED_RATIO_TOL", "0.01"))
+# 0 desliga o recorte e volta o comportamento antigo (arte inteira, com
+# sangria, espremida no slot). Só serve pra comparar impressões.
+CROP_BLEED = os.environ.get("CROP_BLEED", "1") == "1"
+
 # Qualidade do JPEG que vai dentro do PDF. As imagens do Drive já são JPEG,
 # então recomprimir sempre perde um pouco — 95 com subamostragem desligada
 # (4:4:4) deixa essa perda invisível, que é o que se quer em papel
@@ -42,9 +75,10 @@ OUTPUT_DIR = os.environ.get("PDF_OUTPUT_DIR", "/tmp")
 JPEG_QUALITY = int(os.environ.get("JPEG_QUALITY", "95"))
 
 # Reamostragem opcional. As artes do MPC Fill vêm com ~3264 px de largura,
-# que em 63 mm dá ~1315 DPI — umas 4x mais do que qualquer jato de tinta
-# resolve. Reduzir pra 600 DPI corta o PDF em ~4x (o que importa quando o
-# arquivo volta pro navegador por um túnel doméstico) e acelera bastante o
+# que viram ~2976 px depois de tirada a sangria: ~1200 DPI em 63 mm, umas 4x
+# mais do que qualquer jato de tinta resolve. Reduzir pra 600 DPI corta o PDF
+# em ~4x (o que importa quando o arquivo volta pro navegador por um túnel
+# doméstico) e acelera bastante o
 # JPEG, sem diferença visível no papel. 0 = desligado, mantém o original.
 PRINT_DPI = float(os.environ.get("PRINT_DPI", "0"))
 
@@ -235,14 +269,52 @@ def _download(session: requests.Session, drive_id: str) -> bytes:
     raise last_error
 
 
+def _crop_bleed(img: Image.Image, drive_id: str) -> Image.Image:
+    """Tira a sangria do gabarito da MPC, deixando só o que sobra do refile.
+
+    A decisão é POR IMAGEM, pela proporção dela, porque nem todo arquivo que
+    aparece num pedido veio do gabarito:
+
+    * proporção de gabarito (2,72 x 3,70) -> recorta 4,41% da largura e 3,24%
+      da altura em cada borda, e o que sobra é exatamente a carta;
+    * proporção de carta (2,48 x 3,46) -> passa intacta; a arte já veio
+      cortada e recortar de novo comeria a borda do desenho;
+    * qualquer outra proporção -> passa intacta e avisa no log. É arte de
+      fora do MPC Fill, e chutar recorte nela estraga mais do que conserta.
+
+    O recorte é em fração, não em pixels fixos: as artes chegam em resoluções
+    diferentes e cada uma tem que ser cortada na sua própria escala.
+    """
+    if not CROP_BLEED:
+        return img
+
+    ratio = img.width / img.height
+    if abs(ratio - TRIM_RATIO) <= abs(ratio - FULL_RATIO):
+        return img
+    if abs(ratio - FULL_RATIO) > BLEED_RATIO_TOL:
+        print(f"[pdf_generator] {drive_id}: proporção {ratio:.4f} "
+              f"({img.width}x{img.height}) não bate com o gabarito do MPC Fill "
+              f"({FULL_RATIO:.4f}) nem com a carta cortada ({TRIM_RATIO:.4f}); "
+              f"desenhando sem recorte")
+        return img
+
+    left = round(img.width * BLEED_X_FRAC)
+    top = round(img.height * BLEED_Y_FRAC)
+    return img.crop((left, top, img.width - left, img.height - top))
+
+
 def _prepare_image(session: requests.Session, drive_id: str, cache_dir: str) -> str:
-    """Baixa, converte pra JPEG e devolve o caminho no cache do pedido.
+    """Baixa, tira a sangria, converte pra JPEG e devolve o caminho no cache
+    do pedido.
 
     Converter em disco antes de desenhar mantém a memória sob controle: as
     artes chegam como PNG de 3264x4440, o que daria ~58 MB por imagem se
     todas ficassem descompactadas na RAM."""
     path = os.path.join(cache_dir, f"{drive_id}.jpg")
     img = Image.open(io.BytesIO(_download(session, drive_id))).convert("RGB")
+    # Antes do reamostrar: depois daqui a imagem cobre exatamente CARD_W x
+    # CARD_H, que é o que a conta de DPI abaixo assume.
+    img = _crop_bleed(img, drive_id)
 
     if PRINT_DPI > 0:
         # Teto em pixels pro tamanho físico da carta. Só encolhe: imagem que
@@ -391,6 +463,9 @@ def generate_pdf(xml_text: str, order_id: str, on_progress=None) -> tuple[str, i
                         reader = readers.get(drive_id)
                         if reader is None:
                             reader = readers[drive_id] = ImageReader(result)
+                        # A imagem já veio sem sangria de `_crop_bleed`, ou
+                        # seja, é a carta de 63 x 88 mm inteira e nada mais:
+                        # esticar até o slot é o tamanho certo, não um zoom.
                         c.drawImage(reader, x, y, width=CARD_W, height=CARD_H)
                     except Exception as e:
                         failures += 1
