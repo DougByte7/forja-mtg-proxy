@@ -17,9 +17,12 @@ um pouco mais por carta, e essa comparação não está feita aqui.
 """
 import re
 import threading
+import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+
+from . import log
 
 
 @dataclass(frozen=True)
@@ -167,7 +170,7 @@ def escolher_oferta(ofertas, quantidade: int = 1,
 
 
 def cotar(cartas, buscar_ofertas, condicoes_aceitas=None, workers: int = 1,
-          on_progress=None) -> dict:
+          on_progress=None, repescagem: int = 1, rotulo: str = "") -> dict:
     """Cota uma decklist inteira.
 
     `cartas`: lista de `{"nome", "quantidade"}` — exatamente o que o
@@ -185,6 +188,18 @@ def cotar(cartas, buscar_ofertas, condicoes_aceitas=None, workers: int = 1,
     então subir isto não atropela ninguém — só deixa uma fonte lenta e uma
     rápida andarem juntas.
 
+    `repescagem` é quantas passadas EXTRA fazer só nas cartas cuja busca
+    falhou. Existe porque a falha típica de fonte pública não é permanente:
+    é uma rajada barrada (429) ou um timeout, e ela derruba um BLOCO de
+    cartas seguidas — as que estavam em voo naquele minuto. Numa cotação
+    real de 75 cartas, 53 voltaram sem preço em três blocos contíguos, e
+    todas respondiam normalmente quando pedidas de novo, devagar.
+
+    A repescagem roda em série (um worker) e só depois da passada principal:
+    a essa altura a rajada já passou e a fonte já liberou. Carta que a fonte
+    respondeu "não tenho" NÃO entra — repescar isso seria bater de novo à toa.
+    Só entra falha de BUSCA, que é a que pode ser transitória.
+
     Os itens saem ordenados do subtotal maior pro menor. O que interessa
     olhando um orçamento é onde o dinheiro está indo, e isso é o subtotal
     (4x R$ 10 pesa mais que 1x R$ 30), não o preço unitário — que vai junto
@@ -193,20 +208,48 @@ def cotar(cartas, buscar_ofertas, condicoes_aceitas=None, workers: int = 1,
     cartas = list(cartas)
     total_cartas = len(cartas)
     feitas = _Contador(on_progress, total_cartas)
+    canal = f"cotacao/{rotulo}" if rotulo else "cotacao"
+    inicio = time.monotonic()
 
-    def buscar(carta):
+    def buscar(carta, contar: bool = True):
         try:
             return list(buscar_ofertas(carta["nome"])), None
         except Exception as e:
-            return None, f"falha na busca: {e}"
+            # A mensagem carrega o TIPO da exceção. Sem isso, "falha na
+            # busca: " com uma exceção de mensagem vazia (acontece) virava
+            # uma linha sem informação nenhuma na tela e no log.
+            return None, f"falha na busca: {type(e).__name__}: {e}"
         finally:
-            feitas.passo()
+            if contar:
+                feitas.passo()
 
     if workers > 1 and total_cartas > 1:
         with ThreadPoolExecutor(max_workers=workers) as pool:
             resultados = list(pool.map(buscar, cartas))
     else:
         resultados = [buscar(c) for c in cartas]
+
+    # ---- repescagem: só o que falhou na BUSCA, em série ----
+    for rodada in range(1, max(0, repescagem) + 1):
+        pendentes = [i for i, (_, erro) in enumerate(resultados)
+                     if erro is not None]
+        if not pendentes:
+            break
+        log.aviso(canal, "repescando", rodada=rodada, cartas=len(pendentes),
+                  de=total_cartas)
+        recuperadas = 0
+        for i in pendentes:
+            ofertas, erro = buscar(cartas[i], contar=False)
+            if erro is None:
+                resultados[i] = (ofertas, None)
+                recuperadas += 1
+            else:
+                # Guarda o erro NOVO, não o antigo: se a primeira falha foi
+                # 429 e a segunda foi "não existe", quem lê o log precisa da
+                # segunda.
+                resultados[i] = (None, erro)
+        log.evento(canal, "repescagem-fim", rodada=rodada,
+                   recuperadas=recuperadas, ainda_falhando=len(pendentes) - recuperadas)
 
     itens, nao_encontradas = [], []
     for carta, (ofertas, erro) in zip(cartas, resultados):
@@ -243,6 +286,19 @@ def cotar(cartas, buscar_ofertas, condicoes_aceitas=None, workers: int = 1,
 
     itens.sort(key=lambda i: (-i["subtotal"], -i["preco_unitario"], i["nome"]))
 
+    # Um resumo por fonte, com os motivos AGRUPADOS. É a linha que responde
+    # "por que faltou preço?" sem precisar ler 75 linhas de detalhe.
+    motivos: dict[str, int] = {}
+    for c in nao_encontradas:
+        chave = c["motivo"].split(":")[0].strip()
+        motivos[chave] = motivos.get(chave, 0) + 1
+    log.evento(canal, "fim", cartas=total_cartas, cotadas=len(itens),
+               faltando=len(nao_encontradas),
+               motivos=", ".join(f"{k} x{v}" for k, v in
+                                 sorted(motivos.items(), key=lambda kv: -kv[1]))
+                       or None,
+               segundos=int(time.monotonic() - inicio))
+
     return {
         "itens": itens,
         "nao_encontradas": nao_encontradas,
@@ -261,7 +317,14 @@ def comparar(cartas, fontes, condicoes_aceitas=None, on_progress=None) -> dict:
     com o preço de cada uma lado a lado.
 
     `fontes`: lista de dicts com `id`, `rotulo`, `moeda`, `buscar` (a função
-    `nome -> list[Oferta]`) e, opcional, `workers` e `observacao`.
+    `nome -> list[Oferta]`) e, opcional, `workers`, `observacao` e
+    `preparar`.
+
+    `preparar` é uma função `lista de nomes -> None` que a fonte pode oferecer
+    pra adiantar o trabalho em lote antes da varredura carta a carta (a
+    Scryfall resolve 75 nomes numa requisição só). Ela NÃO devolve resultado:
+    enche o cache da fonte, e a varredura normal encontra tudo pronto. Assim o
+    lote é otimização pura — se falhar, a cotação segue igual, só mais lenta.
 
     As fontes rodam em paralelo entre si. Isso importa na prática: a
     LigaMagic tem intervalo mínimo obrigatório entre requisições e leva
@@ -278,9 +341,19 @@ def comparar(cartas, fontes, condicoes_aceitas=None, on_progress=None) -> dict:
     contador = _Contador(on_progress, len(cartas) * len(fontes))
 
     def rodar(fonte):
+        preparar = fonte.get("preparar")
+        if preparar:
+            try:
+                preparar([c["nome"] for c in cartas])
+            except Exception as e:
+                # Nunca derruba a cotação: o lote é atalho, não o caminho.
+                log.aviso(f"cotacao/{fonte['id']}", "preparar-falhou",
+                          motivo=f"{type(e).__name__}: {e}")
         return cotar(cartas, fonte["buscar"], condicoes_aceitas,
                      workers=fonte.get("workers", 1),
-                     on_progress=lambda *_: contador.passo())
+                     on_progress=lambda *_: contador.passo(),
+                     repescagem=fonte.get("repescagem", 1),
+                     rotulo=fonte["id"])
 
     if len(fontes) > 1:
         with ThreadPoolExecutor(max_workers=len(fontes)) as pool:

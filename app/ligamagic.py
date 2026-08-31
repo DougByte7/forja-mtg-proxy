@@ -25,7 +25,6 @@ Tudo que é específico da LigaMagic mora aqui. Quem chama recebe `Oferta` do
 import json
 import os
 import re
-import threading
 import time
 from html import unescape  # importado assim porque `html` aqui é a página
 from io import BytesIO
@@ -33,7 +32,7 @@ from io import BytesIO
 import requests
 from PIL import Image
 
-from . import cache_precos, identidade
+from . import cache_precos, identidade, log, ritmo
 from .cotacao import Oferta
 
 BASE = "https://www.ligamagic.com.br/"
@@ -53,7 +52,7 @@ DELAY_SEGUNDOS = float(os.environ.get("LIGAMAGIC_DELAY_SEGUNDOS", "3"))
 WORKERS = int(os.environ.get("LIGAMAGIC_WORKERS", "2"))
 TIMEOUT_CONEXAO = float(os.environ.get("LIGAMAGIC_TIMEOUT_CONEXAO", "10"))
 TIMEOUT_LEITURA = float(os.environ.get("LIGAMAGIC_TIMEOUT_LEITURA", "30"))
-TENTATIVAS = int(os.environ.get("LIGAMAGIC_TENTATIVAS", "3"))
+TENTATIVAS = int(os.environ.get("LIGAMAGIC_TENTATIVAS", "4"))
 BACKOFF = float(os.environ.get("LIGAMAGIC_BACKOFF", "2"))
 
 
@@ -251,23 +250,12 @@ def _decodificar(css: str, posicoes: dict, imagens: dict, sprites: dict) -> str:
 # --------------------------------------------------------------------------
 # Rede
 # --------------------------------------------------------------------------
-_trava_ritmo = threading.Lock()
-_ultimo_acesso = 0.0
-
-
-def _respeitar_ritmo():
-    """Segura a thread até completar DELAY_SEGUNDOS desde a última requisição.
-
-    A trava é do módulo inteiro, não de cada thread: com WORKERS > 1 o que
-    importa é o intervalo entre requisições que CHEGAM na LigaMagic, não o
-    que cada worker espera sozinho.
-    """
-    global _ultimo_acesso
-    with _trava_ritmo:
-        espera = DELAY_SEGUNDOS - (time.monotonic() - _ultimo_acesso)
-        if espera > 0:
-            time.sleep(espera)
-        _ultimo_acesso = time.monotonic()
+# Compartilhado por todas as threads: além do intervalo mínimo entre
+# requisições, guarda a pausa global aplicada quando a Liga responde 429.
+# A trava é do módulo inteiro, não de cada thread — o que importa é o
+# intervalo entre requisições que CHEGAM lá, não o que cada worker espera
+# sozinho. Ver `ritmo.py`.
+_freio = ritmo.Freio("ligamagic", DELAY_SEGUNDOS)
 
 
 def _sessao() -> requests.Session:
@@ -280,26 +268,51 @@ def _sessao() -> requests.Session:
     return s
 
 
-def _get(sessao: requests.Session, url: str, ritmo: bool = True) -> requests.Response:
+def _get(sessao: requests.Session, url: str, freiar: bool = True,
+         carta: str = "") -> requests.Response:
+    """GET com ritmo, retry e log do motivo da falha.
+
+    O parâmetro se chama `freiar` (e não `ritmo`) porque `ritmo` agora é o
+    módulo importado lá em cima. Vale False só pros sprites, que vêm de outro
+    host e não contam como requisição à LigaMagic.
+    """
     erro = None
-    for tentativa in range(TENTATIVAS):
-        if ritmo:
-            _respeitar_ritmo()
+    for tentativa in range(1, TENTATIVAS + 1):
+        if freiar:
+            esperou = _freio.esperar()
+            if esperou > DELAY_SEGUNDOS * 2:
+                log.debug("ligamagic", "esperou", segundos=round(esperou, 1),
+                          carta=carta or None)
         try:
             r = sessao.get(url, timeout=(TIMEOUT_CONEXAO, TIMEOUT_LEITURA))
             if r.status_code == 429 or r.status_code >= 500:
-                # 429 é o site pedindo pra ir mais devagar. Espera mais que o
-                # backoff normal — insistir no mesmo ritmo é o caminho certo
-                # pra levar bloqueio.
+                # 429 é o site pedindo pra ir mais devagar. Aqui isso segura
+                # TODAS as threads, não só esta: recuar cada worker por conta
+                # mantém a mesma rajada e é o caminho certo pro bloqueio.
                 erro = f"HTTP {r.status_code}"
-                time.sleep(BACKOFF * (2 ** tentativa) * (5 if r.status_code == 429 else 1))
+                pausa = (ritmo.espera_pedida(r)
+                         or ritmo.backoff(tentativa, BACKOFF)
+                         * (5 if r.status_code == 429 else 1))
+                if freiar:
+                    _freio.recuar(pausa, motivo=erro, carta=carta)
+                else:
+                    time.sleep(pausa)
+                log.aviso("ligamagic", "tentando-de-novo", carta=carta or None,
+                          motivo=erro, tentativa=f"{tentativa}/{TENTATIVAS}",
+                          pausa=round(pausa, 1))
                 continue
             r.raise_for_status()
             return r
         except requests.RequestException as e:
-            erro = str(e)
-            if tentativa < TENTATIVAS - 1:
-                time.sleep(BACKOFF * (2 ** tentativa))
+            erro = f"{type(e).__name__}: {e}"
+            if tentativa < TENTATIVAS:
+                pausa = ritmo.backoff(tentativa, BACKOFF)
+                log.aviso("ligamagic", "tentando-de-novo", carta=carta or None,
+                          motivo=erro, tentativa=f"{tentativa}/{TENTATIVAS}",
+                          pausa=round(pausa, 1))
+                time.sleep(pausa)
+    log.erro("ligamagic", "desisti", carta=carta or None, url=url,
+             motivo=erro, tentativas=TENTATIVAS)
     raise LigaMagicError(f"não consegui buscar {url}: {erro}")
 
 
@@ -312,7 +325,7 @@ def _baixar_sprites(sessao, urls) -> dict:
     """
     sprites = {}
     for url in urls:
-        r = _get(sessao, url, ritmo=False)
+        r = _get(sessao, url, freiar=False)
         try:
             sprites[url] = Image.open(BytesIO(r.content)).convert("RGB")
         except Exception as e:
@@ -475,10 +488,22 @@ def buscar_carta(nome: str, usar_cache: bool = True) -> list[Oferta]:
     if usar_cache:
         cacheado = cache_precos.ler("ligamagic", nome)
         if cacheado is not None:
+            log.debug("ligamagic", "cache", carta=nome, ofertas=len(cacheado))
             return cacheado
 
+    inicio = time.monotonic()
     sessao = _sessao()
-    html = _get(sessao, url_da_carta(nome)).text
-    ofertas = extrair_ofertas(html, nome, sessao=sessao)
+    html = _get(sessao, url_da_carta(nome), carta=nome).text
+    try:
+        ofertas = extrair_ofertas(html, nome, sessao=sessao)
+    except LigaMagicError as e:
+        # Falha de LAYOUT, não de rede: o site mudou e o parser não acompanha
+        # mais. Vale ERROR e não WARNING porque não passa sozinho — alguém
+        # precisa olhar o `SCRAPING_NOTES.md` e refazer o mapeamento.
+        log.erro("ligamagic", "layout-mudou", carta=nome, motivo=str(e))
+        raise
     cache_precos.gravar("ligamagic", nome, ofertas)
+    log.evento("ligamagic", "ok" if ofertas else "sem-oferta", carta=nome,
+               ofertas=len(ofertas),
+               ms=int((time.monotonic() - inicio) * 1000))
     return ofertas

@@ -192,12 +192,17 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
   total. Não sabe de onde vem o preço: a função de busca chega por parâmetro.
 - `app/ligamagic.py` — lê as ofertas das lojas brasileiras na LigaMagic.
   **Leia o aviso no topo do arquivo antes de mexer.**
-- `app/scryfall.py` — segunda fonte, via API oficial (preços em dólar).
+- `app/scryfall.py` — segunda fonte, via API oficial (preços em dólar). Busca
+  o deck inteiro em lote (`preparar`) antes da varredura carta a carta.
 - `app/cotacao_job.py` — roda a cotação em segundo plano e guarda o andamento.
 - `app/cache_precos.py` — cache em disco das ofertas, **por carta**,
   compartilhado pelas duas fontes.
 - `app/identidade.py` — monta o `User-Agent` das consultas de preço a partir
   do `SMTP_USER`/`NOTIFY_TO`, pra não ter e-mail escrito no código.
+- `app/log.py` — log central: stdout + arquivo rotativo, formato `chave=valor`.
+- `app/ritmo.py` — intervalo entre requisições **e a pausa global após 429**,
+  compartilhados por todas as threads de uma mesma fonte.
+- `app/visitas.py` — quem está no sistema, e o palpite de pessoa ou bot.
 - `tests/test_bleed.py` — confere o recorte da sangria e o tamanho da carta no
   PDF (63 × 88 mm). Roda sem rede e sem pytest: `python tests/test_bleed.py`.
 - `tests/test_cotacao.py` — leitura da decklist do XML e a matemática da
@@ -208,6 +213,13 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
   `python tests/test_cache_precos.py`.
 - `tests/test_identidade.py` — o `User-Agent` sai do `.env` e não do código:
   `python tests/test_identidade.py`.
+- `tests/test_retry_log.py` — a repescagem recupera um bloco de cartas perdido
+  numa rajada barrada, e um 429 segura todas as threads:
+  `python tests/test_retry_log.py`.
+- `tests/test_visitas.py` — classificação pessoa/bot e agrupamento de visitas:
+  `python tests/test_visitas.py`.
+- `tests/test_scryfall_lote.py` — o `<query>` do MPC casando com o nome
+  canônico, dupla-face inclusive: `python tests/test_scryfall_lote.py`.
 
 ### Rotas
 
@@ -221,6 +233,7 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
 | `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, pra descobrir o `PRINTER_QUEUE` certo |
 | `POST /admin/cleanup` | você (`X-Admin-Token`) | roda a faxina dos PDFs antigos na hora |
+| `GET /admin/visitas` | você (`X-Admin-Token`) | quem está no sistema agora, separado em pessoas / bots / suspeitos |
 | `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
 
@@ -315,8 +328,9 @@ Daí decorre o resto:
   o projeto não sai batendo lá com o endereço de outra pessoa. Com o `.env`
   vazio o cabeçalho ainda diz o que é, só sem contato, e o backend avisa isso
   no log. `LIGAMAGIC_USER_AGENT`/`SCRYFALL_USER_AGENT` sobrescrevem tudo.
-- Se voltar `HTTP 429`, o cliente espera 5x mais antes de tentar de novo. Se
-  isso virar rotina, suba o `LIGAMAGIC_DELAY_SEGUNDOS` em vez de insistir.
+- Se voltar `HTTP 429`, **todas** as threads daquela fonte param junto, pelo
+  tempo que o `Retry-After` pedir. Ver "Quando uma carta volta sem preço".
+  Se isso virar rotina, suba o `LIGAMAGIC_DELAY_SEGUNDOS` em vez de insistir.
 
 **O total não inclui frete.** Ele é a soma da oferta mais barata de cada
 carta, e cada carta pode vir de uma loja diferente — cada uma com o seu
@@ -335,6 +349,182 @@ Outras limitações menores:
 
 Pra desligar tudo isso, `COTACAO_LIGAMAGIC=0` (só Scryfall) ou
 `COTACAO_SCRYFALL=0` (só LigaMagic).
+
+### Quando uma carta volta sem preço
+
+Vale distinguir dois casos, porque só um deles é problema:
+
+- **A fonte não tem a carta.** Normal, e definitivo. Proxy de Marvel não
+  existe na LigaMagic; carta nova pode não ter preço publicado ainda. Sai no
+  log como `sem-oferta` / `sem-preco` e não adianta tentar de novo.
+- **Não deu pra perguntar.** 429, timeout, conexão caída. É transitório, e
+  era daqui que vinha o buraco grande: numa cotação de 75 cartas, **53
+  voltaram vazias em blocos contíguos** — todas respondiam normalmente quando
+  pedidas de novo, devagar.
+
+O que causava aquilo eram duas coisas somadas, as duas corrigidas:
+
+1. Cada worker descobria o 429 sozinho e recuava sozinho. Com 4 workers e 3
+   tentativas de backoff curto, os quatro queimavam tudo nos mesmos segundos
+   e o bloco inteiro se perdia. Agora o `Freio` (`app/ritmo.py`) é
+   compartilhado: um 429 segura a fonte inteira, pelo tempo que o
+   `Retry-After` pedir.
+2. Não havia segunda chance. Agora `cotar` faz uma **repescagem** em série,
+   depois da passada principal, só nas cartas cuja BUSCA falhou — a essa
+   altura a rajada já passou. Carta que a fonte respondeu "não tenho" não
+   entra, que seria bater à toa.
+
+Medindo contra a Scryfall de verdade, o 429 vem com `Retry-After: 60`, e o
+corte **não parece ser por taxa instantânea**: com o IP castigado, a conta
+fecha em ~20 requisições por minuto, aconteça o que acontecer com o intervalo
+entre elas. Aí `SCRYFALL_DELAY_SEGUNDOS` quase não muda nada — o que segura a
+cotação de pé é o freio + repescagem, não o intervalo.
+
+Cuidado ao repetir essa medição: **um IP que acabou de apanhar mede diferente
+de um IP descansado**. O número acima saiu de uma sessão de testes que bateu
+muito na API em poucos minutos, então é o pior caso, não o dia a dia. Não
+calibre o `.env` por uma medição feita logo depois de uma bateria de testes.
+
+Só que a melhor forma de sobreviver ao 429 é não provocá-lo. Ver a seção
+seguinte: a Scryfall passou a resolver o deck inteiro em lote, e com ~13
+requisições em vez de ~150 o limite deixou de ser alcançado.
+
+Medição de ponta a ponta, no deck de 75 cartas que originou este conserto:
+
+| | antes | freio + repescagem | + busca em lote |
+|---|---|---|---|
+| cartas com preço | 22 de 75 | 75 de 75 | **75 de 75** |
+| requisições | ~150 | ~150 | **13** |
+| eventos de 429 | perdiam a carta | 11, absorvidos | **0** |
+| tempo | ~20 s | 6 min 48 s | **14 s** |
+
+O freio e a repescagem continuam valendo: são eles que seguram as duas cartas
+que ainda caem no caminho carta a carta, e a LigaMagic inteira, que não tem
+busca em lote nenhuma.
+
+A segunda cotação do mesmo deck é instantânea — o `cache_precos` guarda por
+carta, com 12h de validade.
+
+### A busca em lote da Scryfall
+
+O `<query>` do MPC Fill é **quase** o nome exato da carta: ele derruba caixa,
+vírgula, hífen, apóstrofo e o "!" final. Acontece que o endpoint
+`/cards/collection` da Scryfall ignora exatamente essas coisas — e aceita 75
+identificadores por requisição. Medindo com o XML real, **73 dos 75 `<query>`
+casam direto**:
+
+```
+'shang chi master of kung fu'  ->  'Shang-Chi, Master of Kung Fu'
+'natures lore'                 ->  "Nature's Lore"
+'go nuts'                      ->  'Go Nuts!'
+```
+
+Os dois que não casam são aqueles a que o MPC Fill tirou um artigo
+(`enter unknown` para "Enter **the** Unknown"). Nenhuma normalização resolve
+isso sem correr o risco de casar carta errada, então eles caem no caminho
+antigo, carta a carta, onde a busca difusa do `/cards/named` acerta.
+
+As edições saem do mesmo jeito, com um filtro só: `!"A" or !"B" or ...`. Uma
+página traz 175 impressões independentemente de quantas cartas o filtro tenha,
+então as ~2500 impressões de um Commander saem em ~10 páginas em vez de 75
+buscas.
+
+O lote é **atalho, não caminho**. Ele não devolve resultado: enche o
+`cache_precos`, e a varredura normal carta a carta encontra tudo pronto. Se
+ele falhar por qualquer motivo, a cotação segue como antes — mais lenta, mas
+inteira. Por isso `scryfall.preparar` nunca levanta exceção, e
+`cotacao.comparar` engole o erro e continua.
+
+Dois detalhes que custaram teste (ver `tests/test_scryfall_lote.py`):
+
+- **Dupla-face.** O nome canônico é `Bruce Banner // The Incredible Hulk`, mas
+  o `<query>` traz só a frente. Sem indexar a face da frente separada, toda
+  carta dupla-face escaparia do lote sem motivo.
+- **Preço que "muda" entre requisições.** Comparando duas cotações do mesmo
+  deck, o total variou US$ 0,08. Não é o lote: a mesma consulta repetida
+  durante uma atualização de preços da Scryfall também diverge, e até
+  `(!"Command Tower")` diverge de `!"Command Tower"` nessa janela. Se for
+  comparar resultados, compare os dois na mesma janela, senão você vai caçar
+  um bug que é deles.
+
+Se preferir o caminho antigo, tire o `preparar` da fonte em
+`cotacao_job.fontes_ativas()` — nada mais depende dele.
+
+O motivo de cada falha vai pro log com o nome da carta:
+
+```sh
+grep "desisti\|nome-desconhecido\|layout-mudou\|repescando" /app/data/logs/forja.log
+```
+
+## Logs
+
+Duas saídas: o `stdout` (que é o `docker logs -f forja-backend`) e arquivos
+rotativos em `LOG_DIR`, que por padrão é `/app/data/logs` — dentro do volume,
+pra sobreviver ao restart do container. Se o diretório não puder ser criado,
+fica só o stdout: log que não grava não derruba o backend.
+
+Dois arquivos, porque as visitas são muitas e repetitivas e afogariam o log
+de erro se ficassem juntas:
+
+| Arquivo | O que tem |
+|---|---|
+| `forja.log` | tudo — cotação, preços, falhas, visitas |
+| `visitas.log` | só quem chegou e quem saiu |
+
+O formato é `chave=valor`, pra ser lido com `grep` no terminal:
+
+```
+14:43:59 WARNING forja.scryfall  freio segundos=60.0 motivo="HTTP 429" carta="shang chi"
+14:45:01 INFO    forja.scryfall  ok carta="natures lore" canonico="Nature's Lore" ofertas=22 ms=721
+14:45:01 INFO    forja.cotacao/scryfall fim cartas=75 cotadas=75 faltando=0 segundos=64
+```
+
+Perguntas que isso responde:
+
+```sh
+# por que faltou preço na última cotação?
+grep " fim \| job-fonte " /app/data/logs/forja.log | tail -20
+# quais cartas a fonte não conseguiu ler, e por quê?
+grep "desisti\|nome-desconhecido\|layout-mudou" /app/data/logs/forja.log
+# estamos apanhando de rate limit?
+grep "freio" /app/data/logs/forja.log | tail
+# quem esteve no site hoje, sem contar robô?
+grep "classe=pessoa" /app/data/logs/visitas.log
+```
+
+`LOG_NIVEL=DEBUG` acrescenta cada requisição HTTP e cada acerto de cache.
+Serve pra caçar problema; é barulhento demais pro dia a dia.
+
+### Visitas: pessoa ou bot
+
+Uma pessoa abrindo a página gera dezenas de requisições (HTML, CSS, fonte,
+os polls da cotação); um crawler gera uma e some. Por isso o log não conta
+requisição, conta **visita**: mesmo IP + mesmo User-Agent dentro de
+`VISITA_JANELA_MINUTOS` são a mesma pessoa, anunciada uma vez (`chegou`) e
+resumida uma vez quando esfria (`saiu`, com o que ela fez e quanto ficou).
+
+O IP real vem do `CF-Connecting-IP` — `request.client.host` seria o IP do
+túnel da Cloudflare, igual pra todo mundo, e faria todas as visitas virarem
+uma só. `VISITA_ANONIMIZAR_IP=1` corta o último octeto se você preferir.
+
+A classificação é **palpite**, e o log diz em que sinal se baseou justamente
+pra ninguém tratar como fato:
+
+| Classe | Como decide | Confiança |
+|---|---|---|
+| `bot-conhecido` | se identifica no User-Agent (Googlebot, GPTBot, curl, python-requests, HeadlessChrome…) | alta — ninguém mente pra *parecer* robô |
+| `pessoa` | mandou os cabeçalhos que só navegador manda (`Sec-Fetch-*`, `Accept-Language`, `sec-ch-ua`) | boa |
+| `suspeito` | diz ser navegador mas não manda o que navegador manda | é o bot disfarçado — e também o navegador muito antigo |
+
+Nada aqui bloqueia nada; é só pra enxergar o movimento. Um bot que copie os
+cabeçalhos de um Chrome passa por gente, e isso não tem conserto do lado do
+servidor.
+
+Pra ver quem está online agora sem abrir terminal:
+
+```sh
+curl -H "X-Admin-Token: SEU_TOKEN" http://localhost:8000/admin/visitas
+```
 
 ## Quando a impressão falha
 

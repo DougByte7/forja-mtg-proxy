@@ -1,13 +1,13 @@
 import os
 import time
 
-from fastapi import FastAPI, Form, Header, HTTPException, UploadFile
+from fastapi import FastAPI, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import (calc, cleanup, cotacao_job, fulfillment, notify, pix, printer,
-               storage)
+from . import (calc, cleanup, cotacao_job, fulfillment, log, notify, pix,
+               printer, storage, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -32,10 +32,99 @@ def _check_admin(x_admin_token: str | None):
         raise HTTPException(401, "Token de administrador inválido ou ausente.")
 
 
+# Requisições que valem uma linha de log mesmo vindo de bot, porque mexem em
+# alguma coisa. O resto (GET de página, arquivo estático, poll de status) só
+# entra na contagem da visita — senão o log vira o access log do nginx, que
+# já existe e não é o que se quer olhar aqui.
+_ACOES_EXATAS = {
+    ("POST", "/orders"): "pediu orçamento",
+    ("POST", "/cotacao"): "cotou preços",
+}
+# Estas trazem o id do pedido no meio do caminho, então casam por sufixo.
+_ACOES_SUFIXO = {
+    ("POST", "/notify-payment"): "avisou que pagou",
+    ("GET", "/print"): "abriu o link de imprimir",
+    ("GET", "/pdf"): "abriu o PDF",
+}
+
+
+def _acao(metodo: str, caminho: str) -> str | None:
+    exata = _ACOES_EXATAS.get((metodo, caminho))
+    if exata:
+        return exata
+    for (m, sufixo), nome in _ACOES_SUFIXO.items():
+        if m == metodo and caminho.endswith(sufixo):
+            return nome
+    return None
+
+
+@app.middleware("http")
+async def registrar_visita(request: Request, call_next):
+    """Anota quem está no sistema e quanto cada requisição demorou.
+
+    Fica em volta de TODAS as rotas, inclusive dos arquivos estáticos, porque
+    é justamente o pedido do `index.html` que revela que alguém abriu a
+    página — as rotas da API só contam quem já resolveu usar.
+
+    Nada aqui pode derrubar uma resposta: se o registro falhar, a requisição
+    segue. Log é observação, não parte do serviço.
+    """
+    inicio = time.monotonic()
+    try:
+        ip = visitas.ip_do_pedido(request)
+        ua = request.headers.get("user-agent", "")
+        classe, sinal = visitas.classificar(ua, request.headers)
+        visita = visitas.registro.registrar(
+            ip, ua, request.url.path, classe, sinal,
+            pais=request.headers.get("cf-ipcountry", ""))
+        if visita["nova"]:
+            log.evento("visita", "chegou", id=visita["id"], ip=ip,
+                       classe=classe, sinal=sinal,
+                       pais=visita["pais"] or None, em=request.url.path,
+                       ua=ua[:120] or None)
+    except Exception as e:
+        visita, classe = None, "?"
+        log.aviso("visita", "nao-registrei", motivo=f"{type(e).__name__}: {e}")
+
+    try:
+        resposta = await call_next(request)
+    except Exception as e:
+        # Exceção que ninguém tratou. O middleware de erro do Starlette está
+        # POR FORA deste, então sem isto o 500 sairia do backend sem deixar
+        # rastro nenhum no nosso log — só no traceback do uvicorn.
+        log.erro("acesso", "explodiu", id=visita["id"] if visita else None,
+                 metodo=request.method, caminho=request.url.path,
+                 motivo=f"{type(e).__name__}: {e}",
+                 ms=int((time.monotonic() - inicio) * 1000))
+        raise
+
+    try:
+        ms = int((time.monotonic() - inicio) * 1000)
+        acao = _acao(request.method, request.url.path)
+        if acao and visita:
+            visitas.registro.anotar(visita["id"], acao)
+        if acao or resposta.status_code >= 400:
+            log.evento("acesso", acao or "erro",
+                       id=visita["id"] if visita else None,
+                       metodo=request.method, caminho=request.url.path,
+                       status=resposta.status_code, ms=ms, classe=classe)
+        else:
+            log.debug("acesso", "pedido", id=visita["id"] if visita else None,
+                      metodo=request.method, caminho=request.url.path,
+                      status=resposta.status_code, ms=ms)
+    except Exception:
+        pass  # ver acima: log nunca derruba resposta
+
+    return resposta
+
+
 @app.on_event("startup")
 def startup():
     storage.init_db()
     cleanup.start_background()
+    log.evento("app", "subiu", log_dir=log.DIR, nivel=log.NIVEL,
+               fontes=", ".join(f["id"] for f in cotacao_job.fontes_ativas())
+                      or "nenhuma")
 
 
 @app.post("/orders")
@@ -123,8 +212,9 @@ def notify_payment(order_id: str):
     try:
         fulfillment.request_pdf(order_id)
     except Exception as e:
-        print(f"[main] pedido {order_id}: não consegui começar a montagem "
-              f"antecipada do PDF ({e}) — o link do e-mail monta sob demanda.")
+        log.aviso("pedido", "pdf-antecipado-falhou", pedido=order_id,
+                  motivo=f"{type(e).__name__}: {e}",
+                  nota="o link do e-mail monta sob demanda")
 
     try:
         notify.send_payment_claim_email(order, *links)
@@ -349,6 +439,25 @@ def list_printers(x_admin_token: str | None = Header(default=None)):
     é assim que se descobre o nome certo pra PRINTER_QUEUE."""
     _check_admin(x_admin_token)
     return printer.list_queues()
+
+
+@app.get("/admin/visitas")
+def list_visitas(x_admin_token: str | None = Header(default=None)):
+    """Quem está no sistema agora, separado por classe.
+
+    Complementa o `visitas.log`: o arquivo responde "o que aconteceu ontem",
+    isto responde "tem alguém aí neste momento" sem precisar abrir terminal.
+    A janela é `VISITA_JANELA_MINUTOS`.
+    """
+    _check_admin(x_admin_token)
+    ativas = visitas.registro.ativas()
+    return {
+        "janela_minutos": visitas.JANELA_MINUTOS,
+        "pessoas": sum(1 for v in ativas if v["classe"] == "pessoa"),
+        "bots": sum(1 for v in ativas if v["classe"].startswith("bot")),
+        "suspeitos": sum(1 for v in ativas if v["classe"] == "suspeito"),
+        "visitas": ativas,
+    }
 
 
 @app.post("/admin/cleanup")

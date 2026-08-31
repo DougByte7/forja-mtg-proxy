@@ -18,7 +18,7 @@ import os
 import threading
 import time
 
-from . import calc, cotacao, ligamagic, scryfall
+from . import calc, cotacao, ligamagic, log, scryfall
 
 # Teto de cartas distintas POR COTAR (depois de tirar básicas e comandante).
 # Um Commander tem 99, dos quais ~35 são terreno básico; 200 dá folga e ainda
@@ -54,8 +54,11 @@ def fontes_ativas() -> list[dict]:
             "moeda": scryfall.MOEDA,
             "observacao": ("preço do mercado americano, para comparação — "
                            "não é o custo de comprar no Brasil"),
-            "workers": 4,
+            "workers": scryfall.WORKERS,
             "buscar": scryfall.buscar_carta,
+            # Resolve e precifica o deck inteiro em ~20 requisições antes da
+            # varredura, em vez de 2+ por carta. Ver `scryfall.preparar`.
+            "preparar": scryfall.preparar,
         })
     return fontes
 
@@ -89,6 +92,7 @@ def _progresso(job_id: str):
 
 
 def _rodar(job_id: str, cartas, excluidas):
+    inicio = time.time()
     try:
         resultado = cotacao.comparar(cartas, fontes_ativas(),
                                      condicoes_aceitas=CONDICOES,
@@ -96,10 +100,22 @@ def _rodar(job_id: str, cartas, excluidas):
         # As cartas que ficaram de fora viajam junto do resultado: a tela
         # precisa dizer POR QUE o total não cobre o deck inteiro.
         resultado["excluidas"] = excluidas
+        # Uma linha por fonte com o placar. É o que se olha primeiro quando
+        # alguém diz "faltou preço em muita carta": diz de imediato se o
+        # buraco foi de uma fonte só ou das duas.
+        for f in resultado["fontes"]:
+            log.evento("cotacao", "job-fonte", job=job_id, fonte=f["id"],
+                       total=f["total"], moeda=f["moeda"],
+                       cotadas=f["cartas_cotadas"],
+                       faltando=f["cartas_faltando"],
+                       lojas=f["lojas_distintas"])
+        log.evento("cotacao", "job-pronto", job=job_id, cartas=len(cartas),
+                   segundos=int(time.time() - inicio))
         final = {"estado": "pronto", "resultado": resultado,
                  "quando": time.time()}
     except Exception as e:
-        print(f"[cotacao_job] {job_id}: falhou: {type(e).__name__}: {e}")
+        log.erro("cotacao", "job-falhou", job=job_id,
+                 motivo=f"{type(e).__name__}: {e}")
         final = {"estado": "erro", "detalhe": str(e), "quando": time.time()}
     with _trava:
         job = _jobs.get(job_id, {})
@@ -147,6 +163,9 @@ def iniciar(xml_text: str, comandante: str | None = None) -> dict:
                          "total": len(cartas) * len(fontes_ativas()),
                          "inicio": time.time(), "cartas": len(cartas)}
 
+    log.evento("cotacao", "job-comecou", job=job_id, cartas=len(cartas),
+               excluidas=len(excluidas),
+               fontes=", ".join(f["id"] for f in fontes_ativas()) or "nenhuma")
     threading.Thread(target=_rodar, args=(job_id, cartas, excluidas),
                      daemon=True).start()
     with _trava:

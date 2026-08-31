@@ -17,6 +17,7 @@ import os
 import re
 import time
 
+from . import log
 from .cotacao import Oferta
 
 DIR = os.environ.get("COTACAO_CACHE_DIR", "/tmp/forja-cotacao-cache")
@@ -51,4 +52,4 @@ def gravar(fonte: str, nome: str, ofertas: list[Oferta]):
         with open(caminho, "w", encoding="utf-8") as f:
             json.dump([o.__dict__ for o in ofertas], f, ensure_ascii=False)
     except OSError as e:
-        print(f"[cache_precos] não gravei {fonte}/{nome!r}: {e}")
+        log.aviso("cache", "nao-gravei", fonte=fonte, carta=nome, motivo=str(e))
