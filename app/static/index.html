@@ -45,6 +45,35 @@
   .brand .rune span{transform:rotate(-45deg);}
   .brand h1{font-family:'Cinzel',serif;font-weight:700;font-size:20px;letter-spacing:0.03em;margin:0;color:var(--text);}
   .brand p{margin:2px 0 0;font-size:12px;color:var(--text-muted);}
+  /* Pastilha de tinta, ao lado do título. Quebra pra linha de baixo em tela
+     estreita em vez de espremer o nome da página. */
+  .titulo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .tinta{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--text-muted);
+    border:1px solid var(--border);border-radius:999px;padding:3px 9px;
+    cursor:default;
+  }
+  .tinta .bolha{width:7px;height:7px;border-radius:50%;background:var(--text-muted);}
+  .tinta.ok{color:var(--green);border-color:rgba(76,154,107,.45);}
+  .tinta.ok .bolha{background:var(--green);}
+  /* Tinta baixa é aviso, não erro: dourado. O vermelho da página é do banner
+     "isto não é uma loja", e dividir o vermelho com ele tiraria a força de lá. */
+  .tinta.baixo{color:var(--gold-light);border-color:var(--gold);}
+  .tinta.baixo .bolha{background:var(--gold-light);}
+  /* Mesma família do banner-privado, em dourado: é aviso de prazo, não de
+     perigo. */
+  .banner-tinta{
+    background:rgba(201,162,39,0.10);border:1px dashed var(--gold);border-radius:10px;
+    padding:12px 14px;margin-bottom:18px;font-size:13px;line-height:1.6;
+    color:var(--gold-light);
+  }
+  .banner-tinta b{color:#F4E3B0;}
+  .banner-tinta b.prazo{white-space:nowrap;}
+  /* `display` no CSS ganha do atributo `hidden`; sem isto a pastilha nasce
+     visível e vazia enquanto a resposta não chega. */
+  .tinta[hidden],.banner-tinta[hidden]{display:none;}
 
   .card{
     background:var(--surface);border:1px solid var(--border);border-radius:14px;
@@ -384,7 +413,12 @@
     <div class="brand">
       <div class="rune"><span>⛨</span></div>
       <div>
-        <h1>Forja de Proxies</h1>
+        <div class="titulo">
+          <h1>Forja de Proxies</h1>
+          <!-- Nasce escondida: sem resposta da impressora, nenhuma pastilha
+               (ver o comentário do carregarTinta()). -->
+          <span class="tinta" id="tintaChip" hidden></span>
+        </div>
         <p>Orçamento na hora, pagamento por Pix</p>
       </div>
     </div>
@@ -397,6 +431,16 @@
     <b>ATENÇÃO: isto NÃO é uma loja.</b>
     Se você não me conhece, não gere uma cobrança. Este sistema é para uso
     exclusivo meu e do meu grupo, para facilitar nossos playtestes.
+  </div>
+
+  <!-- Só aparece com a tinta no fim. Fica ANTES do card, junto do aviso de
+       que isto não é loja, porque é expectativa de prazo: quem vai pagar
+       precisa ler antes de pagar, não depois. -->
+  <div class="banner-tinta" id="tintaAviso" role="status" hidden>
+    <b>A tinta da impressora está acabando.</b>
+    Enquanto o reabastecimento não chega, a produção das proxies pode levar
+    <b class="prazo">1 a 2 semanas</b>. O orçamento e o pagamento seguem
+    normais — o que atrasa é a impressão.
   </div>
 
   <div class="card">
@@ -1912,6 +1956,42 @@
       undoEdit();
     }
   });
+
+  // --- Tinta da impressora -----------------------------------------------
+  // A pastilha só aparece quando alguém sabe responder. Impressora de tanque
+  // costuma não contar o nível (ver `app/tinta.py`), e aí a página fica como
+  // sempre foi: pastilha nenhuma é melhor que um "tinta ok" chutado.
+  async function carregarTinta(){
+    let t;
+    try{
+      const resp = await fetch('/impressora/tinta');
+      if(!resp.ok) return;
+      t = await resp.json();
+    }catch(err){
+      return;   // silêncio de propósito: isto é recado, não parte do serviço
+    }
+    if(!t || (t.estado !== 'ok' && t.estado !== 'baixo')) return;
+
+    const temNivel = typeof t.nivel === 'number';
+    const chip = document.getElementById('tintaChip');
+    chip.className = 'tinta ' + t.estado;
+    chip.innerHTML = '<span class="bolha"></span>' + esc(
+      t.estado === 'baixo'
+        ? (temNivel ? `Tinta baixa · ${t.nivel}%` : 'Tinta baixa')
+        : (temNivel ? `Tinta ${t.nivel}%` : 'Tinta ok'));
+    // O número de cada suprimento fica no title: interessa a quem cuida da
+    // impressora, e não vale gastar a linha do título com quatro números.
+    const detalhe = (t.marcadores || [])
+      .filter(m => typeof m.nivel === 'number')
+      .map(m => `${m.nome || 'suprimento'}: ${m.nivel}%`).join(' · ');
+    if(detalhe) chip.title = detalhe;
+    chip.hidden = false;
+
+    // O aviso de prazo é o ponto de tudo isto: a pastilha diz o número, ele
+    // diz o que o número significa pra quem está pensando em pagar.
+    document.getElementById('tintaAviso').hidden = t.estado !== 'baixo';
+  }
+  carregarTinta();
 
   // Primeira pintura da tela. Fica aqui no fim de propósito: o recalc()
   // usa as constantes declaradas acima, e `const` não é içada como as

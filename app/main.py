@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import (calc, cleanup, cotacao_job, fulfillment, log, notify, pix,
-               printer, storage, visitas)
+               printer, storage, tinta, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -425,6 +425,19 @@ def get_cotacao(job_id: str):
     return atual
 
 
+@app.get("/impressora/tinta")
+def ink_level():
+    """Nível de tinta da impressora, pra tela avisar quando vai demorar.
+
+    Público de propósito — é a mesma informação que o aviso na página já dá,
+    e ela precisa carregar antes de qualquer pedido. Por isso a resposta não
+    leva endereço de CUPS nem nome de fila (ver `tinta.estado`), e a consulta
+    de verdade fica em cache: quem abre a página não vira uma pergunta nova
+    pra impressora.
+    """
+    return tinta.estado()
+
+
 @app.get("/admin/orders")
 def list_open_orders(x_admin_token: str | None = Header(default=None)):
     """Pedidos ainda não impressos, com o status de cada um ('pending' =
@@ -439,6 +452,18 @@ def list_printers(x_admin_token: str | None = Header(default=None)):
     é assim que se descobre o nome certo pra PRINTER_QUEUE."""
     _check_admin(x_admin_token)
     return printer.list_queues()
+
+
+@app.get("/admin/tinta")
+def ink_diagnostics(x_admin_token: str | None = Header(default=None)):
+    """O que a impressora respondeu sobre tinta, cru.
+
+    Serve pra responder "esse modelo informa o nível?" sem abrir terminal:
+    se não vier nenhum `marker-*`, ele não informa, e o aviso da página passa
+    a depender do `TINTA_ESTADO` no .env.
+    """
+    _check_admin(x_admin_token)
+    return tinta.diagnostico()
 
 
 @app.get("/admin/visitas")

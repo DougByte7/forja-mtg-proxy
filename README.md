@@ -150,6 +150,8 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
    - `CUPS_HOST` e `PRINTER_QUEUE` — endereço do CUPS na rede
      (`IP-DO-SERVIDOR:631`, ou vazio pra falar pelo socket local) e o nome da
      fila da sua impressora.
+   - `TINTA_ESTADO` — opcional, `baixo` liga na mão o aviso de que a
+     impressão vai demorar (veja *Aviso de tinta baixa*).
    - `ADMIN_TOKEN` — uma senha longa e aleatória só sua: ela assina o link
      Imprimir e libera as rotas `/admin`. Sem ela o botão do cliente falha.
 
@@ -186,8 +188,14 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
   o job de impressão.
 - `app/notify.py` — manda o e-mail de aviso com o resumo e os links.
 - `app/printer.py` — envia o PDF pra fila CUPS.
+- `app/tinta.py` — pergunta o nível de tinta ao CUPS por IPP, pra tela avisar
+  quando a impressão vai demorar. Ver *Aviso de tinta baixa*.
 - `app/cleanup.py` — apaga os PDFs antigos do disco de tempos em tempos.
 - `app/main.py` — API que costura tudo.
+- `deploy/atualizar.sh` — puxa o código novo, reconstrói o container e desfaz
+  se a página não voltar. Ver *Publicação automática*.
+- `.github/workflows/publicar.yml` — dispara esse script no homelab a cada push
+  na main, por um runner self-hosted.
 - `app/cotacao.py` — escolhe a oferta mais barata de cada carta e soma o
   total. Não sabe de onde vem o preço: a função de busca chega por parâmetro.
 - `app/ligamagic.py` — lê as ofertas das lojas brasileiras na LigaMagic.
@@ -211,6 +219,10 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
   página sintética: `python tests/test_ligamagic.py`.
 - `tests/test_cache_precos.py` — o cache de ofertas por carta:
   `python tests/test_cache_precos.py`.
+- `tests/test_tinta.py` — o pedido IPP byte a byte e a leitura da resposta,
+  contra uma impressora de mentira: `python tests/test_tinta.py`.
+- `tests/test_deploy.sh` — o script de publicação, com git de verdade e docker
+  de mentira (inclusive o desfazer): `bash tests/test_deploy.sh`.
 - `tests/test_identidade.py` — o `User-Agent` sai do `.env` e não do código:
   `python tests/test_identidade.py`.
 - `tests/test_retry_log.py` — a repescagem recupera um bloco de cartas perdido
@@ -236,6 +248,8 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 | `GET /admin/visitas` | você (`X-Admin-Token`) | quem está no sistema agora, separado em pessoas / bots / suspeitos |
 | `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
+| `GET /impressora/tinta` | front | nível de tinta da impressora, pra pastilha do cabeçalho e o aviso de prazo (público, em cache, sem endereço nem nome de fila na resposta) |
+| `GET /admin/tinta` | você (`X-Admin-Token`) | o que a impressora respondeu sobre tinta, cru — é aqui que se descobre se ela informa o nível |
 
 ## Cotação de preços das cartas
 
@@ -519,6 +533,125 @@ O motivo de cada falha vai pro log com o nome da carta:
 grep "desisti\|nome-desconhecido\|layout-mudou\|repescando" /app/data/logs/forja.log
 ```
 
+## Publicação automática (push na main → homelab)
+
+Push na `main` publica sozinho: o GitHub avisa o homelab, ele puxa o código,
+reconstrói o container e confere se a página voltou. **Se não voltar, desfaz
+e volta pro commit anterior** — a página no ar vale mais que a versão nova,
+ainda mais quando quem publicou já foi dormir.
+
+```
+push na main
+   │
+   ▼
+GitHub  ──(o runner do homelab puxa o job; nada entra de fora)──►  homelab
+                                                                      │
+                                                deploy/atualizar.sh ──┤
+                                                  git pull --ff-only  │
+                                                  compose up --build  │
+                                                  a página responde?  │
+                                                    sim → pronto      │
+                                                    não → desfaz ─────┘
+```
+
+O runner **sai** pra buscar trabalho, então nada precisa ser aberto na rede:
+funciona atrás do NAT e do Cloudflare Tunnel do jeito que já está.
+
+### Instalar o runner no homelab (uma vez)
+
+1. No GitHub: **Settings → Actions → Runners → New self-hosted runner**,
+   Linux x64. A página mostra os comandos com o token já preenchido; rode-os
+   no homelab, num usuário sem sudo. Na hora do `./config.sh`, dê a etiqueta
+   **`homelab`** — o workflow pede exatamente ela (`runs-on: [self-hosted,
+   homelab]`), então sem a etiqueta o job fica esperando pra sempre:
+
+   ```sh
+   ./config.sh --url https://github.com/DougByte7/forja-mtg-proxy \
+               --token TOKEN_DA_PÁGINA --labels homelab
+   ```
+
+2. **Diga onde o projeto mora.** Crie um `.env` na pasta do runner (não é o
+   `.env` da Forja — é outro arquivo, na pasta do `actions-runner`). O runner
+   injeta isso em todo job, e é o que mantém o caminho do seu servidor fora
+   de um repositório público:
+
+   ```
+   FORJA_DIR=/caminho/no/homelab/forja-backend
+   # Opcionais, quando a Forja é um serviço do compose grande do servidor:
+   # FORJA_COMPOSE=/caminho/no/homelab/docker-compose.yml
+   # FORJA_HEALTH_URL=http://localhost:8000/
+   ```
+
+3. **Suba como serviço**, pra voltar sozinho quando a máquina reiniciar:
+
+   ```sh
+   sudo ./svc.sh install $USER
+   sudo ./svc.sh start
+   ```
+
+   Com **podman rootless**, ainda falta um passo — sem ele os containers
+   morrem quando você desloga e o deploy sobe num vazio:
+
+   ```sh
+   loginctl enable-linger $USER
+   ```
+
+4. **Confira o clone do servidor**: o `FORJA_DIR` tem que ser um clone git
+   desta origem (HTTPS basta, o repositório é público), com o `.env` da Forja
+   no lugar e o `deploy/atualizar.sh` executável. É esse clone que o deploy
+   atualiza — o runner nunca faz checkout por conta própria, justamente pra
+   não duplicar o `.env` nem os volumes.
+
+Depois disso, `git push` na main e acompanhe em **Actions**. O resumo do job
+diz o commit que ficou em produção.
+
+### Repositório público + runner em casa: o cuidado que isso exige
+
+O GitHub desaconselha runner self-hosted em repositório público, e o motivo é
+concreto: workflow disparado por `pull_request` roda o código do PR — código
+de desconhecido — dentro da sua máquina. O
+`.github/workflows/publicar.yml` **não tem gatilho de PR** (só `push` na main
+e o botão manual), então PR nenhum executa nada no homelab. Duas coisas
+seguram isso de pé:
+
+- **Nunca adicione um gatilho `pull_request` a esse arquivo.** Está escrito lá
+  em cima também.
+- **Desligue workflow de PR de fork**: Settings → Actions → General → *Fork
+  pull request workflows* → desmarque **Run workflows from fork pull
+  requests**. Sem isso, um PR que ACRESCENTE um gatilho `pull_request` roda no
+  homelab se alguém apertar "Approve and run" na aba Actions. Enquanto estiver
+  ligado, a regra é: **não aprove PR que mexa em `.github/`**.
+- O runner roda como usuário comum, **sem sudo**. Ele não precisa de root pra
+  nada aqui — com podman rootless, nem pra subir o container.
+
+### Publicar na mão
+
+O mesmo script, sem GitHub nenhum no meio (é o caminho quando a Actions está
+fora do ar, ou quando você já está no servidor):
+
+```sh
+cd /caminho/no/homelab/forja-backend
+./deploy/atualizar.sh
+```
+
+Ele recusa se houver arquivo mexido na mão na pasta — o `git pull` falharia no
+meio do caminho, e é melhor parar antes de mexer no container. Os parafusos
+(`FORJA_COMPOSE`, `FORJA_SERVICE`, `FORJA_HEALTH_URL`, `FORJA_HEALTH_TIMEOUT`,
+`FORJA_ROLLBACK`, `FORJA_PRUNE`) estão explicados no cabeçalho do próprio
+script.
+
+Um detalhe do caminho automático: quem executa é a cópia do script que **já
+estava** no servidor, porque é ela quem faz o `git pull`. Mudança no
+`atualizar.sh` vale a partir da publicação seguinte, nunca na mesma.
+
+### Limpeza das imagens
+
+Cada rebuild deixa a imagem anterior sem tag, e num servidor de casa isso
+vira dezenas de GB em alguns meses. O script limpa as sobras no fim de cada
+publicação bem-sucedida, filtrando por `label=app=forja-backend` (a etiqueta
+está no `Dockerfile`) — as imagens dos outros serviços da máquina não são
+tocadas. `FORJA_PRUNE=0` desliga.
+
 ## Logs
 
 Duas saídas: o `stdout` (que é o `docker logs -f forja-backend`) e arquivos
@@ -639,6 +772,51 @@ local**. Dois caminhos:
    ```
    Depois `systemctl restart cups` e compartilhe a fila com
    `lpadmin -p NOME_DA_FILA -o printer-is-shared=true`.
+
+## Aviso de tinta baixa
+
+Ao lado do título da página aparece uma pastilha com o nível de tinta, e
+quando ele está no fim entra um aviso avisando que **a produção pode levar 1
+a 2 semanas** — antes do orçamento, pra quem vai pagar ler antes de pagar.
+
+Quem sabe o nível é o CUPS, nos atributos `marker-*` da fila (são eles que
+desenham a barrinha de tinta na interface web dele). O `lpstat` não mostra
+isso: a pergunta é IPP, e o `app/tinta.py` monta esse pedido na mão pra não
+precisar do `ipptool`, que não vem no `cups-client`. A resposta fica em cache
+(`TINTA_CACHE_SEGUNDOS`, 24 h) porque a rota é pública — cada visita não
+pode virar uma pergunta nova pra impressora, e nível de tinta não muda de
+hora em hora. O cache mora na memória: reiniciar o container zera na hora,
+que é o que se faz depois de reabastecer de qualquer jeito.
+
+**Nem toda impressora responde**, e a L4260 é justamente do tipo que
+costuma não responder: impressora de tanque não tem chip no tanque pra medir
+nada, então ela estima por contador de página ou devolve "não sei". Quando
+ninguém sabe, a pastilha **não aparece** e a página fica como sempre foi —
+mostrar "tinta ok" sem ter medido seria pior que não mostrar nada.
+
+Pra saber de que lado a sua está:
+
+```
+curl -H "X-Admin-Token: SEU_TOKEN" https://SEU-BACKEND/admin/tinta
+```
+
+`informa_nivel: true` e a página se vira sozinha. Se vier `false` (ou
+`atributos` sem nenhum `marker-*`), o caminho é a mão — quem enche o tanque
+olha e escreve no `.env`:
+
+```
+TINTA_ESTADO=baixo     # liga o aviso; "ok" cala; vazio = automático
+```
+
+Ele ganha da impressora sempre: quem olhou o tanque viu melhor que o
+contador de páginas. Não esqueça de tirar depois de reabastecer — é a única
+parte disto que não se corrige sozinha.
+
+Os outros parafusos, todos opcionais: `TINTA_LIMITE` (padrão 20, o % abaixo
+do qual a tinta conta como baixa, usado só quando a impressora não informa o
+limite dela), `TINTA_CACHE_SEGUNDOS` e `TINTA_TIMEOUT_SEGUNDOS` (padrão 4 —
+curto de propósito: impressora dormindo não pode segurar o carregamento da
+página).
 
 ## Qualidade de impressão
 

@@ -1,5 +1,10 @@
 FROM python:3.12-slim
 
+# A etiqueta serve pra faxina do deploy: cada rebuild deixa a imagem anterior
+# sem tag, e é por esta label que o `deploy/atualizar.sh` acha as sobras da
+# Forja sem encostar nas imagens dos outros serviços da máquina.
+LABEL app=forja-backend
+
 WORKDIR /app
 
 RUN apt-get update \

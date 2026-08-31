@@ -1,0 +1,57 @@
+name: Publicar no homelab
+
+# SÓ push na main, de propósito.
+#
+# Este repositório é PÚBLICO e o runner é uma máquina de casa. Workflow que
+# dispara em `pull_request` roda o código do PR — ou seja, código de
+# desconhecido — dentro do homelab. Por isso não existe gatilho de PR aqui, e
+# não deve passar a existir. Ver o README, seção "Publicação automática".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # botão manual; só quem tem acesso de escrita vê
+
+# Um deploy por vez. `cancel-in-progress: false` porque cancelar no meio de um
+# `compose up` deixaria o container em estado indefinido — dois pushes
+# seguidos entram na fila, um espera o outro.
+concurrency:
+  group: publicar-homelab
+  cancel-in-progress: false
+
+permissions:
+  contents: read            # o job não escreve nada no GitHub
+
+jobs:
+  publicar:    
+    if: github.repository == 'DougByte7/forja-mtg-proxy'
+    runs-on: [self-hosted, homelab]
+    timeout-minutes: 20
+    steps:
+      # Sem checkout de propósito: o que interessa está na pasta do projeto no
+      # servidor, que é quem tem o .env e os volumes. O runner só dá a ordem.
+      - name: Conferir a configuração do runner
+        run: |
+          set -euo pipefail
+          if [ -z "${FORJA_DIR:-}" ]; then
+            echo "::error::FORJA_DIR não está definida. Ela sai do arquivo .env"\
+                 "do runner (na pasta do actions-runner, no homelab) e aponta pra"\
+                 "pasta do projeto no servidor. Ver README, 'Publicação automática'."
+            exit 1
+          fi
+          if [ ! -x "$FORJA_DIR/deploy/atualizar.sh" ]; then
+            echo "::error::não achei $FORJA_DIR/deploy/atualizar.sh (ou ele não"\
+                 "tem permissão de execução). FORJA_DIR aponta pro clone certo?"
+            exit 1
+          fi
+          echo "publicando em $FORJA_DIR"
+
+      - name: Puxar o código e subir o container
+        run: "$FORJA_DIR/deploy/atualizar.sh"
+
+      - name: Dizer o que ficou no ar
+        if: always()
+        run: |
+          cd "$FORJA_DIR"
+          echo "### Forja no homelab" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit em produção: \`$(git log -1 --format='%h %s')\`" >> "$GITHUB_STEP_SUMMARY"
