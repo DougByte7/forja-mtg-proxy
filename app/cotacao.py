@@ -106,6 +106,15 @@ def normalizar_nome(nome: str) -> str:
     return "".join(c for c in sem_acento if not unicodedata.combining(c)).strip()
 
 
+def face_da_frente(nome: str) -> str:
+    """A face da frente de uma carta com `//`; o nome inteiro se não tiver.
+
+    Carta de duas partes tem nome canônico "A // B", e cada site trata isso
+    de um jeito — daí morar aqui, e não dentro de um cliente só.
+    """
+    return nome.split("//")[0].strip() if "//" in nome else nome
+
+
 def e_basica(nome: str) -> bool:
     return normalizar_nome(nome) in BASICAS
 

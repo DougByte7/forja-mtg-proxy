@@ -24,7 +24,7 @@ import unicodedata
 import requests
 
 from . import cache_precos, identidade, log, ritmo
-from .cotacao import Oferta
+from .cotacao import Oferta, face_da_frente
 
 BASE = "https://api.scryfall.com"
 # A Scryfall pede um User-Agent identificável — é regra deles, não gentileza.
@@ -235,8 +235,15 @@ def _resolver_nomes(sessao, nomes: list[str]) -> dict[str, str]:
     canonico_de: dict[str, str] = {}
     for i in range(0, len(nomes), QUANTOS_POR_COLECAO):
         lote = nomes[i:i + QUANTOS_POR_COLECAO]
+        # Manda a FACE DA FRENTE das dupla-face: o `/cards/collection` não
+        # aceita o nome completo. Pedir "Bruce Banner // The Incredible Hulk"
+        # cai em `not_found`; pedir "Bruce Banner" devolve a carta com o nome
+        # completo. Isso passou a importar quando os nomes começaram a chegar
+        # aqui JÁ canônicos (ver `resolver_nomes`) — antes vinham do XML, que
+        # traz só a frente, e o problema não aparecia. Sem isto, toda carta
+        # dupla-face escapa do lote e custa duas requisições a mais.
         resposta = _post(sessao, f"{BASE}/cards/collection",
-                         {"identifiers": [{"name": n} for n in lote]},
+                         {"identifiers": [{"name": face_da_frente(n)} for n in lote]},
                          carta=f"lote de {len(lote)}")
         if not resposta:
             continue
@@ -304,6 +311,57 @@ def _edicoes_em_lote(sessao, canonicos: list[str]) -> dict[str, list[Oferta]]:
                 break
             url, params = pagina["next_page"], None
     return por_nome
+
+
+def resolver_nomes(nomes) -> dict[str, str]:
+    """`{nome pedido: nome canônico}` — o dicionário de nomes do projeto.
+
+    Existe como função PÚBLICA, e não escondida no lote, porque quem mais
+    precisa dela não é a Scryfall: é a LigaMagic. A busca da Liga é por nome
+    exato (`?view=cards/card&card=...`), então `natures lore` devolve zero
+    oferta e `Nature's Lore` devolve 245. Todo `<query>` a que o MPC Fill
+    tirou uma vírgula, um apóstrofo, um hífen, um "!" ou um artigo sumia da
+    coluna da Liga sem explicação.
+
+    A Scryfall serve de dicionário aqui, não de fonte de preço: uma
+    requisição resolve 75 nomes. Quem não casar no `/cards/collection` cai na
+    busca difusa, que é por carta mas são poucas.
+
+    Nunca levanta exceção e nunca inventa: nome que não resolver simplesmente
+    não aparece no resultado, e quem chamou segue com o que já tinha.
+
+    "Nunca inventa" não é só cuidado nosso — a Scryfall ajuda: nome ambíguo
+    na busca difusa volta 404 ("Too many cards match ambiguous name"), que o
+    `_get` transforma em None. Ou seja, "hulk" não vira uma carta qualquer
+    que comece com Hulk; fica sem resolver, e a carta é buscada com o nome do
+    XML mesmo. Trocar por carta errada seria muito pior que não trocar.
+    """
+    pedidos = []
+    for nome in nomes:
+        nome = " ".join(str(nome or "").split())
+        if nome and nome not in pedidos:
+            pedidos.append(nome)
+    if not pedidos:
+        return {}
+    try:
+        sessao = _sessao()
+        resolvidos = _resolver_nomes(sessao, pedidos)
+        # As que o /cards/collection não conhece (o MPC Fill derruba artigos:
+        # "enter unknown" para "Enter the Unknown") ainda têm chance na busca
+        # difusa, que é por carta — mas costumam ser duas ou três.
+        for nome in pedidos:
+            if nome in resolvidos:
+                continue
+            card = _get(sessao, f"{BASE}/cards/named", {"fuzzy": nome},
+                        carta=nome)
+            if card and card.get("name"):
+                resolvidos[nome] = card["name"]
+        return resolvidos
+    except Exception as e:
+        log.aviso("scryfall", "resolver-nomes-falhou",
+                  motivo=f"{type(e).__name__}: {e}",
+                  nota="cada fonte segue com o nome do XML")
+        return {}
 
 
 def preparar(nomes, usar_cache: bool = True) -> dict:

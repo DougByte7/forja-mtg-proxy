@@ -391,12 +391,16 @@ requisições em vez de ~150 o limite deixou de ser alcançado.
 
 Medição de ponta a ponta, no deck de 75 cartas que originou este conserto:
 
-| | antes | freio + repescagem | + busca em lote |
+| Scryfall | antes | freio + repescagem | + busca em lote |
 |---|---|---|---|
 | cartas com preço | 22 de 75 | 75 de 75 | **75 de 75** |
 | requisições | ~150 | ~150 | **13** |
 | eventos de 429 | perdiam a carta | 11, absorvidos | **0** |
 | tempo | ~20 s | 6 min 48 s | **14 s** |
+
+E a LigaMagic, no mesmo deck de 76 cartas, depois da troca de nomes:
+**75 de 76** (antes: 63), R$ 493,49, em 230 s. A que faltava era a única
+carta de duas partes do deck — ver logo abaixo.
 
 O freio e a repescagem continuam valendo: são eles que seguram as duas cartas
 que ainda caem no caminho carta a carta, e a LigaMagic inteira, que não tem
@@ -404,6 +408,65 @@ busca em lote nenhuma.
 
 A segunda cotação do mesmo deck é instantânea — o `cache_precos` guarda por
 carta, com 12h de validade.
+
+### O nome que o MPC Fill escreve não é o nome que a LigaMagic aceita
+
+A busca da Liga é por nome **exato** (`?view=cards/card&card=...`). Medido:
+
+```
+'natures lore'   ->   0 ofertas
+"Nature's Lore"  -> 245 ofertas
+```
+
+Como o `<query>` do MPC Fill derruba vírgula, apóstrofo, hífen, "!" e artigo,
+**toda** carta cujo nome tenha um desses sumia da coluna da Liga em silêncio —
+eram 13 num deck de 76, e nenhuma delas por falta de estoque: a Liga tinha
+todas.
+
+O conserto é usar a Scryfall como **dicionário de nomes**, não como fonte de
+preço: `/cards/collection` resolve 75 nomes numa requisição, e a busca difusa
+pega o resto. O `cotacao_job` troca o `<query>` pelo nome real UMA vez, antes
+de qualquer fonte rodar, e daí pra frente tudo usa o nome certo:
+
+```
+'shang chi master of kung fu'  ->  'Shang-Chi, Master of Kung Fu'   0 -> 123 ofertas
+'hulk smash'                   ->  'HULK SMASH!'                    0 -> 377 ofertas
+'natures lore'                 ->  "Nature's Lore"                  0 -> 245 ofertas
+```
+
+Três coisas ganham junto: as duas buscas, o cache por carta (dois decks que
+escrevem o mesmo nome diferente passam a dividir a entrada) e a tabela na
+tela, que passa a mostrar "Nature's Lore" em vez de "natures lore".
+
+Nome que não resolver fica como estava no XML, e se a resolução inteira
+falhar a cotação segue com os nomes do XML — é melhoria pura, nunca piora o
+que já funcionava. `COTACAO_RESOLVER_NOMES=0` desliga.
+
+Repare que isso vale mesmo com `COTACAO_SCRYFALL=0`: são coisas diferentes.
+Uma é mostrar a coluna de preço em dólar; a outra é saber como a carta se
+chama, e essa a LigaMagic precisa tanto quanto.
+
+#### Carta de duas partes ("A // B")
+
+Aqui cada site faz de um jeito, e não dá pra decidir olhando só o nome:
+
+| nome procurado | Scryfall `/cards/collection` | LigaMagic |
+|---|---|---|
+| `Fire // Ice` (split) | não acha | **388 ofertas** |
+| `Fire` | acha | 0 |
+| `Bruce Banner // The Incredible Hulk` (transformar) | não acha | 0 |
+| `Bruce Banner` | acha | **164 ofertas** |
+
+Ou seja: a Scryfall só aceita a face da frente nos dois casos, e a Liga quer
+o nome inteiro na split e só a frente na de transformar. Por isso o
+`/cards/collection` sempre recebe a frente (`cotacao.face_da_frente`), e a
+LigaMagic tenta o nome inteiro e, se não achar nada, tenta a frente — uma
+requisição a mais, só pras cartas com `//`, que são poucas. Quando isso
+acontece o log diz com que nome a carta foi achada:
+
+```
+ok carta="Bruce Banner // The Incredible Hulk" achada_como="Bruce Banner" ofertas=164
+```
 
 ### A busca em lote da Scryfall
 

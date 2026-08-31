@@ -33,7 +33,7 @@ import requests
 from PIL import Image
 
 from . import cache_precos, identidade, log, ritmo
-from .cotacao import Oferta
+from .cotacao import Oferta, face_da_frente
 
 BASE = "https://www.ligamagic.com.br/"
 
@@ -493,9 +493,31 @@ def buscar_carta(nome: str, usar_cache: bool = True) -> list[Oferta]:
 
     inicio = time.monotonic()
     sessao = _sessao()
+    usado = nome
     html = _get(sessao, url_da_carta(nome), carta=nome).text
     try:
         ofertas = extrair_ofertas(html, nome, sessao=sessao)
+
+        # Carta de duas partes: a Liga é INCONSISTENTE entre os dois tipos,
+        # e não dá pra saber qual é olhando só o nome.
+        #
+        #   "Fire // Ice"                          -> 388 ofertas
+        #   "Fire"                                 ->   0
+        #   "Bruce Banner // The Incredible Hulk"  ->   0
+        #   "Bruce Banner"                         -> 164
+        #
+        # Split card fica com o nome inteiro; dupla-face de transformar fica
+        # só com a frente. Como o nome não diz qual é, tenta a outra forma
+        # quando a primeira não acha nada — uma requisição a mais, só pras
+        # cartas com "//", que são poucas.
+        frente = face_da_frente(nome)
+        if not ofertas and frente != nome:
+            log.debug("ligamagic", "tentando-a-frente", carta=nome,
+                      frente=frente)
+            html = _get(sessao, url_da_carta(frente), carta=frente).text
+            ofertas = extrair_ofertas(html, frente, sessao=sessao)
+            if ofertas:
+                usado = frente
     except LigaMagicError as e:
         # Falha de LAYOUT, não de rede: o site mudou e o parser não acompanha
         # mais. Vale ERROR e não WARNING porque não passa sozinho — alguém
@@ -504,6 +526,7 @@ def buscar_carta(nome: str, usar_cache: bool = True) -> list[Oferta]:
         raise
     cache_precos.gravar("ligamagic", nome, ofertas)
     log.evento("ligamagic", "ok" if ofertas else "sem-oferta", carta=nome,
+               achada_como=usado if usado != nome else None,
                ofertas=len(ofertas),
                ms=int((time.monotonic() - inicio) * 1000))
     return ofertas

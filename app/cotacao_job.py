@@ -32,6 +32,54 @@ CONDICOES = [c.strip().upper() for c in
              if c.strip()]
 USAR_LIGAMAGIC = os.environ.get("COTACAO_LIGAMAGIC", "1") == "1"
 USAR_SCRYFALL = os.environ.get("COTACAO_SCRYFALL", "1") == "1"
+# Troca o `<query>` do XML pelo nome real da carta antes de perguntar preço.
+# Vale pras DUAS fontes e é independente de mostrar a coluna da Scryfall: aqui
+# ela é usada como dicionário de nomes, não como fonte de preço. Ver
+# `scryfall.resolver_nomes` — sem isto, a LigaMagic devolve zero oferta pra
+# toda carta com vírgula, apóstrofo, hífen, "!" ou artigo no nome.
+RESOLVER_NOMES = os.environ.get("COTACAO_RESOLVER_NOMES", "1") == "1"
+
+
+def _com_nome_real(cartas: list[dict]) -> list[dict]:
+    """A mesma lista, com o nome canônico no lugar do `<query>` do MPC Fill.
+
+    Carta que não resolver fica com o nome do XML — o comportamento antigo.
+    Isso mantém a troca como melhoria pura: nunca piora o que já funcionava.
+
+    A substituição acontece aqui, num lugar só, e não dentro de cada cliente,
+    porque o nome certo serve pra tudo o que vem depois: as duas buscas, o
+    cache por carta (dois decks que escrevem o mesmo nome diferente passam a
+    dividir a entrada) e a tabela na tela, que passa a mostrar "Nature's Lore"
+    em vez de "natures lore".
+    """
+    if not RESOLVER_NOMES:
+        return cartas
+    try:
+        canonico_de = scryfall.resolver_nomes([c["nome"] for c in cartas])
+    except Exception as e:
+        # `resolver_nomes` já engole os erros dele, mas a cotação não pode
+        # depender disso: o nome canônico é um luxo que melhora o resultado,
+        # nunca uma dependência que possa derrubar o orçamento inteiro.
+        log.aviso("cotacao", "resolver-nomes-falhou",
+                  motivo=f"{type(e).__name__}: {e}",
+                  nota="segue com os nomes do XML")
+        return cartas
+    if not canonico_de:
+        return cartas
+
+    trocadas, saida = 0, []
+    for carta in cartas:
+        real = canonico_de.get(carta["nome"])
+        if real and real != carta["nome"]:
+            trocadas += 1
+            log.debug("cotacao", "nome-real", de=carta["nome"], para=real)
+            saida.append({**carta, "nome": real, "nome_xml": carta["nome"]})
+        else:
+            saida.append(carta)
+    log.evento("cotacao", "nomes-resolvidos", cartas=len(cartas),
+               trocados=trocadas,
+               nao_resolvidos=len(cartas) - len(canonico_de) or None)
+    return saida
 
 
 def fontes_ativas() -> list[dict]:
@@ -94,6 +142,10 @@ def _progresso(job_id: str):
 def _rodar(job_id: str, cartas, excluidas):
     inicio = time.time()
     try:
+        # Antes de qualquer fonte: troca o `<query>` do MPC pelo nome real.
+        # Fica aqui dentro, e não no `iniciar`, porque custa uma requisição —
+        # e o `iniciar` responde dentro do HTTP, que não pode esperar rede.
+        cartas = _com_nome_real(cartas)
         resultado = cotacao.comparar(cartas, fontes_ativas(),
                                      condicoes_aceitas=CONDICOES,
                                      on_progress=_progresso(job_id))
