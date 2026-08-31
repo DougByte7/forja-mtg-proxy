@@ -226,11 +226,17 @@ def _chaves_do_card(card: dict) -> list[str]:
     return [c for c in chaves if c]
 
 
-def _resolver_nomes(sessao, nomes: list[str]) -> dict[str, str]:
+def _resolver_nomes(sessao, nomes: list[str],
+                    tipos: dict[str, str] | None = None) -> dict[str, str]:
     """`{nome pedido: nome canônico}` via `/cards/collection`.
 
     Quem não aparecer aqui simplesmente não entra no lote — não é erro, é o
     caso que o caminho carta-a-carta resolve com busca difusa.
+
+    `tipos`, se vier, sai preenchido com `{nome canônico: type_line}`. É de
+    graça: o `/cards/collection` devolve a carta inteira, então o tipo vem na
+    mesma resposta que já estávamos lendo pelo nome — nenhuma requisição a
+    mais.
     """
     canonico_de: dict[str, str] = {}
     for i in range(0, len(nomes), QUANTOS_POR_COLECAO):
@@ -251,6 +257,8 @@ def _resolver_nomes(sessao, nomes: list[str]) -> dict[str, str]:
         for card in resposta.get("data", []):
             for chave in _chaves_do_card(card):
                 indice.setdefault(chave, card["name"])
+            if tipos is not None and card.get("type_line"):
+                tipos.setdefault(card["name"], card["type_line"])
         for nome in lote:
             achado = indice.get(_chave_nome(nome))
             if achado:
@@ -313,7 +321,7 @@ def _edicoes_em_lote(sessao, canonicos: list[str]) -> dict[str, list[Oferta]]:
     return por_nome
 
 
-def resolver_nomes(nomes) -> dict[str, str]:
+def resolver_nomes(nomes, tipos: dict[str, str] | None = None) -> dict[str, str]:
     """`{nome pedido: nome canônico}` — o dicionário de nomes do projeto.
 
     Existe como função PÚBLICA, e não escondida no lote, porque quem mais
@@ -335,6 +343,11 @@ def resolver_nomes(nomes) -> dict[str, str]:
     `_get` transforma em None. Ou seja, "hulk" não vira uma carta qualquer
     que comece com Hulk; fica sem resolver, e a carta é buscada com o nome do
     XML mesmo. Trocar por carta errada seria muito pior que não trocar.
+
+    `tipos`, se vier, sai preenchido com `{nome canônico: type_line}` — o tipo
+    vem junto da mesma resposta que resolve o nome, e é o que deixa a tela
+    agrupar a cotação por tipo de carta. É extra, nunca requisito: quem não
+    resolver o nome também não ganha tipo, e ninguém quebra por isso.
     """
     pedidos = []
     for nome in nomes:
@@ -345,7 +358,7 @@ def resolver_nomes(nomes) -> dict[str, str]:
         return {}
     try:
         sessao = _sessao()
-        resolvidos = _resolver_nomes(sessao, pedidos)
+        resolvidos = _resolver_nomes(sessao, pedidos, tipos)
         # As que o /cards/collection não conhece (o MPC Fill derruba artigos:
         # "enter unknown" para "Enter the Unknown") ainda têm chance na busca
         # difusa, que é por carta — mas costumam ser duas ou três.
@@ -356,6 +369,8 @@ def resolver_nomes(nomes) -> dict[str, str]:
                         carta=nome)
             if card and card.get("name"):
                 resolvidos[nome] = card["name"]
+                if tipos is not None and card.get("type_line"):
+                    tipos.setdefault(card["name"], card["type_line"])
         return resolvidos
     except Exception as e:
         log.aviso("scryfall", "resolver-nomes-falhou",

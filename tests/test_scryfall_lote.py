@@ -100,7 +100,16 @@ from app import cotacao_job  # noqa: E402
 
 MAPA = {"natures lore": "Nature's Lore", "go nuts": "Go Nuts!",
         "Sol Ring": "Sol Ring"}
-cotacao_job.scryfall.resolver_nomes = lambda nomes: dict(MAPA)
+# O tipo vem de carona no mesmo `resolver_nomes` (é o que a Scryfall já
+# devolve junto do nome), e é o que a tela usa pra agrupar a tabela.
+TIPOS = {"Nature's Lore": "Sorcery", "Sol Ring": "Artifact"}
+
+def resolve(nomes, tipos=None):
+    if tipos is not None:
+        tipos.update(TIPOS)
+    return dict(MAPA)
+
+cotacao_job.scryfall.resolver_nomes = resolve
 
 cartas = [{"nome": n, "quantidade": 1} for n in
           ["natures lore", "go nuts", "Sol Ring", "carta que nao existe"]]
@@ -115,15 +124,19 @@ check("a quantidade sobrevive à troca",
       all(c["quantidade"] == 1 for c in saida))
 check("o nome do XML fica guardado pra referência",
       saida[0].get("nome_xml") == "natures lore")
+check("o tipo da carta vem junto do nome resolvido",
+      saida[0].get("tipo") == "Sorcery", saida[0].get("tipo"))
+check("carta que não resolve fica sem tipo (a tela agrupa em 'outras')",
+      not saida[3].get("tipo"))
 
 # Se a resolução falhar (Scryfall fora do ar), a cotação tem que seguir com
 # os nomes do XML — como antes. É o que mantém isto como melhoria pura.
-cotacao_job.scryfall.resolver_nomes = lambda nomes: {}
+cotacao_job.scryfall.resolver_nomes = lambda nomes, tipos=None: {}
 check("resolução vazia devolve a lista intacta",
       [c["nome"] for c in cotacao_job._com_nome_real(cartas)] ==
       [c["nome"] for c in cartas])
 
-def explode(nomes):
+def explode(nomes, tipos=None):
     raise RuntimeError("Scryfall fora do ar")
 cotacao_job.scryfall.resolver_nomes = explode
 # `resolver_nomes` já engole os erros dele, mas a cotação não pode DEPENDER

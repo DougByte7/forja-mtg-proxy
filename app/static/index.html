@@ -208,9 +208,15 @@
   table.cot .loja{display:block;font-size:10px;color:var(--text-muted);}
   table.cot tr.faltou td{color:var(--text-muted);}
   table.cot td .aviso{color:#F2AFA1;}
-  /* Acordeão: começa mostrando 10 linhas. Um Commander cotado inteiro passa
-     de 60 linhas e empurraria o total pra fora da tela. */
-  table.cot tr.oculta{display:none;}
+  /* Acordeão: começa mostrando as 10 mais caras. Um Commander cotado inteiro
+     passa de 60 linhas e empurraria o total pra fora da tela. Aberto, a mesma
+     tabela vira a lista completa agrupada por tipo de carta. */
+  table.cot tr.grupo td{
+    background:rgba(139,107,255,0.07);border-bottom-color:rgba(139,107,255,.35);
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--gold-light);padding:8px;
+  }
+  table.cot tr.grupo .qtd{color:var(--text-muted);letter-spacing:0;text-transform:none;}
   .cot-mais{
     width:100%;background:transparent;border:1px dashed var(--border);color:var(--text-muted);
     border-radius:8px;padding:8px;font-size:11px;cursor:pointer;margin-top:8px;
@@ -882,6 +888,31 @@
       c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   }
 
+  // Grupos da tabela expandida. A ORDEM daqui é a ordem dos grupos na tela, e
+  // o primeiro padrão que casar com o tipo vence — por isso "Terrenos" vem
+  // antes de "Criaturas" (Dryad Arbor é terreno pra quem monta o deck) e
+  // "Criaturas" antes de "Artefatos" (uma criatura artefato é criatura).
+  const COT_GRUPOS = [
+    ['Planeswalkers',  /planeswalker/],
+    ['Batalhas',       /battle/],
+    ['Terrenos',       /land/],
+    ['Criaturas',      /creature/],
+    ['Artefatos',      /artifact/],
+    ['Encantamentos',  /enchantment/],
+    ['Mágicas instantâneas', /instant/],
+    ['Feitiços',       /sorcery/],
+  ];
+  const COT_OUTRAS = 'Outras';
+
+  // `tipo` é o type_line cru da Scryfall ("Legendary Creature — Elf Druid").
+  function grupoDaCarta(tipo){
+    // Dupla-face vem "frente // verso"; quem manda é a frente, que é a que se
+    // joga da mão.
+    const frente = String(tipo || '').split('//')[0].toLowerCase();
+    const achado = COT_GRUPOS.find(([, re]) => re.test(frente));
+    return achado ? achado[0] : COT_OUTRAS;
+  }
+
   function desenharCotacao(r){
     const fontes = r.fontes || [];
     const cabecalho = fontes.map(f => `
@@ -894,7 +925,7 @@
 
     const colunas = fontes.map(f => `<th>${esc(f.rotulo)}</th>`).join('');
     const todas = r.linhas || [];
-    const linhas = todas.map((l, i) => {
+    const linhaHTML = (l) => {
       const achou = fontes.some(f => !(l.precos[f.id] || {}).erro);
       const celulas = fontes.map(f => {
         const p = l.precos[f.id] || {};
@@ -908,19 +939,56 @@
                 <span class="loja">${esc(p.loja)}${
                   p.condicao ? ' · ' + esc(p.condicao) : ''}</span></td>`;
       }).join('');
-      // Da 11ª linha em diante nasce escondida. Como as linhas vêm ordenadas
-      // do subtotal maior pro menor, as 10 primeiras já são onde o dinheiro
-      // está — o resto é conferência.
-      const oculta = i >= COT_VISIVEIS ? ' oculta' : '';
-      return `<tr class="${achou ? '' : 'faltou'}${oculta}">
+      return `<tr class="${achou ? '' : 'faltou'}">
         <td class="carta">${esc(l.nome)}</td>
         <td class="num">${l.quantidade}x</td>${celulas}</tr>`;
-    }).join('');
+    };
+
+    // Fechada: as 10 mais caras, sem grupo nenhum. As linhas já chegam do
+    // backend do subtotal maior pro menor, então é só cortar — é onde o
+    // dinheiro do deck está, e é o que a tela mostra de cara.
+    const corpoTopo = todas.slice(0, COT_VISIVEIS).map(linhaHTML).join('');
+
+    // Aberta: a lista inteira agrupada por tipo de carta, cada grupo ainda do
+    // mais caro pro mais barato — como a ordem de chegada já é essa, agrupar
+    // preservando-a basta, sem reordenar nada. Serve pra conferência ("os
+    // terrenos estão custando quanto?"), que é o que se faz depois de ver o
+    // topo.
+    const grupos = new Map();
+    todas.forEach(l => {
+      const g = grupoDaCarta(l.tipo);
+      if(!grupos.has(g)) grupos.set(g, []);
+      grupos.get(g).push(l);
+    });
+    // Sem tipo em carta nenhuma (Scryfall desligada, ou fora do ar na hora)
+    // não há o que agrupar: cai na lista corrida de sempre em vez de uma
+    // gaveta "Outras" com o deck inteiro dentro.
+    const agrupavel = todas.some(l => l.tipo) &&
+                      !(grupos.size === 1 && grupos.has(COT_OUTRAS));
+    let corpoTudo;
+    if(agrupavel){
+      const colunasTotal = 2 + fontes.length;
+      corpoTudo = COT_GRUPOS.map(([nome]) => nome).concat(COT_OUTRAS)
+        .filter(g => grupos.has(g))
+        .map(g => {
+          const doGrupo = grupos.get(g);
+          const copias = doGrupo.reduce((s, l) => s + l.quantidade, 0);
+          return `<tr class="grupo"><td colspan="${colunasTotal}">${esc(g)}
+                    <span class="qtd">· ${doGrupo.length} carta(s), ${copias} cópia(s)</span>
+                  </td></tr>` + doGrupo.map(linhaHTML).join('');
+        }).join('');
+    }else{
+      corpoTudo = todas.map(linhaHTML).join('');
+    }
 
     const escondidas = Math.max(0, todas.length - COT_VISIVEIS);
+    const rotuloAbrir = agrupavel
+      ? `Ver as ${todas.length} cartas agrupadas por tipo`
+      : `Ver mais ${escondidas} carta(s)`;
+    const rotuloFechar = `Ver só as ${COT_VISIVEIS} mais caras`;
     const botaoMais = escondidas
       ? `<button class="cot-mais" id="cotMais" data-aberto="0">
-           Ver mais ${escondidas} carta(s)</button>`
+           ${rotuloAbrir}</button>`
       : '';
 
     // O que ficou de fora do total, e por quê. Sem isso o total parece menor
@@ -952,7 +1020,7 @@
       <div class="cot-tabela-wrap">
         <table class="cot">
           <thead><tr><th>Carta</th><th>Qtd</th>${colunas}</tr></thead>
-          <tbody>${linhas}</tbody>
+          <tbody id="cotCorpo">${corpoTopo}</tbody>
         </table>
       </div>
       ${botaoMais}
@@ -966,15 +1034,15 @@
 
     const btnMais = document.getElementById('cotMais');
     if(btnMais){
+      // Troca o corpo da tabela inteiro em vez de esconder linha por linha:
+      // fechada e aberta são listas com ORDENS diferentes (preço puro x
+      // agrupada por tipo), não a mesma lista com um pedaço escondido.
+      const corpo = document.getElementById('cotCorpo');
       btnMais.addEventListener('click', ()=>{
         const aberto = btnMais.dataset.aberto === '1';
-        cotResultado.querySelectorAll('table.cot tbody tr').forEach((tr, i) => {
-          if(i >= COT_VISIVEIS) tr.classList.toggle('oculta', aberto);
-        });
+        corpo.innerHTML = aberto ? corpoTopo : corpoTudo;
         btnMais.dataset.aberto = aberto ? '0' : '1';
-        btnMais.textContent = aberto
-          ? `Ver mais ${escondidas} carta(s)`
-          : 'Ver menos';
+        btnMais.textContent = aberto ? rotuloAbrir : rotuloFechar;
       });
     }
     cotAssinatura = loadedSignature;

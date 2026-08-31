@@ -54,8 +54,13 @@ def _com_nome_real(cartas: list[dict]) -> list[dict]:
     """
     if not RESOLVER_NOMES:
         return cartas
+    # O tipo da carta ("Legendary Creature — Elf Druid") vem na MESMA resposta
+    # que resolve o nome, então pedi-lo aqui não custa requisição nenhuma. Ele
+    # não muda preço nem busca: serve pra tela agrupar a tabela por tipo
+    # quando o usuário expande a cotação.
+    tipos: dict[str, str] = {}
     try:
-        canonico_de = scryfall.resolver_nomes([c["nome"] for c in cartas])
+        canonico_de = scryfall.resolver_nomes([c["nome"] for c in cartas], tipos)
     except Exception as e:
         # `resolver_nomes` já engole os erros dele, mas a cotação não pode
         # depender disso: o nome canônico é um luxo que melhora o resultado,
@@ -70,12 +75,18 @@ def _com_nome_real(cartas: list[dict]) -> list[dict]:
     trocadas, saida = 0, []
     for carta in cartas:
         real = canonico_de.get(carta["nome"])
+        # Carta sem tipo (nome que não resolveu, ou Scryfall fora do ar) segue
+        # normalmente e a tela a joga numa gaveta de "outras" — o tipo é
+        # enfeite da tabela, nunca condição pra cotar.
+        tipo = tipos.get(real or carta["nome"], "")
+        extra = {"tipo": tipo} if tipo else {}
         if real and real != carta["nome"]:
             trocadas += 1
             log.debug("cotacao", "nome-real", de=carta["nome"], para=real)
-            saida.append({**carta, "nome": real, "nome_xml": carta["nome"]})
+            saida.append({**carta, "nome": real, "nome_xml": carta["nome"],
+                          **extra})
         else:
-            saida.append(carta)
+            saida.append({**carta, **extra} if extra else carta)
     log.evento("cotacao", "nomes-resolvidos", cartas=len(cartas),
                trocados=trocadas,
                nao_resolvidos=len(cartas) - len(canonico_de) or None)

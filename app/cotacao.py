@@ -377,8 +377,11 @@ def comparar(cartas, fontes, condicoes_aceitas=None, on_progress=None) -> dict:
     linhas = []
     for carta in cartas:
         nome = carta["nome"]
+        # `tipo` é o type_line da Scryfall, quando houve (ver
+        # `cotacao_job._com_nome_real`). Vai cru pra tela, que decide como
+        # agrupar; aqui ele é só carona.
         linha = {"nome": nome, "quantidade": int(carta.get("quantidade", 1)),
-                 "precos": {}}
+                 "tipo": carta.get("tipo", ""), "precos": {}}
         for fonte in fontes:
             r = por_fonte[fonte["id"]]
             achado = next((i for i in r["itens"] if i["nome"] == nome), None)
