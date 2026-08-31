@@ -81,6 +81,9 @@ E `GET /admin/orders` (mesmo header) lista os pedidos ainda não impressos,
 com `status` `pending` (ninguém avisou nada) ou `notified` (o cliente disse
 que pagou).
 
+Pra não depender do e-mail nem do curl, tem a tela **[Pedidos](#tela-de-pedidos-admin)**
+em `/admin`, com a mesma coisa em botão.
+
 Se um dia quiser confirmação automática de verdade, migrar pra um provedor
 como o Asaas (cadastro simples de pessoa física, tem webhook) resolve esse
 ponto sem mexer no resto — o `pix.py` viraria uma chamada de API em vez de
@@ -177,10 +180,13 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 
 - `app/static/index.html` — o front-end (a Forja de Proxies), servido pelo
   próprio FastAPI.
+- `app/static/admin.html` — a tela de pedidos do operador, em `/admin`. Ver
+  *Tela de pedidos (admin)*.
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
-  (`status`: `pending` → `notified` → `paid`).
+  (`status`: `pending` → `notified` → `paid`, mais `cancelado` pro que o
+  operador desistiu na tela de pedidos).
 - `app/pdf_generator.py` — baixa as imagens do Drive e monta o PDF A4 3x3. Os
   versos de carta dupla-face saem **um por cópia**, igual ao que o `calc.py`
   cobra e ao que a prévia mostra.
@@ -232,6 +238,10 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
   `python tests/test_visitas.py`.
 - `tests/test_scryfall_lote.py` — o `<query>` do MPC casando com o nome
   canônico, dupla-face inclusive: `python tests/test_scryfall_lote.py`.
+- `tests/test_admin_pedidos.py` — a tela de pedidos: cada rota `/admin/pedidos`
+  barrando quem não tem token, o XML do deck não vazando na listagem, e o que
+  cancelar / reabrir / apagar fazem de fato. Precisa do fastapi instalado:
+  `python tests/test_admin_pedidos.py`.
 
 ### Rotas
 
@@ -242,6 +252,14 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 | `POST /orders/{id}/notify-payment` | botão do cliente | manda o e-mail de aviso e já começa a montar o PDF (não imprime) |
 | `GET /orders/{id}/pdf?token=…` | botão **Ver PDF** | monta e devolve a folha inline pra conferir (`&fresh=1` regera) |
 | `GET /orders/{id}/print?token=…` | botão **Imprimir** | marca pago e manda pra fila da impressora |
+| `GET /admin` | você, no navegador | a tela de pedidos (é só HTML: os dados vêm das rotas abaixo, todas com token) |
+| `GET /admin/sessao` | tela de pedidos | diz se o token vale, pra tela saber se mostra a lista ou o formulário de entrada |
+| `GET /admin/pedidos` | tela de pedidos | todos os pedidos, do mais novo pro mais antigo, com contagem por estado. Aceita `status=` e `busca=` |
+| `GET /admin/pedidos/{id}` | tela de pedidos | um pedido só |
+| `POST /admin/pedidos/{id}/status` | tela de pedidos | muda o estado na mão (`pending`, `notified`, `paid`, `cancelado`) |
+| `POST /admin/pedidos/{id}/pdf` | tela de pedidos | manda montar a folha (ou diz como vai a montagem). `?fresh=true` remonta do zero |
+| `POST /admin/pedidos/{id}/imprimir` | tela de pedidos | mesmo efeito do link **Imprimir** do e-mail: marca pago e manda pra fila |
+| `DELETE /admin/pedidos/{id}` | tela de pedidos | apaga o pedido e o PDF de vez |
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
 | `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, pra descobrir o `PRINTER_QUEUE` certo |
 | `POST /admin/cleanup` | você (`X-Admin-Token`) | roda a faxina dos PDFs antigos na hora |
@@ -250,6 +268,58 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
 | `GET /impressora/tinta` | front | nível de tinta da impressora, pra pastilha do cabeçalho e o aviso de prazo (público, em cache, sem endereço nem nome de fila na resposta) |
 | `GET /admin/tinta` | você (`X-Admin-Token`) | o que a impressora respondeu sobre tinta, cru — é aqui que se descobre se ela informa o nível |
+
+## Tela de pedidos (admin)
+
+`https://SEU-BACKEND/admin` — a mesma coisa que os links do e-mail fazem, só
+que numa lista, sem depender de achar o e-mail certo na caixa de entrada. É o
+que se abre no celular quando alguém manda mensagem perguntando do pedido.
+
+### Como entra
+
+Ela pede o `ADMIN_TOKEN` do `.env` na primeira vez e guarda no navegador
+(no `sessionStorage`, que some quando a aba fecha; marcando *"Lembrar neste
+navegador"*, no `localStorage`, que fica). O botão **Sair** apaga os dois.
+
+**Onde mora a proteção:** o arquivo `admin.html` é servido como qualquer
+outro estático — quem digitar o endereço vê a tela. O que ele **não** vê é
+pedido nenhum: a página nasce vazia e todo dado vem das rotas `/admin/...`,
+que exigem o header `X-Admin-Token`. Sem o token, a tela é uma caixa de texto
+pedindo o token, e é isso. É o mesmo modelo dos links do e-mail: o que se
+protege é o dado, não o layout.
+
+Trocou a `ADMIN_TOKEN` no `.env`? A tela cai sozinha na entrada no primeiro
+clique — e os links dos e-mails antigos param de valer junto.
+
+### O que dá pra fazer
+
+Cada pedido é um cartão com nome, valor, id, código do deck, quantidade de
+cartas, páginas, laminação e quando foi criado/avisado. Os que **avisaram
+pagamento** vêm com a borda dourada: é a fila do dia. Em cima, filtros por
+estado e uma busca que casa com nome, id do pedido ou código do deck.
+
+| Botão | O que faz |
+|---|---|
+| **Ver PDF** | abre a folha montada numa aba nova (mesmo link assinado do e-mail) |
+| **Montar PDF** | manda montar antes da hora e mostra o progresso ali mesmo (`12 de 60 imagens baixadas`) |
+| **Refazer PDF** | remonta do zero — é o que se usa depois de arrumar uma arte no Drive |
+| **Imprimir** | marca como pago e manda pra fila do CUPS. Pede confirmação |
+| **Marcar pago** | confirma o Pix **sem** imprimir (pro Pix que caiu sem o cliente avisar) |
+| **Cancelar** | tira da fila sem apagar nada; continua no histórico |
+| **Reabrir** / **Voltar pra pendente** | desfaz um clique errado. Voltar pra pendente limpa o aviso do cliente, então ele consegue avisar de novo |
+| **Apagar** | apaga o pedido, o XML do deck e o PDF. Não tem volta, e por isso pede o id digitado |
+
+Conferir o Pix no app do banco continua sendo com você — a tela não fala com
+banco nenhum, pelo mesmo motivo de sempre (ver *Como o pagamento é
+confirmado*).
+
+A lista se atualiza sozinha a cada 30 s, mas só com a aba à vista e nenhuma
+confirmação aberta: redesenhar a lista embaixo de um clique é a melhor forma
+de imprimir o pedido errado.
+
+Sem `PRINTER_QUEUE` configurada, aparece um aviso no topo — ali o botão
+**Imprimir** confirma o pagamento e deixa o PDF pronto, mas não manda nada
+pra impressora nenhuma.
 
 ## Cotação de preços das cartas
 

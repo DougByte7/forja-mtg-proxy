@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Não é uma página pra ser achada: quem chega aqui já sabe o endereço. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Pedidos — Forja de Proxies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Mesma paleta da tela do cliente (index.html), de propósito: é o mesmo
+     sistema, só que do lado de dentro. O que muda é a largura — aqui a tela
+     é uma lista, não um formulário. */
+  :root{
+    --bg:#0F0D17;
+    --surface:#1B1730;
+    --surface-2:#241F3D;
+    --border:#382F5C;
+    --text:#EDE6D6;
+    --text-muted:#A79BC7;
+    --gold:#C9A227;
+    --gold-light:#E4C767;
+    --purple:#8B6BFF;
+    --green:#4C9A6B;
+    --red:#D9634A;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 15% 0%, rgba(139,107,255,0.12), transparent 45%),
+      radial-gradient(circle at 85% 100%, rgba(201,162,39,0.10), transparent 45%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    padding:28px 16px 72px;
+  }
+  .wrap{max-width:840px;margin:0 auto;}
+  [hidden]{display:none !important;}
+
+  header{display:flex;align-items:center;gap:12px;margin-bottom:22px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0;}
+  .brand .rune{
+    width:38px;height:38px;border:1.5px solid var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Cinzel',serif;color:var(--gold-light);font-size:18px;
+    transform:rotate(45deg);flex-shrink:0;
+  }
+  .brand .rune span{transform:rotate(-45deg);}
+  .brand h1{font-family:'Cinzel',serif;font-weight:700;font-size:20px;letter-spacing:.03em;margin:0;}
+  .brand p{margin:2px 0 0;font-size:12px;color:var(--text-muted);}
+
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:22px;box-shadow:0 20px 40px -20px rgba(0,0,0,.6);
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .rotulo{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;
+    color:var(--gold-light);text-transform:uppercase;margin-bottom:8px;display:block;
+  }
+
+  /* --- Entrada ---------------------------------------------------------- */
+  #gate{max-width:420px;margin:8vh auto 0;}
+  #gate h2{font-family:'Cinzel',serif;font-size:17px;margin:0 0 8px;}
+  #gate p{font-size:13px;line-height:1.6;color:var(--text-muted);margin:0 0 16px;}
+  input[type=password],input[type=text],input[type=search]{
+    width:100%;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:9px;color:var(--text);padding:11px 12px;font-size:14px;
+    font-family:'Inter',sans-serif;
+  }
+  input:focus-visible,button:focus-visible,select:focus-visible{
+    outline:2px solid var(--gold);outline-offset:1px;
+  }
+  .lembrar{
+    display:flex;align-items:center;gap:8px;margin-top:12px;
+    font-size:12px;color:var(--text-muted);cursor:pointer;
+  }
+  .lembrar input{width:15px;height:15px;accent-color:var(--gold);cursor:pointer;}
+
+  .btn-ouro{
+    background:var(--gold);color:#1A1408;border:none;border-radius:9px;padding:12px;
+    font-weight:700;font-size:14px;cursor:pointer;width:100%;margin-top:14px;
+  }
+  .btn-ouro:hover:not(:disabled){filter:brightness(1.08);}
+  .btn-ouro:disabled{opacity:.4;cursor:not-allowed;}
+
+  /* --- Barra de filtros -------------------------------------------------- */
+  .barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .chip{
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);
+    border-radius:999px;padding:7px 13px;font-size:12px;cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;white-space:nowrap;
+  }
+  .chip:hover{border-color:var(--gold);color:var(--gold-light);}
+  .chip.ativo{border-color:var(--gold);background:rgba(201,162,39,.10);color:var(--gold-light);}
+  .chip .n{font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.75;margin-left:5px;}
+  .busca-linha{display:flex;gap:8px;margin-bottom:16px;}
+  .busca-linha input{flex:1;}
+  .btn-sec{
+    background:transparent;border:1px solid var(--border);color:var(--text-muted);
+    border-radius:9px;padding:9px 14px;font-size:12px;cursor:pointer;white-space:nowrap;
+    transition:border-color .15s,color .15s;
+  }
+  .btn-sec:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
+  .btn-sec:disabled{opacity:.35;cursor:not-allowed;}
+  .btn-sec.perigo:hover:not(:disabled){border-color:var(--red);color:#F2AFA1;}
+
+  /* --- Lista de pedidos -------------------------------------------------- */
+  .pedido{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 16px;margin-bottom:10px;
+  }
+  /* O que espera decisão fica marcado: é a fila de trabalho do dia. */
+  .pedido.notified{border-color:var(--gold);background:rgba(201,162,39,.05);}
+  .pedido.cancelado{opacity:.6;}
+  .p-topo{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .p-nome{font-size:15px;font-weight:600;flex:1;min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .p-valor{font-family:'IBM Plex Mono',monospace;font-size:17px;color:var(--gold-light);}
+  .pill{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;
+    text-transform:uppercase;border:1px solid var(--border);border-radius:999px;
+    padding:3px 9px;color:var(--text-muted);white-space:nowrap;
+  }
+  .pill.pending{color:var(--text-muted);}
+  .pill.notified{color:var(--gold-light);border-color:var(--gold);}
+  .pill.paid{color:var(--green);border-color:rgba(76,154,107,.45);}
+  .pill.cancelado{color:#F2AFA1;border-color:rgba(217,99,74,.5);}
+  .p-meta{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);
+    margin-top:7px;line-height:1.7;
+  }
+  .p-meta b{color:var(--text);font-weight:600;}
+  .p-meta .sep{opacity:.4;margin:0 6px;}
+  .p-acoes{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;}
+  .p-acoes .btn-sec{padding:7px 11px;font-size:11px;}
+  .p-nota{
+    font-size:11px;line-height:1.55;margin-top:10px;border-radius:8px;
+    padding:8px 10px;border:1px dashed var(--border);color:var(--text-muted);
+  }
+  .p-nota.ok{color:var(--green);border-color:rgba(76,154,107,.45);}
+  .p-nota.erro{color:#F2AFA1;border-color:var(--red);background:rgba(217,99,74,.10);}
+  .p-nota.andando{color:var(--gold-light);border-color:var(--gold);}
+
+  .vazio{
+    text-align:center;color:var(--text-muted);font-size:13px;line-height:1.6;
+    border:1px dashed var(--border);border-radius:12px;padding:28px 18px;
+  }
+  .aviso{
+    background:rgba(217,99,74,.12);border:1px solid var(--red);color:#F2AFA1;
+    border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:14px;
+  }
+  .rodape{
+    margin-top:22px;font-size:11px;line-height:1.6;color:var(--text-muted);
+    text-align:center;
+  }
+  .rodape b{color:var(--text);}
+
+  /* --- Confirmação ------------------------------------------------------- */
+  .modal{
+    position:fixed;inset:0;z-index:50;background:rgba(8,6,16,.84);
+    display:none;align-items:center;justify-content:center;padding:16px;
+  }
+  .modal.show{display:flex;}
+  .modal-box{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    width:min(430px,100%);padding:22px;
+  }
+  .modal-box h3{font-family:'Cinzel',serif;font-size:16px;margin:0 0 10px;letter-spacing:.03em;}
+  .modal-box p{font-size:13px;line-height:1.6;color:var(--text-muted);margin:0 0 14px;}
+  .modal-box p b{color:var(--text);}
+  .modal-acoes{display:flex;gap:9px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap;}
+  .btn-confirma{
+    background:var(--gold);color:#1A1408;border:none;border-radius:9px;
+    padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;
+  }
+  .btn-confirma.perigo{background:var(--red);color:#2A0F09;}
+  .btn-confirma:hover:not(:disabled){filter:brightness(1.08);}
+  .btn-confirma:disabled{opacity:.4;cursor:not-allowed;}
+
+  @media (prefers-reduced-motion: reduce){*{transition:none !important;}}
+  @media (max-width:560px){
+    .p-valor{font-size:15px;}
+    .p-acoes .btn-sec{flex:1;min-width:calc(50% - 4px);}
+  }
+</style>
+</head>
+<body>
+
+<!-- ENTRADA. Só o que aparece enquanto não houver token válido; nenhum dado
+     de pedido chega ao navegador antes disso. -->
+<div id="gate" class="card" hidden>
+  <h2>Pedidos</h2>
+  <p>Esta tela é do operador. Cole o <b>ADMIN_TOKEN</b> do <span class="mono">.env</span> pra continuar.</p>
+  <form id="formEntrar" autocomplete="off">
+    <label class="rotulo" for="tokenInput">Token de administrador</label>
+    <input id="tokenInput" type="password" placeholder="••••••••••••" autocomplete="current-password">
+    <label class="lembrar">
+      <input type="checkbox" id="lembrarInput">
+      Lembrar neste navegador
+    </label>
+    <button class="btn-ouro" type="submit" id="btnEntrar">Entrar</button>
+  </form>
+  <div class="aviso" id="gateErro" hidden style="margin:14px 0 0;"></div>
+</div>
+
+<!-- PAINEL -->
+<div class="wrap" id="painel" hidden>
+  <header>
+    <div class="brand">
+      <div class="rune"><span>⛨</span></div>
+      <div>
+        <h1>Pedidos</h1>
+        <p>Forja de Proxies — painel do operador</p>
+      </div>
+    </div>
+    <button class="btn-sec" id="btnAtualizar">Atualizar</button>
+    <button class="btn-sec" id="btnSair">Sair</button>
+  </header>
+
+  <div class="aviso" id="avisoTopo" hidden></div>
+
+  <div class="barra" id="filtros"></div>
+  <div class="busca-linha">
+    <input type="search" id="buscaInput" placeholder="Buscar por nome, id do pedido ou código do deck">
+  </div>
+
+  <div id="lista"></div>
+
+  <p class="rodape">
+    <b>Imprimir</b> marca como pago e manda pra fila — é a única ação que gasta papel.<br>
+    Conferir o Pix no app do banco continua sendo com você.
+  </p>
+</div>
+
+<!-- Confirmação. Uma caixa só, reaproveitada: imprimir e apagar são as duas
+     ações que não dá pra desfazer. -->
+<div class="modal" id="modal">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitulo">
+    <h3 id="modalTitulo"></h3>
+    <p id="modalTexto"></p>
+    <input type="text" id="modalInput" hidden autocomplete="off">
+    <div class="modal-acoes">
+      <button class="btn-sec" id="modalCancelar">Voltar</button>
+      <button class="btn-confirma" id="modalOk"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* Onde fica o token.
+   Por padrão, sessionStorage: fecha a aba, some. A caixinha "lembrar" troca
+   pro localStorage, que é o que serve pro celular do operador, onde entrar de
+   novo a cada vez é o que faria a tela deixar de ser usada. */
+const CHAVE = "forja_admin_token";
+let token = sessionStorage.getItem(CHAVE) || localStorage.getItem(CHAVE) || "";
+
+const $ = (id) => document.getElementById(id);
+const gate = $("gate"), painel = $("painel");
+
+const ESTADOS = {
+  pending:   {nome: "Aguardando pagamento"},
+  notified:  {nome: "Avisou que pagou"},
+  paid:      {nome: "Pago e impresso"},
+  cancelado: {nome: "Cancelado"},
+};
+const LAMINACAO = {single: "Um lado", double: "Dois lados"};
+
+let filtro = "";           // "" = todos
+let busca = "";
+let pedidos = [];
+let notas = {};            // id -> {tipo, texto} mostrado embaixo do pedido
+let carregando = false;
+let ocupado = 0;           // ações longas em andamento (montagem, impressão)
+
+/* ------------------------------------------------------------------ rede */
+
+async function api(caminho, opcoes = {}) {
+  const r = await fetch(caminho, {
+    ...opcoes,
+    cache: "no-store",
+    headers: {"X-Admin-Token": token, ...(opcoes.headers || {})},
+  });
+  if (r.status === 401) {
+    // Token trocado no .env, ou colado errado. Volta pra entrada em vez de
+    // deixar a tela mostrando uma lista velha que não atualiza mais.
+    esquecerToken();
+    mostrarGate("O token foi recusado. Confira o ADMIN_TOKEN do .env.");
+    throw new Error("401");
+  }
+  if (!r.ok) {
+    let detalhe = "";
+    try { detalhe = (await r.json()).detail || ""; } catch (e) { /* corpo vazio */ }
+    throw new Error(detalhe || `O servidor respondeu ${r.status}.`);
+  }
+  return r.status === 204 ? null : r.json();
+}
+
+/* ---------------------------------------------------------------- sessão */
+
+function guardarToken(valor, lembrar) {
+  token = valor;
+  sessionStorage.setItem(CHAVE, valor);
+  if (lembrar) localStorage.setItem(CHAVE, valor);
+  else localStorage.removeItem(CHAVE);
+}
+
+function esquecerToken() {
+  token = "";
+  sessionStorage.removeItem(CHAVE);
+  localStorage.removeItem(CHAVE);
+}
+
+function mostrarGate(erro) {
+  painel.hidden = true;
+  gate.hidden = false;
+  $("gateErro").hidden = !erro;
+  $("gateErro").textContent = erro || "";
+  $("tokenInput").value = "";
+  $("tokenInput").focus();
+}
+
+async function entrar() {
+  const sessao = await api("/admin/sessao");
+  gate.hidden = true;
+  painel.hidden = false;
+  // Sem fila de impressão configurada o botão Imprimir confirma o pagamento
+  // mas não imprime nada. Melhor dizer isso ANTES de alguém clicar esperando
+  // ouvir a impressora.
+  if (!sessao.impressora) {
+    $("avisoTopo").hidden = false;
+    $("avisoTopo").textContent =
+      "PRINTER_QUEUE não está configurada: o botão Imprimir vai confirmar o " +
+      "pagamento e deixar o PDF pronto, mas não manda nada pra impressora.";
+  }
+  await carregar();
+}
+
+$("formEntrar").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const valor = $("tokenInput").value.trim();
+  if (!valor) return;
+  $("btnEntrar").disabled = true;
+  guardarToken(valor, $("lembrarInput").checked);
+  try {
+    await entrar();
+  } catch (e) {
+    if (e.message !== "401") mostrarGate(e.message);
+  } finally {
+    $("btnEntrar").disabled = false;
+  }
+});
+
+$("btnSair").addEventListener("click", () => {
+  esquecerToken();
+  mostrarGate("");
+});
+
+/* ----------------------------------------------------------------- lista */
+
+async function carregar() {
+  if (!token) return;
+  carregando = true;
+  $("btnAtualizar").disabled = true;
+  try {
+    const params = new URLSearchParams();
+    if (filtro) params.set("status", filtro);
+    if (busca) params.set("busca", busca);
+    const dados = await api("/admin/pedidos?" + params.toString());
+    pedidos = dados.pedidos;
+    desenharFiltros(dados.contagem);
+    desenharLista();
+  } catch (e) {
+    if (e.message !== "401") {
+      $("lista").innerHTML = "";
+      $("lista").appendChild(caixaVazia("Não consegui carregar: " + e.message));
+    }
+  } finally {
+    carregando = false;
+    $("btnAtualizar").disabled = false;
+  }
+}
+
+function desenharFiltros(contagem) {
+  const abas = [
+    ["", "Todos", contagem.total],
+    ["notified", "Avisou que pagou", contagem.notified],
+    ["pending", "Aguardando", contagem.pending],
+    ["paid", "Pagos", contagem.paid],
+    ["cancelado", "Cancelados", contagem.cancelado],
+  ];
+  const div = $("filtros");
+  div.innerHTML = "";
+  for (const [valor, nome, n] of abas) {
+    const b = document.createElement("button");
+    b.className = "chip" + (valor === filtro ? " ativo" : "");
+    b.innerHTML = `${nome}<span class="n">${n || 0}</span>`;
+    b.addEventListener("click", () => { filtro = valor; carregar(); });
+    div.appendChild(b);
+  }
+}
+
+function caixaVazia(texto) {
+  const d = document.createElement("div");
+  d.className = "vazio";
+  d.textContent = texto;
+  return d;
+}
+
+function quando(epoch) {
+  if (!epoch) return "—";
+  const d = new Date(epoch * 1000);
+  const min = Math.floor((Date.now() - d.getTime()) / 60000);
+  let relativo;
+  if (min < 1) relativo = "agora";
+  else if (min < 60) relativo = `há ${min} min`;
+  else if (min < 60 * 24) relativo = `há ${Math.floor(min / 60)} h`;
+  else relativo = `há ${Math.floor(min / 1440)} d`;
+  return `${d.toLocaleString("pt-BR", {day: "2-digit", month: "2-digit",
+          hour: "2-digit", minute: "2-digit"})} (${relativo})`;
+}
+
+const dinheiro = (v) => "R$ " + Number(v || 0).toFixed(2).replace(".", ",");
+
+/* Tudo que vem do banco e é montado com innerHTML passa por aqui. O nome de
+   quem pediu é digitado pelo cliente; o resto o backend valida, mas escapar
+   é de graça e esquecer disso é script rodando na tela do operador. */
+const escapar = (t) => String(t == null ? "" : t)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+
+function desenharLista() {
+  const lista = $("lista");
+  lista.innerHTML = "";
+  if (!pedidos.length) {
+    lista.appendChild(caixaVazia(busca
+      ? `Nenhum pedido casa com "${busca}".`
+      : "Nenhum pedido por aqui."));
+    return;
+  }
+  for (const p of pedidos) lista.appendChild(desenharPedido(p));
+}
+
+function desenharPedido(p) {
+  const el = document.createElement("div");
+  el.className = "pedido " + p.status;
+
+  const topo = document.createElement("div");
+  topo.className = "p-topo";
+  topo.innerHTML =
+    `<span class="p-nome"></span>` +
+    `<span class="pill ${escapar(p.status)}">${escapar(ESTADOS[p.status]?.nome || p.status)}</span>` +
+    `<span class="p-valor">${dinheiro(p.amount)}</span>`;
+  // O nome vem do cliente, então entra como texto, nunca como HTML.
+  topo.querySelector(".p-nome").textContent = p.customer_name || "(sem nome)";
+  el.appendChild(topo);
+
+  const meta = document.createElement("div");
+  meta.className = "p-meta";
+  meta.innerHTML =
+    `<b>#${escapar(p.id)}</b><span class="sep">|</span>deck ${escapar(p.deck_hash || "?")}` +
+    `<span class="sep">|</span>${Number(p.qty)} carta(s)` +
+    `<span class="sep">|</span>${Number(p.pages)} pág.` +
+    `<span class="sep">|</span>${escapar(LAMINACAO[p.lamination] || p.lamination)}<br>` +
+    `criado ${quando(p.created_at)}` +
+    (p.notified_at ? `<span class="sep">|</span>avisou ${quando(p.notified_at)}` : "");
+  el.appendChild(meta);
+
+  el.appendChild(acoesDoPedido(p));
+
+  // A nota nasce sempre, escondida: `anotar` só troca o texto dela, sem
+  // redesenhar o pedido — trocar os botões debaixo do dedo de quem está
+  // clicando é como se imprime o pedido errado.
+  const n = document.createElement("div");
+  n.className = "p-nota";
+  n.id = "nota-" + p.id;
+  const nota = notas[p.id];
+  if (nota) { n.className = "p-nota " + nota.tipo; n.textContent = nota.texto; }
+  else { n.hidden = true; }
+  el.appendChild(n);
+  return el;
+}
+
+function botao(texto, aoClicar, classe) {
+  const b = document.createElement("button");
+  b.className = "btn-sec" + (classe ? " " + classe : "");
+  b.textContent = texto;
+  b.addEventListener("click", () => aoClicar(b));
+  return b;
+}
+
+function acoesDoPedido(p) {
+  const div = document.createElement("div");
+  div.className = "p-acoes";
+  const aberto = p.status === "pending" || p.status === "notified";
+
+  if (p.pdf_url) {
+    div.appendChild(botao("Ver PDF", () => window.open(p.pdf_url, "_blank")));
+  }
+  div.appendChild(botao("Montar PDF", (b) => montarPdf(p, b)));
+  div.appendChild(botao("Refazer PDF", (b) => montarPdf(p, b, true)));
+
+  if (aberto || p.status === "paid") {
+    div.appendChild(botao(p.status === "paid" ? "Imprimir de novo" : "Imprimir",
+                          () => confirmarImpressao(p)));
+  }
+  if (aberto) {
+    div.appendChild(botao("Marcar pago", () => mudarStatus(p, "paid",
+      "Marcado como pago sem imprimir.")));
+    div.appendChild(botao("Cancelar", () => mudarStatus(p, "cancelado",
+      "Pedido cancelado."), "perigo"));
+  }
+  if (p.status === "paid" || p.status === "cancelado") {
+    div.appendChild(botao(p.status === "cancelado" ? "Reabrir" : "Voltar pra pendente",
+      () => mudarStatus(p, "pending", "Voltou pra aguardando pagamento.")));
+  }
+  div.appendChild(botao("Apagar", () => confirmarApagar(p), "perigo"));
+  return div;
+}
+
+/* ----------------------------------------------------------------- ações */
+
+function anotar(id, tipo, texto) {
+  notas[id] = {tipo, texto};
+  const n = document.getElementById("nota-" + id);
+  if (n) {
+    n.className = "p-nota " + tipo;
+    n.textContent = texto;
+    n.hidden = false;
+  } else {
+    desenharLista();   // o pedido saiu do filtro atual; redesenha e pronto
+  }
+}
+
+async function mudarStatus(p, status, mensagem) {
+  const corpo = new FormData();
+  corpo.append("status", status);
+  try {
+    await api(`/admin/pedidos/${p.id}/status`, {method: "POST", body: corpo});
+    anotar(p.id, "ok", mensagem);
+    await carregar();
+  } catch (e) {
+    if (e.message !== "401") anotar(p.id, "erro", e.message);
+  }
+}
+
+/* Monta a folha sem sair da tela.
+   Vale a pena adiantar: são dezenas de imagens de ~10 MB vindas do Drive, e
+   é bem melhor descobrir que uma carta não baixa AGORA do que na hora que o
+   cliente estiver esperando. */
+async function montarPdf(p, botaoEl, fresh) {
+  botaoEl.disabled = true;
+  ocupado++;
+  try {
+    const q = fresh ? "?fresh=true" : "";
+    let estado = await api(`/admin/pedidos/${p.id}/pdf${q}`, {method: "POST"});
+    while (estado.estado === "montando") {
+      const onde = estado.total
+        ? `${estado.feitas} de ${estado.total} imagens baixadas`
+        : "lendo a lista de cartas";
+      anotar(p.id, "andando", `Montando o PDF — ${onde}.`);
+      await new Promise((r) => setTimeout(r, 4000));
+      estado = await api(`/admin/pedidos/${p.id}/pdf`, {method: "POST"});
+    }
+    if (estado.estado === "erro") {
+      anotar(p.id, "erro", "Não consegui montar o PDF: " + estado.detalhe);
+    } else if (estado.falhas) {
+      anotar(p.id, "erro", `PDF pronto, mas ${estado.falhas} carta(s) não ` +
+             `baixaram do Drive e viraram quadro de falha. Confira antes de imprimir.`);
+    } else {
+      anotar(p.id, "ok", "PDF pronto — abra em Ver PDF pra conferir.");
+    }
+  } catch (e) {
+    if (e.message !== "401") anotar(p.id, "erro", e.message);
+  } finally {
+    ocupado--;
+    botaoEl.disabled = false;
+  }
+}
+
+function confirmarImpressao(p) {
+  abrirModal({
+    titulo: "Imprimir agora?",
+    texto: `Isso marca o pedido <b>#${escapar(p.id)}</b> (${escapar(p.customer_name)}, ` +
+           `${p.pages} página(s)) como <b>pago</b> e manda a folha pra fila da ` +
+           `impressora. Confira o Pix no app do banco antes.`,
+    ok: "Imprimir",
+    perigo: false,
+    aoConfirmar: async () => {
+      anotar(p.id, "andando", "Mandando pra impressora…");
+      ocupado++;
+      try {
+        const r = await api(`/admin/pedidos/${p.id}/imprimir`, {method: "POST"});
+        anotar(p.id, r.falhas ? "erro" : "ok", r.mensagem);
+        await carregar();
+      } catch (e) {
+        if (e.message !== "401") anotar(p.id, "erro", e.message);
+      } finally {
+        ocupado--;
+      }
+    },
+  });
+}
+
+function confirmarApagar(p) {
+  abrirModal({
+    titulo: "Apagar de vez?",
+    texto: `O pedido <b>#${escapar(p.id)}</b> sai do banco junto com o XML do deck e o ` +
+           `PDF montado — isso não tem volta. Pra tirar da fila sem perder o ` +
+           `histórico, use <b>Cancelar</b>. Digite o id pra confirmar:`,
+    ok: "Apagar",
+    perigo: true,
+    confirmarCom: p.id,
+    aoConfirmar: async () => {
+      try {
+        await api(`/admin/pedidos/${p.id}`, {method: "DELETE"});
+        delete notas[p.id];
+        await carregar();
+      } catch (e) {
+        if (e.message !== "401") anotar(p.id, "erro", e.message);
+      }
+    },
+  });
+}
+
+/* --------------------------------------------------------------- modal */
+
+let confirmarAtual = null;
+
+function abrirModal({titulo, texto, ok, perigo, confirmarCom, aoConfirmar}) {
+  $("modalTitulo").textContent = titulo;
+  $("modalTexto").innerHTML = texto;
+  const btn = $("modalOk");
+  btn.textContent = ok;
+  btn.className = "btn-confirma" + (perigo ? " perigo" : "");
+  const campo = $("modalInput");
+  campo.hidden = !confirmarCom;
+  campo.value = "";
+  // Com campo de confirmação o botão nasce travado: apagar não pode ser um
+  // clique só, ainda mais numa lista onde as linhas são parecidas.
+  btn.disabled = !!confirmarCom;
+  campo.oninput = confirmarCom
+    ? () => { btn.disabled = campo.value.trim() !== confirmarCom; }
+    : null;
+  confirmarAtual = aoConfirmar;
+  $("modal").classList.add("show");
+  (confirmarCom ? campo : btn).focus();
+}
+
+function fecharModal() {
+  $("modal").classList.remove("show");
+  confirmarAtual = null;
+}
+
+// Enter no campo de confirmação vale como clique — mas só quando o botão já
+// está destravado, senão o Enter viraria o atalho pra apagar sem conferir.
+$("modalInput").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    if (!$("modalOk").disabled) $("modalOk").click();
+  }
+});
+
+$("modalCancelar").addEventListener("click", fecharModal);
+$("modal").addEventListener("click", (ev) => {
+  if (ev.target === $("modal")) fecharModal();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && $("modal").classList.contains("show")) fecharModal();
+});
+$("modalOk").addEventListener("click", async () => {
+  const acao = confirmarAtual;
+  fecharModal();
+  if (acao) await acao();
+});
+
+/* --------------------------------------------------------------- eventos */
+
+$("btnAtualizar").addEventListener("click", () => carregar());
+
+let debounce;
+$("buscaInput").addEventListener("input", (ev) => {
+  clearTimeout(debounce);
+  const valor = ev.target.value.trim();
+  // Espera parar de digitar: cada tecla seria uma consulta ao banco.
+  debounce = setTimeout(() => { busca = valor; carregar(); }, 350);
+});
+
+/* Atualiza sozinho, mas só com a aba à vista e nenhuma confirmação aberta —
+   redesenhar a lista embaixo de um clique é a melhor forma de imprimir o
+   pedido errado. */
+setInterval(() => {
+  if (document.hidden || !token || painel.hidden || carregando || ocupado) return;
+  if ($("modal").classList.contains("show")) return;
+  carregar();
+}, 30000);
+
+/* ---------------------------------------------------------------- início */
+
+(async () => {
+  if (!token) { mostrarGate(""); return; }
+  try {
+    await entrar();
+  } catch (e) {
+    if (e.message !== "401") mostrarGate(e.message);
+  }
+})();
+</script>
+</body>
+</html>

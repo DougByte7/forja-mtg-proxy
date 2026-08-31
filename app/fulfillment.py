@@ -57,8 +57,15 @@ def check_token(purpose: str, order_id: str, token: str | None) -> bool:
     return hmac.compare_digest(_token(purpose, order_id), token)
 
 
-def pdf_url(order_id: str, fresh: bool = False) -> str:
-    url = f"{PUBLIC_BASE_URL}/orders/{order_id}/pdf?token={_token('view', order_id)}"
+def pdf_url(order_id: str, fresh: bool = False, base: str | None = None) -> str:
+    """Link assinado de conferir a folha.
+
+    `base=""` devolve o caminho relativo, que é o que a tela do admin usa: ela
+    já está servida pelo próprio backend, enquanto o PUBLIC_BASE_URL aponta
+    pro domínio de fora (que num acesso pela rede local pode nem resolver).
+    """
+    raiz = PUBLIC_BASE_URL if base is None else base
+    url = f"{raiz}/orders/{order_id}/pdf?token={_token('view', order_id)}"
     return url + "&fresh=1" if fresh else url
 
 
@@ -234,6 +241,25 @@ def request_pdf(order_id: str, fresh: bool = False) -> dict:
     with _locks_guard:
         return dict(_progress[order_id])
 
+
+
+def descartar_pdf(order_id: str) -> bool:
+    """Apaga a folha montada de um pedido. Devolve True se havia o que apagar.
+
+    Vai junto com apagar o pedido: sem isso o PDF ficaria no disco servindo um
+    pedido que não existe mais, esperando a faxina diária.
+    """
+    achou = False
+    for caminho in (pdf_path(order_id), _incomplete_marker(order_id)):
+        try:
+            os.remove(caminho)
+            achou = True
+        except FileNotFoundError:
+            pass
+    with _locks_guard:
+        _progress.pop(order_id, None)
+        _last_run.pop(order_id, None)
+    return achou
 
 def run_print_job(order_id: str) -> tuple[str, int, str]:
     """

@@ -485,6 +485,166 @@ def list_visitas(x_admin_token: str | None = Header(default=None)):
     }
 
 
+# --- Tela de pedidos (app/static/admin.html) -------------------------------
+#
+# A página em si é só a casca: HTML, CSS e JS, sem nenhum dado de pedido
+# dentro. TUDO que ela mostra vem das rotas abaixo, e todas passam pelo
+# `_check_admin` — quem abrir /admin sem o token não vê pedido nenhum, só o
+# pedido de token. É por isso que servir o arquivo estático publicamente não
+# é problema: o que se protege é o dado, não o layout.
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_page():
+    """Serve a tela de pedidos. Fica antes do mount estático pra a URL ser
+    /admin, sem o .html."""
+    return FileResponse("app/static/admin.html", media_type="text/html")
+
+
+@app.get("/admin/sessao")
+def admin_session(x_admin_token: str | None = Header(default=None)):
+    """Só diz se o token vale. A tela chama isto ao abrir (e ao colar um
+    token novo) pra saber se mostra a lista ou o formulário de entrada, sem
+    ter que pedir a lista inteira só pra descobrir isso."""
+    _check_admin(x_admin_token)
+    return {"ok": True, "impressora": printer.PRINTER_QUEUE or None,
+            "email_configurado": notify.is_configured()}
+
+
+@app.get("/admin/pedidos")
+def admin_list_orders(status: str | None = None, busca: str | None = None,
+                      limite: int = 200,
+                      x_admin_token: str | None = Header(default=None)):
+    """Todos os pedidos, do mais novo pro mais antigo, com os contadores por
+    estado e o link assinado de conferir o PDF de cada um.
+
+    O link vai relativo (`base=""`): a tela está no mesmo servidor, e o
+    PUBLIC_BASE_URL é o domínio de fora, que num acesso pela rede local pode
+    nem resolver.
+    """
+    _check_admin(x_admin_token)
+    pedidos = storage.list_orders(status=status, busca=busca, limite=limite)
+    for pedido in pedidos:
+        try:
+            pedido["pdf_url"] = fulfillment.pdf_url(pedido["id"], base="")
+        except RuntimeError:
+            # Sem ADMIN_TOKEN não dá pra assinar link nenhum — mas aí nem se
+            # chega aqui, porque o _check_admin já teria barrado. Fica pelo
+            # caso de a configuração mudar com o processo no ar.
+            pedido["pdf_url"] = None
+    return {"contagem": storage.count_by_status(), "pedidos": pedidos}
+
+
+@app.get("/admin/pedidos/{order_id}")
+def admin_get_order(order_id: str,
+                    x_admin_token: str | None = Header(default=None)):
+    """Um pedido só, pra tela atualizar a linha depois de uma ação sem
+    recarregar a lista inteira."""
+    _check_admin(x_admin_token)
+    pedido = storage.get_order(order_id)
+    if not pedido:
+        raise HTTPException(404, "Pedido não encontrado.")
+    try:
+        pedido["pdf_url"] = fulfillment.pdf_url(order_id, base="")
+    except RuntimeError:
+        pedido["pdf_url"] = None
+    return pedido
+
+
+@app.post("/admin/pedidos/{order_id}/status")
+def admin_set_status(order_id: str, status: str = Form(...),
+                     x_admin_token: str | None = Header(default=None)):
+    """Muda o estado de um pedido na mão.
+
+    Serve pros casos que o fluxo normal não cobre: marcar como pago um Pix
+    que caiu sem o cliente avisar, cancelar um pedido abandonado, ou desfazer
+    um clique errado voltando pra 'pending'.
+
+    Marcar como 'paid' por aqui NÃO imprime nada — quem imprime é o botão de
+    imprimir, que é uma ação separada de propósito (papel e tinta não voltam).
+    """
+    _check_admin(x_admin_token)
+    try:
+        mudou = storage.set_status(order_id, status)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not mudou:
+        raise HTTPException(404, "Pedido não encontrado.")
+    log.evento("admin", "mudou-status", pedido=order_id, status=status)
+    return storage.get_order(order_id)
+
+
+@app.post("/admin/pedidos/{order_id}/pdf")
+def admin_build_pdf(order_id: str, fresh: bool = False,
+                    x_admin_token: str | None = Header(default=None)):
+    """Manda montar a folha (ou diz como está a montagem em andamento).
+
+    Devolve o mesmo `{"estado": "pronto"|"montando"|"erro"}` do link do
+    e-mail, e a tela fica chamando isto enquanto for "montando" pra mostrar o
+    progresso — pedido grande leva minutos baixando as artes do Drive.
+    """
+    _check_admin(x_admin_token)
+    if not storage.get_order(order_id):
+        raise HTTPException(404, "Pedido não encontrado.")
+    estado = fulfillment.request_pdf(order_id, fresh=fresh)
+    # O caminho no disco não interessa pra tela e é caminho de dentro do
+    # container — sai da resposta.
+    return {k: v for k, v in estado.items() if k != "path"}
+
+
+@app.post("/admin/pedidos/{order_id}/imprimir")
+def admin_print(order_id: str,
+                x_admin_token: str | None = Header(default=None)):
+    """Mesmo efeito do link "Imprimir" do e-mail: marca pago e manda pra fila.
+
+    É a única ação da tela que gasta papel, então o botão pede confirmação do
+    outro lado. Aqui roda síncrono igual ao link, pra resposta já dizer se o
+    CUPS aceitou.
+    """
+    _check_admin(x_admin_token)
+    order = storage.get_order(order_id)
+    if not order:
+        raise HTTPException(404, "Pedido não encontrado.")
+    ja_pago = order["status"] == "paid"
+    try:
+        pdf_path, falhas, print_status = fulfillment.run_print_job(order_id)
+    except printer.PrintError as e:
+        raise HTTPException(502, f"O pedido foi marcado como pago e o PDF "
+                                 f"está pronto, mas o CUPS recusou: {e}")
+    if not printer.PRINTER_QUEUE:
+        mensagem = ("Pagamento confirmado e PDF pronto. A impressão automática "
+                    "está desligada (PRINTER_QUEUE vazia), então nada foi pra "
+                    "fila — use o botão Ver PDF e imprima de onde preferir.")
+    else:
+        mensagem = f"{print_status}."
+    if ja_pago:
+        mensagem += " Esse pedido já tinha sido confirmado antes."
+    if falhas:
+        mensagem += (f" ATENÇÃO: {falhas} carta(s) não baixaram do Drive e "
+                     f"saíram como quadro de falha no papel.")
+    log.evento("admin", "imprimiu", pedido=order_id, falhas=falhas,
+               arquivo=os.path.basename(pdf_path))
+    return {"ok": True, "mensagem": mensagem, "falhas": falhas,
+            "pedido": storage.get_order(order_id)}
+
+
+@app.delete("/admin/pedidos/{order_id}")
+def admin_delete_order(order_id: str,
+                       x_admin_token: str | None = Header(default=None)):
+    """Apaga o pedido de vez, junto com o PDF montado.
+
+    O XML do deck vive só aqui, então isso não tem volta — por isso a tela
+    pede o id digitado antes de chamar. Pra tirar da frente sem perder o
+    histórico, o caminho é cancelar.
+    """
+    _check_admin(x_admin_token)
+    if not storage.delete_order(order_id):
+        raise HTTPException(404, "Pedido não encontrado.")
+    tinha_pdf = fulfillment.descartar_pdf(order_id)
+    log.evento("admin", "apagou-pedido", pedido=order_id, pdf=tinha_pdf)
+    return {"ok": True, "pdf_apagado": tinha_pdf}
+
+
 @app.post("/admin/cleanup")
 def run_cleanup(x_admin_token: str | None = Header(default=None)):
     """Roda a faxina dos PDFs antigos na hora, sem esperar o ciclo diário."""
