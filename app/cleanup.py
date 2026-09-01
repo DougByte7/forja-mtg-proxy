@@ -10,9 +10,10 @@ sempre reversível**: o `xml_text` continua guardado no banco pra sempre, e
 abrir o link "Ver PDF" ou "Imprimir" de um pedido antigo simplesmente monta
 a folha de novo. O único custo é baixar as imagens do Drive outra vez.
 
-Só toca em arquivos com cara de PDF de pedido (`pedido-XXXX.pdf` e o
-marcador `.incompleto` que anda junto). O `orders.db` mora na mesma pasta e
-não pode ser tocado de jeito nenhum — daí os regexes fechados abaixo.
+Só toca em arquivos com cara de folha montada (`pedido-XXXX.pdf`,
+`combo-XXXX.pdf` e o marcador `.incompleto` que anda junto). O `orders.db`
+mora na mesma pasta e não pode ser tocado de jeito nenhum — daí os regexes
+fechados abaixo.
 """
 import os
 import re
@@ -26,8 +27,10 @@ PDF_KEEP_DAYS = float(os.environ.get("PDF_KEEP_DAYS", "30"))
 # De quanto em quanto tempo a faxina roda.
 CLEANUP_INTERVAL_HOURS = float(os.environ.get("CLEANUP_INTERVAL_HOURS", "24"))
 
-_PDF_RE = re.compile(r"^pedido-[A-Za-z0-9_-]+\.pdf$")
-_MARKER_RE = re.compile(r"^pedido-[A-Za-z0-9_-]+\.pdf\.incompleto$")
+# `combo-` são as folhas combinadas (vários pedidos num papel só). Apagar
+# também é reversível ali: o combo continua no banco e a folha se remonta.
+_PDF_RE = re.compile(r"^(pedido|combo)-[A-Za-z0-9_-]+\.pdf$")
+_MARKER_RE = re.compile(r"^(pedido|combo)-[A-Za-z0-9_-]+\.pdf\.incompleto$")
 
 
 def _is_ours(name: str) -> bool:

@@ -139,6 +139,23 @@ CROSS_ARM_MM = float(os.environ.get("CROSS_ARM_MM", "3"))  # cada braço do "+"
 CROSS_THICKNESS_MM = float(os.environ.get("CROSS_THICKNESS_MM", "0.2"))
 CORNER_CROSSES = os.environ.get("CORNER_CROSSES", "1") == "1"
 
+# --- Legenda da folha combinada ---
+# Numa folha combinada as 9 cartas podem ser de clientes diferentes, e depois
+# do corte vira um monte de carta solta sem dono. A legenda é uma linha de
+# texto miúdo na margem de BAIXO — fora das cartas, na tira de papel que o
+# refile joga fora — dizendo qual pedido ocupa quais posições daquela folha.
+# Sem ela, separar a pilha é adivinhação.
+#
+# Ela cruza as marcas de corte verticais dessa margem, que são fios de 0,2 mm:
+# em cinza claro e 5,5 pt uma coisa não atrapalha a leitura da outra, e as
+# duas somem no lixo do refile.
+COMBO_LABEL = os.environ.get("COMBO_LABEL", "1") == "1"
+COMBO_LABEL_PT = float(os.environ.get("COMBO_LABEL_PT", "5.5"))
+COMBO_LABEL_GRAY = float(os.environ.get("COMBO_LABEL_GRAY", "0.45"))
+COMBO_LABEL_Y_MM = float(os.environ.get("COMBO_LABEL_Y_MM", "4"))
+# Quanto do nome do cliente cabe na legenda antes de virar reticências.
+COMBO_LABEL_NOME = int(os.environ.get("COMBO_LABEL_NOME", "16"))
+
 
 def _margins():
     margin_x = (PAGE_W - CARD_W * COLS) / 2
@@ -191,6 +208,39 @@ def _draw_corner_crosses(c):
             c.line(x - arm, y, x + arm, y)
             c.line(x, y - arm, x, y + arm)
 
+    c.restoreState()
+
+
+def _texto_seguro(texto: str) -> str:
+    """Deixa o texto no que as fontes padrão do PDF sabem escrever.
+
+    A legenda carrega o nome digitado pelo cliente, e as fontes embutidas do
+    reportlab (Helvetica e companhia) falam WinAnsi, não Unicode inteiro. Um
+    nome com emoji ou com caractere de outro alfabeto derrubaria a montagem
+    da folha inteira — trocar por "?" e seguir é melhor que não imprimir.
+    """
+    return texto.encode("cp1252", "replace").decode("cp1252")
+
+
+def _draw_page_label(c, texto: str):
+    """Escreve a legenda na margem de baixo, encolhendo até caber na folha."""
+    if not texto:
+        return
+    texto = _texto_seguro(texto)
+    fonte, tamanho = "Helvetica", COMBO_LABEL_PT
+    largura_max = PAGE_W - 8 * mm
+
+    # Primeiro tenta diminuir a fonte; abaixo de 4 pt não se lê mais nada, e
+    # aí o jeito é cortar o texto.
+    while tamanho > 4 and c.stringWidth(texto, fonte, tamanho) > largura_max:
+        tamanho -= 0.25
+    while len(texto) > 4 and c.stringWidth(texto, fonte, tamanho) > largura_max:
+        texto = texto[:-4] + "..."
+
+    c.saveState()
+    c.setFillGray(COMBO_LABEL_GRAY)
+    c.setFont(fonte, tamanho)
+    c.drawCentredString(PAGE_W / 2, COMBO_LABEL_Y_MM * mm, texto)
     c.restoreState()
 
 
@@ -435,6 +485,72 @@ def _draw_failure(c, x, y, drive_id: str):
     c.restoreState()
 
 
+def _render_queue(print_queue: list[str], out_path: str, titulo: str,
+                  cache_dir: str, on_progress=None, rotulo=None) -> int:
+    """Baixa as artes da fila e desenha as folhas. Devolve quantas falharam.
+
+    `print_queue` é uma lista achatada de drive_ids na ordem em que as cartas
+    entram no papel — 9 por folha, esquerda pra direita, de cima pra baixo. É
+    o único lugar que sabe desenhar uma folha, e é por isso que o PDF de um
+    pedido só e o PDF combinado saem idênticos em tudo que é impressão:
+    tamanho da carta, guias de corte e cruzes vêm daqui pros dois.
+
+    `rotulo(pagina, total_paginas, inicio, quantidade) -> str | None` é
+    chamado por folha e escreve a legenda da margem. O PDF de um pedido só
+    passa `None`: ali a folha inteira é de uma pessoa só e não há o que
+    separar.
+    """
+    images = _fetch_all(print_queue, cache_dir, on_progress)
+
+    c = canvas.Canvas(out_path, pagesize=A4)
+    c.setTitle(titulo)
+    margin_x, margin_y = _margins()
+    per_page = COLS * ROWS
+    total_paginas = max(1, -(-len(print_queue) // per_page))
+    failures = 0
+    # Um ImageReader por imagem distinta: assim o reportlab embute o
+    # JPEG uma vez só e as cópias repetidas apenas apontam pra ele, em
+    # vez de engordar o PDF a cada slot.
+    readers = {}
+
+    for page_start in range(0, len(print_queue), per_page):
+        page_items = print_queue[page_start:page_start + per_page]
+        for i, drive_id in enumerate(page_items):
+            col, row = i % COLS, i // COLS
+            x = margin_x + col * CARD_W
+            y = PAGE_H - margin_y - (row + 1) * CARD_H
+            result = images.get(drive_id)
+            if isinstance(result, str):
+                try:
+                    reader = readers.get(drive_id)
+                    if reader is None:
+                        reader = readers[drive_id] = ImageReader(result)
+                    # A imagem já veio sem sangria de `_crop_bleed`, ou
+                    # seja, é a carta de 63 x 88 mm inteira e nada mais:
+                    # esticar até o slot é o tamanho certo, não um zoom.
+                    c.drawImage(reader, x, y, width=CARD_W, height=CARD_H)
+                except Exception as e:
+                    failures += 1
+                    _draw_failure(c, x, y, drive_id)
+                    print(f"[pdf_generator] erro desenhando {drive_id}: {e}")
+            else:
+                failures += 1
+                _draw_failure(c, x, y, drive_id)
+            if CARD_OUTLINE:
+                c.rect(x, y, CARD_W, CARD_H)
+        _draw_cut_guides(c)
+        if CORNER_CROSSES:
+            _draw_corner_crosses(c)
+        if rotulo:
+            _draw_page_label(c, rotulo(page_start // per_page + 1,
+                                       total_paginas, page_start,
+                                       len(page_items)))
+        c.showPage()
+
+    c.save()
+    return failures
+
+
 def generate_pdf(xml_text: str, order_id: str, on_progress=None) -> tuple[str, int]:
     """Monta o PDF e devolve `(caminho, quantidade_de_imagens_que_falharam)`."""
     root = ET.fromstring(xml_text)
@@ -449,53 +565,102 @@ def generate_pdf(xml_text: str, order_id: str, on_progress=None) -> tuple[str, i
     cache_dir = tempfile.mkdtemp(prefix=f"imgs-{order_id}-", dir=OUTPUT_DIR)
     inicio = time.monotonic()
     try:
-        images = _fetch_all(print_queue, cache_dir, on_progress)
-
-        c = canvas.Canvas(out_path, pagesize=A4)
-        c.setTitle(f"Forja de Proxies — pedido {order_id}")
-        margin_x, margin_y = _margins()
-        per_page = COLS * ROWS
-        failures = 0
-        # Um ImageReader por imagem distinta: assim o reportlab embute o
-        # JPEG uma vez só e as cópias repetidas apenas apontam pra ele, em
-        # vez de engordar o PDF a cada slot.
-        readers = {}
-
-        for page_start in range(0, len(print_queue), per_page):
-            page_items = print_queue[page_start:page_start + per_page]
-            for i, drive_id in enumerate(page_items):
-                col, row = i % COLS, i // COLS
-                x = margin_x + col * CARD_W
-                y = PAGE_H - margin_y - (row + 1) * CARD_H
-                result = images.get(drive_id)
-                if isinstance(result, str):
-                    try:
-                        reader = readers.get(drive_id)
-                        if reader is None:
-                            reader = readers[drive_id] = ImageReader(result)
-                        # A imagem já veio sem sangria de `_crop_bleed`, ou
-                        # seja, é a carta de 63 x 88 mm inteira e nada mais:
-                        # esticar até o slot é o tamanho certo, não um zoom.
-                        c.drawImage(reader, x, y, width=CARD_W, height=CARD_H)
-                    except Exception as e:
-                        failures += 1
-                        _draw_failure(c, x, y, drive_id)
-                        print(f"[pdf_generator] erro desenhando {drive_id}: {e}")
-                else:
-                    failures += 1
-                    _draw_failure(c, x, y, drive_id)
-                if CARD_OUTLINE:
-                    c.rect(x, y, CARD_W, CARD_H)
-            _draw_cut_guides(c)
-            if CORNER_CROSSES:
-                _draw_corner_crosses(c)
-            c.showPage()
-
-        c.save()
+        failures = _render_queue(print_queue, out_path,
+                                 f"Forja de Proxies \u2014 pedido {order_id}",
+                                 cache_dir, on_progress)
         print(f"[pdf_generator] pedido {order_id} pronto em "
-              f"{time.monotonic() - inicio:.0f}s — "
+              f"{time.monotonic() - inicio:.0f}s \u2014 "
               f"{os.path.getsize(out_path) / 1e6:.0f} MB, "
               f"{len(print_queue)} carta(s), {failures} falha(s)")
         return out_path, failures
     finally:
         shutil.rmtree(cache_dir, ignore_errors=True)
+
+
+# --- PDF combinado ---------------------------------------------------------
+#
+# Um pedido sozinho arredonda pra cima: 4 cartas gastam uma folha inteira e
+# deixam 5 slots em branco. Emendando as filas de impressão de vários pedidos
+# numa fila só, o começo de um preenche a sobra do anterior e apenas a última
+# folha do conjunto sai incompleta.
+#
+# O preço de cada pedido NÃO muda por causa disso, e é de propósito: o que foi
+# cobrado é o que foi combinado com o cliente. Quem economiza papel aqui é a
+# gráfica, não a conta de ninguém.
+
+
+def _rotulo_combinado(combo_id: str, mapa: list[dict]):
+    """Devolve a função de legenda pro `_render_queue`.
+
+    `mapa` é `[{"id", "customer_name", "inicio", "fim"}, ...]` com as faixas
+    de posição de cada pedido na fila, contando de 1 — o mesmo formato que o
+    `calc.resumo_combinado` monta pra tela.
+    """
+    def rotulo(pagina, total_paginas, inicio, quantidade):
+        primeiro, ultimo = inicio + 1, inicio + quantidade   # 1-based, inclusivo
+        partes = []
+        for pedido in mapa:
+            a = max(pedido["inicio"], primeiro)
+            b = min(pedido["fim"], ultimo)
+            if a > b:
+                continue   # este pedido não põe carta nesta folha
+            # Posição DENTRO da folha (1 a 9), que é o que quem separa a
+            # pilha tem na mão — a posição na fila inteira não ajuda em nada.
+            de, ate = a - inicio, b - inicio
+            faixa = f"{de}" if de == ate else f"{de}-{ate}"
+            nome = (pedido.get("customer_name") or "").strip()
+            if len(nome) > COMBO_LABEL_NOME:
+                nome = nome[:COMBO_LABEL_NOME - 1] + "."
+            partes.append(f"#{pedido['id']} {nome} [{faixa}]".replace("  ", " "))
+        return (f"Forja de Proxies \u2014 combinado {combo_id} \u2014 "
+                f"folha {pagina}/{total_paginas} \u2014 " + "  \u00b7  ".join(partes))
+    return rotulo
+
+
+def generate_combined_pdf(pedidos: list[dict], combo_id: str,
+                          on_progress=None) -> tuple[str, int, list[dict]]:
+    """Monta UMA folha corrida com as cartas de vários pedidos.
+
+    `pedidos` é `[{"id", "customer_name", "xml_text"}, ...]` e a ORDEM da
+    lista é a ordem de impressão: pedido 1, depois pedido 2, sem folha nova
+    entre eles. Devolve `(caminho, falhas, mapa)`, onde `mapa` diz em que
+    posições e páginas cada pedido caiu — o mesmo que sai impresso na margem.
+
+    O mapa é calculado da fila REAL montada a partir do XML, não do que está
+    guardado no banco: se um pedido antigo tiver contagem divergente, o que
+    vale é o que foi pro papel.
+    """
+    fila: list[str] = []
+    mapa: list[dict] = []
+    for pedido in pedidos:
+        queue = _build_print_queue(ET.fromstring(pedido["xml_text"]))
+        mapa.append({
+            "id": pedido["id"],
+            "customer_name": pedido.get("customer_name"),
+            "cartas": len(queue),
+            "inicio": len(fila) + 1,
+            "fim": len(fila) + len(queue),
+            "primeira_pagina": len(fila) // (COLS * ROWS) + 1,
+            "ultima_pagina": (max(len(fila), len(fila) + len(queue) - 1)
+                              // (COLS * ROWS) + 1),
+        })
+        fila.extend(queue)
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    out_path = os.path.join(OUTPUT_DIR, f"combo-{combo_id}.pdf")
+    cache_dir = tempfile.mkdtemp(prefix=f"imgs-combo-{combo_id}-", dir=OUTPUT_DIR)
+    inicio = time.monotonic()
+    try:
+        rotulo = _rotulo_combinado(combo_id, mapa) if COMBO_LABEL else None
+        failures = _render_queue(fila, out_path,
+                                 f"Forja de Proxies \u2014 combinado {combo_id}",
+                                 cache_dir, on_progress, rotulo=rotulo)
+        print(f"[pdf_generator] combinado {combo_id} pronto em "
+              f"{time.monotonic() - inicio:.0f}s \u2014 "
+              f"{os.path.getsize(out_path) / 1e6:.0f} MB, "
+              f"{len(pedidos)} pedido(s), {len(fila)} carta(s), "
+              f"{failures} falha(s)")
+        return out_path, failures, mapa
+    finally:
+        shutil.rmtree(cache_dir, ignore_errors=True)
+

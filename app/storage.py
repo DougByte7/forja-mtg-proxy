@@ -12,6 +12,7 @@ Ciclo de vida do `status`:
   cancelado-> o operador desistiu do pedido pela tela do admin (sai da lista
               de abertos, mas continua no histórico)
 """
+import hashlib
 import os
 import sqlite3
 import time
@@ -49,6 +50,16 @@ def init_db():
     cols = {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
     if "notified_at" not in cols:
         conn.execute("ALTER TABLE orders ADD COLUMN notified_at REAL")
+    # Combinações de pedidos numa folha só (ver `save_combo`).
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS combos (
+            id TEXT PRIMARY KEY,
+            order_ids TEXT,
+            created_at REAL
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -105,7 +116,7 @@ def get_order(order_id: str):
     conn = _conn()
     cur = conn.execute(
         """SELECT id,status,amount,qty,pages,blanks,lamination,customer_name,
-                  deck_hash,notified_at
+                  deck_hash,notified_at,created_at
            FROM orders WHERE id=?""",
         (order_id,),
     )
@@ -114,7 +125,7 @@ def get_order(order_id: str):
     if not row:
         return None
     keys = ["id", "status", "amount", "qty", "pages", "blanks", "lamination",
-            "customer_name", "deck_hash", "notified_at"]
+            "customer_name", "deck_hash", "notified_at", "created_at"]
     return dict(zip(keys, row))
 
 
@@ -245,3 +256,129 @@ def delete_order(order_id: str) -> bool:
     apagou = cur.rowcount > 0
     conn.close()
     return apagou
+
+
+def get_orders_with_xml(order_ids: list[str]) -> list[dict]:
+    """Vários pedidos de uma vez, com o XML, NA ORDEM em que foram pedidos.
+
+    É o que a montagem do PDF combinado usa: a ordem da lista é a ordem em
+    que as cartas entram na folha, então ela não pode ser a ordem que o
+    SQLite achou melhor. Id que não existe mais some do resultado — quem
+    chamou compara os tamanhos e decide o que fazer.
+    """
+    unicos = list(dict.fromkeys(order_ids))
+    if not unicos:
+        return []
+    marcadores = ",".join("?" * len(unicos))
+    conn = _conn()
+    rows = conn.execute(
+        f"""SELECT id,status,amount,qty,pages,blanks,lamination,customer_name,
+                   deck_hash,xml_text
+            FROM orders WHERE id IN ({marcadores})""",
+        unicos,
+    ).fetchall()
+    conn.close()
+    keys = ["id", "status", "amount", "qty", "pages", "blanks", "lamination",
+            "customer_name", "deck_hash", "xml_text"]
+    por_id = {r[0]: dict(zip(keys, r)) for r in rows}
+    return [por_id[i] for i in unicos if i in por_id]
+
+
+def mark_paid_many(order_ids: list[str]) -> int:
+    """Marca vários pedidos como pagos numa transação só.
+
+    Existe por causa da impressão combinada: a folha sai com as cartas de
+    todo mundo juntas, então ou todos os pedidos daquele papel viram 'paid'
+    ou nenhum vira — marcar um a um deixaria metade confirmada se o processo
+    caísse no meio.
+    """
+    unicos = list(dict.fromkeys(order_ids))
+    if not unicos:
+        return 0
+    marcadores = ",".join("?" * len(unicos))
+    conn = _conn()
+    cur = conn.execute(
+        f"UPDATE orders SET status='paid' WHERE id IN ({marcadores})", unicos)
+    conn.commit()
+    n = cur.rowcount
+    conn.close()
+    return n
+
+
+# --- Combinações de pedidos ------------------------------------------------
+#
+# Um "combo" é só a lista ordenada de pedidos que vão numa folha só. Ele não
+# tem estado próprio (nada de 'pago' ou 'impresso'): quem guarda isso continua
+# sendo cada pedido. O que o registro serve é dar um endereço fixo pro PDF
+# combinado, pra que o link assinado de conferir a folha continue valendo
+# depois de reiniciar o container — sem isso o operador perderia a folha que
+# acabou de montar num deploy no meio do expediente.
+#
+# O id é derivado do CONJUNTO de pedidos (ver `combo_id`), então escolher os
+# mesmos pedidos de novo cai no mesmo combo e reaproveita o PDF já montado.
+
+
+def combo_id(order_ids: list[str]) -> str:
+    """Id estável pra um conjunto de pedidos, sem depender da ordem da escolha.
+
+    Ordenado antes do hash de propósito: marcar A e depois B tem que dar o
+    mesmo combo que marcar B e depois A, senão a mesma folha seria montada
+    duas vezes com dois nomes diferentes. A ordem de IMPRESSÃO é outra coisa,
+    e fica guardada em `order_ids`.
+    """
+    bruto = "|".join(sorted(dict.fromkeys(order_ids)))
+    return hashlib.sha256(bruto.encode()).hexdigest()[:12]
+
+
+def save_combo(order_ids: list[str]) -> str:
+    """Grava (ou reaproveita) a combinação e devolve o id dela.
+
+    `order_ids` já vem na ordem de impressão. Regravar por cima é de
+    propósito: o conjunto é o mesmo, e a ordem calculada também — o
+    `INSERT OR REPLACE` só evita que duas abas do admin briguem pela linha.
+    """
+    cid = combo_id(order_ids)
+    conn = _conn()
+    conn.execute("INSERT OR REPLACE INTO combos (id, order_ids, created_at) "
+                 "VALUES (?,?,?)",
+                 (cid, ",".join(order_ids), time.time()))
+    conn.commit()
+    conn.close()
+    return cid
+
+
+def get_combo(cid: str):
+    """`{"id", "order_ids", "created_at"}` ou None."""
+    conn = _conn()
+    row = conn.execute(
+        "SELECT id, order_ids, created_at FROM combos WHERE id=?",
+        (cid,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {"id": row[0],
+            "order_ids": [i for i in (row[1] or "").split(",") if i],
+            "created_at": row[2]}
+
+
+def delete_combo(cid: str) -> bool:
+    """Esquece a combinação. Os pedidos dela não são tocados."""
+    conn = _conn()
+    cur = conn.execute("DELETE FROM combos WHERE id=?", (cid,))
+    conn.commit()
+    apagou = cur.rowcount > 0
+    conn.close()
+    return apagou
+
+
+def list_combos(limite: int = 20) -> list[dict]:
+    """As combinações mais recentes, da mais nova pra mais velha."""
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT id, order_ids, created_at FROM combos "
+        "ORDER BY created_at DESC LIMIT ?",
+        (max(1, min(int(limite), 200)),)).fetchall()
+    conn.close()
+    return [{"id": r[0],
+             "order_ids": [i for i in (r[1] or "").split(",") if i],
+             "created_at": r[2]} for r in rows]

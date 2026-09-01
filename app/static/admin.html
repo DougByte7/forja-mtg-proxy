@@ -145,6 +145,47 @@
   .p-nota.erro{color:#F2AFA1;border-color:var(--red);background:rgba(217,99,74,.10);}
   .p-nota.andando{color:var(--gold-light);border-color:var(--gold);}
 
+  /* --- Combinar pedidos -------------------------------------------------- */
+  /* A caixinha fica na frente do cartão, alinhada com o nome. Só aparece em
+     pedido que pode entrar na folha — cancelado não gasta papel. */
+  .p-topo .marcar{
+    width:17px;height:17px;accent-color:var(--gold);cursor:pointer;
+    flex-shrink:0;margin:0 2px 0 0;
+  }
+  .pedido.marcado{border-color:var(--purple);background:rgba(139,107,255,.07);}
+
+  /* Barra que nasce no rodapé quando há pedido marcado. Fixa de propósito:
+     a lista é longa e a decisão de combinar se toma olhando os pedidos. */
+  .combo-barra{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;
+    background:var(--surface-2);border-top:1px solid var(--purple);
+    box-shadow:0 -14px 30px -18px rgba(0,0,0,.9);
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .combo-dentro{max-width:840px;margin:0 auto;display:flex;gap:10px;
+    align-items:center;flex-wrap:wrap;}
+  .combo-conta{flex:1;min-width:220px;font-size:12px;line-height:1.6;
+    color:var(--text-muted);font-family:'IBM Plex Mono',monospace;}
+  .combo-conta b{color:var(--text);}
+  .combo-conta .ganho{color:var(--gold-light);}
+  .combo-conta .nada{color:var(--text-muted);}
+  .combo-conta .erro{color:#F2AFA1;}
+  .combo-acoes{display:flex;gap:7px;flex-wrap:wrap;}
+  .combo-acoes .btn-sec{padding:8px 12px;font-size:12px;}
+  .combo-acoes .btn-ouro{width:auto;margin:0;padding:8px 14px;font-size:12px;}
+  .combo-mapa{
+    max-width:840px;margin:8px auto 0;font-family:'IBM Plex Mono',monospace;
+    font-size:11px;line-height:1.7;color:var(--text-muted);
+  }
+  .combo-mapa b{color:var(--text);}
+  /* O rodapé fixo cobriria o fim da lista; o corpo ganha folga quando ela
+     está no ar. */
+  body.com-combo{padding-bottom:200px;}
+  @media (max-width:560px){
+    .combo-acoes{width:100%;}
+    .combo-acoes button{flex:1;min-width:calc(50% - 4px);}
+  }
+
   .vazio{
     text-align:center;color:var(--text-muted);font-size:13px;line-height:1.6;
     border:1px dashed var(--border);border-radius:12px;padding:28px 18px;
@@ -232,8 +273,24 @@
 
   <p class="rodape">
     <b>Imprimir</b> marca como pago e manda pra fila — é a única ação que gasta papel.<br>
+    Marque dois ou mais pedidos pra juntá-los numa folha só e aproveitar o papel.<br>
     Conferir o Pix no app do banco continua sendo com você.
   </p>
+</div>
+
+<!-- Barra de combinação. Nasce escondida e só aparece com pedido marcado. -->
+<div class="combo-barra" id="comboBarra" hidden>
+  <div class="combo-dentro">
+    <div class="combo-conta" id="comboConta"></div>
+    <div class="combo-acoes">
+      <button class="btn-ouro" id="comboMontar">Montar PDF combinado</button>
+      <button class="btn-sec" id="comboVer" hidden>Ver PDF</button>
+      <button class="btn-sec" id="comboVerLocal" hidden>Ver PDF (rede local)</button>
+      <button class="btn-sec" id="comboImprimir" hidden>Imprimir</button>
+      <button class="btn-sec" id="comboLimpar">Limpar</button>
+    </div>
+  </div>
+  <div class="combo-mapa" id="comboMapa" hidden></div>
 </div>
 
 <!-- Confirmação. Uma caixa só, reaproveitada: imprimir e apagar são as duas
@@ -277,6 +334,17 @@ let pedidos = [];
 let notas = {};            // id -> {tipo, texto} mostrado embaixo do pedido
 let carregando = false;
 let ocupado = 0;           // ações longas em andamento (montagem, impressão)
+
+/* Combinar pedidos numa folha só.
+   `selecionados` é o que está marcado; `conhecidos` guarda os dados de todo
+   pedido que já passou pela tela, porque trocar de filtro ou buscar tira o
+   pedido de `pedidos` sem tirar a marca dele — e a conta de folhas precisa
+   dos dados de TODOS os marcados, não só dos visíveis. */
+const selecionados = new Set();
+const conhecidos = {};     // id -> pedido, acumulado entre recargas
+let comboAtual = null;     // {id, chave, pdf_url, pdf_url_local} já montado
+let comboNota = null;      // {tipo, texto} mostrado na barra
+let comboMapa = null;      // quem cai em qual folha, do backend
 
 /* ------------------------------------------------------------------ rede */
 
@@ -373,8 +441,10 @@ async function carregar() {
     if (busca) params.set("busca", busca);
     const dados = await api("/admin/pedidos?" + params.toString());
     pedidos = dados.pedidos;
+    for (const p of pedidos) conhecidos[p.id] = p;
     desenharFiltros(dados.contagem);
     desenharLista();
+    atualizarCombo();
   } catch (e) {
     if (e.message !== "401") {
       $("lista").innerHTML = "";
@@ -450,6 +520,8 @@ function desenharPedido(p) {
   const el = document.createElement("div");
   el.className = "pedido " + p.status;
 
+  if (selecionados.has(p.id)) el.classList.add("marcado");
+
   const topo = document.createElement("div");
   topo.className = "p-topo";
   topo.innerHTML =
@@ -458,6 +530,23 @@ function desenharPedido(p) {
     `<span class="p-valor">${dinheiro(p.amount)}</span>`;
   // O nome vem do cliente, então entra como texto, nunca como HTML.
   topo.querySelector(".p-nome").textContent = p.customer_name || "(sem nome)";
+  // Cancelado não entra em folha combinada: o operador já disse que aquele
+  // pedido não vai acontecer, e o backend recusa de qualquer jeito.
+  if (p.status !== "cancelado") {
+    const marca = document.createElement("input");
+    marca.type = "checkbox";
+    marca.className = "marcar";
+    marca.checked = selecionados.has(p.id);
+    marca.title = "Combinar este pedido com outros numa folha só";
+    marca.setAttribute("aria-label", `Combinar o pedido de ${p.customer_name || p.id}`);
+    marca.addEventListener("change", () => {
+      if (marca.checked) selecionados.add(p.id);
+      else selecionados.delete(p.id);
+      el.classList.toggle("marcado", marca.checked);
+      atualizarCombo();
+    });
+    topo.insertBefore(marca, topo.firstChild);
+  }
   el.appendChild(topo);
 
   const meta = document.createElement("div");
@@ -635,6 +724,240 @@ function confirmarApagar(p) {
     },
   });
 }
+
+/* ------------------------------------------------ combinar pedidos */
+
+/* Pedido pequeno desperdiça papel: 4 cartas ocupam uma folha inteira e deixam
+   5 slots em branco. Marcando vários, as filas de impressão deles viram uma
+   fila corrida e só a última folha do conjunto sai incompleta.
+
+   A conta aqui é uma PRÉVIA, feita com o que a listagem já trouxe, pra barra
+   responder na hora que se marca uma caixinha. Quem decide de verdade é o
+   backend (`calc.resumo_combinado`), que refaz a mesma conta ao criar a
+   combinação — esta cópia nunca chega a gastar papel sozinha. */
+
+const CARTAS_POR_FOLHA = 9;
+
+/* Quantas cartas o pedido põe na fila. `pages * 9 - blanks` é exatamente o
+   que o backend gravou como qty + versos na hora de cobrar. */
+const slotsDe = (p) => Math.max(0, (Number(p.pages) || 0) * CARTAS_POR_FOLHA
+                                   - (Number(p.blanks) || 0));
+
+/* Os pedidos marcados, na mesma ordem que o backend usa pra imprimir: do mais
+   antigo pro mais novo. Marcado que a tela não conhece (veio de outra sessão)
+   fica de fora da prévia — o backend ainda assim vai contar com ele. */
+function pedidosMarcados() {
+  return [...selecionados]
+    .map((id) => conhecidos[id])
+    .filter(Boolean)
+    .sort((a, b) => (a.created_at - b.created_at) || (a.id < b.id ? -1 : 1));
+}
+
+function resumoLocal(lista) {
+  const cartas = lista.reduce((n, p) => n + slotsDe(p), 0);
+  const separadas = lista.reduce((n, p) => n + (Number(p.pages) || 0), 0);
+  const combinadas = Math.ceil(cartas / CARTAS_POR_FOLHA);
+  return {cartas, separadas, combinadas,
+          economia: Math.max(0, separadas - combinadas)};
+}
+
+/* A chave identifica a SELEÇÃO, não a ordem do clique — igual ao id que o
+   backend deriva do conjunto. É com ela que se sabe se o PDF já montado ainda
+   corresponde ao que está marcado agora. */
+const chaveDaSelecao = () => [...selecionados].sort().join(",");
+
+function anotarCombo(tipo, texto) {
+  comboNota = texto ? {tipo, texto} : null;
+  desenharComboExtra();
+}
+
+function desenharComboExtra() {
+  const div = $("comboMapa");
+  div.innerHTML = "";
+  if (comboNota) {
+    const linha = document.createElement("div");
+    linha.className = "p-nota " + comboNota.tipo;
+    linha.style.margin = "0 0 8px";
+    linha.textContent = comboNota.texto;
+    div.appendChild(linha);
+  }
+  // O mapa é o que salva a hora de separar a pilha depois do corte: uma folha
+  // pode ter carta de dois clientes, e é aqui (e na legenda impressa na
+  // margem) que se lê de quem é cada posição.
+  if (comboMapa) {
+    for (const m of comboMapa) {
+      const linha = document.createElement("div");
+      const folhas = m.primeira_pagina === m.ultima_pagina
+        ? `folha ${m.primeira_pagina}`
+        : `folhas ${m.primeira_pagina}–${m.ultima_pagina}`;
+      linha.innerHTML = `<b>#${escapar(m.id)}</b> ` +
+        `${escapar(m.customer_name || "(sem nome)")} — ` +
+        `${Number(m.cartas)} carta(s), ${folhas} ` +
+        `(posições ${Number(m.inicio)}–${Number(m.fim)} da fila)`;
+      div.appendChild(linha);
+    }
+  }
+  div.hidden = !div.childElementCount;
+}
+
+function atualizarCombo() {
+  const barra = $("comboBarra");
+  const lista = pedidosMarcados();
+  const n = selecionados.size;
+
+  // Mudou a seleção? O PDF montado é de outro conjunto e não serve mais.
+  if (comboAtual && comboAtual.chave !== chaveDaSelecao()) {
+    comboAtual = null;
+    comboMapa = null;
+    comboNota = null;
+  }
+
+  barra.hidden = n === 0;
+  document.body.classList.toggle("com-combo", n > 0);
+  if (!n) { desenharComboExtra(); return; }
+
+  const laminacoes = new Set(lista.map((p) => p.lamination));
+  const misturado = laminacoes.size > 1;
+  const poucos = n < 2;
+  const resumo = resumoLocal(lista);
+
+  let conta = `<b>${n}</b> pedido(s) marcado(s) — <b>${resumo.cartas}</b> carta(s)`;
+  if (poucos) {
+    conta += `<br><span class="nada">Marque pelo menos dois pra combinar.</span>`;
+  } else if (misturado) {
+    // A laminação é uma propriedade da FOLHA, não da carta: o papel inteiro
+    // passa (ou não) pela plastificadora. Misturar entregaria acabamento
+    // errado pra metade da gente, e não tem desfazer depois de laminado.
+    conta += `<br><span class="erro">Laminação misturada (` +
+      [...laminacoes].map((l) => escapar(LAMINACAO[l] || l)).join(" e ") +
+      `) — só dá pra combinar pedidos com o mesmo acabamento.</span>`;
+  } else {
+    conta += `<br>${resumo.separadas} folha(s) separadas → ` +
+      `<b>${resumo.combinadas}</b> combinadas`;
+    conta += resumo.economia
+      ? ` <span class="ganho">(economia de ${resumo.economia} folha(s))</span>`
+      : ` <span class="nada">(sem economia — já fechavam certinho)</span>`;
+  }
+  $("comboConta").innerHTML = conta;
+
+  const impedido = poucos || misturado;
+  $("comboMontar").disabled = impedido;
+  $("comboMontar").textContent = comboAtual ? "Refazer PDF combinado"
+                                            : "Montar PDF combinado";
+  const pronto = !!(comboAtual && comboAtual.pronto);
+  $("comboVer").hidden = !pronto;
+  $("comboVerLocal").hidden = !(pronto && comboAtual.pdf_url_local);
+  $("comboImprimir").hidden = !pronto;
+  desenharComboExtra();
+}
+
+/* Cria (ou reaproveita) a combinação no backend e devolve o que ela vale.
+   Não monta PDF nenhum: só a conta oficial e o mapa. */
+async function criarCombo() {
+  const corpo = new FormData();
+  corpo.append("ids", [...selecionados].join(","));
+  const combo = await api("/admin/combos", {method: "POST", body: corpo});
+  comboAtual = {id: combo.id, chave: chaveDaSelecao(), pronto: false,
+                pdf_url: combo.pdf_url, pdf_url_local: combo.pdf_url_local};
+  comboMapa = combo.mapa;
+  return combo;
+}
+
+async function montarCombo(refazer) {
+  $("comboMontar").disabled = true;
+  ocupado++;
+  try {
+    // Sempre passa por aqui: criar é só a conta e o mapa, e o mesmo conjunto
+    // sempre cai na mesma combinação — então isto revalida a seleção contra o
+    // banco (pedido apagado, cancelado, laminação trocada) antes de gastar
+    // minutos baixando arte do Drive.
+    const combo = await criarCombo();
+    // Some com Ver/Imprimir enquanto remonta: até a folha nova ficar pronta,
+    // o que existe no disco é a antiga, e mandar essa pra impressora é
+    // exatamente o que o "Refazer" está tentando corrigir.
+    atualizarCombo();
+    const id = comboAtual.id;
+    if (!combo.folhas_economizadas) {
+      anotarCombo("andando", "Montando — esta seleção não economiza folha, " +
+                  "mas sai tudo num arquivo só.");
+    }
+    const q = refazer ? "?fresh=true" : "";
+    let estado = await api(`/admin/combos/${id}/pdf${q}`, {method: "POST"});
+    while (estado.estado === "montando") {
+      const onde = estado.total
+        ? `${estado.feitas} de ${estado.total} imagens baixadas`
+        : "lendo a lista de cartas";
+      anotarCombo("andando", `Montando a folha combinada — ${onde}.`);
+      await new Promise((r) => setTimeout(r, 4000));
+      estado = await api(`/admin/combos/${id}/pdf`, {method: "POST"});
+    }
+    if (estado.estado === "erro") {
+      anotarCombo("erro", "Não consegui montar: " + estado.detalhe);
+      return;
+    }
+    if (estado.mapa) comboMapa = estado.mapa;
+    comboAtual.pronto = true;
+    if (estado.falhas) {
+      anotarCombo("erro", `Folha pronta, mas ${estado.falhas} carta(s) não ` +
+        `baixaram do Drive e viraram quadro de falha. Confira antes de imprimir.`);
+    } else {
+      anotarCombo("ok", "Folha combinada pronta — confira em Ver PDF antes de " +
+        "imprimir. Cada folha sai com uma legenda na margem dizendo de quem " +
+        "é cada carta.");
+    }
+  } catch (e) {
+    if (e.message !== "401") anotarCombo("erro", e.message);
+  } finally {
+    ocupado--;
+    atualizarCombo();
+  }
+}
+
+function confirmarImpressaoCombinada() {
+  const lista = pedidosMarcados();
+  const resumo = resumoLocal(lista);
+  const nomes = lista.map((p) => `<b>#${escapar(p.id)}</b> ${escapar(p.customer_name || "")}`)
+                     .join(", ");
+  abrirModal({
+    titulo: "Imprimir a folha combinada?",
+    texto: `Isso marca <b>todos</b> estes pedidos como pagos e manda ` +
+           `${resumo.combinadas} folha(s) pra fila: ${nomes}. ` +
+           `As cartas saem misturadas no mesmo papel, então não dá pra ` +
+           `imprimir só uma parte — confira o Pix de cada um antes.`,
+    ok: "Imprimir tudo",
+    perigo: false,
+    aoConfirmar: async () => {
+      anotarCombo("andando", "Mandando pra impressora…");
+      ocupado++;
+      try {
+        const r = await api(`/admin/combos/${comboAtual.id}/imprimir`,
+                            {method: "POST"});
+        anotarCombo(r.falhas ? "erro" : "ok", r.mensagem);
+        await carregar();
+      } catch (e) {
+        if (e.message !== "401") anotarCombo("erro", e.message);
+      } finally {
+        ocupado--;
+      }
+    },
+  });
+}
+
+$("comboMontar").addEventListener("click",
+  () => montarCombo(!!(comboAtual && comboAtual.pronto)));
+$("comboVer").addEventListener("click",
+  () => window.open(comboAtual.pdf_url, "_blank"));
+$("comboVerLocal").addEventListener("click",
+  () => window.open(comboAtual.pdf_url_local, "_blank"));
+$("comboImprimir").addEventListener("click", confirmarImpressaoCombinada);
+$("comboLimpar").addEventListener("click", () => {
+  selecionados.clear();
+  comboAtual = null;
+  comboMapa = null;
+  comboNota = null;
+  desenharLista();
+  atualizarCombo();
+});
 
 /* --------------------------------------------------------------- modal */
 

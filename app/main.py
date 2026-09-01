@@ -396,6 +396,48 @@ def view_pdf(request: Request, order_id: str, token: str | None = None,
     return _servir_pdf(request, estado["path"], order_id, estado["falhas"])
 
 
+@app.get("/combos/{combo_id}/pdf")
+def view_combo_pdf(request: Request, combo_id: str, token: str | None = None,
+                   fresh: bool = False,
+                   x_admin_token: str | None = Header(default=None)):
+    """A folha combinada (vários pedidos num papel só), pra conferir.
+
+    Mesmo comportamento do `/orders/{id}/pdf`: monta em segundo plano se ainda
+    não existir, devolve uma página que se atualiza sozinha enquanto monta, e
+    serve o arquivo inline quando fica pronto.
+
+    O token é assinado sobre `combo:<id>`, então o link de conferir um pedido
+    não abre a folha combinada e vice-versa. Conferir não imprime nada nem
+    marca pedido nenhum como pago.
+    """
+    autorizado = bool(x_admin_token and ADMIN_TOKEN and x_admin_token == ADMIN_TOKEN)
+    if not autorizado:
+        try:
+            autorizado = fulfillment.check_combo_token("view", combo_id, token)
+        except RuntimeError as e:
+            raise HTTPException(500, str(e))
+    if not autorizado:
+        raise HTTPException(401, "Link inválido ou expirado.")
+    if not storage.get_combo(combo_id):
+        raise HTTPException(404, "Combinação não encontrada.")
+
+    estado = fulfillment.request_combo_pdf(combo_id, fresh=fresh)
+
+    if estado["estado"] == "erro":
+        return HTMLResponse(_status_page(
+            "Falhou", f"Não consegui montar a folha combinada {combo_id}: "
+                      f"{estado['detalhe']}", ok=False
+        ), status_code=500)
+
+    if estado["estado"] == "montando":
+        return HTMLResponse(_montando_page(
+            combo_id, estado, token, caminho=f"/combos/{combo_id}/pdf",
+            rotulo=f"Folha combinada {combo_id}"))
+
+    return _servir_pdf(request, estado["path"], f"combinado-{combo_id}",
+                       estado["falhas"])
+
+
 @app.get("/orders/{order_id}/print", response_class=HTMLResponse)
 def print_order(order_id: str, token: str | None = None,
                 x_admin_token: str | None = Header(default=None)):
@@ -447,17 +489,24 @@ def print_order(order_id: str, token: str | None = None,
     return HTMLResponse(_status_page(titulo, detalhe))
 
 
-def _montando_page(order_id: str, estado: dict, token: str | None) -> str:
+def _montando_page(order_id: str, estado: dict, token: str | None,
+                   caminho: str | None = None,
+                   rotulo: str | None = None) -> str:
     """Página que se atualiza sozinha enquanto o PDF é montado.
 
     O refresh aponta pra URL SEM o `fresh=1`: senão cada atualização pediria
     uma remontagem nova e o pedido nunca chegaria ao fim.
+
+    `caminho` troca a rota do refresh e `rotulo` troca o nome que aparece na
+    tela — é o que a folha combinada usa, que mora em `/combos/{id}/pdf` e não
+    é "o pedido tal".
     """
     feitas, total = estado.get("feitas", 0), estado.get("total", 0)
     decorrido = int(time.time() - estado.get("inicio", time.time()))
     onde = (f"{feitas} de {total} imagens baixadas" if total
             else "lendo a lista de cartas")
-    destino = f"/orders/{order_id}/pdf" + (f"?token={token}" if token else "")
+    destino = (caminho or f"/orders/{order_id}/pdf") + (f"?token={token}" if token else "")
+    quem = rotulo or f"Pedido {order_id}"
     return f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -470,7 +519,7 @@ def _montando_page(order_id: str, estado: dict, token: str | None) -> str:
               border-radius:14px;padding:28px;">
     <h1 style="margin:0 0 12px;font-size:20px;color:#C9A227;">Montando o PDF</h1>
     <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#A79BC7;">
-      Pedido {order_id}: {onde} ({decorrido}s). As artes vêm do Google Drive e
+      {quem}: {onde} ({decorrido}s). As artes vêm do Google Drive e
       têm ~10 MB cada, então pedido grande leva alguns minutos.
     </p>
     <p style="margin:0;font-size:13px;color:#6F6490;">
@@ -741,6 +790,185 @@ def admin_print(order_id: str,
                arquivo=os.path.basename(pdf_path))
     return {"ok": True, "mensagem": mensagem, "falhas": falhas,
             "pedido": storage.get_order(order_id)}
+
+
+# --- Combinar pedidos numa folha só ----------------------------------------
+#
+# Pedido pequeno desperdiça papel: 4 cartas ocupam uma folha inteira e deixam
+# 5 slots em branco. Marcando vários na tela, as filas de impressão deles
+# viram uma fila corrida e só a última folha do conjunto sai incompleta.
+#
+# O que NÃO muda: o valor de cada pedido (foi o combinado com o cliente) e o
+# estado de cada um (o combo não tem estado próprio — quem fica 'paid' são os
+# pedidos, todos de uma vez, quando a folha vai pra impressora).
+
+
+def _pedidos_do_combo(order_ids: list[str]) -> list[dict]:
+    """Valida a seleção e devolve os pedidos NA ORDEM DE IMPRESSÃO.
+
+    A ordem é a de criação (mais antigo primeiro), não a que a tela mandou:
+    assim a mesma escolha sempre monta a mesma folha, e quem esperou mais sai
+    primeiro no papel.
+    """
+    ids = [i for i in dict.fromkeys(x.strip() for x in order_ids) if i]
+    if len(ids) < 2:
+        raise HTTPException(400, "Escolha pelo menos dois pedidos pra combinar.")
+
+    pedidos = []
+    for order_id in ids:
+        pedido = storage.get_order(order_id)
+        if not pedido:
+            raise HTTPException(404, f"Pedido {order_id} não encontrado.")
+        pedidos.append(pedido)
+
+    cancelados = [p["id"] for p in pedidos if p["status"] == "cancelado"]
+    if cancelados:
+        raise HTTPException(400, "Pedido cancelado não entra em folha "
+                                 f"combinada: {', '.join(cancelados)}.")
+
+    # A laminação é uma propriedade da FOLHA, não da carta: a folha inteira
+    # passa (ou não) pela plastificadora dos dois lados. Misturar 'single' com
+    # 'double' no mesmo papel entregaria acabamento errado pra metade da
+    # gente, e não tem como desfazer depois de laminado.
+    laminacoes = {p["lamination"] for p in pedidos}
+    if len(laminacoes) > 1:
+        raise HTTPException(
+            400, "Só dá pra combinar pedidos com a mesma laminação — nesta "
+                 "seleção tem " + " e ".join(sorted(laminacoes)) + ".")
+
+    pedidos.sort(key=lambda p: (p["created_at"] or 0, p["id"]))
+    return pedidos
+
+
+def _resposta_combo(combo_id: str, pedidos: list[dict]) -> dict:
+    """O que a tela precisa saber de uma combinação."""
+    resumo = calc.resumo_combinado(pedidos)
+    try:
+        url = fulfillment.combo_pdf_url(combo_id, base="")
+        url_local = fulfillment.combo_pdf_url_local(combo_id)
+    except RuntimeError:
+        url = url_local = None
+    return {
+        "id": combo_id,
+        "lamination": pedidos[0]["lamination"] if pedidos else None,
+        "pedidos": [{"id": p["id"], "customer_name": p["customer_name"],
+                     "status": p["status"], "pages": p["pages"],
+                     "amount": p["amount"]} for p in pedidos],
+        "valor_total": round(sum(float(p["amount"] or 0) for p in pedidos), 2),
+        "pdf_url": url,
+        "pdf_url_local": url_local,
+        **resumo,
+    }
+
+
+@app.post("/admin/combos")
+def admin_criar_combo(ids: str = Form(...),
+                      x_admin_token: str | None = Header(default=None)):
+    """Cria (ou reaproveita) a combinação dos pedidos em `ids`, separados por
+    vírgula, e devolve quanto papel ela economiza.
+
+    Não monta PDF nenhum aqui: só a conta e o mapa de quem cai em qual folha,
+    pra tela mostrar antes de o operador decidir. Montar é o passo seguinte.
+
+    Escolher os mesmos pedidos de novo cai na mesma combinação e reaproveita
+    a folha já montada — o id sai do conjunto, não do clique.
+    """
+    _check_admin(x_admin_token)
+    pedidos = _pedidos_do_combo(ids.split(","))
+    combo_id = storage.save_combo([p["id"] for p in pedidos])
+    log.evento("admin", "combinou-pedidos", combo=combo_id,
+               pedidos=len(pedidos))
+    return _resposta_combo(combo_id, pedidos)
+
+
+@app.get("/admin/combos/{combo_id}")
+def admin_get_combo(combo_id: str,
+                    x_admin_token: str | None = Header(default=None)):
+    """Uma combinação já criada, com os pedidos dela no estado de agora."""
+    _check_admin(x_admin_token)
+    combo = storage.get_combo(combo_id)
+    if not combo:
+        raise HTTPException(404, "Combinação não encontrada.")
+    pedidos = [p for p in (storage.get_order(i) for i in combo["order_ids"]) if p]
+    resposta = _resposta_combo(combo_id, pedidos)
+    # Pedido apagado depois de a folha ter sido combinada: a montagem vai
+    # recusar, e é melhor a tela saber disso antes de gastar minutos baixando.
+    resposta["faltando"] = [i for i in combo["order_ids"]
+                            if i not in {p["id"] for p in pedidos}]
+    return resposta
+
+
+@app.post("/admin/combos/{combo_id}/pdf")
+def admin_build_combo_pdf(combo_id: str, fresh: bool = False,
+                          x_admin_token: str | None = Header(default=None)):
+    """Manda montar a folha combinada (ou diz como vai a montagem).
+
+    Mesmo `{"estado": "pronto"|"montando"|"erro"}` da folha de um pedido só,
+    e a tela fica chamando isto enquanto for "montando".
+    """
+    _check_admin(x_admin_token)
+    if not storage.get_combo(combo_id):
+        raise HTTPException(404, "Combinação não encontrada.")
+    estado = fulfillment.request_combo_pdf(combo_id, fresh=fresh)
+    resposta = {k: v for k, v in estado.items() if k != "path"}
+    if estado["estado"] == "pronto":
+        mapa = fulfillment.mapa_combo(combo_id)
+        if mapa:
+            resposta["mapa"] = mapa
+    return resposta
+
+
+@app.post("/admin/combos/{combo_id}/imprimir")
+def admin_print_combo(combo_id: str,
+                      x_admin_token: str | None = Header(default=None)):
+    """Manda a folha combinada pra fila e marca TODOS os pedidos dela como pagos.
+
+    É um papel só com as cartas de várias pessoas, então não existe imprimir
+    metade: ou o conjunto inteiro é confirmado, ou nenhum. Confira os Pix de
+    todos antes — a tela pede confirmação do outro lado.
+    """
+    _check_admin(x_admin_token)
+    combo = storage.get_combo(combo_id)
+    if not combo:
+        raise HTTPException(404, "Combinação não encontrada.")
+    try:
+        pdf_path, falhas, print_status, ids = fulfillment.run_combo_print_job(combo_id)
+    except printer.PrintError as e:
+        raise HTTPException(502, f"Os pedidos foram marcados como pagos e a "
+                                 f"folha está pronta, mas o CUPS recusou: {e}")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    if not printer.PRINTER_QUEUE:
+        mensagem = (f"{len(ids)} pedido(s) confirmados e folha combinada pronta. "
+                    f"A impressão automática está desligada (PRINTER_QUEUE "
+                    f"vazia), então nada foi pra fila — use Ver PDF combinado e "
+                    f"imprima de onde preferir.")
+    else:
+        mensagem = f"{print_status}. {len(ids)} pedido(s) marcados como pagos."
+    if falhas:
+        mensagem += (f" ATENÇÃO: {falhas} carta(s) não baixaram do Drive e "
+                     f"saíram como quadro de falha no papel.")
+    log.evento("admin", "imprimiu-combinado", combo=combo_id, falhas=falhas,
+               pedidos=len(ids), arquivo=os.path.basename(pdf_path))
+    return {"ok": True, "mensagem": mensagem, "falhas": falhas, "pedidos": ids}
+
+
+@app.delete("/admin/combos/{combo_id}")
+def admin_delete_combo(combo_id: str,
+                       x_admin_token: str | None = Header(default=None)):
+    """Esquece a combinação e apaga a folha montada dela.
+
+    Os pedidos NÃO são tocados: desfazer uma combinação é só jogar fora um
+    arranjo de papel, e cada pedido continua com o estado que tinha.
+    """
+    _check_admin(x_admin_token)
+    existia = storage.delete_combo(combo_id)
+    tinha_pdf = fulfillment.descartar_combo_pdf(combo_id)
+    if not existia and not tinha_pdf:
+        raise HTTPException(404, "Combinação não encontrada.")
+    log.evento("admin", "desfez-combinado", combo=combo_id, pdf=tinha_pdf)
+    return {"ok": True, "pdf_apagado": tinha_pdf}
 
 
 @app.delete("/admin/pedidos/{order_id}")

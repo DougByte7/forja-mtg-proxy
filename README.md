@@ -191,10 +191,12 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
   (`status`: `pending` → `notified` → `paid`, mais `cancelado` pro que o
-  operador desistiu na tela de pedidos).
+  operador desistiu na tela de pedidos). Guarda também as **combinações** de
+  pedidos que dividem uma folha — ver *Combinar pedidos numa folha só*.
 - `app/pdf_generator.py` — baixa as imagens do Drive e monta o PDF A4 3x3. Os
   versos de carta dupla-face saem **um por cópia**, igual ao que o `calc.py`
-  cobra e ao que a prévia mostra.
+  cobra e ao que a prévia mostra. O mesmo desenho serve a folha de um pedido
+  só e a folha combinada de vários.
 - `app/fulfillment.py` — assina os links do e-mail, faz cache do PDF e roda
   o job de impressão.
 - `app/notify.py` — manda o e-mail de aviso com o resumo e os links.
@@ -247,6 +249,11 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
   barrando quem não tem token, o XML do deck não vazando na listagem, e o que
   cancelar / reabrir / apagar fazem de fato. Precisa do fastapi instalado:
   `python tests/test_admin_pedidos.py`.
+- `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
+  economizadas, as regras de quem pode entrar no mesmo papel (laminação,
+  cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
+  todos os pedidos de uma vez. Roda sem rede (o Drive é trocado por imagens de
+  mentira): `python tests/test_combos.py`.
 
 ### Rotas
 
@@ -265,6 +272,12 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 | `POST /admin/pedidos/{id}/pdf` | tela de pedidos | manda montar a folha (ou diz como vai a montagem). `?fresh=true` remonta do zero |
 | `POST /admin/pedidos/{id}/imprimir` | tela de pedidos | mesmo efeito do link **Imprimir** do e-mail: marca pago e manda pra fila |
 | `DELETE /admin/pedidos/{id}` | tela de pedidos | apaga o pedido e o PDF de vez |
+| `POST /admin/combos` | tela de pedidos | junta os pedidos de `ids` (separados por vírgula) numa folha só e devolve quanto papel isso economiza. Não monta PDF nenhum |
+| `GET /admin/combos/{id}` | tela de pedidos | uma combinação já criada, com os pedidos dela no estado de agora |
+| `POST /admin/combos/{id}/pdf` | tela de pedidos | manda montar a folha combinada (ou diz como vai a montagem). `?fresh=true` remonta |
+| `POST /admin/combos/{id}/imprimir` | tela de pedidos | manda a folha pra fila e marca **todos** os pedidos dela como pagos |
+| `DELETE /admin/combos/{id}` | tela de pedidos | desfaz a combinação e apaga a folha. Os pedidos não são tocados |
+| `GET /combos/{id}/pdf?token=…` | botão **Ver PDF** da barra | a folha combinada, pra conferir antes de imprimir |
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
 | `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, pra descobrir o `PRINTER_QUEUE` certo |
 | `POST /admin/cleanup` | você (`X-Admin-Token`) | roda a faxina dos PDFs antigos na hora |
@@ -314,6 +327,7 @@ estado e uma busca que casa com nome, id do pedido ou código do deck.
 | **Cancelar** | tira da fila sem apagar nada; continua no histórico |
 | **Reabrir** / **Voltar pra pendente** | desfaz um clique errado. Voltar pra pendente limpa o aviso do cliente, então ele consegue avisar de novo |
 | **Apagar** | apaga o pedido, o XML do deck e o PDF. Não tem volta, e por isso pede o id digitado |
+| **caixinha de marcar** | escolhe o pedido pra entrar numa folha combinada — ver *Combinar pedidos numa folha só* |
 
 Conferir o Pix no app do banco continua sendo com você — a tela não fala com
 banco nenhum, pelo mesmo motivo de sempre (ver *Como o pagamento é
@@ -326,6 +340,75 @@ de imprimir o pedido errado.
 Sem `PRINTER_QUEUE` configurada, aparece um aviso no topo — ali o botão
 **Imprimir** confirma o pagamento e deixa o PDF pronto, mas não manda nada
 pra impressora nenhuma.
+
+### Combinar pedidos numa folha só
+
+Pedido pequeno desperdiça papel. A folha é uma grade 3x3, então **qualquer**
+quantidade de cartas arredonda pra cima: 4 cartas gastam uma folha inteira e
+deixam 5 posições em branco; 2 cartas gastam outra folha e deixam 7. Três
+pedidinhos assim saem em 3 folhas, sendo que caberiam com sobra em 1.
+
+Marcando a caixinha de dois ou mais pedidos, aparece uma barra no rodapé com a
+conta:
+
+```
+3 pedido(s) marcado(s) — 24 carta(s)
+4 folha(s) separadas → 3 combinadas (economia de 1 folha)
+```
+
+A conta aparece na hora, antes de montar nada: as filas de impressão dos
+pedidos marcados viram uma fila corrida, o começo de um preenche a sobra do
+anterior, e só a última folha do conjunto sai incompleta. Se a seleção não
+economizar folha nenhuma (os pedidos já fechavam certinho), a barra diz isso —
+combinar continua valendo pra sair um arquivo só, mas sem promessa de ganho.
+
+| Botão da barra | O que faz |
+|---|---|
+| **Montar PDF combinado** | monta a folha corrida e mostra o progresso ali mesmo. Depois de pronta, vira **Refazer PDF combinado** |
+| **Ver PDF** / **Ver PDF (rede local)** | abre a folha combinada pra conferir, igual ao PDF de um pedido só |
+| **Imprimir** | manda a folha pra fila e marca **todos** os pedidos dela como pagos. Pede confirmação |
+| **Limpar** | desmarca tudo |
+
+**Quem separa a pilha depois?** Uma folha combinada pode ter carta de dois
+clientes, e depois do corte vira um monte de carta solta sem dono. Por isso
+cada folha sai com uma legenda de texto miúdo na margem de baixo — na tira que
+o refile joga fora — dizendo quem ocupa quais posições daquela folha:
+
+```
+Forja de Proxies — combinado b09d89de91dc — folha 1/3 — #cf03743a Ana Prado [1-4]  ·  #2835d418 Bruno Lima [5-9]
+```
+
+As posições são as da FOLHA (1 a 9, esquerda pra direita, de cima pra baixo),
+que é o que se tem na mão na hora de separar. A mesma informação aparece na
+tela, embaixo da barra, com as páginas de cada pedido. `COMBO_LABEL=0` no
+`.env` desliga a legenda impressa.
+
+**O que a combinação não faz:**
+
+- **Não mexe no preço.** Cada pedido continua valendo o que foi combinado com
+  o cliente. Quem economiza papel aqui é a gráfica, não a conta de ninguém.
+- **Não junta laminações diferentes.** A laminação é uma propriedade da FOLHA,
+  não da carta: o papel inteiro passa (ou não) pela plastificadora. Misturar
+  entregaria acabamento errado pra metade da gente, e não tem desfazer depois
+  de plastificado — a tela avisa e o backend recusa.
+- **Não entra pedido cancelado.** A caixinha nem aparece neles.
+- **Não tem estado próprio.** Um combo é só um arranjo de papel. Quem fica
+  `paid` são os pedidos, todos de uma vez, quando a folha vai pra impressora —
+  é um papel só com carta de várias pessoas, então não existe imprimir metade.
+  Desfazer a combinação joga fora o arranjo e não toca em pedido nenhum.
+
+**Escolher os mesmos pedidos de novo cai na mesma folha.** O id da combinação
+sai do conjunto de pedidos, não do clique, então marcar A e depois B dá o mesmo
+resultado que marcar B e depois A — e a folha já montada é reaproveitada em vez
+de baixar tudo do Drive outra vez. A ordem de impressão é sempre a de criação:
+quem esperou mais sai primeiro no papel.
+
+O registro da combinação fica no banco (tabela `combos`) só pra que o link
+assinado de conferir a folha continue valendo depois de reiniciar o container —
+sem isso, um deploy no meio do expediente derrubaria a folha que o operador
+acabou de montar. A folha em si é um `combo-XXXX.pdf` no `PDF_OUTPUT_DIR`, e a
+faxina diária a trata igual às outras (ver *Limpeza automática dos PDFs*):
+apagar é reversível, porque o combo continua no banco e a folha se remonta.
 
 ## Cotação de preços das cartas
 
@@ -1114,7 +1197,7 @@ pedido.
 | `PDF_KEEP_DAYS` | `30` | dias que o PDF fica no disco; `0` desliga a limpeza |
 | `CLEANUP_INTERVAL_HOURS` | `24` | de quanto em quanto tempo a faxina roda |
 
-A faxina só toca em arquivos `pedido-*.pdf` (e nos marcadores
+A faxina só toca em arquivos `pedido-*.pdf` e `combo-*.pdf` (e nos marcadores
 `.incompleto`). O `orders.db` mora na mesma pasta e nunca é tocado. Pra
 rodar na hora, sem esperar o ciclo:
 

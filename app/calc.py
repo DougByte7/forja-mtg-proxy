@@ -144,3 +144,66 @@ def parse_card_list(xml_text: str) -> list[dict]:
 
     ordenadas = sorted(por_nome.values(), key=lambda c: c["_ordem"])
     return [{"nome": c["nome"], "quantidade": c["quantidade"]} for c in ordenadas]
+
+
+# --- Combinar pedidos numa folha só ---------------------------------------
+#
+# Cada pedido, sozinho, arredonda pra cima: 4 cartas ocupam uma folha inteira
+# e desperdiçam 5 slots. Impressos em sequência numa fila única, o começo de
+# um pedido preenche o resto da folha do anterior, e só a ÚLTIMA folha do
+# conjunto sai incompleta. É daqui que sai o número de folhas economizadas
+# que a tela do operador mostra antes de montar o PDF combinado.
+
+
+def slots_do_pedido(pages, blanks) -> int:
+    """Quantos slots de carta o pedido ocupa, a partir do que está guardado.
+
+    `pages` e `blanks` são gravados na criação do pedido pelo `compute_cost`,
+    e por construção `pages * 9 - blanks` é exatamente `qty + backs_count` —
+    ou seja, o tamanho da fila de impressão. Sai daqui em vez de reabrir o
+    XML só pra contar slot: a tela pede esse número pra cada pedido da lista.
+    """
+    return max(0, int(pages or 0) * CARDS_PER_PAGE - int(blanks or 0))
+
+
+def resumo_combinado(pedidos: list[dict]) -> dict:
+    """O que se ganha juntando `pedidos` numa fila única de impressão.
+
+    Cada pedido entra como `{"id", "customer_name", "pages", "blanks"}` — o
+    que a listagem do admin já traz — e a ORDEM da lista é a ordem em que as
+    cartas vão pro papel, porque é ela que decide quem cai em qual folha.
+
+    Devolve os totais e um `mapa`: pra cada pedido, a faixa de posições na
+    fila e as páginas onde ele aparece (contando de 1). É esse mapa que vira
+    a legenda impressa na margem de cada folha e a lista de conferência na
+    tela — sem ele, quem corta uma folha com dois pedidos não sabe qual carta
+    é de quem.
+    """
+    mapa = []
+    posicao = 0
+    paginas_separadas = 0
+    for pedido in pedidos:
+        cartas = slots_do_pedido(pedido.get("pages"), pedido.get("blanks"))
+        paginas_separadas += int(pedido.get("pages") or 0)
+        mapa.append({
+            "id": pedido.get("id"),
+            "customer_name": pedido.get("customer_name"),
+            "cartas": cartas,
+            "inicio": posicao + 1,
+            "fim": posicao + cartas,
+            "primeira_pagina": posicao // CARDS_PER_PAGE + 1,
+            "ultima_pagina": max(posicao, posicao + cartas - 1) // CARDS_PER_PAGE + 1,
+        })
+        posicao += cartas
+
+    total = posicao
+    paginas = math.ceil(total / CARDS_PER_PAGE) if total else 0
+    sobra = total % CARDS_PER_PAGE
+    return {
+        "cartas": total,
+        "paginas_separadas": paginas_separadas,
+        "paginas_combinadas": paginas,
+        "folhas_economizadas": max(0, paginas_separadas - paginas),
+        "brancos": (CARDS_PER_PAGE - sobra) if sobra else 0,
+        "mapa": mapa,
+    }
