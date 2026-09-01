@@ -41,8 +41,10 @@ existe uma API que confirme "foi pago" — e o banco não notifica nada. Então
 1. O cliente monta o pedido, **revisa a folha** (ver a seção abaixo) e gera a
    cobrança Pix.
 2. Ele paga no app do banco dele e clica em **"Pagamento realizado, enviar
-   notificação"**. Esse clique já dispara a montagem do PDF em segundo plano,
-   pra folha estar pronta quando você for conferir.
+   notificação"** — na hora, ou depois, pela tela
+   **[Meus Pedidos](#meus-pedidos-do-lado-do-cliente)**. Esse clique já dispara
+   a montagem do PDF em segundo plano, pra folha estar pronta quando você for
+   conferir.
 3. Você recebe um e-mail com o resumo do pedido (nome, código do deck,
    cartas, páginas, laminação, valor) e dois botões: **Ver PDF** e
    **Imprimir**.
@@ -140,6 +142,45 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
   mesmo verso. Se você já separou frente e verso na mão, a cópia nova sai sem
   verso, em vez de desfazer a sua escolha.
 
+## Meus Pedidos (do lado do cliente)
+
+O cabeçalho da página tem um botão **Meus Pedidos**, que só aparece quando
+este navegador já gerou alguma cobrança. Ele abre a lista do que foi pedido
+daqui, com o andamento de cada um.
+
+Não há login: o backend guarda os pedidos, mas não sabe de quem. Então a lista
+mora no **`localStorage` do navegador** — id do pedido, nome, valor, código do
+deck, o Pix copia-e-cola, o QR e o XML do deck. Ficam os 12 mais recentes;
+estourando a cota do navegador, os mais velhos vão saindo. Quem limpar o
+navegador perde **a lista**, não os pedidos: eles continuam no servidor, só
+não dá mais pra achá-los por aqui (aí é pelo `/admin`).
+
+O que dá pra fazer:
+
+- **Ver as cartas**, do mesmo jeito do modal de revisão — a lista com as
+  miniaturas e a prévia da folha A4 —, só que sem os `+` / `−`: o pedido já
+  virou cobrança, não há mais o que ajustar. É o XML guardado no navegador que
+  é redesenhado, sem pedir nada ao servidor (que nem devolve XML).
+- **Ver o andamento**: a tela consulta `GET /orders/{id}` de cada pedido ao
+  abrir. *Aguardando pagamento* (`pending`), *Aviso enviado* (`notified`),
+  *Confirmado* (`paid`) ou *Cancelado*. Pedido que o servidor não conhece mais
+  (a faxina apagou) aparece como *Não encontrado*, e o ✕ tira ele da lista.
+- **Enquanto ninguém foi avisado** (`pending`), e só nesse estado, o rodapé
+  mostra o QR de novo e as duas ações: **enviar a notificação de pagamento**
+  (a mesma do fluxo principal) ou **cancelar o pedido**. Depois do aviso as
+  duas somem: dali em diante você já está conferindo Pix, e desfazer isso pela
+  tela do cliente viraria um jeito de sumir com um pedido que talvez esteja
+  pago.
+
+Cancelar chama `POST /orders/{id}/cancel`, que só aceita pedido em `pending` —
+qualquer outro estado volta 409. Não apaga nada: o pedido sai dos abertos e
+continua no histórico do `/admin` marcado como cancelado, igualzinho ao
+cancelamento que você faz por lá. A rota não tem token, pela mesma regra do
+`notify-payment`: quem tem o id do pedido é quem mexe nele. Como o id são 8
+dígitos hex, dá pra chutar — o estrago possível é anular a cobrança de um
+pedido que ninguém avisou como pago, e isso fica registrado no log
+(`pedido cancelado-pelo-cliente`) e no histórico.
+
 ## Passo a passo
 
 1. **Preencha o `.env`** a partir do `.env.example`:
@@ -191,7 +232,8 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
   (`status`: `pending` → `notified` → `paid`, mais `cancelado` pro que o
-  operador desistiu na tela de pedidos). Guarda também as **combinações** de
+  operador desistiu na tela de pedidos — ou o próprio cliente, pela tela
+  *Meus Pedidos*, enquanto ninguém foi avisado). Guarda também as **combinações** de
   pedidos que dividem uma folha — ver *Combinar pedidos numa folha só*.
 - `app/pdf_generator.py` — baixa as imagens do Drive e monta o PDF A4 3x3. Os
   versos de carta dupla-face saem **um por cópia**, igual ao que o `calc.py`
@@ -249,6 +291,10 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
   barrando quem não tem token, o XML do deck não vazando na listagem, e o que
   cancelar / reabrir / apagar fazem de fato. Precisa do fastapi instalado:
   `python tests/test_admin_pedidos.py`.
+- `tests/test_cancelar_pedido.py` — o cancelamento pelo cliente: a janela que
+  fecha depois do aviso de pagamento, o pedido que continua no histórico e o
+  andamento que a tela **Meus Pedidos** consulta. Precisa do fastapi instalado:
+  `python tests/test_cancelar_pedido.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -262,6 +308,7 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 | `POST /orders` | front | cria o pedido e devolve QR + copia-e-cola |
 | `GET /orders/{id}` | front | status do pedido |
 | `POST /orders/{id}/notify-payment` | botão do cliente | manda o e-mail de aviso e já começa a montar o PDF (não imprime) |
+| `POST /orders/{id}/cancel` | tela **Meus Pedidos** | o cliente desiste. Só vale em `pending`; depois do aviso volta 409. Não apaga: vira `cancelado` no histórico |
 | `GET /orders/{id}/pdf?token=…` | botão **Ver PDF** | monta e devolve a folha inline pra conferir (`&fresh=1` regera) |
 | `GET /orders/{id}/print?token=…` | botão **Imprimir** | marca pago e manda pra fila da impressora |
 | `GET /admin` | você, no navegador | a tela de pedidos (é só HTML: os dados vêm das rotas abaixo, todas com token) |

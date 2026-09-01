@@ -45,6 +45,7 @@ _ACOES_EXATAS = {
 # Estas trazem o id do pedido no meio do caminho, então casam por sufixo.
 _ACOES_SUFIXO = {
     ("POST", "/notify-payment"): "avisou que pagou",
+    ("POST", "/cancel"): "cancelou o pedido",
     ("GET", "/print"): "abriu o link de imprimir",
     ("GET", "/pdf"): "abriu o PDF",
 }
@@ -228,6 +229,46 @@ def notify_payment(order_id: str):
     return {"status": "sent",
             "message": "Aviso enviado. Assim que o pagamento for conferido, "
                        "seu pedido vai pra impressão."}
+
+
+@app.post("/orders/{order_id}/cancel")
+def cancel_order(order_id: str):
+    """
+    O cliente desistiu, pela tela "Meus pedidos" dele.
+
+    Só vale enquanto o pedido está em 'pending' — ou seja, enquanto ninguém
+    do outro lado ficou sabendo dele. Depois que o aviso de pagamento saiu, o
+    operador já está conferindo Pix, e desfazer isso sozinho pela tela viraria
+    um jeito de sumir com um pedido que talvez já esteja pago: daí em diante o
+    caminho é falar comigo.
+
+    Cancelar não apaga nada: o pedido sai da lista de abertos e continua no
+    histórico do admin (`storage.set_status`).
+
+    Sem token: quem tem o id do pedido é quem pode mexer nele, a mesma regra
+    do notify-payment. O id são 8 dígitos hex (`storage.create_order`), então
+    dá pra chutar — o estrago possível é anular a cobrança de um pedido que
+    ninguém ainda avisou como pago, e ele continua no histórico do admin
+    marcado como cancelado. Se um dia isso incomodar, o caminho é o mesmo do
+    PDF: link assinado (`_authorize`), não token de admin.
+    """
+    order = storage.get_order(order_id)
+    if not order:
+        raise HTTPException(404, "Pedido não encontrado.")
+    if order["status"] == "cancelado":
+        return {"status": "cancelado",
+                "message": "Esse pedido já estava cancelado."}
+    if order["status"] != "pending":
+        raise HTTPException(
+            409,
+            "Esse pedido já saiu do aguardando pagamento, então não dá mais "
+            "pra cancelar por aqui — me chama pelo contato de sempre.")
+
+    storage.set_status(order_id, "cancelado")
+    log.evento("pedido", "cancelado-pelo-cliente", pedido=order_id,
+               cliente=order["customer_name"], deck=order["deck_hash"])
+    return {"status": "cancelado",
+            "message": "Pedido cancelado. Nada foi enviado pra impressão."}
 
 
 def _authorize(purpose: str, order_id: str, token: str | None,

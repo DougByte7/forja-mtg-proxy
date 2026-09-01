@@ -34,8 +34,8 @@
   }
   .wrap{max-width:560px;margin:0 auto;}
 
-  header{display:flex;align-items:center;margin-bottom:28px;}
-  .brand{display:flex;align-items:center;gap:12px;}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
+  .brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0;}
   .brand .rune{
     width:38px;height:38px;border:1.5px solid var(--gold);
     display:flex;align-items:center;justify-content:center;
@@ -178,13 +178,23 @@
   }
   .pix-btn:hover{filter:brightness(1.08);}
   .pix-btn:disabled{opacity:.4;cursor:not-allowed;}
-  .secondary-row{display:flex;gap:10px;}
   .sec-btn{
     flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted);
     border-radius:9px;padding:10px;font-size:12px;cursor:pointer;transition:border-color .15s,color .15s;
   }
   .sec-btn:hover{border-color:var(--gold);color:var(--gold-light);}
-  .copied{color:var(--green) !important;border-color:var(--green) !important;}
+
+  /* "Meus Pedidos" mora no cabeçalho, não no card: quem volta ao site pra
+     ver o andamento de um pedido antigo não tem XML nenhum selecionado, e o
+     card inteiro ainda está vazio. Nasce escondido — sem pedido guardado
+     neste navegador, o botão não teria o que abrir. */
+  .meus-btn{flex:none;padding:9px 12px;white-space:nowrap;}
+  .meus-btn[hidden]{display:none;}
+  .meus-btn .n{
+    display:inline-block;margin-left:6px;padding:1px 6px;border-radius:9px;
+    background:var(--surface-2);border:1px solid var(--border);
+    font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gold-light);
+  }
 
   .note{font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:10px;}
   .note.falha{
@@ -377,6 +387,59 @@
   .pg-ctrl button:disabled{opacity:.35;cursor:not-allowed;}
   .pg-guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;}
 
+  /* --- Meus Pedidos ---
+     Reaproveita a caixa do modal de revisão: o painel da esquerda vira a
+     lista de pedidos guardados e o da direita, o pedido escolhido. */
+  .qty-ro{
+    font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-muted);
+    flex-shrink:0;padding-right:4px;
+  }
+  .oi{
+    display:flex;align-items:center;gap:6px;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:9px 10px;margin-bottom:6px;
+  }
+  .oi:hover{border-color:var(--gold);}
+  .oi-open{
+    flex:1;min-width:0;display:flex;align-items:center;gap:10px;
+    background:none;border:none;padding:0;margin:0;cursor:pointer;
+    color:var(--text);font:inherit;text-align:left;
+  }
+  .oi.sel{border-color:var(--gold);background:rgba(201,162,39,0.08);}
+  .oi-info{flex:1;min-width:0;}
+  .oi-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .oi-meta{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:3px;}
+  .chip{
+    display:inline-block;flex-shrink:0;font-size:10px;letter-spacing:.02em;
+    border-radius:20px;padding:2px 8px;border:1px solid var(--border);
+    color:var(--text-muted);white-space:nowrap;
+  }
+  .chip.esperando{color:var(--gold-light);border-color:var(--gold);}
+  .chip.avisado{color:#F4E3B0;border-color:var(--gold);background:rgba(201,162,39,0.10);}
+  .chip.pago{color:var(--green);border-color:rgba(76,154,107,.55);}
+  .chip.morto{color:#F2AFA1;border-color:var(--red);}
+  .oi-del{
+    background:none;border:none;color:var(--text-muted);font-size:14px;
+    cursor:pointer;padding:2px 4px;line-height:1;
+  }
+  .oi-del:hover{color:var(--red);}
+  .od-vazio{font-size:12px;color:var(--text-muted);line-height:1.6;padding:6px 2px;}
+  .od-topo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .od-quando{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);}
+  .od-recado{font-size:12px;color:var(--text-muted);line-height:1.6;margin:0 0 12px;}
+  .od-recado.bom{color:var(--green);}
+  .od-recado.ruim{color:#F2AFA1;}
+  .od-dados{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:4px 12px;margin-bottom:14px;
+  }
+  .od-pix{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:12px;margin-bottom:14px;text-align:center;
+  }
+  .od-pix img{width:170px;height:170px;border-radius:8px;background:#fff;padding:8px;}
+  .od-pix p{font-size:11px;color:var(--text-muted);margin:8px 0 10px;}
+
   .modal-foot{
     border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
   }
@@ -394,6 +457,13 @@
     font-weight:700;font-size:13px;cursor:pointer;
   }
   .confirm-btn:hover{filter:brightness(1.08);}
+  .confirm-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .perigo-btn{
+    background:transparent;border:1px solid var(--red);color:#F2AFA1;
+    border-radius:9px;padding:10px 14px;font-size:12px;cursor:pointer;
+  }
+  .perigo-btn:hover:not(:disabled){background:rgba(217,99,74,0.12);}
+  .perigo-btn:disabled{opacity:.4;cursor:not-allowed;}
 
   @media (max-width:820px){
     .modal{padding:0;}
@@ -422,6 +492,9 @@
         <p>Orçamento na hora, pagamento por Pix</p>
       </div>
     </div>
+    <button class="sec-btn meus-btn" id="ordersBtn" hidden>
+      Meus Pedidos <span class="n" id="ordersCount">0</span>
+    </button>
   </header>
 
   <!-- Fica no topo, antes de tudo, porque a página parece uma loja: tem
@@ -508,10 +581,6 @@
           <span>Declaro que conheço o dono do sistema.</span>
         </label>
         <button class="pix-btn" id="pixBtn" disabled>Gerar cobrança Pix</button>
-        <div class="secondary-row">
-          <button class="sec-btn" id="downloadBtn">Baixar XML</button>
-          <button class="sec-btn" id="copyBtn">Copiar resumo</button>
-        </div>
         <div class="cot-cmd">
           <label for="cmdSelect">Comandante (opcional — não conta no teto do Commander 500)</label>
           <select id="cmdSelect"><option value="">— nenhum —</option></select>
@@ -572,6 +641,39 @@
       <button class="icon-btn" id="cancelReviewBtn">Cancelar</button>
       <button class="confirm-btn" id="confirmReviewBtn">Confirmar revisão</button>
       <p class="foot-msg" id="footMsg"></p>
+    </div>
+
+  </div>
+</div>
+
+<!-- Meus Pedidos: o que este navegador já pediu. A lista mora no
+     localStorage (o servidor não sabe quem é quem — não há login aqui), e o
+     andamento vem do backend na hora de abrir, pelo id de cada pedido. -->
+<div class="modal" id="ordersModal" role="dialog" aria-modal="true" aria-labelledby="ordersTitle">
+  <div class="modal-box">
+
+    <div class="modal-head">
+      <h2 id="ordersTitle">Meus Pedidos
+        <span class="sub">Ficam guardados só neste navegador. Escolha um pedido pra ver as cartas e o andamento.</span>
+      </h2>
+      <button class="icon-btn" id="closeOrdersBtn" title="Fechar (Esc)">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="deck-pane">
+        <p class="pane-title">Pedidos guardados</p>
+        <div id="ordersList"></div>
+      </div>
+      <div class="sheet-pane" id="orderPane">
+        <div id="orderDetail"></div>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <div class="foot-sum" id="ordersFootSum"></div>
+      <button class="perigo-btn" id="orderCancelBtn" style="display:none;">Cancelar pedido</button>
+      <button class="confirm-btn" id="orderNotifyBtn" style="display:none;">Pagamento realizado, enviar notificação</button>
+      <p class="foot-msg" id="ordersFootMsg"></p>
     </div>
 
   </div>
@@ -827,6 +929,26 @@
         }catch(e){ avisoNoBotao('copyPixBtn', 'Selecione o código e copie', 'Copiar Pix Copia e Cola'); }
       };
       setupNotifyButton(data.order_id);
+      // A partir daqui esse pedido existe no servidor com um id que só este
+      // navegador conhece. Guardar agora é o que permite voltar depois pra
+      // ver o andamento, avisar o pagamento ou desistir.
+      guardarPedido({
+        id: data.order_id,
+        deck_hash: data.deck_hash,
+        nome: lastState.customerName,
+        valor: data.amount,
+        qty: lastState.qty,
+        backs: lastState.backsCount,
+        pages: lastState.pages,
+        blanks: lastState.blanks,
+        lam: lastState.lam,
+        lamLabel: lastState.lamLabel,
+        xml: lastState.xmlText,
+        pix: data.pix_copia_cola,
+        qr: data.pix_qr_base64,
+        status: 'pending',
+        criado_em: Date.now()
+      });
     }catch(e){
       mostrarFalhaPix(e.message);
     }finally{
@@ -1189,6 +1311,7 @@
         if(!resp.ok) throw new Error(await motivoDaFalha(resp));
         const data = await resp.json().catch(()=> ({}));
         btn.textContent = 'Aviso enviado ✓';
+        marcarStatus(orderId, 'notified');   // a lista de "Meus Pedidos" acompanha
         note.style.color = 'var(--green)';
         note.textContent = data.message || 'Aviso enviado.';
         note.style.display = 'block';
@@ -1203,37 +1326,12 @@
     };
   }
 
-  // Baixar XML
-  document.getElementById('downloadBtn').addEventListener('click', ()=>{
-    if(!lastState) return;
-    const blob = new Blob([lastState.xmlText], {type:'text/xml'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = sheetEdited ? 'pedido-proxies-revisado.xml' : 'pedido-proxies.xml';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
-
-  // Copiar resumo
-  document.getElementById('copyBtn').addEventListener('click', async ()=>{
-    if(!lastState) return;
-    const msg = `Cartas: ${lastState.qty} | Páginas: ${lastState.pages} | Laminação: ${lastState.lamLabel} | Em branco: ${lastState.blanks} | Total: R$ ${formatBRL(lastState.total)}`;
-    try{
-      await navigator.clipboard.writeText(msg);
-      const btn = document.getElementById('copyBtn');
-      btn.classList.add('copied');
-      avisoNoBotao('copyBtn', 'Copiado!', 'Copiar resumo');
-    }catch(e){
-      avisoNoBotao('copyBtn', 'Selecione o resumo e copie', 'Copiar resumo');
-    }
-  });
-
   // Retorno no próprio botão que a pessoa acabou de apertar — é onde ela
   // está olhando, e não interrompe o que ela estava fazendo.
   function avisoNoBotao(id, aviso, rotulo){
     const btn = document.getElementById(id);
     btn.textContent = aviso;
-    setTimeout(()=>{ btn.textContent = rotulo; btn.classList.remove('copied'); }, 1800);
+    setTimeout(()=>{ btn.textContent = rotulo; }, 1800);
   }
 
   // ===================================================================
@@ -1318,7 +1416,11 @@
     return out;
   }
 
-  function buildSheetModel(xmlText){
+  // Lê o XML e devolve a folha, sem mexer em nada. Fica separado do
+  // buildSheetModel porque a tela "Meus Pedidos" também precisa desenhar as
+  // cartas de um pedido antigo — e ali não se edita nada, então o estado do
+  // editor não pode ser tocado.
+  function parseSlots(xmlText){
     const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
     if(doc.querySelector('parsererror')){
       throw new Error('Esse XML não é válido.');
@@ -1326,9 +1428,14 @@
     const versos = new Map();
     readSection(doc, 'backs').forEach(b => versos.set(b.slot, b.meta));
     const frentes = readSection(doc, 'fronts').sort((a, b) => a.slot - b.slot);
+    return {doc, slots: frentes.map(f => ({front: f.meta,
+                                           back: versos.get(f.slot) || null}))};
+  }
 
-    origDoc = doc;
-    sheetSlots = frentes.map(f => ({front: f.meta, back: versos.get(f.slot) || null}));
+  function buildSheetModel(xmlText){
+    const lido = parseSlots(xmlText);
+    origDoc = lido.doc;
+    sheetSlots = lido.slots;
     backCatalog = new Map();
     sheetSlots.forEach(slot => { if(slot.back) catalogBack(slot.front.id, slot.back); });
     editHistory = [];
@@ -1359,9 +1466,9 @@
   // versos ficam dentro do grupo, cada um com a sua própria contagem: numa
   // carta dupla-face dá pra ter 4 frentes e só 2 versos, por exemplo, e é
   // isso que deixa mexer num sem mexer no outro.
-  function sheetGroups(){
+  function agrupar(slots){
     const mapa = new Map();
-    sheetSlots.forEach((slot, i) => {
+    slots.forEach((slot, i) => {
       let g = mapa.get(slot.front.id);
       if(!g){
         g = {key: slot.front.id, front: slot.front, idx: [], backs: new Map()};
@@ -1374,6 +1481,11 @@
         b.idx.push(i);
       }
     });
+    return mapa;
+  }
+
+  function sheetGroups(){
+    const mapa = agrupar(sheetSlots);
     // versos que o cliente zerou continuam listados, com contador 0
     mapa.forEach((g, frontId) => {
       (backCatalog.get(frontId) || new Map()).forEach((meta, backId) => {
@@ -1618,6 +1730,14 @@
     info.append(nome, desc);
     linha.appendChild(info);
 
+    if(ctrl.leitura){
+      const n = document.createElement('div');
+      n.className = 'qty-ro';
+      n.textContent = '×' + ctrl.valor;
+      linha.appendChild(n);
+      return linha;
+    }
+
     const qty = document.createElement('div');
     qty.className = 'qty';
     const menos = botao('−', ctrl.menos.rotulo, ctrl.menos.acao);
@@ -1640,10 +1760,10 @@
 
   // Mesma ordem do _build_print_queue do backend: as frentes em ordem de
   // slot, depois os versos especiais, também em ordem de slot.
-  function printQueue(){
-    const fila = sheetSlots.map(slot => ({tipo: 'front', meta: slot.front,
-                                          frontKey: slot.front.id}));
-    sheetSlots.forEach(slot => {
+  function printQueue(slots){
+    const fila = slots.map(slot => ({tipo: 'front', meta: slot.front,
+                                     frontKey: slot.front.id}));
+    slots.forEach(slot => {
       if(slot.back) fila.push({tipo: 'back', meta: slot.back,
                                frontKey: slot.front.id, backId: slot.back.id});
     });
@@ -1681,7 +1801,10 @@
     return (valor / total * 100).toFixed(4) + '%';
   }
 
-  function buildPage(itens, indice, totalPaginas){
+  // `comControles` desligado desenha a mesma folha sem os + e −: é assim
+  // que a tela "Meus Pedidos" mostra um pedido que já virou cobrança, onde
+  // não há mais o que ajustar.
+  function buildPage(itens, indice, totalPaginas, comControles){
     const wrap = document.createElement('div');
     wrap.className = 'pg-wrap';
 
@@ -1710,16 +1833,19 @@
         slot.appendChild(vazio);
       } else {
         slot.appendChild(cardArt(item.meta, 400));
+        if(item.tipo === 'back'){
+          const tag = document.createElement('span');
+          tag.className = 'pg-badge';
+          tag.textContent = 'VERSO';
+          slot.appendChild(tag);
+        }
+        if(!comControles){ pg.appendChild(slot); continue; }
         const ctrl = document.createElement('div');
         ctrl.className = 'pg-ctrl';
         if(item.tipo === 'back'){
           // O verso tem contador próprio: dá pra tirar o verso e deixar a
           // frente na folha (o cliente que já tem o verso, ou que vai usar
           // o verso genérico), ou o contrário.
-          const tag = document.createElement('span');
-          tag.className = 'pg-badge';
-          tag.textContent = 'VERSO';
-          slot.appendChild(tag);
           const menos = botao('−', 'Remover este verso, mantendo a frente',
                               () => removeBack(item.frontKey, item.backId));
           const mais = botao('+', 'Adicionar mais um verso desta carta',
@@ -1742,17 +1868,20 @@
     return wrap;
   }
 
-  function renderPages(){
-    const pane = document.getElementById('sheetPane');
-    const host = document.getElementById('previewPages');
-    const rolagem = pane.scrollTop;   // não pular pro topo a cada + ou −
+  function desenharFolha(host, slots, comControles){
     host.textContent = '';
-    const fila = printQueue();
+    const fila = printQueue(slots);
     const totalPaginas = Math.max(1, Math.ceil(fila.length / CARDS_PER_PAGE));
     for(let p = 0; p < totalPaginas; p++){
       host.appendChild(buildPage(fila.slice(p * CARDS_PER_PAGE, (p + 1) * CARDS_PER_PAGE),
-                                 p, totalPaginas));
+                                 p, totalPaginas, comControles));
     }
+  }
+
+  function renderPages(){
+    const pane = document.getElementById('sheetPane');
+    const rolagem = pane.scrollTop;   // não pular pro topo a cada + ou −
+    desenharFolha(document.getElementById('previewPages'), sheetSlots, true);
     pane.scrollTop = rolagem;
   }
 
@@ -1955,6 +2084,479 @@
       undoEdit();
     }
   });
+
+  // ===================================================================
+  //  Meus Pedidos — o que este navegador já pediu
+  // ===================================================================
+  // Não existe login aqui: o backend guarda os pedidos, mas não sabe de
+  // quem. Então a lista de "meus pedidos" mora no localStorage, e a chave de
+  // tudo é o `order_id` — é ele que abre o andamento, o aviso de pagamento e
+  // o cancelamento lá no servidor. Quem limpar o navegador perde a LISTA,
+  // não o pedido: ele continua lá, só não dá mais pra achar por aqui.
+  //
+  // O XML vai junto de propósito: é o que deixa remontar as cartas na tela
+  // depois, do mesmo jeito que na revisão, sem pedir nada ao servidor (que
+  // nem entrega o XML de volta).
+
+  const PEDIDOS_KEY = 'forja.pedidos.v1';
+  const PEDIDOS_MAX = 12;      // XML + QR de cada pedido pesam alguns KB
+
+  let pedidoAberto = null;     // id do pedido desenhado no painel da direita
+  let cancelArmado = null;     // id que já levou um clique em "Cancelar"
+  let esquecerArmado = null;   // idem, pro ✕ que tira da lista
+
+  // Os estados são os do `app/storage.py`. 'sumiu' e 'offline' não existem
+  // lá: são o que a tela sabe quando o servidor não responde o esperado.
+  const ESTADOS = {
+    pending:   {rotulo: 'Aguardando pagamento', classe: 'esperando',
+                recado: 'Pague o Pix e clique em "Pagamento realizado" — é esse clique que me avisa.'},
+    notified:  {rotulo: 'Aviso enviado', classe: 'avisado',
+                recado: 'Já fui avisado. Assim que eu conferir o Pix no banco, o pedido vai pra impressão.'},
+    paid:      {rotulo: 'Confirmado', classe: 'pago',
+                recado: 'Pagamento conferido: esse pedido já foi pra impressão.'},
+    cancelado: {rotulo: 'Cancelado', classe: 'morto',
+                recado: 'Esse pedido foi cancelado. Nada foi impresso e nada mais vai acontecer com ele.'},
+    sumiu:     {rotulo: 'Não encontrado', classe: 'morto',
+                recado: 'O servidor não conhece mais esse pedido — pedidos velhos são limpados de tempos em tempos. Dá pra tirar da lista pelo ✕.'},
+    offline:   {rotulo: 'Sem contato', classe: '',
+                recado: 'Não consegui falar com o servidor pra saber o andamento. O que está aqui é o que ficou guardado da última vez.'}
+  };
+
+  function estadoInfo(status){
+    return ESTADOS[status] || ESTADOS.offline;
+  }
+
+  // --- Guarda no navegador -----------------------------------------------
+  function lerPedidos(){
+    try{
+      const bruto = localStorage.getItem(PEDIDOS_KEY);
+      const lista = bruto ? JSON.parse(bruto) : [];
+      return Array.isArray(lista) ? lista.filter(p => p && p.id) : [];
+    }catch(e){
+      return [];   // localStorage bloqueado ou conteúdo estragado
+    }
+  }
+
+  function gravarPedidos(lista){
+    try{
+      localStorage.setItem(PEDIDOS_KEY, JSON.stringify(lista));
+      return true;
+    }catch(e){
+      return false;   // sem espaço, ou navegador em modo que não deixa gravar
+    }
+  }
+
+  function guardarPedido(reg){
+    let lista = [reg].concat(lerPedidos().filter(p => p.id !== reg.id))
+                     .slice(0, PEDIDOS_MAX);
+    // Estourou a cota: vai largando o pedido mais velho até caber. Se nem um
+    // couber, a lista antiga fica como estava — melhor perder o pedido novo
+    // da lista (ele existe no servidor) do que zerar o histórico inteiro.
+    while(lista.length && !gravarPedidos(lista)) lista = lista.slice(0, -1);
+    atualizarBotaoPedidos();
+  }
+
+  function marcarStatus(id, status){
+    const lista = lerPedidos();
+    const reg = lista.find(p => p.id === id);
+    if(!reg) return;
+    reg.status = status;
+    gravarPedidos(lista);
+  }
+
+  function pedidoAtual(){
+    return lerPedidos().find(p => p.id === pedidoAberto) || null;
+  }
+
+  function atualizarBotaoPedidos(){
+    const lista = lerPedidos();
+    document.getElementById('ordersCount').textContent = lista.length;
+    document.getElementById('ordersBtn').hidden = lista.length === 0;
+  }
+
+  // --- Andamento, direto do backend --------------------------------------
+  function assinaturaStatus(){
+    return lerPedidos().map(p => p.id + ':' + (p.status || '')).join('|');
+  }
+
+  async function atualizarStatus(ids){
+    const lista = lerPedidos();
+    await Promise.all(ids.map(async id => {
+      const reg = lista.find(p => p.id === id);
+      if(!reg) return;
+      try{
+        const resp = await fetch('/orders/' + encodeURIComponent(id));
+        if(resp.status === 404){ reg.status = 'sumiu'; return; }
+        if(!resp.ok) return;
+        const data = await resp.json();
+        if(data && data.status) reg.status = data.status;
+      }catch(e){
+        // sem contato: fica valendo o que estava guardado
+      }
+    }));
+    gravarPedidos(lista);
+  }
+
+  // --- Desenho ------------------------------------------------------------
+  function dataLegivel(ms){
+    if(!ms) return '';
+    try{
+      return new Date(ms).toLocaleString('pt-BR',
+                                         {dateStyle: 'short', timeStyle: 'short'});
+    }catch(e){
+      return '';
+    }
+  }
+
+  function recadoPedidos(msg, tom){
+    const p = document.getElementById('ordersFootMsg');
+    p.textContent = msg || '';
+    p.style.color = tom === 'ruim' ? 'var(--red)'
+                  : (tom === 'bom' ? 'var(--green)' : '');
+  }
+
+  function renderOrdersList(){
+    const host = document.getElementById('ordersList');
+    host.textContent = '';
+    const lista = lerPedidos();
+    if(!lista.length){
+      const vazio = document.createElement('p');
+      vazio.className = 'od-vazio';
+      vazio.textContent = 'Nenhum pedido guardado neste navegador.';
+      host.appendChild(vazio);
+      return;
+    }
+
+    lista.forEach(reg => {
+      const info = estadoInfo(reg.status);
+      const linha = document.createElement('div');
+      linha.className = 'oi' + (reg.id === pedidoAberto ? ' sel' : '');
+
+      const abrir = document.createElement('button');
+      abrir.type = 'button';
+      abrir.className = 'oi-open';
+      abrir.setAttribute('aria-pressed', reg.id === pedidoAberto ? 'true' : 'false');
+
+      const dados = document.createElement('div');
+      dados.className = 'oi-info';
+      const nome = document.createElement('div');
+      nome.className = 'oi-name';
+      nome.textContent = reg.nome || 'Pedido';
+      const meta = document.createElement('div');
+      meta.className = 'oi-meta';
+      meta.textContent = dataLegivel(reg.criado_em) + ' · R$ ' + formatBRL(reg.valor)
+                       + ' · ' + reg.qty + (reg.qty === 1 ? ' carta' : ' cartas');
+      dados.append(nome, meta);
+
+      const chip = document.createElement('span');
+      chip.className = 'chip ' + info.classe;
+      chip.textContent = info.rotulo;
+
+      abrir.append(dados, chip);
+      abrir.addEventListener('click', ()=> selecionarPedido(reg.id));
+
+      const tirar = botao('✕', 'Tirar da lista deste navegador (não cancela o pedido)',
+                          ()=> pedirParaEsquecer(reg.id));
+      tirar.className = 'oi-del';
+
+      linha.append(abrir, tirar);
+      host.appendChild(linha);
+    });
+  }
+
+  function linhaDado(rotulo, valor){
+    return `<div class="receipt-row"><span>${rotulo}</span><b>${valor}</b></div>`;
+  }
+
+  // As mesmas linhas do modal de revisão, sem os + e −: aqui o pedido já
+  // virou cobrança, então não há mais o que ajustar — só conferir.
+  function renderDeckLeitura(host, slots){
+    agrupar(slots).forEach(g => {
+      const bloco = document.createElement('div');
+      bloco.className = 'ci-block';
+      const titulo = cardTitle(g.front);
+      const nVersos = Array.from(g.backs.values())
+                           .reduce((soma, b) => soma + b.idx.length, 0);
+      bloco.appendChild(linhaBase('ci', g.front, titulo,
+        g.idx.length + (g.idx.length === 1 ? ' cópia' : ' cópias')
+          + (nVersos ? ' · ' + nVersos + ' com verso próprio' : ''),
+        {leitura: true, valor: g.idx.length}));
+      g.backs.forEach(b => {
+        bloco.appendChild(linhaBase('ci ci-sub', b.meta, cardTitle(b.meta),
+          'verso de ' + titulo + ' · ' + b.idx.length + ' de ' + g.idx.length,
+          {leitura: true, valor: b.idx.length}));
+      });
+      host.appendChild(bloco);
+    });
+  }
+
+  function renderOrderDetail(){
+    const host = document.getElementById('orderDetail');
+    host.textContent = '';
+    document.getElementById('orderPane').scrollTop = 0;
+
+    const reg = pedidoAtual();
+    atualizarRodapePedidos(reg);
+    if(!reg){
+      const vazio = document.createElement('p');
+      vazio.className = 'od-vazio';
+      vazio.textContent = 'Escolha um pedido na lista pra ver as cartas e o andamento.';
+      host.appendChild(vazio);
+      return;
+    }
+
+    const info = estadoInfo(reg.status);
+
+    const topo = document.createElement('div');
+    topo.className = 'od-topo';
+    const chip = document.createElement('span');
+    chip.className = 'chip ' + info.classe;
+    chip.textContent = info.rotulo;
+    const quando = document.createElement('span');
+    quando.className = 'od-quando';
+    quando.textContent = dataLegivel(reg.criado_em);
+    topo.append(chip, quando);
+    host.appendChild(topo);
+
+    const recado = document.createElement('p');
+    recado.className = 'od-recado'
+      + (reg.status === 'paid' ? ' bom' : '')
+      + (reg.status === 'cancelado' || reg.status === 'sumiu' ? ' ruim' : '');
+    recado.textContent = info.recado;
+    host.appendChild(recado);
+
+    const dados = document.createElement('div');
+    dados.className = 'od-dados';
+    // Só o nome do cliente vem de fora; o resto é número nosso.
+    dados.innerHTML =
+        linhaDado('Pedido de', esc(reg.nome))
+      + linhaDado('Cartas', reg.qty)
+      + (reg.backs ? linhaDado('Versos próprios (dupla-face)', reg.backs) : '')
+      + linhaDado('Páginas', reg.pages)
+      + (reg.blanks ? linhaDado('Espaços livres na última página', reg.blanks) : '')
+      + linhaDado('Laminação', esc(reg.lamLabel))
+      + linhaDado('Código do pedido', esc(reg.deck_hash))
+      + linhaDado('Total', 'R$ ' + formatBRL(reg.valor));
+    host.appendChild(dados);
+
+    // O QR só faz sentido enquanto ninguém avisou nada: depois do aviso o
+    // Pix já foi pago, e mostrar o código de novo é convite pra pagar duas.
+    if(reg.status === 'pending' && (reg.qr || reg.pix)){
+      const caixa = document.createElement('div');
+      caixa.className = 'od-pix';
+      if(reg.qr){
+        const img = document.createElement('img');
+        img.src = 'data:image/png;base64,' + reg.qr;
+        img.alt = 'QR code Pix deste pedido';
+        caixa.appendChild(img);
+      }
+      const valor = document.createElement('p');
+      valor.textContent = 'Valor desta cobrança: R$ ' + formatBRL(reg.valor);
+      caixa.appendChild(valor);
+      if(reg.pix){
+        const copiar = botao('Copiar Pix Copia e Cola',
+                             'Copiar o código Pix deste pedido', async ()=>{
+          try{
+            await navigator.clipboard.writeText(reg.pix);
+            avisoNoBotao('odCopyPix', 'Copiado!', 'Copiar Pix Copia e Cola');
+          }catch(e){
+            avisoNoBotao('odCopyPix', 'Selecione o código e copie',
+                         'Copiar Pix Copia e Cola');
+          }
+        });
+        copiar.className = 'sec-btn';
+        copiar.id = 'odCopyPix';
+        caixa.appendChild(copiar);
+      }
+      host.appendChild(caixa);
+    }
+
+    const tituloCartas = document.createElement('p');
+    tituloCartas.className = 'pane-title';
+    tituloCartas.textContent = 'Cartas do pedido';
+    host.appendChild(tituloCartas);
+
+    let slots = [];
+    try{
+      slots = parseSlots(reg.xml || '').slots;
+    }catch(e){
+      slots = [];
+    }
+    if(!slots.length){
+      const aviso = document.createElement('p');
+      aviso.className = 'od-vazio';
+      aviso.textContent = 'Não consegui reler as cartas guardadas deste pedido — '
+                        + 'os números acima continuam valendo.';
+      host.appendChild(aviso);
+      return;
+    }
+
+    const deck = document.createElement('div');
+    renderDeckLeitura(deck, slots);
+    host.appendChild(deck);
+
+    const tituloFolha = document.createElement('p');
+    tituloFolha.className = 'pane-title';
+    tituloFolha.textContent = 'Como sai na folha';
+    host.appendChild(tituloFolha);
+
+    const folha = document.createElement('div');
+    desenharFolha(folha, slots, false);
+    host.appendChild(folha);
+  }
+
+  // As duas ações só aparecem em 'pending' — ou seja, enquanto ninguém do
+  // outro lado ficou sabendo do pedido. Depois do aviso, quem mexe sou eu.
+  function atualizarRodapePedidos(reg){
+    const resumo = document.getElementById('ordersFootSum');
+    const bCancelar = document.getElementById('orderCancelBtn');
+    const bAvisar = document.getElementById('orderNotifyBtn');
+
+    cancelArmado = null;
+    esquecerArmado = null;
+    bCancelar.disabled = false;
+    bAvisar.disabled = false;
+    bCancelar.textContent = 'Cancelar pedido';
+    bAvisar.textContent = NOTIFY_LABEL;
+
+    if(!reg){
+      resumo.textContent = '';
+      bCancelar.style.display = 'none';
+      bAvisar.style.display = 'none';
+      return;
+    }
+
+    resumo.innerHTML =
+      `<div>${plural(reg.qty, 'carta', 'cartas')}`
+      + ` · ${plural(reg.pages, 'página', 'páginas')}`
+      + ` · <span class="price">R$ ${formatBRL(reg.valor)}</span></div>`
+      + `<div>${esc(reg.lamLabel)} · ${esc(reg.deck_hash)}</div>`;
+
+    const emAberto = reg.status === 'pending';
+    bCancelar.style.display = emAberto ? '' : 'none';
+    bAvisar.style.display = emAberto ? '' : 'none';
+  }
+
+  function redesenharPedidos(){
+    renderOrdersList();
+    renderOrderDetail();
+  }
+
+  function selecionarPedido(id){
+    pedidoAberto = id;
+    recadoPedidos('');
+    redesenharPedidos();
+  }
+
+  function pedirParaEsquecer(id){
+    if(esquecerArmado !== id){
+      esquecerArmado = id;
+      recadoPedidos('Clique no ✕ de novo pra tirar esse pedido da lista. '
+                  + 'Ele some só daqui — não é cancelamento.');
+      return;
+    }
+    esquecerArmado = null;
+    const lista = lerPedidos().filter(p => p.id !== id);
+    gravarPedidos(lista);
+    if(pedidoAberto === id) pedidoAberto = lista.length ? lista[0].id : null;
+    atualizarBotaoPedidos();
+    redesenharPedidos();
+    recadoPedidos('Pedido tirado da lista deste navegador.');
+  }
+
+  // --- Ações do rodapé ----------------------------------------------------
+  document.getElementById('orderNotifyBtn').addEventListener('click', async ()=>{
+    const reg = pedidoAtual();
+    if(!reg) return;
+    const btn = document.getElementById('orderNotifyBtn');
+    btn.disabled = true;
+    btn.textContent = 'Enviando aviso...';
+    recadoPedidos('');
+    let msg = '', tom = 'bom';
+    try{
+      const resp = await fetch(`/orders/${encodeURIComponent(reg.id)}/notify-payment`,
+                               {method: 'POST'});
+      if(!resp.ok) throw new Error(await motivoDaFalha(resp));
+      const data = await resp.json().catch(()=> ({}));
+      msg = data.message || 'Aviso enviado.';
+    }catch(e){
+      tom = 'ruim';
+      msg = 'Não deu pra enviar o aviso.' + (e.message ? ' ' + e.message : '')
+          + ' Tenta de novo em instantes — se insistir, me chama pelo contato de sempre.';
+    }
+    await atualizarStatus([reg.id]);
+    redesenharPedidos();
+    recadoPedidos(msg, tom);
+  });
+
+  // Cancelar não tem volta e some com a cobrança, então pede dois cliques —
+  // o primeiro só troca o rótulo do botão e explica o que vai acontecer.
+  document.getElementById('orderCancelBtn').addEventListener('click', async ()=>{
+    const reg = pedidoAtual();
+    if(!reg) return;
+    const btn = document.getElementById('orderCancelBtn');
+    if(cancelArmado !== reg.id){
+      cancelArmado = reg.id;
+      btn.textContent = 'Confirmar cancelamento';
+      recadoPedidos('Isso não tem volta: pra pedir de novo é montar o pedido do '
+                  + 'começo. Não pague o Pix depois de cancelar.');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Cancelando...';
+    let msg = '', tom = 'bom';
+    try{
+      const resp = await fetch(`/orders/${encodeURIComponent(reg.id)}/cancel`,
+                               {method: 'POST'});
+      if(!resp.ok) throw new Error(await motivoDaFalha(resp));
+      const data = await resp.json().catch(()=> ({}));
+      msg = data.message || 'Pedido cancelado.';
+      marcarStatus(reg.id, 'cancelado');
+    }catch(e){
+      tom = 'ruim';
+      msg = 'Não deu pra cancelar.' + (e.message ? ' ' + e.message : '')
+          + ' Tenta de novo em instantes.';
+    }
+    await atualizarStatus([reg.id]);
+    redesenharPedidos();
+    recadoPedidos(msg, tom);
+  });
+
+  // --- Abrir e fechar -----------------------------------------------------
+  async function abrirPedidos(){
+    const lista = lerPedidos();
+    if(!lista.some(p => p.id === pedidoAberto)){
+      pedidoAberto = lista.length ? lista[0].id : null;
+    }
+    recadoPedidos('');
+    document.getElementById('ordersModal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+    redesenharPedidos();
+
+    // O andamento vem depois da tela aparecer: a lista guardada já mostra o
+    // pedido na hora, e o redesenho só acontece se algo tiver mudado — senão
+    // as miniaturas piscariam a cada abertura.
+    const antes = assinaturaStatus();
+    await atualizarStatus(lista.map(p => p.id));
+    if(assinaturaStatus() !== antes) redesenharPedidos();
+  }
+
+  function fecharPedidos(){
+    document.getElementById('ordersModal').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('ordersBtn').addEventListener('click', abrirPedidos);
+  document.getElementById('closeOrdersBtn').addEventListener('click', fecharPedidos);
+  document.getElementById('ordersModal').addEventListener('click', e => {
+    if(e.target.id === 'ordersModal') fecharPedidos();   // clique fora da caixa
+  });
+  document.addEventListener('keydown', e => {
+    if(e.key !== 'Escape') return;
+    if(document.getElementById('ordersModal').classList.contains('show')) fecharPedidos();
+  });
+
+  atualizarBotaoPedidos();
 
   // --- Tinta da impressora -----------------------------------------------
   // A pastilha só aparece quando alguém sabe responder. Impressora de tanque
