@@ -518,6 +518,13 @@ denunciar se a LigaMagic começar a devolver número estranho. `USD_BRL` no
 `.env` converte a coluna da Scryfall pra real só pra facilitar a leitura — é
 taxa fixa que você põe na mão, sem imposto, frete nem IOF.
 
+Na tabela, um **▲ vermelho** ao lado do preço da LigaMagic marca a carta que
+está mais de 20% acima do preço lá fora, convertido pelo câmbio do dia (uma
+consulta pública, sem chave, guardada por 6 h; se ela falhar, vale dólar a
+R$ 5 — ver `CAMBIO_*` no `.env.example`). O indicador aparece nas duas
+visões da tabela, no top 10 e na lista agrupada por tipo, e é comparação de
+ordem de grandeza: o preço de fora não inclui frete, imposto nem IOF.
+
 ### Riscos conhecidos — leia antes de depender disso
 
 **A LigaMagic não tem API e não quer ser lida por robô.** Isto não é

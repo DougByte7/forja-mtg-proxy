@@ -18,7 +18,7 @@ import os
 import threading
 import time
 
-from . import calc, cotacao, ligamagic, log, scryfall
+from . import calc, cambio, cotacao, ligamagic, log, scryfall
 
 # Teto de cartas distintas POR COTAR (depois de tirar básicas e comandante).
 # Um Commander tem 99, dos quais ~35 são terreno básico; 200 dá folga e ainda
@@ -163,6 +163,10 @@ def _rodar(job_id: str, cartas, excluidas):
         # As cartas que ficaram de fora viajam junto do resultado: a tela
         # precisa dizer POR QUE o total não cobre o deck inteiro.
         resultado["excluidas"] = excluidas
+        # O câmbio viaja junto pra tela poder marcar a carta que está muito
+        # mais cara aqui do que lá fora. É comparação, não conversão: não
+        # entra em total nenhum. Ver `cambio.py` — nunca levanta.
+        resultado["cambio"] = cambio.taxa()
         # Uma linha por fonte com o placar. É o que se olha primeiro quando
         # alguém diz "faltou preço em muita carta": diz de imediato se o
         # buraco foi de uma fonte só ou das duas.

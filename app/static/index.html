@@ -247,6 +247,13 @@
   table.cot .loja{display:block;font-size:10px;color:var(--text-muted);}
   table.cot tr.faltou td{color:var(--text-muted);}
   table.cot td .aviso{color:#F2AFA1;}
+  /* Carta bem mais cara aqui do que no mercado em dólar. Vermelho e colado
+     no preço: é um aviso sobre AQUELE número, não sobre a linha. */
+  table.cot td .caro,.note .caro{
+    display:inline-block;font-size:10px;color:var(--red);cursor:help;
+    border:1px solid rgba(217,99,74,.5);border-radius:5px;padding:0 3px;
+    margin-left:4px;vertical-align:1px;
+  }
   /* Acordeão: começa mostrando as 10 mais caras. Um Commander cotado inteiro
      passa de 60 linhas e empurraria o total pra fora da tela. Aberto, a mesma
      tabela vira a lista completa agrupada por tipo de carta. */
@@ -996,6 +1003,13 @@
   const cmdSelect = document.getElementById('cmdSelect');
   const COT_LABEL = 'Cotar preços das cartas';
   const COT_VISIVEIS = 10;   // linhas antes do "ver mais"
+  // A partir de quanto acima do preço em dólar a carta ganha o indicador de
+  // "caro aqui". 20% é folga suficiente pra não marcar diferença de câmbio,
+  // spread de loja ou arredondamento — o que sobra é diferença de verdade.
+  const COT_DISCREPANCIA = 0.20;
+  // Dólar de reserva, pra tela não ficar sem indicador quando o backend não
+  // mandar câmbio nenhum (cotação de uma versão anterior, por exemplo).
+  const COT_DOLAR_RESERVA = 5;
   let cotTimer = null;
   let cotAssinatura = '';    // deck que a cotação desenhada reflete
 
@@ -1080,6 +1094,36 @@
 
   function desenharCotacao(r){
     const fontes = r.fontes || [];
+    // Câmbio só pra COMPARAR as duas colunas — ver `cambio.py` no backend.
+    // Não entra em total nenhum: nada aqui é convertido pra mostrar, só pra
+    // decidir se a carta está desproporcionalmente cara no Brasil.
+    const cambio = r.cambio || {};
+    const taxa = cambio.valor > 0 ? cambio.valor : COT_DOLAR_RESERVA;
+    // A comparação é entre a fonte principal (a brasileira, que ordena a
+    // tabela) e a seguinte, o mercado em dólar. Com uma fonte só — ou com a
+    // principal já em dólar — não há o que comparar e o indicador some.
+    const fonteBase = fontes[0] || null;
+    const fonteRef = fontes[1] || null;
+    const comparavel = !!fonteBase && !!fonteRef && fonteBase.moeda === 'BRL';
+    // Preço na mesma moeda dos dois lados. A Scryfall pode vir em dólar ou já
+    // em real (quando o USD_BRL do .env está preenchido), então quem manda é
+    // a sigla da fonte, não o id dela.
+    const emBRL = (valor, sigla) =>
+      sigla === 'BRL' ? valor : sigla === 'USD' ? valor * taxa : null;
+
+    // Quanto a carta está acima do preço lá fora, ou null quando não dá pra
+    // comparar (faltou preço de um dos lados, ou só há uma fonte).
+    function discrepancia(l){
+      if(!comparavel) return null;
+      const aqui = l.precos[fonteBase.id] || {};
+      const la = l.precos[fonteRef.id] || {};
+      if(aqui.erro || la.erro) return null;
+      const a = emBRL(aqui.preco_unitario, fonteBase.moeda);
+      const b = emBRL(la.preco_unitario, fonteRef.moeda);
+      if(!(a > 0) || !(b > 0)) return null;
+      const excesso = a / b - 1;
+      return excesso >= COT_DISCREPANCIA ? {excesso, la, laBRL: b} : null;
+    }
     const cabecalho = fontes.map(f => `
       <div class="cot-fonte">
         <h4>${esc(f.rotulo)}</h4>
@@ -1092,15 +1136,26 @@
     const todas = r.linhas || [];
     const linhaHTML = (l) => {
       const achou = fontes.some(f => !(l.precos[f.id] || {}).erro);
+      const cara = discrepancia(l);
       const celulas = fontes.map(f => {
         const p = l.precos[f.id] || {};
         if(p.erro) return `<td class="num"><span class="aviso">—</span></td>`;
+        // O indicador vai na coluna brasileira, colado no número que ele
+        // está criticando; o título diz contra o que a conta foi feita.
+        const caro = (f === fonteBase && cara)
+          ? ` <span class="caro" title="${esc(
+                Math.round(cara.excesso * 100) + '% acima da ' + fonteRef.rotulo
+                + ' (' + moeda(cara.la.preco_unitario, fonteRef.moeda)
+                + (fonteRef.moeda === 'BRL' ? '' : ' ≈ ' + moeda(cara.laBRL, 'BRL')
+                   + ' a ' + moeda(taxa, 'BRL') + ' por dólar') + ')'
+              )}">▲ ${Math.round(cara.excesso * 100)}%</span>`
+          : '';
         // Mostra o unitário; a quantidade já está numa coluna própria, e o
         // subtotal se faz de cabeça. O que interessa comparar entre as duas
         // fontes é o preço da carta, não o produto.
         const alerta = p.estoque_suficiente ? '' :
           ' <span class="aviso" title="a loja não tem todas as cópias">!</span>';
-        return `<td class="num">${moeda(p.preco_unitario, f.moeda)}${alerta}
+        return `<td class="num">${moeda(p.preco_unitario, f.moeda)}${alerta}${caro}
                 <span class="loja">${esc(p.loja)}${
                   p.condicao ? ' · ' + esc(p.condicao) : ''}</span></td>`;
       }).join('');
@@ -1180,6 +1235,21 @@
         comandante e sem os terrenos básicos.</div>`;
     }
 
+    // Explica o ▲ sempre que ele PUDER aparecer, mesmo que nenhuma carta o
+    // tenha ganhado: um triângulo vermelho sem legenda no meio de uma tabela
+    // de preço é justamente o tipo de coisa que assusta sem informar.
+    const notaCaro = !comparavel ? '' : `
+      <p class="note">
+        O <span class="caro">▲</span> marca a carta que está mais de
+        ${Math.round(COT_DISCREPANCIA * 100)}% acima do preço da
+        ${esc(fonteRef.rotulo)}${fonteRef.moeda === 'BRL' ? '' :
+          `, convertido a ${moeda(taxa, 'BRL')} por dólar (${
+            cambio.fonte === 'awesomeapi'
+              ? 'câmbio de hoje' : 'valor fixo, sem consultar câmbio'})`}.
+        Serve pra comparar ordem de grandeza: o preço de fora não inclui
+        frete, imposto nem IOF.
+      </p>`;
+
     cotResultado.innerHTML = `
       <div class="cot-fontes">${cabecalho}</div>
       <div class="cot-tabela-wrap">
@@ -1190,6 +1260,7 @@
       </div>
       ${botaoMais}
       ${aviso}
+      ${notaCaro}
       <p class="note">
         Cada total é a soma da oferta mais barata de cada carta na fonte
         correspondente e <b>não inclui frete</b> — as cartas podem vir de
