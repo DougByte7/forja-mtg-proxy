@@ -148,11 +148,26 @@ def parse_card_list(xml_text: str) -> list[dict]:
 
 # --- Combinar pedidos numa folha só ---------------------------------------
 #
-# Cada pedido, sozinho, arredonda pra cima: 4 cartas ocupam uma folha inteira
-# e desperdiçam 5 slots. Impressos em sequência numa fila única, o começo de
-# um pedido preenche o resto da folha do anterior, e só a ÚLTIMA folha do
-# conjunto sai incompleta. É daqui que sai o número de folhas economizadas
-# que a tela do operador mostra antes de montar o PDF combinado.
+# O desperdício de material é o SLOT EM BRANCO: cada pedido, sozinho,
+# arredonda pra cima, então 4 cartas ocupam uma folha inteira e jogam fora 5
+# slots. Impressos em sequência numa fila única, o começo de um pedido
+# preenche o resto da folha do anterior, e só a ÚLTIMA folha do conjunto sai
+# incompleta — todo o branco do meio vira carta.
+#
+# A conta abaixo devolve os dois lados disso, porque a tela precisa dos dois:
+#
+#   `brancos_evitados` — quantos slots vazios deixaram de existir. É o número
+#   que descreve o ganho de verdade, e cresce com cada pedido marcado.
+#
+#   `folhas_economizadas` — o mesmo ganho convertido em papel. Só que folha
+#   inteira: `brancos_evitados` é sempre múltiplo de 9 (o branco do meio de
+#   uma folha só some quando a folha inteira some), então esse número é
+#   exatamente `brancos_evitados / 9` e é sempre GROSSO — dois pedidos nunca
+#   economizam mais que uma folha, por mais migalha que sejam.
+#
+# E `brancos`, o que ainda sobra vazio na última folha do conjunto, é quanta
+# carta ainda cabe ali: é o que diz ao operador se vale esperar mais um
+# pedido antes de mandar imprimir.
 
 
 def slots_do_pedido(pages, blanks) -> int:
@@ -182,9 +197,11 @@ def resumo_combinado(pedidos: list[dict]) -> dict:
     mapa = []
     posicao = 0
     paginas_separadas = 0
+    brancos_separados = 0
     for pedido in pedidos:
         cartas = slots_do_pedido(pedido.get("pages"), pedido.get("blanks"))
         paginas_separadas += int(pedido.get("pages") or 0)
+        brancos_separados += max(0, int(pedido.get("blanks") or 0))
         mapa.append({
             "id": pedido.get("id"),
             "customer_name": pedido.get("customer_name"),
@@ -199,11 +216,14 @@ def resumo_combinado(pedidos: list[dict]) -> dict:
     total = posicao
     paginas = math.ceil(total / CARDS_PER_PAGE) if total else 0
     sobra = total % CARDS_PER_PAGE
+    brancos = (CARDS_PER_PAGE - sobra) if sobra else 0
     return {
         "cartas": total,
         "paginas_separadas": paginas_separadas,
         "paginas_combinadas": paginas,
         "folhas_economizadas": max(0, paginas_separadas - paginas),
-        "brancos": (CARDS_PER_PAGE - sobra) if sobra else 0,
+        "brancos_separados": brancos_separados,
+        "brancos": brancos,
+        "brancos_evitados": max(0, brancos_separados - brancos),
         "mapa": mapa,
     }

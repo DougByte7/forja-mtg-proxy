@@ -731,6 +731,12 @@ function confirmarApagar(p) {
    5 slots em branco. Marcando vários, as filas de impressão deles viram uma
    fila corrida e só a última folha do conjunto sai incompleta.
 
+   O que a barra mostra é o SLOT EM BRANCO que deixou de existir, não só a
+   folha: a folha é o branco arredondado pra baixo (nove brancos = uma folha),
+   e por isso dois pedidos nunca economizam mais que uma. O branco que ainda
+   sobra na última folha vai junto, porque é o que ainda cabe ali — a deixa
+   pra marcar mais um pedido antes de mandar imprimir.
+
    A conta aqui é uma PRÉVIA, feita com o que a listagem já trouxe, pra barra
    responder na hora que se marca uma caixinha. Quem decide de verdade é o
    backend (`calc.resumo_combinado`), que refaz a mesma conta ao criar a
@@ -756,8 +762,13 @@ function pedidosMarcados() {
 function resumoLocal(lista) {
   const cartas = lista.reduce((n, p) => n + slotsDe(p), 0);
   const separadas = lista.reduce((n, p) => n + (Number(p.pages) || 0), 0);
+  const brancosSeparados = lista.reduce(
+    (n, p) => n + Math.max(0, Number(p.blanks) || 0), 0);
   const combinadas = Math.ceil(cartas / CARTAS_POR_FOLHA);
-  return {cartas, separadas, combinadas,
+  const sobra = cartas % CARTAS_POR_FOLHA;
+  const brancos = sobra ? CARTAS_POR_FOLHA - sobra : 0;
+  return {cartas, separadas, combinadas, brancosSeparados, brancos,
+          brancosEvitados: Math.max(0, brancosSeparados - brancos),
           economia: Math.max(0, separadas - combinadas)};
 }
 
@@ -832,11 +843,24 @@ function atualizarCombo() {
       [...laminacoes].map((l) => escapar(LAMINACAO[l] || l)).join(" e ") +
       `) — só dá pra combinar pedidos com o mesmo acabamento.</span>`;
   } else {
+    // A linha de cima é o desperdício: quantos slots em branco os pedidos
+    // jogariam fora separados, e quantos sobram depois de emendados. A folha
+    // economizada vem logo atrás como tradução em papel desse mesmo ganho.
+    conta += `<br>${resumo.brancosSeparados} espaço(s) em branco separados → ` +
+      `<b>${resumo.brancos}</b> combinados`;
+    conta += resumo.brancosEvitados
+      ? ` <span class="ganho">(${resumo.brancosEvitados} espaço(s) ` +
+        `aproveitado(s) = ${resumo.economia} folha(s))</span>`
+      : ` <span class="nada">(nada aproveitado — o branco não fecha ` +
+        `folha ainda)</span>`;
     conta += `<br>${resumo.separadas} folha(s) separadas → ` +
       `<b>${resumo.combinadas}</b> combinadas`;
-    conta += resumo.economia
-      ? ` <span class="ganho">(economia de ${resumo.economia} folha(s))</span>`
-      : ` <span class="nada">(sem economia — já fechavam certinho)</span>`;
+    // O branco que sobra é convite: com ele na tela dá pra decidir se vale
+    // esperar mais um pedido pequeno em vez de imprimir folha pela metade.
+    conta += resumo.brancos
+      ? ` <span class="nada">— ainda cabe(m) ${resumo.brancos} carta(s) ` +
+        `na última folha</span>`
+      : ` <span class="ganho">— a última folha fecha certinho</span>`;
   }
   $("comboConta").innerHTML = conta;
 
@@ -877,9 +901,9 @@ async function montarCombo(refazer) {
     // exatamente o que o "Refazer" está tentando corrigir.
     atualizarCombo();
     const id = comboAtual.id;
-    if (!combo.folhas_economizadas) {
-      anotarCombo("andando", "Montando — esta seleção não economiza folha, " +
-                  "mas sai tudo num arquivo só.");
+    if (!combo.brancos_evitados) {
+      anotarCombo("andando", "Montando — esta seleção não aproveita nenhum " +
+                  "espaço em branco, mas sai tudo num arquivo só.");
     }
     const q = refazer ? "?fresh=true" : "";
     let estado = await api(`/admin/combos/${id}/pdf${q}`, {method: "POST"});

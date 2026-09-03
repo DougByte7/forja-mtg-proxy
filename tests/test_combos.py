@@ -4,9 +4,10 @@ tela do operador).
 
 O que se está travando aqui é o que dói se quebrar em silêncio:
 
-1. **A conta de papel.** O ganho todo do recurso é a folha economizada. Se a
-   matemática escorregar, a tela promete economia que a impressora não
-   entrega — e o operador só descobre com o papel na mão.
+1. **A conta de papel.** O ganho todo do recurso é o slot em branco que
+   deixa de ser impresso — e a folha economizada, que é esse mesmo ganho
+   arredondado pra baixo. Se a matemática escorregar, a tela promete economia
+   que a impressora não entrega — e o operador só descobre com o papel na mão.
 2. **As regras de quem pode entrar na folha.** Laminação misturada estraga o
    acabamento de metade das pessoas e não tem desfazer depois de plastificado;
    pedido cancelado não pode gastar papel.
@@ -118,7 +119,14 @@ check("soma as cartas dos três", r["cartas"] == 24, r["cartas"])
 check("4 folhas separadas viram 3", (r["paginas_separadas"],
                                      r["paginas_combinadas"]) == (4, 3), r)
 check("economia de 1 folha", r["folhas_economizadas"] == 1, r)
-check("e sobram 3 slots em branco na última", r["brancos"] == 3, r["brancos"])
+check("12 brancos separados viram 3", (r["brancos_separados"],
+                                       r["brancos"]) == (12, 3), r)
+# O desperdício evitado é o número que a barra mostra como ganho, e a folha
+# economizada é ele dividido por 9. Se um dia deixar de fechar, a tela está
+# prometendo em slots uma coisa e em papel outra.
+check("9 brancos aproveitados = a folha economizada",
+      r["brancos_evitados"] == 9
+      and r["brancos_evitados"] == r["folhas_economizadas"] * calc.CARDS_PER_PAGE, r)
 check("o mapa emenda as faixas sem buraco",
       [(m["inicio"], m["fim"]) for m in r["mapa"]] == [(1, 4), (5, 22), (23, 24)],
       r["mapa"])
@@ -131,6 +139,18 @@ check("e diz em que folha cada pedido cai",
 r2 = calc.resumo_combinado([{"id": "x", "pages": 2, "blanks": 0},
                             {"id": "y", "pages": 1, "blanks": 0}])
 check("pedidos redondos não economizam folha", r2["folhas_economizadas"] == 0, r2)
+check("e não tinham branco nenhum pra aproveitar",
+      (r2["brancos_separados"], r2["brancos_evitados"]) == (0, 0), r2)
+
+# Dois pedidos cheios de branco que ainda assim não fecham folha: junta o
+# desperdício num lugar só, mas não devolve papel nenhum. É o caso em que a
+# barra não pode cantar vitória — e o que fazia a conta antiga parecer sempre
+# a mesma, porque só sabia falar em folha inteira.
+r3 = calc.resumo_combinado([{"id": "x", "pages": 1, "blanks": 5},
+                            {"id": "y", "pages": 1, "blanks": 3}])
+check("branco que não fecha folha não vira economia",
+      (r3["brancos_separados"], r3["brancos"], r3["brancos_evitados"],
+       r3["folhas_economizadas"]) == (8, 8, 0, 0), r3)
 
 # --- 2. a porta ----------------------------------------------------------
 ROTAS = [
@@ -290,12 +310,14 @@ else:
     ctx.eval(trecho + """
     function previa(lista) {
       const r = resumoLocal(lista);
-      return JSON.stringify([r.cartas, r.separadas, r.combinadas, r.economia]);
+      return JSON.stringify([r.cartas, r.separadas, r.combinadas, r.economia,
+                             r.brancosSeparados, r.brancos, r.brancosEvitados]);
     }""")
     import json
     casos = [
         [(1, 5), (2, 0), (1, 7)],          # o caso da tela: economiza 1
         [(2, 0), (1, 0)],                  # redondos: não economiza
+        [(1, 5), (1, 3)],                  # muito branco, folha nenhuma
         [(1, 8), (1, 8), (1, 8)],          # três migalhas viram uma folha
         [(1, 0)],                          # um só
         [(4, 3), (2, 6), (3, 1), (1, 8)],  # um punhado qualquer
@@ -305,7 +327,9 @@ else:
                  for i, (pg, bl) in enumerate(caso)]
         py = calc.resumo_combinado(lista)
         esperado = [py["cartas"], py["paginas_separadas"],
-                    py["paginas_combinadas"], py["folhas_economizadas"]]
+                    py["paginas_combinadas"], py["folhas_economizadas"],
+                    py["brancos_separados"], py["brancos"],
+                    py["brancos_evitados"]]
         obtido = json.loads(ctx.eval(f"previa({json.dumps(lista)})"))
         check(f"prévia da tela bate com o backend em {caso}",
               obtido == esperado, f"js={obtido} py={esperado}")
