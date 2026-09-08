@@ -159,7 +159,12 @@ def _conn() -> sqlite3.Connection:
     pasta = os.path.dirname(DB_PATH)
     if pasta:
         os.makedirs(pasta, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    # `isolation_level=None` desliga a transação implícita do módulo sqlite3.
+    # No modo legado (o padrão) ele abre uma transação sozinho antes do
+    # primeiro INSERT e só fecha no `commit()` — e aí o nosso `BEGIN
+    # IMMEDIATE` da troca esbarra num "cannot start a transaction within a
+    # transaction". Sem ele, transação só existe onde a gente escreveu BEGIN.
+    conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
     # WAL pra leitura não travar durante a carga: a sincronização escreve
     # dezenas de milhares de linhas e a tela continua buscando enquanto isso.
@@ -460,6 +465,27 @@ def _descomprimido(resposta) -> "list":
         yield descompressor.flush()
 
 
+def _gravar(conn, lote: list) -> None:
+    """Grava um lote de cartas, em transação própria.
+
+    Uma transação por lote, e não uma pro download inteiro: a carga passa
+    minutos esperando a rede, e segurar o lock de escrita esse tempo todo
+    travaria qualquer outra escrita no banco. Também não dá pra deixar cada
+    INSERT por conta própria — em autocommit seriam 35 mil transações, uma
+    ida ao disco por carta. `cartas_novas` é descartável, então lote gravado
+    pela metade não é problema: se a carga falhar, ela é apagada inteira.
+    """
+    conn.execute("BEGIN")
+    try:
+        conn.executemany(
+            f"INSERT OR REPLACE INTO cartas_novas ({_COLUNAS}) "
+            f"VALUES ({_INTERROGACOES})", lote)
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")
+
+
 def sincronizar() -> dict:
     """Baixa o bulk data e reconstrói a tabela de cartas.
 
@@ -523,17 +549,13 @@ def _carregar() -> dict:
                     continue
                 lote.append(linha)
                 if len(lote) >= LOTE:
-                    conn.executemany(
-                        f"INSERT OR REPLACE INTO cartas_novas ({_COLUNAS}) "
-                        f"VALUES ({_INTERROGACOES})", lote)
+                    _gravar(conn, lote)
                     lidas += len(lote)
                     lote.clear()
                     with _trava:
                         _andamento["lidas"] = lidas
         if lote:
-            conn.executemany(
-                f"INSERT OR REPLACE INTO cartas_novas ({_COLUNAS}) "
-                f"VALUES ({_INTERROGACOES})", lote)
+            _gravar(conn, lote)
             lidas += len(lote)
 
         if lidas < 1000:
@@ -565,8 +587,12 @@ def _carregar() -> dict:
                 "segundos": 0}
     finally:
         try:
+            # Se a carga morreu no meio de uma transação, o DROP esbarraria
+            # nela — desfaz primeiro. A troca já commitou; o que sobrar aqui
+            # é escrita em `cartas_novas`, que vai embora de qualquer jeito.
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
             conn.execute("DROP TABLE IF EXISTS cartas_novas")
-            conn.commit()
         except sqlite3.Error:
             pass
         conn.close()

@@ -343,6 +343,99 @@ try:
        cartas.por_nomes(["Carta Que Não Existe"]), {})
     eq("lista vazia não vira consulta", cartas.por_nomes([]), {})
 
+    # ------------------------------------------------- carga inteira, sem rede
+    #
+    # Vai por último de propósito: `_carregar` troca a tabela `cartas`, então
+    # qualquer teste de busca depois daqui estaria olhando outra base.
+    #
+    # Este bloco existe porque os dois bugs que derrubaram a sincronização de
+    # verdade — a Scryfall trocando `download_uri` por JSONL gzipado, e o
+    # `BEGIN IMMEDIATE` esbarrando na transação implícita do sqlite3 — só
+    # apareciam com a carga rodando ponta a ponta. Testar os pedaços não
+    # bastava: cada um passava sozinho.
+    print("\n--- carga completa com a Scryfall falsa ---")
+
+    class RespostaFalsaHTTP:
+        def __init__(self, info=None, corpo=b""):
+            self._info, self._corpo = info, corpo
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self._info
+
+        def iter_content(self, chunk_size=0):
+            tamanho = chunk_size or 64
+            return iter([self._corpo[i:i + tamanho]
+                         for i in range(0, len(self._corpo), tamanho)])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    class SessaoFalsa:
+        def __init__(self, info, corpo):
+            self._info, self._corpo = info, corpo
+
+        def get(self, url, timeout=None, stream=False):
+            if "/bulk-data/" in url:
+                return RespostaFalsaHTTP(info=self._info)
+            return RespostaFalsaHTTP(corpo=self._corpo)
+
+    # Precisa passar das 1000 cartas, senão a carga se recusa a trocar a base.
+    muitas = "".join(json.dumps(carta(f"Bulk {i}")) + "\n" for i in range(1200))
+    corpo = gzip.compress(muitas.encode("utf-8"))
+    info = {"type": "oracle_cards", "updated_at": "2026-09-08T09:00:00+00:00",
+            "jsonl_download_uri": "https://data.exemplo/oracle.jsonl.gz"}
+
+    sessao_real = cartas._sessao
+    cartas._sessao = lambda: SessaoFalsa(info, corpo)
+    try:
+        resumo = cartas._carregar()
+        eq("carga contou as cartas", resumo["cartas"], 1200)
+        eq("base trocada tem as cartas novas",
+           cartas.estado()["cartas"], 1200)
+        eq("carta da base nova é buscável",
+           [c["nome"] for c in cartas.buscar("Bulk 7", limite=1)], ["Bulk 7"])
+
+        # Formato antigo (array JSON, sem gzip) tem que continuar carregando:
+        # é o que sobra se a Scryfall voltar atrás.
+        antigo = json.dumps([carta(f"Velho {i}") for i in range(1100)])
+        cartas._sessao = lambda: SessaoFalsa(
+            {"download_uri": "https://data.exemplo/oracle.json"},
+            antigo.encode("utf-8"))
+        eq("array JSON sem gzip ainda carrega",
+           cartas._carregar()["cartas"], 1100)
+
+        # Bulk curto não pode derrubar a base boa.
+        curto = "".join(json.dumps(carta(f"Curto {i}")) + "\n" for i in range(10))
+        cartas._sessao = lambda: SessaoFalsa(info, gzip.compress(curto.encode()))
+        try:
+            cartas._carregar()
+            check("bulk curto não troca a base", False, "(trocou!)")
+        except cartas.CartasError:
+            check("bulk curto não troca a base", True)
+        eq("base boa sobreviveu ao bulk curto",
+           cartas.estado()["cartas"], 1100)
+
+        # E depois de uma falha o banco continua utilizável — se uma
+        # transação tivesse ficado aberta, a carga seguinte travaria.
+        cartas._sessao = lambda: SessaoFalsa(info, corpo)
+        eq("carga depois da falha funciona", cartas._carregar()["cartas"], 1200)
+
+        # Catálogo sem nenhuma URI de download: erro claro, base intacta.
+        cartas._sessao = lambda: SessaoFalsa({"type": "oracle_cards"}, corpo)
+        try:
+            cartas._carregar()
+            check("catálogo sem URI levanta erro", False, "(passou calado)")
+        except cartas.CartasError:
+            check("catálogo sem URI levanta erro", True)
+    finally:
+        cartas._sessao = sessao_real
+
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 
