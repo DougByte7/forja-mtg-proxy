@@ -11,8 +11,8 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
 from fastapi.staticfiles import StaticFiles
 
 from . import (calc, cartas, cleanup, cotacao_job, decks, edhrec, fulfillment,
-               log, notify, pix, poder, printer, spellbook, storage, tinta,
-               visitas)
+               log, manabase, notify, pix, poder, printer, spellbook, storage,
+               tinta, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -875,6 +875,24 @@ def sugestoes_do_deck(deck_id: str, corpo: dict = Body(default={})):
         raise HTTPException(502, str(e))
     return {**achado,
             "listas": decks.sugestoes_uteis(deck, achado["listas"])}
+
+
+@app.get("/decks/{deck_id}/manabase")
+def manabase_do_deck(deck_id: str, teto: float | None = None):
+    """Quantos terrenos o deck pede, de que cores, e o que falta.
+
+    É a única análise que não sai daqui: conta sobre o próprio deck e a base
+    local, sem rede. Por isso é GET e por isso a tela pode chamar a cada
+    autosave em vez de esperar um botão. `teto` (em dólar da Scryfall) separa
+    os terrenos de fixação em "baratos" e "se o orçamento deixar".
+    """
+    deck = _deck_ou_404(deck_id)
+    completo = decks.com_cartas(deck)
+    identidade = decks.identidade_de(
+        [c for c in completo["comandantes_completos"] if c])
+    return manabase.analisar(completo, identidade,
+                             teto_usd=teto if teto is not None
+                             else manabase.TETO_USD)
 
 
 @app.get("/impressora/tinta")

@@ -242,6 +242,8 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   o "por que essa nota". A conta não é nossa; a tradução é.
 - `app/edhrec.py` — as sugestões por sinergia e tema. **Endpoint não oficial,
   sem contrato** — leia o aviso no topo do arquivo antes de mexer.
+- `app/manabase.py` — terrenos, fontes por cor e fixadores. A única análise
+  feita aqui dentro; a heurística está no cabeçalho, em duas regras.
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
@@ -328,6 +330,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   achatado, parceiros entram em ordem alfabética), a leitura das listas, e a
   garantia de que formato mudado vira ERRO e não lista vazia. Também o filtro
   que tira o que já está no deck: `python tests/test_edhrec.py`.
+- `tests/test_manabase.py` — que cores um terreno produz (subtipo, "Add",
+  "any color" preso à identidade, custo de ativação NÃO conta), as duas regras
+  com pisos e limites, e as sugestões: básico só da cor que falta e até a
+  vaga, fixador só da identidade e nunca um que já está no deck:
+  `python tests/test_manabase.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -378,6 +385,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /decks/{id}/combos` | botão **Procurar combos** | pergunta ao Commander Spellbook os combos do deck e os que faltam uma carta. Uma consulta só, e só no clique |
 | `POST /decks/{id}/poder` | botão **Estimar nível** | classifica o deck nos brackets do Commander e devolve o que justifica a nota, carta por carta |
 | `POST /decks/{id}/sugestoes` | botão **Buscar sugestões** | cartas que combinam com o comandante, pelo EDHREC, já filtradas contra o deck. `tema` opcional no corpo |
+| `GET /decks/{id}/manabase` | botão **Analisar mana base** (e cada autosave depois) | terrenos recomendados, fontes por cor, básicos que faltam e fixadores da identidade. Conta local, sem rede. `teto` em dólar separa barato de caro |
 | `GET /impressora/tinta` | front | nível de tinta da impressora, pra pastilha do cabeçalho e o aviso de prazo (público, em cache, sem endereço nem nome de fila na resposta) |
 | `GET /admin/tinta` | você (`X-Admin-Token`) | o que a impressora respondeu sobre tinta, cru — é aqui que se descobre se ela informa o nível |
 
@@ -708,9 +716,44 @@ O que este projeto faz diferente das bibliotecas de EDHREC que existem por aí:
 
 `EDHREC=0` no `.env` desliga o painel.
 
-### O que ainda não tem
+### Mana base
 
-Falta a sugestão de mana base.
+O painel **Mana base** responde três perguntas: quantos terrenos a curva pede,
+quantas fontes de cada cor o deck tem, e quantas precisaria — com os básicos
+que fecham a conta (num clique, em lote) e os terrenos de fixação da
+identidade que o deck ainda não tem, separados por teto de preço.
+
+**É a única análise que não sai daqui.** Combos, bracket e sugestão vêm de
+serviços de fora; isto é conta sobre o próprio deck e a base local, sem rede.
+Por isso, depois de aberta uma vez, ela **acompanha cada autosave** em vez de
+envelhecer com aviso.
+
+**A heurística é nossa e é simples de propósito.** Existe análise séria sobre
+quantos terrenos um deck precisa — a de Frank Karsten é a referência —, mas
+ela depende de simulação e de tabela por custo. O que está aqui é a versão de
+mesa, em duas regras que qualquer um confere de cabeça (`manabase.py`):
+
+1. **Terrenos:** 36 num deck de curva média 3,2; um a mais a cada 0,25 de
+   curva pra cima, um a menos pra baixo; cada rampa barata (rock ou dork de
+   custo até 2) vale meio terreno a menos, até quatro. Preso entre 32 e 40.
+2. **Fontes por cor:** proporcionais aos símbolos de mana que o deck pede de
+   cada cor, sobre o total de terrenos — com piso: 8 fontes pra um respingo
+   (menos de 12% dos símbolos), 12 pra cor de verdade.
+
+Dois detalhes que a tela repete porque confundem: **fonte é o que produz a
+cor**, então um terreno de duas cores conta pras duas — é por isso que num
+deck de três cores as fontes pedidas somam mais que os terrenos, e é essa
+diferença que os fixadores cobrem. E o que um terreno produz é lido do
+subtipo ("Forest Island") ou do texto, **só do que vem depois de "Add"** —
+"{G}: Add {C}" não produz verde.
+
+O preço que separa "barato" de "se o orçamento deixar" (`MANABASE_TETO_USD`)
+é o da Scryfall no dia da sincronização, em dólar, só pra ordem de grandeza.
+
+### As cinco fases
+
+Estão todas no ar: montar (fase 1), combos (2), nível de poder (3),
+sugestões (4) e mana base (5). O que fica pra frente é o que o uso pedir.
 
 ## Cotação de preços das cartas
 

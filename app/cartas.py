@@ -616,6 +616,28 @@ def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
         conn.close()
 
 
+def terrenos(identidade: str) -> list[dict]:
+    """Todos os terrenos NÃO básicos legais que cabem na identidade.
+
+    Sem o teto de 200 da `buscar`: quem chama é a análise de mana base, que
+    precisa olhar cada terreno da identidade pra decidir quais produzem as
+    cores que o deck pede — e um deck de cinco cores enxerga a lista inteira.
+    São algumas centenas de linhas; cabe numa consulta só.
+    """
+    onde = ["legal = 1", "basico = 0", "LOWER(tipo) LIKE '%land%'"]
+    params: list = []
+    _filtro_identidade(identidade or "", onde, params)
+    conn = _conn()
+    try:
+        return [_dict(l) for l in conn.execute(
+            f"SELECT {_COLUNAS} FROM cartas WHERE {' AND '.join(onde)} "
+            f"ORDER BY nome", params)]
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
+
+
 def por_nomes(nomes: list[str]) -> dict[str, dict]:
     """Resolve uma lista de nomes de carta de uma vez.
 
