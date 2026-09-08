@@ -233,6 +233,18 @@
   .cot-fonte h4{margin:0 0 2px;font-size:12px;color:var(--text);font-weight:600;}
   .cot-fonte .v{font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--gold-light);}
   .cot-fonte .obs{font-size:10px;color:var(--text-muted);line-height:1.45;margin-top:4px;}
+  /* A caixa do menor custo teórico não é um total que dê pra pagar em lugar
+     nenhum: é o piso de preço da lista, carta a carta, misturando as fontes.
+     O verde a separa das outras duas, que são totais reais de uma loja só. */
+  .cot-fonte.teorico{border-color:rgba(93,191,143,.45);background:rgba(93,191,143,.06);}
+  .cot-fonte.teorico .v{color:var(--green);}
+  .cot-copiar{
+    display:block;width:100%;margin-top:8px;background:transparent;
+    border:1px dashed var(--border);color:var(--text-muted);border-radius:7px;
+    padding:5px;font-size:10px;cursor:pointer;font-family:inherit;
+    transition:border-color .15s,color .15s;
+  }
+  .cot-copiar:hover{border-color:var(--gold);color:var(--gold-light);}
   /* A tabela rola sozinha na horizontal: em tela de celular ela não cabe,
      e deixar a PÁGINA rolar de lado quebra o resto do layout. */
   .cot-tabela-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
@@ -1067,6 +1079,29 @@
       c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   }
 
+  // A página também roda em http na rede local, e aí `navigator.clipboard`
+  // simplesmente não existe — o navegador só o expõe em contexto seguro. O
+  // textarea escondido com execCommand é o caminho que ainda funciona lá.
+  async function copiarTexto(texto){
+    try{
+      if(navigator.clipboard && window.isSecureContext){
+        await navigator.clipboard.writeText(texto);
+        return true;
+      }
+    }catch(e){ /* segue pro plano B */ }
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-1000px;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    }catch(e){ return false; }
+  }
+
   // Grupos da tabela expandida. A ORDEM daqui é a ordem dos grupos na tela, e
   // o primeiro padrão que casar com o tipo vence — por isso "Terrenos" vem
   // antes de "Criaturas" (Dryad Arbor é terreno pra quem monta o deck) e
@@ -1111,6 +1146,19 @@
     const emBRL = (valor, sigla) =>
       sigla === 'BRL' ? valor : sigla === 'USD' ? valor * taxa : null;
 
+    // O menor preço da carta em real, venha de onde vier: a oferta brasileira
+    // ou a de fora convertida. Null quando fonte nenhuma tem preço dela.
+    function menorBRL(l){
+      let menor = null;
+      fontes.forEach(f => {
+        const p = l.precos[f.id] || {};
+        if(p.erro) return;
+        const v = emBRL(p.preco_unitario, f.moeda);
+        if(v > 0 && (menor === null || v < menor)) menor = v;
+      });
+      return menor;
+    }
+
     // Quanto a carta está acima do preço lá fora, ou null quando não dá pra
     // comparar (faltou preço de um dos lados, ou só há uma fonte).
     function discrepancia(l){
@@ -1124,16 +1172,68 @@
       const excesso = a / b - 1;
       return excesso >= COT_DISCREPANCIA ? {excesso, la, laBRL: b} : null;
     }
-    const cabecalho = fontes.map(f => `
+
+    const todas = r.linhas || [];
+
+    // Uma lista por caixa de total, na mesma ordem das caixas. Cada botão
+    // copia a decklist com o preço que AQUELA caixa somou — nunca mistura o
+    // preço de uma fonte com o total de outra.
+    const listas = [];
+
+    // "Nome [R$ x,xx]", uma carta por linha, na ordem da tabela (mais cara
+    // primeiro). Carta sem preço na caixa fica de fora: a linha só serviria
+    // pra dizer que não tem preço, e quem cola isso quer o que dá pra comprar.
+    const listaTexto = (precoDe) => todas
+      .map(l => { const p = precoDe(l); return p ? `${l.nome} [${p}]` : null; })
+      .filter(Boolean).join('\n');
+
+    const cabecalho = fontes.map((f, i) => {
+      listas.push(listaTexto(l => {
+        const p = l.precos[f.id] || {};
+        return p.erro ? null : moeda(p.preco_unitario, f.moeda);
+      }));
+      return `
       <div class="cot-fonte">
         <h4>${esc(f.rotulo)}</h4>
         <div class="v">${moeda(f.total, f.moeda)}</div>
         <div class="obs">${esc(f.observacao)}${
           f.cartas_faltando ? ` · ${f.cartas_faltando} carta(s) sem preço` : ''}</div>
-      </div>`).join('');
+        <button class="cot-copiar" data-lista="${i}">Copiar lista</button>
+      </div>`;
+    }).join('');
+
+    // Terceira caixa: o piso teórico da lista. Carta a carta, o menor entre o
+    // preço em real e o de fora convertido. Nenhuma loja vende o deck por
+    // esse total — é o chão de quem garimpa nas duas pontas, e por isso ele
+    // vive numa caixa separada em vez de virar mais uma coluna da tabela.
+    let caixaTeorica = '';
+    const temConversivel = fontes.some(f => f.moeda === 'BRL' || f.moeda === 'USD');
+    if(fontes.length > 1 && temConversivel){
+      let totalTeorico = 0, semPreco = 0;
+      todas.forEach(l => {
+        const v = menorBRL(l);
+        if(v === null) semPreco++;
+        else totalTeorico += v * l.quantidade;
+      });
+      const indice = listas.length;
+      listas.push(listaTexto(l => {
+        const v = menorBRL(l);
+        return v === null ? null : moeda(v, 'BRL');
+      }));
+      caixaTeorica = `
+        <div class="cot-fonte teorico">
+          <h4>Menor custo teórico</h4>
+          <div class="v">${moeda(totalTeorico, 'BRL')}</div>
+          <div class="obs">o menor preço de cada carta entre as fontes, o de
+            fora convertido a ${moeda(taxa, 'BRL')} por dólar${
+              cambio.fonte === 'awesomeapi' ? '' : ' (valor fixo, sem consultar câmbio)'
+            } · nenhuma loja vende tudo por esse total${
+              semPreco ? ` · ${semPreco} carta(s) sem preço` : ''}</div>
+          <button class="cot-copiar" data-lista="${indice}">Copiar lista</button>
+        </div>`;
+    }
 
     const colunas = fontes.map(f => `<th>${esc(f.rotulo)}</th>`).join('');
-    const todas = r.linhas || [];
     const linhaHTML = (l) => {
       const achou = fontes.some(f => !(l.precos[f.id] || {}).erro);
       const cara = discrepancia(l);
@@ -1251,7 +1351,7 @@
       </p>`;
 
     cotResultado.innerHTML = `
-      <div class="cot-fontes">${cabecalho}</div>
+      <div class="cot-fontes">${cabecalho}${caixaTeorica}</div>
       <div class="cot-tabela-wrap">
         <table class="cot">
           <thead><tr><th>Carta</th><th>Qtd</th>${colunas}</tr></thead>
@@ -1264,9 +1364,30 @@
       <p class="note">
         Cada total é a soma da oferta mais barata de cada carta na fonte
         correspondente e <b>não inclui frete</b> — as cartas podem vir de
-        lojas diferentes, cada uma com o seu. Os dois totais são de mercados
-        e moedas diferentes: dá pra comparar e ter uma ideia geral.
+        lojas diferentes, cada uma com o seu. Os totais das fontes são de
+        mercados e moedas diferentes: dá pra comparar e ter uma ideia geral.
+        Já o menor custo teórico não é um total que dê pra pagar em lugar
+        nenhum: ele mistura as duas pontas, carta a carta, pra mostrar o
+        piso da lista. O botão de cada caixa copia a lista com o preço
+        daquela caixa, uma carta por linha.
       </p>`;
+
+    // Cada caixa copia a sua própria lista. O rótulo vira o aviso por um
+    // instante e volta: é o único retorno que existe pro Ctrl+V que ainda
+    // não aconteceu.
+    cotResultado.querySelectorAll('.cot-copiar').forEach(btn => {
+      // Guarda o rótulo original: sem isso, um segundo clique durante o
+      // aviso grava "Copiado!" como se fosse o nome do botão.
+      btn.dataset.rotulo = btn.textContent;
+      btn.addEventListener('click', async ()=>{
+        const texto = listas[Number(btn.dataset.lista)] || '';
+        const quantas = texto ? texto.split('\n').length : 0;
+        btn.textContent = !texto ? 'Nada pra copiar'
+          : (await copiarTexto(texto)) ? `Copiado! ${quantas} carta(s)`
+          : 'Não deu pra copiar';
+        setTimeout(()=>{ btn.textContent = btn.dataset.rotulo; }, 1800);
+      });
+    });
 
     const btnMais = document.getElementById('cotMais');
     if(btnMais){
