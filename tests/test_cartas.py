@@ -26,6 +26,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -268,6 +269,26 @@ try:
     conn.close()
 
     eq("base montada", cartas.estado()["cartas"], 8)
+
+    # A normalização fica GRAVADA na coluna `busca`. Se ela mudar no código e
+    # a base não for remontada, a consulta procura uma coisa e o banco guarda
+    # outra — e o efeito não é erro, é carta que some da busca. Por isso a
+    # versão viaja junto e uma divergência força a remontagem.
+    conn = cartas._conn()
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('normalizacao', ?)",
+                 (cartas.VERSAO_NORMALIZACAO,))
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('atualizado_em', ?)",
+                 (str(time.time()),))
+    conn.commit()
+    conn.close()
+    eq("base recém-montada não pede sync", cartas._precisa_sincronizar(), False)
+
+    conn = cartas._conn()
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('normalizacao', 'antiga')")
+    conn.commit()
+    conn.close()
+    eq("normalização diferente força a remontagem",
+       cartas._precisa_sincronizar(), True)
 
     # O nome inteiro vem primeiro: quem digita "sol ring" quer o Sol Ring na
     # primeira linha, não o Solemn Simulacrum.

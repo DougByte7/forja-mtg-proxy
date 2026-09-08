@@ -80,6 +80,15 @@ class CartasError(Exception):
 # carta.
 # ---------------------------------------------------------------------------
 
+# Versão da normalização. O `busca` fica GRAVADO no banco, então mudar a
+# `normalizar` sem mais nada deixa a coluna falando uma língua e a consulta
+# outra — e o efeito não é erro, é carta que some da busca sem explicação até
+# a próxima sincronização (foi assim que "Night's Whisper" sumiu uma vez).
+#
+# **Ao mexer na `normalizar`, suba este número.** A base se reconstrói sozinha
+# na subida seguinte em vez de ficar meio dia inconsistente.
+VERSAO_NORMALIZACAO = "2"
+
 _SO_ALFANUM = re.compile(r"[^a-z0-9 ]+")
 _ESPACOS = re.compile(r"\s+")
 # Apóstrofo SOME, não vira espaço: "Nature's Lore" é procurado como "natures
@@ -547,6 +556,8 @@ def _carregar() -> dict:
                      (str(info.get("updated_at") or ""),))
         conn.execute("INSERT OR REPLACE INTO meta VALUES ('cartas', ?)",
                      (str(lidas),))
+        conn.execute("INSERT OR REPLACE INTO meta VALUES ('normalizacao', ?)",
+                     (VERSAO_NORMALIZACAO,))
         conn.commit()
         with _trava:
             _andamento["lidas"] = lidas
@@ -583,6 +594,7 @@ def estado() -> dict:
             "atualizado_em": float(quando) if quando else None,
             "idade_horas": round((time.time() - float(quando)) / 3600, 1)
                            if quando else None,
+            "normalizacao": _meta(conn, "normalizacao"),
             **andamento(),
         }
     finally:
@@ -592,6 +604,14 @@ def estado() -> dict:
 def _precisa_sincronizar() -> bool:
     atual = estado()
     if not atual["cartas"]:
+        return True
+    # Base montada com outra normalização: a coluna `busca` fala uma língua e
+    # a consulta fala outra. Não dá erro — dá carta que some da busca —, então
+    # reconstrói na hora em vez de esperar o ciclo diário.
+    if atual.get("normalizacao") != VERSAO_NORMALIZACAO:
+        log.evento("cartas", "normalizacao-mudou",
+                   base=atual.get("normalizacao"), codigo=VERSAO_NORMALIZACAO,
+                   nota="a base vai ser remontada")
         return True
     idade = atual.get("idade_horas")
     return idade is None or idade >= SYNC_HORAS
@@ -688,6 +708,28 @@ def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
         return [_dict(linha) for linha in conn.execute(sql, params)]
     except sqlite3.OperationalError:
         return []  # base ainda não montada
+    finally:
+        conn.close()
+
+
+def terrenos(identidade: str) -> list[dict]:
+    """Todos os terrenos NÃO básicos legais que cabem na identidade.
+
+    Sem o teto de 200 da `buscar`: quem chama é a análise de mana base, que
+    precisa olhar cada terreno da identidade pra decidir quais produzem as
+    cores que o deck pede — e um deck de cinco cores enxerga a lista inteira.
+    São algumas centenas de linhas; cabe numa consulta só.
+    """
+    onde = ["legal = 1", "basico = 0", "LOWER(tipo) LIKE '%land%'"]
+    params: list = []
+    _filtro_identidade(identidade or "", onde, params)
+    conn = _conn()
+    try:
+        return [_dict(l) for l in conn.execute(
+            f"SELECT {_COLUNAS} FROM cartas WHERE {' AND '.join(onde)} "
+            f"ORDER BY nome", params)]
+    except sqlite3.OperationalError:
+        return []
     finally:
         conn.close()
 

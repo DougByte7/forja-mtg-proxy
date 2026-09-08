@@ -10,8 +10,9 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (calc, cartas, cleanup, cotacao_job, decks, fulfillment, log,
-               notify, pix, printer, storage, tinta, visitas)
+from . import (calc, cartas, cleanup, cotacao_job, decks, edhrec, fulfillment,
+               log, manabase, notify, pix, poder, printer, spellbook, storage,
+               tinta, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -803,6 +804,95 @@ def cotar_deck(deck_id: str):
                                          deck.get("comandantes") or None)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.post("/decks/{deck_id}/combos")
+def combos_do_deck(deck_id: str):
+    """Procura os combos do deck no Commander Spellbook.
+
+    Só no clique, nunca automático: o deck muda a cada carta adicionada, e
+    buscar sozinho viraria uma requisição por clique num serviço gratuito.
+    É a mesma regra da cotação (ver `cotacao_job.py`).
+
+    Roda dentro da requisição, e não em segundo plano como a cotação, porque
+    aqui é UMA requisição só — não há minutos de varredura pra esperar.
+
+    Falha do Spellbook volta 502, não lista vazia: "não sei" e "não tem
+    combo" parecem iguais na tela e são opostos.
+    """
+    deck = _deck_ou_404(deck_id)
+    try:
+        return spellbook.buscar(deck.get("comandantes") or [],
+                                deck.get("cartas") or [])
+    except spellbook.SpellbookError as e:
+        raise HTTPException(502, str(e))
+
+
+@app.post("/decks/{deck_id}/poder")
+def poder_do_deck(deck_id: str):
+    """Classifica o deck na escala de brackets do Commander (1 a 4).
+
+    Quem classifica é o `estimate-bracket` do Spellbook, não a gente: a lista
+    oficial de *game changers* muda a cada anúncio da Wizards, e mantê-la na
+    mão aqui envelheceria em semanas (ver `poder.py`).
+
+    A resposta traz o número E o que o justifica, carta por carta — uma nota
+    sozinha não ajuda ninguém a decidir o que trocar.
+
+    Mesma regra dos combos: só no clique, e falha vira 502 em vez de uma
+    classificação inventada.
+    """
+    deck = _deck_ou_404(deck_id)
+    try:
+        estimativa = spellbook.estimar_bracket(deck.get("comandantes") or [],
+                                               deck.get("cartas") or [])
+    except spellbook.SpellbookError as e:
+        raise HTTPException(502, str(e))
+    return poder.ler(estimativa)
+
+
+@app.post("/decks/{deck_id}/sugestoes")
+def sugestoes_do_deck(deck_id: str, corpo: dict = Body(default={})):
+    """Cartas que combinam com o comandante, pelo EDHREC.
+
+    `tema` no corpo é opcional e restringe a página consultada ("aristocrats",
+    "superfriends"). Os temas disponíveis voltam na resposta pra tela montar
+    o seletor.
+
+    As sugestões voltam já filtradas: sem o que o deck tem, sem o que a base
+    local não conhece e sem o que não cabe na identidade de cor (ver
+    `decks.sugestoes_uteis`).
+
+    Isto lê um endpoint NÃO OFICIAL do EDHREC e pode quebrar sem aviso — daí
+    o 502 com a mensagem em vez de uma lista vazia, que a tela leria como
+    "esse comandante não tem sinergia com nada".
+    """
+    deck = _deck_ou_404(deck_id)
+    tema = (corpo.get("tema") or "").strip() or None
+    try:
+        achado = edhrec.sugerir(deck.get("comandantes") or [], tema)
+    except edhrec.EDHRECError as e:
+        raise HTTPException(502, str(e))
+    return {**achado,
+            "listas": decks.sugestoes_uteis(deck, achado["listas"])}
+
+
+@app.get("/decks/{deck_id}/manabase")
+def manabase_do_deck(deck_id: str, teto: float | None = None):
+    """Quantos terrenos o deck pede, de que cores, e o que falta.
+
+    É a única análise que não sai daqui: conta sobre o próprio deck e a base
+    local, sem rede. Por isso é GET e por isso a tela pode chamar a cada
+    autosave em vez de esperar um botão. `teto` (em dólar da Scryfall) separa
+    os terrenos de fixação em "baratos" e "se o orçamento deixar".
+    """
+    deck = _deck_ou_404(deck_id)
+    completo = decks.com_cartas(deck)
+    identidade = decks.identidade_de(
+        [c for c in completo["comandantes_completos"] if c])
+    return manabase.analisar(completo, identidade,
+                             teto_usd=teto if teto is not None
+                             else manabase.TETO_USD)
 
 
 @app.get("/impressora/tinta")

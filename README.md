@@ -234,6 +234,16 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   sem tocar na API deles) e a sincronização diária que a mantém.
 - `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
   cartas, parceria) e onde os decks ficam guardados.
+- `app/spellbook.py` — o cliente do Commander Spellbook: os combos do deck e a
+  classificação de bracket. **A rota de combos é `GET` com corpo JSON, a de
+  bracket é POST, e as duas respondem em camelCase** — leia o cabeçalho do
+  arquivo antes de mexer.
+- `app/poder.py` — a resposta do `estimate-bracket` virando a nota de 1 a 4 e
+  o "por que essa nota". A conta não é nossa; a tradução é.
+- `app/edhrec.py` — as sugestões por sinergia e tema. **Endpoint não oficial,
+  sem contrato** — leia o aviso no topo do arquivo antes de mexer.
+- `app/manabase.py` — terrenos, fontes por cor e fixadores. A única análise
+  feita aqui dentro; a heurística está no cabeçalho, em duas regras.
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
@@ -308,6 +318,23 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `tests/test_decks.py` — as regras do formato, com atenção às exceções que
   dão falso positivo: terreno básico e "any number of cards named" repetem, e
   dois comandantes valem com Partner: `python tests/test_decks.py`.
+- `tests/test_spellbook.py` — o cliente do Commander Spellbook contra uma
+  resposta sintética no formato real: o `GET` com corpo, a leitura do
+  camelCase dentro de `results`, a conta de qual peça está faltando e o que
+  acontece quando eles não respondem: `python tests/test_spellbook.py`.
+- `tests/test_poder.py` — o mapa de brackets (duas tags caem no mesmo número,
+  e carta banida não cai em nenhum), o agrupamento dos motivos, e o cache das
+  duas rotas do Spellbook, que partem da mesma chave e não podem se misturar:
+  `python tests/test_poder.py`.
+- `tests/test_edhrec.py` — o slug da página (apóstrofo some, acento é
+  achatado, parceiros entram em ordem alfabética), a leitura das listas, e a
+  garantia de que formato mudado vira ERRO e não lista vazia. Também o filtro
+  que tira o que já está no deck: `python tests/test_edhrec.py`.
+- `tests/test_manabase.py` — que cores um terreno produz (subtipo, "Add",
+  "any color" preso à identidade, custo de ativação NÃO conta), as duas regras
+  com pisos e limites, e as sugestões: básico só da cor que falta e até a
+  vaga, fixador só da identidade e nunca um que já está no deck:
+  `python tests/test_manabase.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -355,6 +382,10 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `DELETE /decks/{id}` | deckbuilder | apaga o deck. Não tem volta |
 | `GET /decks/{id}/lista` | deckbuilder | a decklist em texto, comandante primeiro — é o que se cola no MPC Fill |
 | `POST /decks/{id}/cotacao` | botão **Cotar preços** | cota o deck montado, sem precisar de XML. O andamento sai no `GET /cotacao/{job_id}` de sempre |
+| `POST /decks/{id}/combos` | botão **Procurar combos** | pergunta ao Commander Spellbook os combos do deck e os que faltam uma carta. Uma consulta só, e só no clique |
+| `POST /decks/{id}/poder` | botão **Estimar nível** | classifica o deck nos brackets do Commander e devolve o que justifica a nota, carta por carta |
+| `POST /decks/{id}/sugestoes` | botão **Buscar sugestões** | cartas que combinam com o comandante, pelo EDHREC, já filtradas contra o deck. `tema` opcional no corpo |
+| `GET /decks/{id}/manabase` | botão **Analisar mana base** (e cada autosave depois) | terrenos recomendados, fontes por cor, básicos que faltam e fixadores da identidade. Conta local, sem rede. `teto` em dólar separa barato de caro |
 | `GET /impressora/tinta` | front | nível de tinta da impressora, pra pastilha do cabeçalho e o aviso de prazo (público, em cache, sem endereço nem nome de fila na resposta) |
 | `GET /admin/tinta` | você (`X-Admin-Token`) | o que a impressora respondeu sobre tinta, cru — é aqui que se descobre se ela informa o nível |
 
@@ -569,11 +600,160 @@ O `preco_usd` guardado nessa base é o do dia da sincronização e serve só pra
 ordenar e dar ordem de grandeza na tela. **Quem responde "quanto custa
 comprar" continua sendo a cotação**, que consulta na hora.
 
-### O que ainda não tem
+### Combos, pelo Commander Spellbook
 
-Esta é a primeira fase. Ficaram pra depois, nesta ordem: combos (via Commander
-Spellbook), nível de poder pelos brackets 1–5, sugestão de cartas por tema
-(EDHREC) e sugestão de mana base.
+O painel **Combos** responde duas coisas: que combos o deck **já tem**, e
+quais ficam a **uma carta** de fechar — esses últimos com um botão que põe a
+carta que falta direto no deck.
+
+Ao contrário da LigaMagic, aqui é API pública e feita pra isso: o
+`find-my-combos` existe exatamente pra receber uma decklist e devolver os
+combos dela. O contrato foi tirado do backend deles, que é código aberto
+(`SpaceCowMedia/commander-spellbook-backend`).
+
+**Só busca quando você clica.** É a mesma regra da cotação: o deck muda a cada
+carta adicionada, e buscar sozinho viraria uma requisição por clique num
+serviço gratuito. Quando o deck muda depois de uma busca, o painel avisa que o
+resultado envelheceu em vez de sair perguntando de novo.
+
+Duas surpresas do contrato deles, que estão certas e por isso viraram teste
+(`tests/test_spellbook.py`):
+
+- **É `GET` com corpo JSON**, não POST. "Consertar" isso pra POST devolve 405
+  e a tela fica sem combo nenhum.
+- **A resposta é camelCase** (`almostIncluded`) e vem dentro de `results`. Ler
+  `almost_included` devolve lista vazia — que na tela é indistinguível de
+  "esse deck não tem combo".
+
+Por isso, também: falha na consulta vira **erro na tela**, nunca lista vazia.
+"Não sei" e "não tem" parecem iguais e são opostos.
+
+A API devolve seis listas; o painel usa duas. As outras quatro
+(`...ByAddingColors`, `...ByChangingCommanders`) pedem mudar a cor do deck ou
+trocar o comandante — não são sugestão, são outro deck, e listá-las junto
+afogaria as que dão pra usar.
+
+Cada combo vem com o **bracket** dele na escala do Spellbook (de *Exibição*,
+que é mais graça que ameaça, até *Impiedoso*, que ganha o jogo na hora), pra
+dar o peso do combo sem precisar abrir o link.
+
+`SPELLBOOK=0` no `.env` desliga o painel.
+
+### Nível de poder (brackets do Commander)
+
+O painel **Nível de poder** classifica o deck na escala oficial de brackets —
+e, mais importante, **mostra por quê, carta por carta**. Uma nota sozinha não
+ajuda ninguém a decidir nada: "bracket 4" só vira informação útil quando vem
+com "por causa destes 5 game changers e deste combo de duas cartas".
+
+| Bracket | Nome | O que é |
+|---|---|---|
+| 1 | Exibição | deck de mesa leve: sem combo, sem game changer |
+| 2 | Núcleo | nível de precon de fábrica — a régua da maioria das mesas |
+| 3 | Turbinado | precon melhorado: até três game changers |
+| 4 | Otimizado | sem freio: o deck joga pra ganhar o quanto antes |
+| 5 | cEDH | **não é calculado** — ver abaixo |
+
+**A nota não é conta nossa.** Quem classifica é o `estimate-bracket` do
+Commander Spellbook, que é mantido por quem cataloga combo de Magic em tempo
+integral e acompanha a lista oficial de *game changers* da Wizards — uma lista
+que muda a cada anúncio deles e que, mantida na mão aqui, envelheceria em
+semanas. O que este projeto faz é traduzir a resposta: o número, pelo mesmo
+mapa que o backend deles usa, e os motivos, agrupados e em português.
+
+**O bracket 5 não é estimado, e isso não é limitação de implementação:** cEDH
+é definido pelo metagame e pela intenção de quem monta, não pela lista de
+cartas. Um deck bracket 4 e um cEDH podem ter a mesma decklist. Por isso o
+degrau 5 aparece na escala tracejado e apagado, com a explicação no título —
+esconder faria a escala parecer ir só até 4.
+
+**Carta banida não dá bracket baixo, dá bracket nenhum:** o deck está fora do
+formato, e é isso que o painel diz.
+
+E a estimativa vale pelo deck **inteiro**: num deck pela metade ela só
+descreve a metade que existe, e o painel avisa isso com a contagem.
+
+### Sugestões de carta (EDHREC)
+
+O painel **Sugestões** responde "o que mais entra num deck desse comandante?".
+Cada carta vem com a **sinergia**: o quanto ela aparece mais com *este*
+comandante do que com os outros. +51% é carta que praticamente define o deck;
+−5% é carta popular no geral que ali rende menos.
+
+Dá pra filtrar por **tema** (Terrenos, Cemitério, Aristocratas…) — os temas
+disponíveis vêm do próprio EDHREC e mudam por comandante.
+
+As sugestões chegam **já filtradas**: sai o que o deck já tem, o que a base
+local de cartas não conhece (não daria pra adicionar num clique) e o que não
+cabe na identidade de cor. Clicar numa sugestão põe a carta no deck e a tira
+da lista.
+
+**Por que o EDHREC e não a Scryfall:** a Scryfall responde "que cartas
+existem". Ela não sabe dizer que *Deadly Rollick* combina com um comandante e
+*Murder* não. Sinergia é dado agregado de decks reais, e quem tem isso é o
+EDHREC.
+
+#### Aviso: isto é o módulo mais frágil do projeto depois da LigaMagic
+
+O EDHREC **não tem API oficial**. O que existe é `json.edhrec.com`, o endpoint
+que o front-end do próprio site chama pra desenhar as páginas: aberto, sem
+chave e **sem contrato**. Pode mudar de forma ou sumir sem aviso nenhum.
+
+Por isso o módulo **grita** quando o formato muda — uma resposta sem
+`cardlists` vira erro na tela, nunca lista vazia. "Nenhuma sugestão" se leria
+como "esse comandante não combina com nada", que é o oposto de "eu não sei".
+
+O que este projeto faz diferente das bibliotecas de EDHREC que existem por aí:
+
+- **Se identifica.** O `User-Agent` diz quem é e leva o e-mail de contato do
+  `.env`. Bibliotecas populares sorteiam um User-Agent de navegador a cada
+  chamada pra parecer gente; aqui não. Se eles quiserem falar com a gente, ou
+  bloquear, que seja pelo caminho fácil.
+- **Vai devagar.** Um pedido por segundo (`EDHREC_DELAY_SEGUNDOS`), com o
+  resultado em cache por 24h. Os números do EDHREC são agregados de milhares
+  de decks e não mudam de hora em hora.
+- **Pede pouco.** Uma requisição por consulta, e só quando alguém clica.
+
+`EDHREC=0` no `.env` desliga o painel.
+
+### Mana base
+
+O painel **Mana base** responde três perguntas: quantos terrenos a curva pede,
+quantas fontes de cada cor o deck tem, e quantas precisaria — com os básicos
+que fecham a conta (num clique, em lote) e os terrenos de fixação da
+identidade que o deck ainda não tem, separados por teto de preço.
+
+**É a única análise que não sai daqui.** Combos, bracket e sugestão vêm de
+serviços de fora; isto é conta sobre o próprio deck e a base local, sem rede.
+Por isso, depois de aberta uma vez, ela **acompanha cada autosave** em vez de
+envelhecer com aviso.
+
+**A heurística é nossa e é simples de propósito.** Existe análise séria sobre
+quantos terrenos um deck precisa — a de Frank Karsten é a referência —, mas
+ela depende de simulação e de tabela por custo. O que está aqui é a versão de
+mesa, em duas regras que qualquer um confere de cabeça (`manabase.py`):
+
+1. **Terrenos:** 36 num deck de curva média 3,2; um a mais a cada 0,25 de
+   curva pra cima, um a menos pra baixo; cada rampa barata (rock ou dork de
+   custo até 2) vale meio terreno a menos, até quatro. Preso entre 32 e 40.
+2. **Fontes por cor:** proporcionais aos símbolos de mana que o deck pede de
+   cada cor, sobre o total de terrenos — com piso: 8 fontes pra um respingo
+   (menos de 12% dos símbolos), 12 pra cor de verdade.
+
+Dois detalhes que a tela repete porque confundem: **fonte é o que produz a
+cor**, então um terreno de duas cores conta pras duas — é por isso que num
+deck de três cores as fontes pedidas somam mais que os terrenos, e é essa
+diferença que os fixadores cobrem. E o que um terreno produz é lido do
+subtipo ("Forest Island") ou do texto, **só do que vem depois de "Add"** —
+"{G}: Add {C}" não produz verde.
+
+O preço que separa "barato" de "se o orçamento deixar" (`MANABASE_TETO_USD`)
+é o da Scryfall no dia da sincronização, em dólar, só pra ordem de grandeza.
+
+### As cinco fases
+
+Estão todas no ar: montar (fase 1), combos (2), nível de poder (3),
+sugestões (4) e mana base (5). O que fica pra frente é o que o uso pedir.
 
 ## Cotação de preços das cartas
 

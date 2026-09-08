@@ -109,8 +109,13 @@
     background:var(--surface);border:1px solid var(--border);border-radius:14px;
     padding:16px;box-shadow:0 20px 40px -22px rgba(0,0,0,.6);
   }
+  /* A lateral rola por dentro quando os painéis passam da altura da tela.
+     Sem `flex:none` nos painéis, o flex encolhe o primeiro (a busca) até
+     sobrar só o título dele — que foi exatamente o que aconteceu quando o
+     painel de combos entrou como quarto. */
   .lateral{position:sticky;top:74px;display:flex;flex-direction:column;gap:14px;
-    max-height:calc(100vh - 92px);}
+    max-height:calc(100vh - 92px);overflow-y:auto;}
+  .lateral > .painel{flex:none;}
   h2.secao{
     font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;
     text-transform:uppercase;color:var(--gold-light);margin:0 0 10px;font-weight:600;
@@ -144,7 +149,7 @@
     margin-top:10px;overflow-y:auto;flex:1;min-height:120px;
     display:flex;flex-direction:column;gap:3px;padding-right:2px;
   }
-  .lateral .resultados{max-height:calc(100vh - 320px);}
+  .lateral .resultados{max-height:min(46vh, 340px);}
   .heroi .resultados{max-height:340px;text-align:left;margin:12px auto 0;max-width:440px;}
 
   .achado{
@@ -275,6 +280,144 @@
   .progresso .cheio{display:block;height:100%;border-radius:3px;
     background:linear-gradient(90deg,var(--purple),var(--gold));transition:width .3s;}
 
+  /* ---------------- sugestões (EDHREC) ---------------- */
+  .temas{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0 4px;}
+  .lista-sug{margin-top:12px;}
+  .lista-sug h3{
+    display:flex;align-items:center;gap:8px;margin:0 0 4px;
+    font-size:11px;font-weight:600;color:var(--text-muted);
+    text-transform:uppercase;letter-spacing:.05em;
+  }
+  .lista-sug h3::after{content:"";flex:1;border-top:1px dashed var(--border);}
+  /* A sugestão reusa a linha da busca: é a mesma ação (clicar pra somar ao
+     deck), e dar duas aparências pra mesma ação faria a pessoa reaprender. */
+  .achado .sinergia{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;flex:none;
+    border:1px solid var(--border);border-radius:999px;padding:1px 7px;
+    color:var(--text-muted);cursor:help;
+  }
+  .achado .sinergia.alta{border-color:var(--green);color:#A8D8BC;}
+  .fonte-edhrec{
+    font-size:11px;color:var(--text-muted);margin-top:12px;line-height:1.5;
+  }
+  .fonte-edhrec a{color:var(--gold-light);}
+
+  /* ---------------- mana base ---------------- */
+  .mb-terrenos{
+    display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+    margin-bottom:4px;font-size:12px;color:var(--text-muted);
+  }
+  .mb-terrenos b{font-family:'IBM Plex Mono',monospace;font-size:18px;
+    color:var(--gold-light);font-weight:600;}
+  .mb-terrenos b.falta{color:var(--red);}
+  .mb-terrenos b.ok{color:var(--green);}
+  .mb-cor{
+    display:grid;grid-template-columns:13px 56px 1fr auto;align-items:center;
+    gap:7px;font-size:11.5px;color:var(--text-muted);padding:3px 0;
+  }
+  .mb-cor .trilho{display:block;height:6px;border-radius:3px;
+    background:var(--surface-2);overflow:hidden;position:relative;}
+  .mb-cor .cheio{display:block;height:100%;border-radius:3px;}
+  /* A marca é o que o deck PEDE; a barra é o que ele TEM. Barra que não
+     chega na marca é fonte faltando — dá pra ver sem ler número. */
+  .mb-cor .marca{position:absolute;top:-2px;bottom:-2px;width:2px;
+    background:var(--gold-light);}
+  .mb-cor .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    white-space:nowrap;}
+  .mb-cor .num.falta{color:#F2AFA1;}
+  .mb-basico{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:6px 8px;border:1px dashed var(--border);border-radius:8px;
+    margin-top:5px;font-size:12px;
+  }
+  .mb-basico .add-peca{margin-left:0;}
+
+  /* ---------------- nível de poder (brackets) ---------------- */
+  .escala{display:flex;gap:5px;margin:4px 0 12px;}
+  .degrau{
+    flex:1;text-align:center;border:1px solid var(--border);border-radius:8px;
+    padding:7px 2px 6px;background:var(--surface-2);cursor:help;
+  }
+  .degrau .n{
+    display:block;font-family:'IBM Plex Mono',monospace;font-size:16px;
+    font-weight:600;color:var(--text-muted);line-height:1.1;
+  }
+  .degrau .rot{display:block;font-size:9px;color:#6F6490;margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .degrau.aqui{border-color:var(--gold);background:rgba(201,162,39,.14);}
+  .degrau.aqui .n{color:var(--gold-light);font-size:19px;}
+  .degrau.aqui .rot{color:var(--gold-light);}
+  /* O 5 nasce tracejado e apagado: cEDH é definido pelo metagame, não pela
+     lista de cartas, então nenhuma conta sobre o papel chega nele. Mostrar o
+     degrau e explicar por que ele é inalcançável é mais honesto do que
+     esconder e deixar a escala parecendo ir só até 4. */
+  .degrau.fora{border-style:dashed;opacity:.5;}
+
+  .poder-nome{font-family:'Cinzel',serif;font-size:15px;color:var(--gold-light);
+    margin-bottom:3px;}
+  .poder-explica{font-size:12px;color:var(--text-muted);line-height:1.55;
+    margin-bottom:12px;}
+  .motivo{
+    border:1px solid var(--border);border-radius:9px;padding:9px 11px;
+    margin-bottom:6px;background:var(--surface-2);
+  }
+  .motivo.erro{border-color:rgba(217,99,74,.55);background:rgba(217,99,74,.09);}
+  .motivo b{font-size:12.5px;display:block;margin-bottom:3px;}
+  .motivo.erro b{color:#F2AFA1;}
+  .motivo .porque{font-size:11.5px;color:var(--text-muted);line-height:1.5;}
+  .motivo .quais{font-size:11.5px;color:var(--text);line-height:1.6;margin-top:5px;}
+  .motivo .quais span{
+    display:inline-block;background:var(--surface);border:1px solid var(--border);
+    border-radius:6px;padding:1px 7px;margin:2px 3px 0 0;
+  }
+
+  /* ---------------- combos (Commander Spellbook) ---------------- */
+  .combo{
+    border:1px solid var(--border);border-radius:10px;padding:10px 11px;
+    margin-bottom:7px;background:var(--surface-2);
+  }
+  .combo.falta{border-style:dashed;border-color:rgba(139,107,255,.55);}
+  .combo .topo-combo{display:flex;align-items:baseline;gap:7px;margin-bottom:6px;}
+  .combo .pecas{flex:1;min-width:0;font-size:12.5px;line-height:1.5;}
+  .peca{display:inline;}
+  .peca.tem::before{content:"✓ ";color:var(--green);}
+  /* A peça que falta se distingue por cor e peso, sem marcador próprio: o
+     separador entre as peças já é um "+", e um segundo "+" colado nele lia
+     como erro de digitação ("... + + Sylvan Library"). */
+  .peca.falta{color:var(--gold-light);font-weight:600;}
+  .peca.comandante::after{content:" (no comando)";color:var(--text-muted);
+    font-size:11px;font-weight:400;}
+  .combo .mais{color:var(--text-muted);}
+  .combo .produz{
+    font-size:11.5px;color:#A8D8BC;margin-top:5px;line-height:1.5;
+  }
+  .combo .produz b{color:#C6EBD5;font-weight:600;}
+  .combo .rodape{
+    display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;
+  }
+  .bracket{
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.05em;
+    text-transform:uppercase;border:1px solid var(--border);border-radius:999px;
+    padding:2px 8px;color:var(--text-muted);cursor:help;flex:none;
+  }
+  /* Só os dois extremos ganham cor: um combo que ganha o jogo e um que é
+     piada de mesa precisam se distinguir de relance; o meio da escala não. */
+  .bracket.R,.bracket.B{border-color:var(--red);color:#F2AFA1;}
+  .bracket.E{border-color:var(--border);color:#6F6490;}
+  .combo .rodape a{color:var(--text-muted);font-size:11px;text-decoration:none;}
+  .combo .rodape a:hover{color:var(--gold-light);text-decoration:underline;}
+  .add-peca{
+    margin-left:auto;border:1px solid var(--gold);background:rgba(201,162,39,.10);
+    color:var(--gold-light);border-radius:7px;padding:4px 9px;font-size:11px;
+    cursor:pointer;flex:none;
+  }
+  .add-peca:hover{background:rgba(201,162,39,.2);}
+  .add-peca:disabled{opacity:.45;cursor:not-allowed;}
+  .combo-desatualizado{
+    font-size:11.5px;color:var(--gold-light);background:rgba(201,162,39,.10);
+    border:1px dashed var(--gold);border-radius:8px;padding:7px 10px;margin-bottom:8px;
+  }
+
   /* ---------------- abas (só no celular) ---------------- */
   .abas{
     display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;
@@ -348,9 +491,15 @@
     .corpo[data-aba="deck"] .lateral{display:none;}
     .corpo[data-aba="buscar"] .principal{display:none;}
     .corpo[data-aba="buscar"] #painel-analise,
+    .corpo[data-aba="buscar"] #painel-manabase,
+    .corpo[data-aba="buscar"] #painel-poder,
+    .corpo[data-aba="buscar"] #painel-combos,
     .corpo[data-aba="buscar"] #painel-orcamento{display:none;}
     .corpo[data-aba="analise"] .principal{display:none;}
-    .corpo[data-aba="analise"] #painel-busca{display:none;}
+    /* Sugestão fica na aba Buscar, e não na Análise: ela existe pra ADICIONAR
+       carta, que é o que a pessoa está fazendo ali. */
+    .corpo[data-aba="analise"] #painel-busca,
+    .corpo[data-aba="analise"] #painel-sugestoes{display:none;}
   }
 </style>
 </head>
@@ -419,6 +568,18 @@
       <div class="resultados" id="res"></div>
     </div>
 
+    <!-- Logo abaixo da busca, e não junto da análise: sugestão é pra
+         ADICIONAR carta, que é a mesma coisa que se faz no painel de cima. -->
+    <div class="painel" id="painel-sugestoes">
+      <h2 class="secao">Sugestões</h2>
+      <p class="nota" id="sug-nota">Cartas que combinam com o comandante,
+        segundo os decks registrados no EDHREC. A sinergia diz o quanto a
+        carta aparece mais <b>com ele</b> do que com os outros comandantes.</p>
+      <button class="btn" id="btn-sugestoes" style="width:100%;margin-top:10px;">
+        Buscar sugestões</button>
+      <div id="sug-resultado" style="margin-top:4px;"></div>
+    </div>
+
     <div class="painel" id="painel-analise">
       <h2 class="secao">Análise</h2>
       <div id="apontamentos"></div>
@@ -430,6 +591,37 @@
         <h2 class="secao">Cores e tipos</h2>
         <div class="distrib" id="distrib"></div>
       </div>
+    </div>
+
+    <div class="painel" id="painel-manabase">
+      <h2 class="secao">Mana base</h2>
+      <p class="nota" id="mb-nota">Quantos terrenos a curva pede, quantas
+        fontes de cada cor o deck tem e quantas precisaria. Conta feita aqui,
+        sobre o seu deck — depois da primeira vez, acompanha cada mudança.</p>
+      <button class="btn" id="btn-manabase" style="width:100%;margin-top:10px;">
+        Analisar mana base</button>
+      <div id="mb-resultado" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="painel" id="painel-poder">
+      <h2 class="secao">Nível de poder</h2>
+      <p class="nota" id="poder-nota">Classifica o deck na escala oficial de
+        brackets do Commander — e mostra <b>por quê</b>, carta por carta. Quem
+        classifica é o Commander Spellbook, que acompanha a lista de game
+        changers da Wizards.</p>
+      <button class="btn" id="btn-poder" style="width:100%;margin-top:10px;">
+        Estimar nível</button>
+      <div id="poder-resultado" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="painel" id="painel-combos">
+      <h2 class="secao">Combos</h2>
+      <p class="nota" id="combos-nota">O Commander Spellbook conhece os combos
+        que já existem no deck — e os que ficam a <b>uma carta</b> de fechar.
+        A busca é uma consulta só, e só acontece quando você pede.</p>
+      <button class="btn" id="btn-combos" style="width:100%;margin-top:10px;">
+        Procurar combos</button>
+      <div id="combos-resultado" style="margin-top:12px;"></div>
     </div>
 
     <div class="painel" id="painel-orcamento">
@@ -502,7 +694,19 @@ const estado = {
   validacao: null,   // a do servidor, quando chega
   filtro: "",
   desfazer: [],
+  combos: null,             // a última resposta do Spellbook
+  combosAssinatura: null,   // como o deck estava quando ela foi buscada
+  poder: null,              // a última estimativa de bracket
+  poderAssinatura: null,
+  sugestoes: null,          // a última resposta do EDHREC
+  sugestoesTema: null,
+  manabase: null,           // a última análise de mana base
+  manabaseTeto: null,       // teto de preço escolhido (null = o padrão)
 };
+
+// As cartas das sugestões, achatadas numa lista só — é o que o clique usa
+// pra adicionar, igual ao `ultimosResultados` da busca.
+let sugestoesPlanas = [];
 
 /* ---------------------------------------------------------------- utilidades */
 
@@ -671,6 +875,9 @@ async function salvarAgora(){
     marcarEstado("salvo " + new Date().toLocaleTimeString("pt-BR",
       {hour:"2-digit", minute:"2-digit"}), "ok");
     desenharAnalise();
+    // A mana base é conta local, sem custo de fora: depois de aberta uma
+    // vez, acompanha cada autosave em vez de envelhecer com aviso.
+    if (estado.manabase) analisarManabase();
   } catch (e){
     marcarEstado("não consegui salvar: " + e.message, "erro");
   } finally {
@@ -715,6 +922,10 @@ function desenharTudo(){
   desenharAnalise();
   desenharContador();
   atualizarNotaIdentidade();
+  // Redesenha os combos pra o aviso de "o deck mudou desde esta busca"
+  // aparecer no mesmo instante em que ele passa a ser verdade.
+  if (estado.combos) desenharCombos();
+  if (estado.poder) desenharPoder();
 }
 
 function desenharContador(){
@@ -1165,6 +1376,441 @@ function mostrarCotacao(resultado){
        Commander 500.</p>` : "");
 }
 
+/* ------------------------------------------------------------- sugestões
+
+   As cartas vêm do EDHREC já filtradas pelo servidor (sem o que o deck tem,
+   sem o que a base local não conhece, sem o que não cabe na identidade), e
+   com a carta completa junto — então adicionar é o mesmo clique da busca,
+   sem uma segunda consulta. */
+
+async function buscarSugestoes(tema){
+  if (!estado.comandantes.length){
+    toast("Escolha o comandante primeiro: é ele que define o que combina.");
+    return;
+  }
+  if (!estado.id) await salvarAgora();
+  if (!estado.id){ toast("Não consegui salvar o deck antes de sugerir."); return; }
+
+  const botao = $("btn-sugestoes");
+  botao.disabled = true;
+  $("sug-resultado").innerHTML = `<div class="nota">Perguntando ao EDHREC…</div>`;
+  try {
+    estado.sugestoes = await api(`/decks/${estado.id}/sugestoes`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({tema: tema || null}),
+    });
+    estado.sugestoesTema = tema || null;
+  } catch (e){
+    $("sug-resultado").innerHTML =
+      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    return;
+  } finally {
+    botao.disabled = false;
+  }
+  desenharSugestoes();
+}
+
+function desenharSugestoes(){
+  const caixa = $("sug-resultado");
+  const s = estado.sugestoes;
+  if (!s){ caixa.innerHTML = ""; return; }
+
+  let html = "";
+
+  if (s.temas && s.temas.length){
+    html += `<div class="temas">
+      <button class="chip ${!estado.sugestoesTema ? "ativo" : ""}"
+              data-tema="">Tudo</button>` +
+      s.temas.slice(0, 14).map(t => `
+        <button class="chip ${estado.sugestoesTema === t.slug ? "ativo" : ""}"
+                data-tema="${escapar(t.slug)}"
+                title="${t.decks ? escapar(t.decks) + " decks" : ""}"
+          >${escapar(t.nome)}</button>`).join("") + `</div>`;
+  }
+
+  if (!s.listas.length){
+    html += `<div class="vazio">O EDHREC não trouxe nada que este deck ainda
+      não tenha. Se ele está quase completo, isso é bom sinal.</div>`;
+  }
+
+  // As sugestões guardam a carta completa; `sugestoesPlanas` é o que o clique
+  // usa pra adicionar, do mesmo jeito que `ultimosResultados` na busca.
+  sugestoesPlanas = [];
+  for (const lista of s.listas){
+    html += `<div class="lista-sug"><h3>${escapar(lista.titulo)}</h3>`;
+    html += lista.cartas.map(item => {
+      const i = sugestoesPlanas.push(item.carta) - 1;
+      const sin = item.sinergia;
+      const chip = sin === null || sin === undefined ? "" :
+        `<span class="sinergia ${sin >= 25 ? "alta" : ""}"
+          title="Aparece ${sin > 0 ? sin + " pontos a mais" : Math.abs(sin) + " pontos a menos"} com este comandante do que com os outros${
+            item.porcento ? " · está em " + item.porcento + "% dos decks dele" : ""}"
+         >${sin > 0 ? "+" : ""}${sin}%</span>`;
+      return `
+        <button class="achado" data-sug="${i}" data-arte="${escapar(item.carta.imagem)}">
+          <span class="nome">
+            <b>${escapar(item.carta.nome)}</b>
+            <small>${escapar(item.carta.tipo)}</small>
+          </span>
+          ${manaHTML(item.carta.mana_cost)}
+          ${chip}
+        </button>`;
+    }).join("");
+    html += `</div>`;
+  }
+
+  html += `<div class="fonte-edhrec">Dados do
+    <a href="${escapar(s.link)}" target="_blank" rel="noopener">EDHREC</a>${
+      s.cache ? ", de uma consulta recente" : ""}. São números de decks
+    registrados lá — não são regra, são o que a maioria faz.</div>`;
+
+  caixa.innerHTML = html;
+}
+
+/* ------------------------------------------------------------- mana base */
+
+async function analisarManabase(){
+  if (!estado.comandantes.length){
+    toast("Escolha o comandante primeiro: é a identidade dele que define as cores.");
+    return;
+  }
+  if (!estado.id) await salvarAgora();
+  if (!estado.id){ toast("Não consegui salvar o deck antes de analisar."); return; }
+  const botao = $("btn-manabase");
+  botao.disabled = true;
+  try {
+    const params = estado.manabaseTeto !== null ? `?teto=${estado.manabaseTeto}` : "";
+    estado.manabase = await api(`/decks/${estado.id}/manabase${params}`);
+  } catch (e){
+    $("mb-resultado").innerHTML =
+      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    return;
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Atualizar";
+  }
+  desenharManabase();
+}
+
+function desenharManabase(){
+  const caixa = $("mb-resultado");
+  const m = estado.manabase;
+  if (!m){ caixa.innerHTML = ""; return; }
+  const t = m.terrenos;
+  const classe = t.diferenca === 0 ? "ok" : t.diferenca < 0 ? "falta" : "";
+  let html = `
+    <div class="mb-terrenos"><span>Terrenos</span>
+      <span><b class="${classe}">${t.tem}</b> / ${t.recomendado} recomendados</span></div>
+    <div class="nota">Curva média ${m.cmc_media.toFixed(2)} em ${m.magias} magia(s)${
+      m.rampas_baratas ? `, com ${m.rampas_baratas} rampa(s) barata(s) valendo meio terreno cada` : ""}.</div>`;
+
+  html += `<h2 class="secao" style="margin-top:12px">Fontes por cor</h2>`;
+  const maior = Math.max(1, ...m.cores.map(c => Math.max(c.fontes, c.pedidas)));
+  html += m.cores.map(c => `
+    <div class="mb-cor" title="${escapar(c.nome)}: ${c.pips} símbolo(s) de mana (${Math.round(c.parte*100)}% do deck)${
+        c.fora_do_terreno ? " · mais " + c.fora_do_terreno + " fonte(s) em rocks/dorks" : ""}">
+      <span class="pip ${c.cor}"></span>
+      <span>${escapar(c.nome)}</span>
+      <span class="trilho">
+        <span class="cheio" style="width:${(c.fontes/maior)*100}%;background:var(--mana-${c.cor})"></span>
+        <span class="marca" style="left:clamp(0px, calc(${(c.pedidas/maior)*100}% - 2px), calc(100% - 2px))"></span>
+      </span>
+      <span class="num ${c.faltam ? "falta" : ""}">${c.fontes}/${c.pedidas}${
+        c.faltam ? " · faltam " + c.faltam : ""}</span>
+    </div>`).join("");
+  html += `<div class="nota" style="margin-top:4px">A marca é o que o deck pede;
+    a barra, o que tem. Terreno de duas cores conta pras duas.</div>`;
+
+  if (m.basicos.length){
+    html += `<h2 class="secao" style="margin-top:12px">Básicos que fecham a conta</h2>`;
+    html += m.basicos.map((b, i) => `
+      <div class="mb-basico"><span><span class="pip ${b.cor}"></span>
+        &nbsp;${b.quantidade}× ${escapar(b.nome)}</span>
+        ${b.carta ? `<button class="add-peca" data-basico="${i}">+ ${b.quantidade}</button>`
+                  : `<span class="nota">não está na base local</span>`}
+      </div>`).join("");
+  } else if (t.diferenca < 0){
+    html += `<div class="nota" style="margin-top:10px">Faltam ${-t.diferenca}
+      terreno(s), mas nenhuma cor está descoberta — qualquer básico da
+      identidade serve.</div>`;
+  }
+
+  if (!m.monocolor){
+    const chips = [1, 3, 10, 999].map(v => `
+      <button class="chip ${m.teto_usd === v || (v === 999 && m.teto_usd >= 999) ? "ativo" : ""}"
+        data-teto="${v}">${v >= 999 ? "Sem teto" : "até US$ " + v}</button>`).join("");
+    html += `<h2 class="secao" style="margin-top:12px">Terrenos que fixam</h2>
+      <div class="temas" style="margin-top:0">${chips}</div>`;
+    const lista = (m.fixadores.baratos || []);
+    const caros = (m.fixadores.caros || []);
+    if (!lista.length && !caros.length){
+      html += `<div class="nota">Nenhum terreno de duas ou mais cores da
+        identidade que o deck ainda não tenha.</div>`;
+    }
+    fixadoresPlanos = [];
+    const linha = (terreno) => {
+      const i = fixadoresPlanos.push(terreno) - 1;
+      return `<button class="achado" data-fix="${i}" data-arte="${escapar(terreno.imagem)}">
+        <span class="nome"><b>${escapar(terreno.nome)}</b>
+          <small>${escapar(terreno.tipo)}</small></span>
+        <span class="mana">${terreno.produz.split("").map(c =>
+          `<span class="pip ${c}" title="${NOME_COR[c]}"></span>`).join("")}</span>
+        <span class="preco">${preco(terreno)}</span>
+      </button>`;
+    };
+    if (lista.length) html += lista.map(linha).join("");
+    if (caros.length && m.teto_usd < 999){
+      html += `<div class="nota" style="margin:8px 0 2px">Se o orçamento deixar:</div>`;
+      html += caros.map(linha).join("");
+    }
+  } else {
+    html += `<div class="nota" style="margin-top:10px">Deck de uma cor: básico
+      resolve, fixação não faz falta.</div>`;
+  }
+  caixa.innerHTML = html;
+}
+
+let fixadoresPlanos = [];
+
+/* Põe N cópias de uma vez — é o que "+3 Forest" faz. Uma entrada só de
+   desfazer, senão Ctrl+Z tiraria uma floresta por vez. */
+function adicionarQuantidade(carta, n){
+  guardarDesfazer();
+  const entrada = acharEntrada(carta.nome);
+  if (entrada) entrada.quantidade += n;
+  else estado.cartas.push({carta, quantidade: n});
+  estado.validacao = null;
+  desenharTudo();
+  agendarSalvar();
+}
+
+/* --------------------------------------------------------- nível de poder */
+
+const BRACKETS = [
+  [1, "Exibição",  "Deck de mesa leve: sem combo, sem game changer."],
+  [2, "Núcleo",    "Nível de precon de fábrica — a régua da maioria das mesas."],
+  [3, "Turbinado", "Precon melhorado: até três game changers."],
+  [4, "Otimizado", "Sem freio: o deck joga pra ganhar o quanto antes."],
+  [5, "cEDH",      "Não dá pra calcular: cEDH é definido pelo metagame e pela " +
+                   "intenção de quem monta, não pela lista de cartas."],
+];
+
+async function estimarPoder(){
+  if (!estado.comandantes.length && !estado.cartas.length){
+    toast("Monte alguma coisa antes de estimar o nível.");
+    return;
+  }
+  if (!estado.id) await salvarAgora();
+  if (!estado.id){ toast("Não consegui salvar o deck antes de estimar."); return; }
+
+  const botao = $("btn-poder");
+  botao.disabled = true;
+  $("poder-resultado").innerHTML = `<div class="nota">Classificando…</div>`;
+  try {
+    estado.poder = await api(`/decks/${estado.id}/poder`, {method: "POST"});
+    estado.poderAssinatura = assinaturaDoDeck();
+  } catch (e){
+    $("poder-resultado").innerHTML =
+      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    return;
+  } finally {
+    botao.disabled = false;
+  }
+  desenharPoder();
+}
+
+function desenharPoder(){
+  const caixa = $("poder-resultado");
+  const p = estado.poder;
+  if (!p){ caixa.innerHTML = ""; return; }
+
+  let html = "";
+  if (estado.poderAssinatura !== assinaturaDoDeck()){
+    html += `<div class="combo-desatualizado">O deck mudou desde esta
+      estimativa — rode de novo pra atualizar.</div>`;
+  }
+  // Deck pela metade não tem nível: a estimativa só descreve as cartas que
+  // existem, e dizer "bracket 1" pra um deck de 20 cartas seria mentira por
+  // omissão.
+  const total = totalCartas();
+  if (total < 100){
+    html += `<div class="combo-desatualizado">O deck tem ${total} de 100
+      cartas — esta estimativa vale só pelo que já está montado.</div>`;
+  }
+
+  html += `<div class="escala">` + BRACKETS.map(([n, nome, explica]) => `
+    <div class="degrau ${p.bracket === n ? "aqui" : ""} ${n === 5 ? "fora" : ""}"
+         title="${escapar(nome)} — ${escapar(explica)}">
+      <span class="n">${n}</span><span class="rot">${escapar(nome)}</span>
+    </div>`).join("") + `</div>`;
+
+  if (p.bracket){
+    html += `<div class="poder-nome">Bracket ${p.bracket} — ${escapar(p.nome)}</div>
+             <div class="poder-explica">${escapar(p.explicacao)}</div>`;
+  } else {
+    html += `<div class="poder-nome">Fora do formato</div>
+      <div class="poder-explica">Com carta banida o deck não está em bracket
+        nenhum.</div>`;
+  }
+
+  html += p.motivos.length
+    ? p.motivos.map(m => `
+        <div class="motivo ${m.nivel === "erro" ? "erro" : ""}">
+          <b>${escapar(m.titulo)}</b>
+          <div class="porque">${escapar(m.detalhe)}</div>
+          ${m.cartas.length ? `<div class="quais">` +
+            m.cartas.map(c => `<span>${escapar(c)}</span>`).join("") +
+            `</div>` : ""}
+        </div>`).join("")
+    : `<div class="nota">Nada no deck puxa a nota pra cima: sem game changer,
+       sem combo de duas cartas, sem negação de terreno em massa e sem turno
+       extra.</div>`;
+
+  if (p.cache){
+    html += `<div class="nota" style="margin-top:10px">Resposta guardada de uma
+      estimativa recente com este mesmo deck.</div>`;
+  }
+  caixa.innerHTML = html;
+}
+
+/* ----------------------------------------------------------------- combos
+
+   Uma consulta só ao Commander Spellbook, e só no clique: o deck muda a cada
+   carta adicionada, e buscar sozinho viraria uma requisição por clique num
+   serviço gratuito. Por isso a tela guarda a assinatura do deck de quando a
+   busca rodou e, quando ela deixa de bater, avisa em vez de rebuscar. */
+
+function assinaturaDoDeck(){
+  return JSON.stringify([
+    estado.comandantes.map(c => c.nome).sort(),
+    estado.cartas.map(e => [e.carta.nome, e.quantidade]).sort(),
+  ]);
+}
+
+async function procurarCombos(){
+  if (!estado.comandantes.length && !estado.cartas.length){
+    toast("Monte alguma coisa antes de procurar combos.");
+    return;
+  }
+  if (!estado.id) await salvarAgora();
+  if (!estado.id){ toast("Não consegui salvar o deck antes de buscar."); return; }
+
+  const botao = $("btn-combos");
+  botao.disabled = true;
+  $("combos-resultado").innerHTML = `<div class="nota">Perguntando ao Spellbook…</div>`;
+  try {
+    estado.combos = await api(`/decks/${estado.id}/combos`, {method: "POST"});
+    estado.combosAssinatura = assinaturaDoDeck();
+  } catch (e){
+    // "Não sei" nunca pode virar "não tem combo": são opostos que parecem
+    // iguais numa lista vazia.
+    $("combos-resultado").innerHTML =
+      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    return;
+  } finally {
+    botao.disabled = false;
+  }
+  desenharCombos();
+}
+
+function desenharCombos(){
+  const caixa = $("combos-resultado");
+  const dados = estado.combos;
+  if (!dados){ caixa.innerHTML = ""; return; }
+
+  const mudou = estado.combosAssinatura !== assinaturaDoDeck();
+  let html = mudou
+    ? `<div class="combo-desatualizado">O deck mudou desde esta busca —
+       procure de novo pra atualizar.</div>` : "";
+
+  const noDeck = dados.no_deck || [];
+  const faltando = dados.faltando_uma || [];
+
+  html += `<h2 class="secao">No deck (${noDeck.length})</h2>`;
+  html += noDeck.length
+    ? noDeck.map(c => comboHTML(c, false)).join("")
+    : `<div class="nota">Nenhum combo fechado ainda${
+        faltando.length ? " — mas veja os que estão a uma carta." : "."}</div>`;
+
+  if (faltando.length){
+    html += `<h2 class="secao" style="margin-top:14px">A uma carta (${faltando.length})</h2>`;
+    // Só as primeiras: a lista de "quase lá" de um deck grande passa de 100 e
+    // viraria rolagem infinita numa coluna de 370px.
+    html += faltando.slice(0, 12).map(c => comboHTML(c, true)).join("");
+    if (faltando.length > 12){
+      html += `<div class="nota">E mais ${faltando.length - 12} — as mais
+        populares aparecem primeiro.</div>`;
+    }
+  }
+
+  if (dados.cache){
+    html += `<div class="nota" style="margin-top:10px">Resposta guardada de uma
+      busca recente com este mesmo deck.</div>`;
+  }
+  caixa.innerHTML = html;
+}
+
+function comboHTML(combo, ehSugestao){
+  const pecas = combo.pecas.map(p =>
+    `<span class="peca ${p.no_deck ? "tem" : "falta"} ${p.comandante ? "comandante" : ""}"
+     >${escapar(p.nome)}</span>`).join('<span class="mais"> + </span>');
+
+  const genericas = combo.requer.length
+    ? `<span class="mais"> + </span>` + combo.requer.map(r =>
+        `<span class="peca falta">${escapar(r)}</span>`).join('<span class="mais"> + </span>')
+    : "";
+
+  const produz = combo.produz.length
+    ? `<div class="produz"><b>Resulta em:</b> ${escapar(combo.produz.join(", "))}</div>`
+    : "";
+
+  // O botão só aparece pra peça que é CARTA. Peça genérica ("uma criatura com
+  // vigilância") não tem o que adicionar com um clique — é critério, não carta.
+  const botao = (ehSugestao && combo.faltam.length === 1)
+    ? `<button class="add-peca" data-add-peca="${escapar(combo.faltam[0])}"
+        >+ ${escapar(combo.faltam[0])}</button>`
+    : "";
+
+  const bracket = combo.bracket_rotulo
+    ? `<span class="bracket ${escapar(combo.bracket)}"
+        title="${escapar(combo.bracket_explicacao)}">${escapar(combo.bracket_rotulo)}</span>`
+    : "";
+
+  return `<div class="combo ${ehSugestao ? "falta" : ""}">
+    <div class="topo-combo"><div class="pecas">${pecas}${genericas}</div></div>
+    ${produz}
+    <div class="rodape">
+      ${bracket}
+      <a href="${escapar(combo.link)}" target="_blank" rel="noopener">ver no Spellbook ↗</a>
+      ${botao}
+    </div>
+  </div>`;
+}
+
+/* Adiciona a carta que falta pra fechar um combo. O nome vem do Spellbook,
+   que usa o nome canônico da Scryfall — o mesmo que a base local guarda —,
+   então a resolução é por nome exato e não por busca difusa. */
+async function adicionarPeca(nome, botao){
+  botao.disabled = true;
+  try {
+    const r = await api("/cartas/busca?" + new URLSearchParams({q: nome, limite: "5"}));
+    const alvo = (r.cartas || []).find(c => c.nome.toLowerCase() === nome.toLowerCase())
+              || (r.cartas || [])[0];
+    if (!alvo){
+      toast(`Não achei "${nome}" na base local — talvez ela precise sincronizar.`);
+      botao.disabled = false;
+      return;
+    }
+    adicionar(alvo);
+    toast(`${alvo.nome} entrou no deck.`);
+    desenharCombos();   // redesenha com o aviso de "o deck mudou"
+  } catch (e){
+    toast("Não consegui adicionar: " + e.message);
+    botao.disabled = false;
+  }
+}
+
 /* --------------------------------------------------------------- exportar */
 
 function listaTexto(){
@@ -1241,6 +1887,48 @@ function ligarEventos(){
 
   // Clique nos resultados (os dois painéis) e nos controles do deck.
   document.addEventListener("click", (e) => {
+    // Sugestão do EDHREC: a carta completa já veio junto, então adicionar é
+    // o mesmo clique da busca — sem consulta nenhuma.
+    const sugerida = e.target.closest("[data-sug]");
+    if (sugerida){
+      const carta = sugestoesPlanas[Number(sugerida.dataset.sug)];
+      if (carta){
+        adicionar(carta);
+        toast(`${carta.nome} entrou no deck.`);
+        // Sai da lista: já está no deck, e continuar sugerindo o que a pessoa
+        // acabou de adicionar é o jeito mais rápido de a lista parecer burra.
+        for (const lista of (estado.sugestoes?.listas || [])){
+          lista.cartas = lista.cartas.filter(c => c.carta.nome !== carta.nome);
+        }
+        desenharSugestoes();
+      }
+      return;
+    }
+    const tema = e.target.closest("[data-tema]");
+    if (tema) return buscarSugestoes(tema.dataset.tema);
+
+    // Mana base: básicos em lote, fixadores um a um, e o teto de preço.
+    const basico = e.target.closest("[data-basico]");
+    if (basico){
+      const b = estado.manabase?.basicos[Number(basico.dataset.basico)];
+      if (b?.carta){
+        adicionarQuantidade(b.carta, b.quantidade);
+        toast(`${b.quantidade}× ${b.carta.nome} no deck.`);
+      }
+      return;
+    }
+    const fix = e.target.closest("[data-fix]");
+    if (fix){
+      const terreno = fixadoresPlanos[Number(fix.dataset.fix)];
+      if (terreno){ adicionar(terreno); toast(`${terreno.nome} entrou no deck.`); }
+      return;
+    }
+    const teto = e.target.closest("[data-teto]");
+    if (teto){
+      estado.manabaseTeto = Number(teto.dataset.teto);
+      return analisarManabase();
+    }
+
     const achado = e.target.closest(".achado");
     if (achado){
       const caixa = achado.closest(".resultados");
@@ -1256,6 +1944,8 @@ function ligarEventos(){
     if (sai) return tirar(sai.dataset.tirar);
     const saiCmd = e.target.closest("[data-tirar-cmd]");
     if (saiCmd) return tirarComandante(Number(saiCmd.dataset.tirarCmd));
+    const peca = e.target.closest("[data-add-peca]");
+    if (peca) return adicionarPeca(peca.dataset.addPeca, peca);
     if (e.target.closest("#btn-parceiro")){
       escolherComandante.parceiro = true;
       $("heroi").hidden = false;
@@ -1296,6 +1986,11 @@ function ligarEventos(){
 
   $("btn-cotar").addEventListener("click", cotar);
   $("btn-exportar").addEventListener("click", exportar);
+  $("btn-combos").addEventListener("click", procurarCombos);
+  $("btn-poder").addEventListener("click", estimarPoder);
+  $("btn-sugestoes").addEventListener("click", () =>
+    buscarSugestoes(estado.sugestoesTema));
+  $("btn-manabase").addEventListener("click", analisarManabase);
 
   $("abas").addEventListener("click", (e) => {
     const botao = e.target.closest("[data-aba]");
@@ -1312,6 +2007,9 @@ function ligarEventos(){
    clique, e a lista já mostra tipo e custo. */
 function ligarPrevia(){
   const previa = $("previa");
+  // Arte que não carrega deixaria uma caixa vazia com borda seguindo o mouse,
+  // que parece defeito da página e não carta sem imagem.
+  previa.addEventListener("error", () => previa.classList.remove("mostra"));
   document.addEventListener("mouseover", (e) => {
     const alvo = e.target.closest("[data-arte]");
     const arte = alvo?.dataset.arte;
