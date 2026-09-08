@@ -188,8 +188,19 @@
      ver o andamento de um pedido antigo não tem XML nenhum selecionado, e o
      card inteiro ainda está vazio. Nasce escondido — sem pedido guardado
      neste navegador, o botão não teria o que abrir. */
-  .meus-btn{flex:none;padding:9px 12px;white-space:nowrap;}
+  .meus-btn{flex:none;padding:9px 12px;white-space:nowrap;
+    display:inline-flex;align-items:center;justify-content:center;}
   .meus-btn[hidden]{display:none;}
+  /* Em tela estreita com os DOIS botões (quem já pediu antes vê "Meus
+     Pedidos" ao lado de "Montar deck"), espremer os três numa linha só
+     quebrava o nome da página em três linhas e passava o botão por cima
+     dele. Aqui o nome fica com a linha inteira e os botões dividem a de
+     baixo. */
+  @media (max-width:430px){
+    header{flex-wrap:wrap;}
+    .brand{min-width:100%;}
+    .meus-btn{flex:1;}
+  }
   .meus-btn .n{
     display:inline-block;margin-left:6px;padding:1px 6px;border-radius:9px;
     background:var(--surface-2);border:1px solid var(--border);
@@ -511,6 +522,11 @@
         <p>Orçamento na hora, pagamento por Pix</p>
       </div>
     </div>
+    <!-- O deckbuilder é o passo ANTES desta tela: monta o deck, exporta a
+         lista pro MPC Fill e volta pra cá com o XML. Fica no cabeçalho porque
+         quem ainda não tem deck não tem o que subir aqui. -->
+    <a class="sec-btn meus-btn" href="/deckbuilder"
+       style="text-decoration:none;">Montar deck</a>
     <button class="sec-btn meus-btn" id="ordersBtn" hidden>
       Meus Pedidos <span class="n" id="ordersCount">0</span>
     </button>

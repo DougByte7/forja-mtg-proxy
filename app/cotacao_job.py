@@ -204,6 +204,24 @@ def iniciar(xml_text: str, comandante: str | None = None) -> dict:
     todas = calc.parse_card_list(xml_text)
     if not todas:
         raise ValueError("Não achei carta nenhuma nesse XML.")
+    return iniciar_lista(todas, comandante)
+
+
+def iniciar_lista(todas: list[dict],
+                  comandante: "str | list | None" = None) -> dict:
+    """O mesmo, a partir de uma decklist já pronta (`[{"nome","quantidade"}]`).
+
+    Existe porque o XML do MPC Fill deixou de ser a única origem de uma lista
+    de cartas: o deckbuilder monta o deck aqui dentro e quer o mesmo
+    orçamento, sem ter que fabricar um XML de mentira só pra passar por uma
+    porta que espera arquivo.
+
+    Daqui pra baixo os dois caminhos são o mesmo — inclusive a chave do job,
+    então orçar o deck montado na tela e orçar o XML dele cai no mesmo
+    trabalho em vez de varrer as mesmas cartas duas vezes.
+    """
+    if not todas:
+        raise ValueError("Não achei carta nenhuma nessa lista.")
 
     cartas, excluidas = cotacao.filtrar_cotaveis(todas, comandante)
     if not cartas:
@@ -212,8 +230,9 @@ def iniciar(xml_text: str, comandante: str | None = None) -> dict:
             "nenhuma pra cotar.")
     if len(cartas) > MAX_CARTAS:
         raise ValueError(
-            f"Esse XML tem {len(cartas)} cartas distintas pra cotar e o limite "
-            f"é {MAX_CARTAS}. Cotar uma lista desse tamanho levaria muito tempo.")
+            f"Essa lista tem {len(cartas)} cartas distintas pra cotar e o "
+            f"limite é {MAX_CARTAS}. Cotar uma lista desse tamanho levaria "
+            f"muito tempo.")
 
     # A chave sai da lista JÁ FILTRADA, não da original: cotar o mesmo deck
     # com e sem comandante são dois trabalhos diferentes e não podem cair no

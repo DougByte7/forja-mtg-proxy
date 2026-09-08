@@ -228,6 +228,12 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   próprio FastAPI.
 - `app/static/admin.html` — a tela de pedidos do operador, em `/admin`. Ver
   *Tela de pedidos (admin)*.
+- `app/static/deckbuilder.html` — a tela de montar deck de Commander, em
+  `/deckbuilder`. Ver *Deckbuilder de Commander*.
+- `app/cartas.py` — a cópia local do bulk data da Scryfall (busca instantânea
+  sem tocar na API deles) e a sincronização diária que a mantém.
+- `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
+  cartas, parceria) e onde os decks ficam guardados.
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
@@ -295,6 +301,13 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   fecha depois do aviso de pagamento, o pedido que continua no histórico e o
   andamento que a tela **Meus Pedidos** consulta. Precisa do fastapi instalado:
   `python tests/test_cancelar_pedido.py`.
+- `tests/test_cartas.py` — a leitura do bulk data em pedaços (inclusive
+  caractere UTF-8 cortado no meio e download incompleto, que precisa acusar) e
+  o filtro de identidade de cor, que é escrito ao contrário:
+  `python tests/test_cartas.py`.
+- `tests/test_decks.py` — as regras do formato, com atenção às exceções que
+  dão falso positivo: terreno básico e "any number of cards named" repetem, e
+  dois comandantes valem com Partner: `python tests/test_decks.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -331,6 +344,17 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /admin/visitas` | você (`X-Admin-Token`) | quem está no sistema agora, separado em pessoas / bots / suspeitos |
 | `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
+| `GET /deckbuilder` | você, no navegador | a tela de montar deck de Commander — ver *Deckbuilder de Commander* |
+| `GET /cartas/busca` | deckbuilder | busca na base local. `q`, `identidade`, `tipo`, `comandante`, `limite`. Não toca na Scryfall |
+| `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
+| `POST /admin/cartas/sync` | você (`X-Admin-Token`) | refaz a base de cartas na hora. Baixa 100+ MB da Scryfall, daí o token |
+| `POST /decks` | deckbuilder | cria o deck e devolve o id (12 dígitos hex) |
+| `GET /decks/{id}` | deckbuilder | o deck com as cartas resolvidas e a validação junto |
+| `PUT /decks/{id}` | deckbuilder | grava o deck por cima. É o autosave — a validação vai na resposta mas não impede de gravar |
+| `POST /decks/{id}/duplicar` | deckbuilder | cópia com id novo (o "salvar como" de um sistema sem login) |
+| `DELETE /decks/{id}` | deckbuilder | apaga o deck. Não tem volta |
+| `GET /decks/{id}/lista` | deckbuilder | a decklist em texto, comandante primeiro — é o que se cola no MPC Fill |
+| `POST /decks/{id}/cotacao` | botão **Cotar preços** | cota o deck montado, sem precisar de XML. O andamento sai no `GET /cotacao/{job_id}` de sempre |
 | `GET /impressora/tinta` | front | nível de tinta da impressora, pra pastilha do cabeçalho e o aviso de prazo (público, em cache, sem endereço nem nome de fila na resposta) |
 | `GET /admin/tinta` | você (`X-Admin-Token`) | o que a impressora respondeu sobre tinta, cru — é aqui que se descobre se ela informa o nível |
 
@@ -456,6 +480,100 @@ sem isso, um deploy no meio do expediente derrubaria a folha que o operador
 acabou de montar. A folha em si é um `combo-XXXX.pdf` no `PDF_OUTPUT_DIR`, e a
 faxina diária a trata igual às outras (ver *Limpeza automática dos PDFs*):
 apagar é reversível, porque o combo continua no banco e a folha se remonta.
+
+## Deckbuilder de Commander
+
+`https://SEU-BACKEND/deckbuilder` — uma tela pra **montar** o deck, separada
+da que orça a impressão. Ela responde à pergunta que vem antes do XML: "que
+cartas vão nesse deck?".
+
+As duas telas se encontram no fim. O deckbuilder não gera XML do MPC Fill e
+não vai gerar: **cada carta lá é um id de arquivo no Google Drive** (ver
+`pdf_generator.py`), e a biblioteca de artes é do MPC Fill, não nossa. O que
+ele entrega é a **decklist em texto**, que se cola na caixa do MPC Fill pra
+escolher as artes; o XML que sai de lá é o que sobe no orçamento de sempre.
+
+```
+deckbuilder  ──(decklist em texto)──►  MPC Fill  ──(XML com as artes)──►  /orders
+```
+
+### Como funciona
+
+1. **Escolha o comandante.** A tela nasce nessa única pergunta, porque sem
+   comandante não existe deck de Commander — e é ele que define a identidade
+   de cor de tudo o que vem depois.
+2. **Busque e clique.** A busca lateral já sai filtrada pela identidade do
+   comandante: carta que o deck não poderia jogar não aparece. `/` põe o
+   cursor na busca, Enter adiciona o primeiro resultado, `Ctrl+Z` desfaz.
+3. **Acompanhe a análise.** Contagem pras 100, curva de mana, distribuição de
+   cores e tipos, e os apontamentos de regra — tudo recalculado a cada clique.
+4. **Orce, se quiser.** O botão **Cotar preços** usa a mesma cotação da tela
+   de impressão (LigaMagic + Scryfall), com o mesmo critério do Commander 500.
+5. **Exporte.** **Exportar lista** copia a decklist pra colar no MPC Fill.
+
+### O que a análise acusa
+
+| Apontamento | O que é |
+|---|---|
+| **Faltam N cartas** | não é erro, é barra de progresso — deck pela metade é o estado normal de quem monta |
+| **Fora da identidade de cor** | a carta tem cor que o comandante não tem |
+| **Singleton quebrado** | mais de uma cópia de carta que não é terreno básico nem diz "any number of cards named" |
+| **Não é legal em Commander** | carta banida. Elas nem aparecem na busca; isso só pega deck que chegou de fora |
+| **Comandante repetido nas 99** | ele já está na zona de comando |
+| **Dois comandantes sem parceria** | só com Partner, Doctor's companion ou Background |
+| **Não achei na base local** | *aviso*, não erro: costuma ser carta nova com a base desatualizada |
+
+A validação **nunca impede de salvar**. Ela descreve; quem decide é quem está
+montando.
+
+### Onde os decks ficam
+
+Não há login, pela mesma razão do resto do sistema: **quem tem o id, mexe**. O
+servidor guarda os decks e não sabe de quem são; a lista "Meus decks" mora no
+`localStorage` do navegador, igual à tela *Meus Pedidos*. **Compartilhar**
+copia o link — quem abrir vê e edita o mesmo deck.
+
+A diferença pro pedido é o tamanho do id: **12 dígitos hex, não 8**. Um pedido
+acertado por sorte só pode ser cancelado, e isso fica no histórico; um deck
+acertado por sorte pode ser reescrito, e aí o prejuízo é o trabalho de montar.
+12 dígitos custam nada e tiram a força bruta da mesa.
+
+### A base de cartas é uma cópia local da Scryfall
+
+A busca **não fala com a Scryfall**. Ela lê uma cópia local do *bulk data*
+deles, num SQLite próprio (`CARTAS_DB_PATH`, por padrão `/app/data/cartas.db`).
+
+O motivo é o mesmo 429 que já castiga a cotação: buscar a cada tecla digitada
+contra a API de fora seria o jeito mais rápido de levar bloqueio em cima de
+quem só está montando deck. A Scryfall oferece o banco inteiro num arquivo só
+justamente pra quem precisa de busca própria — é o caminho que **eles pedem**.
+
+- Baixa sozinha quando o container sobe com a base vazia, e se atualiza a cada
+  `CARTAS_SYNC_HORAS` (24 por padrão; a Scryfall republica uma vez por dia).
+- São ~35 mil cartas, uma entrada por carta distinta (`oracle_cards`) — não
+  cada impressão de cada edição, que seria 15 vezes maior e só serviria pra
+  quem escolhe arte.
+- O arquivo passa de 100 MB e é lido **em pedaços**: carregá-lo inteiro na
+  memória custaria mais de 1 GB num container que também monta PDF.
+- A carga escreve numa tabela nova e só troca a antiga por ela no fim, numa
+  transação. **Sync que falha no meio não estraga a base que já estava lá** —
+  buscar em cartas de ontem é melhor que buscar em meia base de hoje.
+- O banco é **descartável e fica fora do `orders.db`** de propósito: dá pra
+  apagar e remontar a qualquer hora, e não tem por que engordar o backup dos
+  pedidos.
+
+`POST /admin/cartas/sync` (com `X-Admin-Token`) refaz a base na hora. É a única
+rota daqui que custa banda de verdade, e por isso é a única com token.
+
+O `preco_usd` guardado nessa base é o do dia da sincronização e serve só pra
+ordenar e dar ordem de grandeza na tela. **Quem responde "quanto custa
+comprar" continua sendo a cotação**, que consulta na hora.
+
+### O que ainda não tem
+
+Esta é a primeira fase. Ficaram pra depois, nesta ordem: combos (via Commander
+Spellbook), nível de poder pelos brackets 1–5, sugestão de cartas por tema
+(EDHREC) e sugestão de mana base.
 
 ## Cotação de preços das cartas
 
