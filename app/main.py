@@ -11,7 +11,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
 from fastapi.staticfiles import StaticFiles
 
 from . import (calc, cartas, cleanup, cotacao_job, decks, fulfillment, log,
-               notify, pix, printer, storage, tinta, visitas)
+               notify, pix, printer, spellbook, storage, tinta, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -803,6 +803,28 @@ def cotar_deck(deck_id: str):
                                          deck.get("comandantes") or None)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.post("/decks/{deck_id}/combos")
+def combos_do_deck(deck_id: str):
+    """Procura os combos do deck no Commander Spellbook.
+
+    Só no clique, nunca automático: o deck muda a cada carta adicionada, e
+    buscar sozinho viraria uma requisição por clique num serviço gratuito.
+    É a mesma regra da cotação (ver `cotacao_job.py`).
+
+    Roda dentro da requisição, e não em segundo plano como a cotação, porque
+    aqui é UMA requisição só — não há minutos de varredura pra esperar.
+
+    Falha do Spellbook volta 502, não lista vazia: "não sei" e "não tem
+    combo" parecem iguais na tela e são opostos.
+    """
+    deck = _deck_ou_404(deck_id)
+    try:
+        return spellbook.buscar(deck.get("comandantes") or [],
+                                deck.get("cartas") or [])
+    except spellbook.SpellbookError as e:
+        raise HTTPException(502, str(e))
 
 
 @app.get("/impressora/tinta")

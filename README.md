@@ -234,6 +234,9 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   sem tocar na API deles) e a sincronização diária que a mantém.
 - `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
   cartas, parceria) e onde os decks ficam guardados.
+- `app/spellbook.py` — os combos do deck, pelo Commander Spellbook. **É `GET`
+  com corpo JSON e a resposta é camelCase** — leia o cabeçalho do arquivo
+  antes de mexer.
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
@@ -308,6 +311,10 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `tests/test_decks.py` — as regras do formato, com atenção às exceções que
   dão falso positivo: terreno básico e "any number of cards named" repetem, e
   dois comandantes valem com Partner: `python tests/test_decks.py`.
+- `tests/test_spellbook.py` — o cliente do Commander Spellbook contra uma
+  resposta sintética no formato real: o `GET` com corpo, a leitura do
+  camelCase dentro de `results`, a conta de qual peça está faltando e o que
+  acontece quando eles não respondem: `python tests/test_spellbook.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -355,6 +362,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `DELETE /decks/{id}` | deckbuilder | apaga o deck. Não tem volta |
 | `GET /decks/{id}/lista` | deckbuilder | a decklist em texto, comandante primeiro — é o que se cola no MPC Fill |
 | `POST /decks/{id}/cotacao` | botão **Cotar preços** | cota o deck montado, sem precisar de XML. O andamento sai no `GET /cotacao/{job_id}` de sempre |
+| `POST /decks/{id}/combos` | botão **Procurar combos** | pergunta ao Commander Spellbook os combos do deck e os que faltam uma carta. Uma consulta só, e só no clique |
 | `GET /impressora/tinta` | front | nível de tinta da impressora, pra pastilha do cabeçalho e o aviso de prazo (público, em cache, sem endereço nem nome de fila na resposta) |
 | `GET /admin/tinta` | você (`X-Admin-Token`) | o que a impressora respondeu sobre tinta, cru — é aqui que se descobre se ela informa o nível |
 
@@ -569,11 +577,49 @@ O `preco_usd` guardado nessa base é o do dia da sincronização e serve só pra
 ordenar e dar ordem de grandeza na tela. **Quem responde "quanto custa
 comprar" continua sendo a cotação**, que consulta na hora.
 
+### Combos, pelo Commander Spellbook
+
+O painel **Combos** responde duas coisas: que combos o deck **já tem**, e
+quais ficam a **uma carta** de fechar — esses últimos com um botão que põe a
+carta que falta direto no deck.
+
+Ao contrário da LigaMagic, aqui é API pública e feita pra isso: o
+`find-my-combos` existe exatamente pra receber uma decklist e devolver os
+combos dela. O contrato foi tirado do backend deles, que é código aberto
+(`SpaceCowMedia/commander-spellbook-backend`).
+
+**Só busca quando você clica.** É a mesma regra da cotação: o deck muda a cada
+carta adicionada, e buscar sozinho viraria uma requisição por clique num
+serviço gratuito. Quando o deck muda depois de uma busca, o painel avisa que o
+resultado envelheceu em vez de sair perguntando de novo.
+
+Duas surpresas do contrato deles, que estão certas e por isso viraram teste
+(`tests/test_spellbook.py`):
+
+- **É `GET` com corpo JSON**, não POST. "Consertar" isso pra POST devolve 405
+  e a tela fica sem combo nenhum.
+- **A resposta é camelCase** (`almostIncluded`) e vem dentro de `results`. Ler
+  `almost_included` devolve lista vazia — que na tela é indistinguível de
+  "esse deck não tem combo".
+
+Por isso, também: falha na consulta vira **erro na tela**, nunca lista vazia.
+"Não sei" e "não tem" parecem iguais e são opostos.
+
+A API devolve seis listas; o painel usa duas. As outras quatro
+(`...ByAddingColors`, `...ByChangingCommanders`) pedem mudar a cor do deck ou
+trocar o comandante — não são sugestão, são outro deck, e listá-las junto
+afogaria as que dão pra usar.
+
+Cada combo vem com o **bracket** dele na escala do Spellbook (de *Exibição*,
+que é mais graça que ameaça, até *Impiedoso*, que ganha o jogo na hora), pra
+dar o peso do combo sem precisar abrir o link.
+
+`SPELLBOOK=0` no `.env` desliga o painel.
+
 ### O que ainda não tem
 
-Esta é a primeira fase. Ficaram pra depois, nesta ordem: combos (via Commander
-Spellbook), nível de poder pelos brackets 1–5, sugestão de cartas por tema
-(EDHREC) e sugestão de mana base.
+Ficaram pra depois, nesta ordem: nível de poder pelos brackets 1–5, sugestão
+de cartas por tema (EDHREC) e sugestão de mana base.
 
 ## Cotação de preços das cartas
 
