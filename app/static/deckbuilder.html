@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deckbuilder — Forja de Proxies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Mesma paleta e as mesmas três fontes do index.html: é a mesma casa. */
+  :root{
+    --bg:#0F0D17;
+    --surface:#1B1730;
+    --surface-2:#241F3D;
+    --border:#382F5C;
+    --text:#EDE6D6;
+    --text-muted:#A79BC7;
+    --gold:#C9A227;
+    --gold-light:#E4C767;
+    --purple:#8B6BFF;
+    --green:#4C9A6B;
+    --red:#D9634A;
+    /* Cores de mana. Tons pastéis do próprio jogo, que só precisam ser
+       distinguíveis a 12px de diâmetro. */
+    --mana-W:#F5F0D8; --mana-U:#9FC7E8; --mana-B:#9A8FA8;
+    --mana-R:#E4907A; --mana-G:#89B894; --mana-C:#B9B4C8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 12% 0%, rgba(139,107,255,0.12), transparent 42%),
+      radial-gradient(circle at 88% 100%, rgba(201,162,39,0.10), transparent 42%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  button{font-family:inherit;}
+  input:focus-visible,button:focus-visible,select:focus-visible{
+    outline:2px solid var(--gold);outline-offset:1px;
+  }
+  [hidden]{display:none !important;}
+
+  /* ---------------- cabeçalho ---------------- */
+  .topo{
+    position:sticky;top:0;z-index:40;
+    background:rgba(15,13,23,0.92);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border);
+  }
+  .topo-in{
+    max-width:1320px;margin:0 auto;padding:10px 16px;
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .rune{
+    width:34px;height:34px;border:1.5px solid var(--gold);flex:none;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Cinzel',serif;color:var(--gold-light);font-size:16px;
+    transform:rotate(45deg);
+  }
+  .rune span{transform:rotate(-45deg);}
+  .titulo-deck{flex:1;min-width:160px;display:flex;flex-direction:column;gap:1px;}
+  .titulo-deck input{
+    background:transparent;border:1px solid transparent;border-radius:7px;
+    color:var(--text);font-family:'Cinzel',serif;font-weight:700;font-size:17px;
+    padding:3px 7px;margin-left:-7px;width:100%;max-width:420px;
+  }
+  .titulo-deck input:hover{border-color:var(--border);}
+  .titulo-deck input:focus{border-color:var(--gold);background:var(--surface);outline:none;}
+  .estado-salvo{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;
+    color:var(--text-muted);padding-left:1px;min-height:13px;
+  }
+  .estado-salvo.erro{color:var(--red);}
+  .estado-salvo.ok{color:var(--green);}
+
+  .btn{
+    background:transparent;border:1px solid var(--border);color:var(--text-muted);
+    border-radius:8px;padding:8px 11px;font-size:12px;cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;white-space:nowrap;
+  }
+  .btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn.ouro{background:var(--gold);border-color:var(--gold);color:#1A1408;font-weight:700;}
+  .btn.ouro:hover:not(:disabled){filter:brightness(1.08);color:#1A1408;}
+  .btn.verde{border-color:var(--green);color:var(--green);}
+  .btn.verde:hover:not(:disabled){background:rgba(76,154,107,.10);border-color:var(--green);color:var(--green);}
+  .acoes{display:flex;gap:7px;flex-wrap:wrap;}
+
+  /* contador 100 cartas, no cabeçalho: é o número que a pessoa mais olha */
+  .contador{
+    display:flex;align-items:baseline;gap:4px;flex:none;
+    font-family:'IBM Plex Mono',monospace;padding:5px 11px;
+    border:1px solid var(--border);border-radius:999px;background:var(--surface);
+  }
+  .contador b{font-size:17px;color:var(--gold-light);font-weight:600;}
+  .contador span{font-size:11px;color:var(--text-muted);}
+  .contador.completo{border-color:var(--green);}
+  .contador.completo b{color:var(--green);}
+  .contador.passou{border-color:var(--red);}
+  .contador.passou b{color:var(--red);}
+
+  /* ---------------- corpo ---------------- */
+  .corpo{
+    max-width:1320px;margin:0 auto;padding:18px 16px 90px;
+    display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:18px;align-items:start;
+  }
+  .painel{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:16px;box-shadow:0 20px 40px -22px rgba(0,0,0,.6);
+  }
+  .lateral{position:sticky;top:74px;display:flex;flex-direction:column;gap:14px;
+    max-height:calc(100vh - 92px);}
+  h2.secao{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--gold-light);margin:0 0 10px;font-weight:600;
+  }
+
+  /* ---------------- estado vazio: escolher comandante ---------------- */
+  .heroi{text-align:center;padding:34px 18px;}
+  .heroi h1{font-family:'Cinzel',serif;font-size:24px;margin:0 0 8px;}
+  .heroi p{color:var(--text-muted);font-size:13px;line-height:1.6;margin:0 auto 20px;max-width:430px;}
+  .heroi .busca-caixa{max-width:440px;margin:0 auto;}
+
+  .campo{
+    width:100%;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:9px;color:var(--text);padding:11px 12px;font-size:14px;
+    font-family:'Inter',sans-serif;
+  }
+  .campo::placeholder{color:#6F6490;}
+  .campo:focus{border-color:var(--gold);outline:none;}
+
+  /* ---------------- busca ---------------- */
+  .filtros{display:flex;gap:5px;flex-wrap:wrap;margin:9px 0 4px;}
+  .chip{
+    border:1px solid var(--border);background:var(--surface-2);color:var(--text-muted);
+    border-radius:999px;padding:4px 10px;font-size:11px;cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .chip:hover{border-color:var(--gold);color:var(--gold-light);}
+  .chip.ativo{border-color:var(--gold);background:rgba(201,162,39,.12);color:var(--gold-light);}
+
+  .resultados{
+    margin-top:10px;overflow-y:auto;flex:1;min-height:120px;
+    display:flex;flex-direction:column;gap:3px;padding-right:2px;
+  }
+  .lateral .resultados{max-height:calc(100vh - 320px);}
+  .heroi .resultados{max-height:340px;text-align:left;margin:12px auto 0;max-width:440px;}
+
+  .achado{
+    display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+    background:transparent;border:1px solid transparent;border-radius:9px;
+    padding:6px 8px;cursor:pointer;color:var(--text);
+    transition:background .12s,border-color .12s;
+  }
+  .achado:hover,.achado:focus-visible{background:var(--surface-2);border-color:var(--border);}
+  .achado .nome{flex:1;min-width:0;}
+  .achado .nome b{display:block;font-size:13px;font-weight:600;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .achado .nome small{display:block;color:var(--text-muted);font-size:11px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+  .achado .preco{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);flex:none;
+  }
+  .achado.no-deck{opacity:.45;}
+  .achado.no-deck .nome b::after{content:" ✓";color:var(--green);}
+
+  /* ---------------- símbolos de mana ---------------- */
+  .mana{display:inline-flex;gap:2px;align-items:center;flex:none;}
+  .pip{
+    width:13px;height:13px;border-radius:50%;display:inline-flex;
+    align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:600;
+    color:#20182C;border:1px solid rgba(0,0,0,.35);
+  }
+  .pip.W{background:var(--mana-W);} .pip.U{background:var(--mana-U);}
+  .pip.B{background:var(--mana-B);} .pip.R{background:var(--mana-R);}
+  .pip.G{background:var(--mana-G);} .pip.C{background:var(--mana-C);}
+
+  /* ---------------- lista do deck ---------------- */
+  .grupo{margin-bottom:16px;}
+  .grupo:last-child{margin-bottom:0;}
+  .grupo h3{
+    display:flex;align-items:center;gap:8px;margin:0 0 6px;
+    font-size:12px;font-weight:600;color:var(--text-muted);
+    text-transform:uppercase;letter-spacing:.05em;
+  }
+  .grupo h3::after{content:"";flex:1;border-top:1px dashed var(--border);}
+  .grupo h3 .n{font-family:'IBM Plex Mono',monospace;color:var(--gold-light);}
+  .colunas{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(288px,1fr));
+    gap:2px 16px;
+  }
+
+  .linha{
+    display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:7px;
+    border:1px solid transparent;transition:background .12s;
+  }
+  .linha:hover{background:var(--surface-2);}
+  .linha.problema{border-color:rgba(217,99,74,.5);background:rgba(217,99,74,.07);}
+  .linha .qtd{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gold-light);
+    width:20px;text-align:right;flex:none;
+  }
+  .linha .nome{
+    flex:1;min-width:0;font-size:13px;cursor:default;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .linha .porque{
+    font-size:10px;color:#F2AFA1;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;max-width:100%;
+  }
+  .linha .ctrl{display:flex;gap:2px;flex:none;opacity:0;transition:opacity .12s;}
+  .linha:hover .ctrl,.linha:focus-within .ctrl{opacity:1;}
+  .mini{
+    width:21px;height:21px;border-radius:6px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text-muted);cursor:pointer;
+    font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;
+  }
+  .mini:hover{border-color:var(--gold);color:var(--gold-light);}
+  .mini.sai:hover{border-color:var(--red);color:var(--red);}
+  /* Em telas de toque não existe hover: os controles ficam sempre à vista,
+     senão não teria como mexer na quantidade. */
+  @media (hover:none){ .linha .ctrl{opacity:1;} }
+
+  /* comandante em destaque */
+  .comandante{
+    display:flex;gap:12px;align-items:center;padding:10px;border-radius:11px;
+    background:linear-gradient(120deg,rgba(201,162,39,.10),transparent 70%);
+    border:1px solid rgba(201,162,39,.4);margin-bottom:14px;
+  }
+  .comandante img{width:52px;height:52px;object-fit:cover;object-position:center 18%;
+    border-radius:8px;flex:none;background:var(--surface-2);}
+  .comandante .dados{flex:1;min-width:0;}
+  .comandante .dados b{display:block;font-size:14px;font-family:'Cinzel',serif;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .comandante .dados small{color:var(--text-muted);font-size:11px;}
+
+  /* ---------------- análise ---------------- */
+  .barras{display:flex;align-items:flex-end;gap:4px;height:86px;margin-top:4px;}
+  .barra{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+    align-items:center;gap:3px;height:100%;}
+  .barra .haste{width:100%;background:linear-gradient(180deg,var(--purple),#5B44B8);
+    border-radius:3px 3px 0 0;min-height:2px;transition:height .25s;}
+  .barra .cmc{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-muted);}
+  .barra .qt{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gold-light);height:11px;}
+
+  .distrib{display:flex;flex-direction:column;gap:5px;margin-top:4px;}
+  .distrib .item{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-muted);}
+  .distrib .trilho{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;}
+  /* `display:block` não é enfeite: sem ele o <span> continua inline, e
+     largura e altura em porcentagem não valem — a barra sai invisível. */
+  .distrib .cheio{display:block;height:100%;border-radius:3px;}
+  .distrib .num{font-family:'IBM Plex Mono',monospace;font-size:10px;width:20px;text-align:right;}
+
+  .aponta{
+    display:flex;gap:7px;align-items:flex-start;font-size:12px;line-height:1.45;
+    padding:8px 10px;border-radius:8px;margin-bottom:5px;
+  }
+  .aponta.erro{background:rgba(217,99,74,.12);border:1px solid rgba(217,99,74,.5);color:#F2AFA1;}
+  .aponta.aviso{background:rgba(201,162,39,.10);border:1px dashed var(--gold);color:var(--gold-light);}
+  .aponta.ok{background:rgba(76,154,107,.10);border:1px solid rgba(76,154,107,.45);color:#A8D8BC;}
+  /* Deck incompleto NÃO é erro: é o estado normal de quem está montando.
+     Vermelho aqui gritaria durante as duas horas inteiras da montagem, e
+     quando um erro de verdade aparecesse ninguém olharia mais. */
+  .progresso{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:8px;
+    padding:9px 11px;margin-bottom:5px;
+  }
+  .progresso .texto{display:flex;justify-content:space-between;align-items:baseline;
+    font-size:12px;color:var(--text-muted);margin-bottom:6px;}
+  .progresso .texto b{font-family:'IBM Plex Mono',monospace;color:var(--gold-light);}
+  .progresso .trilho{display:block;height:6px;border-radius:3px;
+    background:var(--bg);overflow:hidden;}
+  .progresso .cheio{display:block;height:100%;border-radius:3px;
+    background:linear-gradient(90deg,var(--purple),var(--gold));transition:width .3s;}
+
+  /* ---------------- abas (só no celular) ---------------- */
+  .abas{
+    display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;
+    background:rgba(15,13,23,.96);backdrop-filter:blur(10px);
+    border-top:1px solid var(--border);padding:7px 10px calc(7px + env(safe-area-inset-bottom));
+    gap:6px;
+  }
+  .abas button{
+    flex:1;background:transparent;border:1px solid transparent;border-radius:9px;
+    color:var(--text-muted);padding:9px 4px;font-size:11px;cursor:pointer;
+  }
+  .abas button.ativa{border-color:var(--gold);color:var(--gold-light);background:rgba(201,162,39,.08);}
+
+  /* ---------------- prévia da arte (só no mouse) ---------------- */
+  .previa{
+    position:fixed;z-index:60;pointer-events:none;width:220px;border-radius:11px;
+    border:1px solid var(--border);box-shadow:0 22px 44px -14px rgba(0,0,0,.85);
+    opacity:0;transition:opacity .12s;background:var(--surface);
+  }
+  .previa.mostra{opacity:1;}
+
+  /* ---------------- orçamento ---------------- */
+  .fonte{
+    display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+    padding:8px 0;border-bottom:1px dashed var(--border);
+  }
+  .fonte:last-child{border-bottom:none;}
+  .fonte .rot{font-size:12px;color:var(--text-muted);}
+  .fonte .tot{font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--gold-light);}
+  .caras{margin-top:10px;display:flex;flex-direction:column;gap:2px;}
+  .caras .cara{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;
+    color:var(--text-muted);padding:2px 0;}
+  .caras .cara b{color:var(--text);font-weight:500;min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;}
+  .caras .cara span{font-family:'IBM Plex Mono',monospace;flex:none;}
+
+  .nota{font-size:11px;color:var(--text-muted);line-height:1.55;}
+  .nota a{color:var(--gold-light);}
+  .vazio{color:var(--text-muted);font-size:12.5px;line-height:1.6;text-align:center;padding:22px 8px;}
+
+  .aviso-base{
+    background:rgba(201,162,39,.10);border:1px dashed var(--gold);border-radius:10px;
+    padding:11px 13px;margin-bottom:14px;font-size:12.5px;line-height:1.55;color:var(--gold-light);
+  }
+
+  .toast{
+    position:fixed;left:50%;transform:translateX(-50%) translateY(14px);
+    bottom:24px;z-index:70;background:var(--surface-2);border:1px solid var(--gold);
+    color:var(--text);border-radius:10px;padding:11px 16px;font-size:13px;
+    box-shadow:0 18px 34px -16px rgba(0,0,0,.8);opacity:0;pointer-events:none;
+    transition:opacity .18s,transform .18s;max-width:90vw;text-align:center;
+  }
+  .toast.mostra{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* No celular o cabeçalho é grudado no topo, então cada linha dele é espaço
+     que some do deck pro resto da sessão. Os botões viram uma fita que rola
+     de lado em vez de quebrar em três linhas. */
+  @media (max-width:600px){
+    .acoes{flex-wrap:nowrap;overflow-x:auto;width:100%;scrollbar-width:none;}
+    .acoes::-webkit-scrollbar{display:none;}
+    .btn{padding:7px 10px;}
+    .topo-in{padding:8px 12px;gap:9px;}
+  }
+
+  @media (max-width:900px){
+    .corpo{grid-template-columns:minmax(0,1fr);padding-bottom:76px;}
+    .lateral{position:static;max-height:none;}
+    .lateral .resultados{max-height:52vh;}
+    .abas{display:flex;}
+    .previa{display:none;}
+    .corpo[data-aba="deck"] .lateral{display:none;}
+    .corpo[data-aba="buscar"] .principal{display:none;}
+    .corpo[data-aba="buscar"] #painel-analise,
+    .corpo[data-aba="buscar"] #painel-orcamento{display:none;}
+    .corpo[data-aba="analise"] .principal{display:none;}
+    .corpo[data-aba="analise"] #painel-busca{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-in">
+    <div class="rune"><span>⌘</span></div>
+    <div class="titulo-deck">
+      <input id="nome-deck" value="Deck sem nome" maxlength="80"
+             aria-label="Nome do deck" spellcheck="false">
+      <div class="estado-salvo" id="estado-salvo"></div>
+    </div>
+    <div class="contador" id="contador" title="Cartas no deck, comandante incluído">
+      <b id="contador-n">0</b><span>/100</span>
+    </div>
+    <div class="acoes">
+      <button class="btn" id="btn-meus" hidden>Meus decks <span id="meus-n"></span></button>
+      <button class="btn" id="btn-compartilhar" hidden>Compartilhar</button>
+      <button class="btn" id="btn-novo">Novo</button>
+      <a class="btn" href="/" style="text-decoration:none;display:inline-block;">Imprimir proxies</a>
+    </div>
+  </div>
+</header>
+
+<main class="corpo" id="corpo" data-aba="deck">
+
+  <!-- ------------------ coluna principal: o deck ------------------ -->
+  <section class="principal">
+    <div class="aviso-base" id="aviso-base" hidden></div>
+
+    <!-- Estado inicial: sem comandante não existe deck de Commander, então a
+         tela inteira é essa única pergunta. -->
+    <div class="painel heroi" id="heroi">
+      <h1>Quem é o comandante?</h1>
+      <p>Todo deck de Commander começa por uma criatura lendária. Ela define a
+        identidade de cor — e daqui pra frente a busca só mostra o que cabe
+        nela.</p>
+      <div class="busca-caixa">
+        <input class="campo" id="busca-cmd" autocomplete="off" spellcheck="false"
+               placeholder="Buscar comandante… (ex.: Atraxa, Muldrotha)">
+      </div>
+      <div class="resultados" id="res-cmd"></div>
+    </div>
+
+    <!-- Deck montado -->
+    <div class="painel" id="painel-deck" hidden>
+      <div class="comandante" id="cmd-box"></div>
+      <div id="lista-deck"></div>
+      <div class="vazio" id="deck-vazio">
+        As 99 cartas entram pela busca ao lado. Comece pelas que o comandante
+        pede — a análise embaixo acompanha a curva e as cores enquanto você monta.
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------ lateral: busca, análise, orçamento ------------------ -->
+  <aside class="lateral">
+
+    <div class="painel" id="painel-busca" style="display:flex;flex-direction:column;min-height:0;">
+      <h2 class="secao">Adicionar cartas</h2>
+      <input class="campo" id="busca" autocomplete="off" spellcheck="false"
+             placeholder="Buscar carta…  (tecle /)">
+      <div class="filtros" id="filtros"></div>
+      <div class="nota" id="nota-identidade" hidden></div>
+      <div class="resultados" id="res"></div>
+    </div>
+
+    <div class="painel" id="painel-analise">
+      <h2 class="secao">Análise</h2>
+      <div id="apontamentos"></div>
+      <div style="margin-top:14px;">
+        <h2 class="secao">Curva de mana</h2>
+        <div class="barras" id="curva"></div>
+      </div>
+      <div style="margin-top:14px;">
+        <h2 class="secao">Cores e tipos</h2>
+        <div class="distrib" id="distrib"></div>
+      </div>
+    </div>
+
+    <div class="painel" id="painel-orcamento">
+      <h2 class="secao">Orçamento</h2>
+      <p class="nota" id="orc-nota">Cota o preço de comprar as cartas de
+        verdade, nas mesmas duas fontes da tela de impressão. O comandante e os
+        terrenos básicos ficam de fora do total — é o critério do Commander 500.</p>
+      <div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap;">
+        <button class="btn verde" id="btn-cotar" style="flex:1;">Cotar preços</button>
+        <button class="btn" id="btn-exportar">Exportar lista</button>
+      </div>
+      <div id="orc-resultado" style="margin-top:12px;"></div>
+    </div>
+
+  </aside>
+</main>
+
+<nav class="abas" id="abas">
+  <button data-aba="deck" class="ativa">Deck</button>
+  <button data-aba="buscar">Buscar</button>
+  <button data-aba="analise">Análise</button>
+</nav>
+
+<img class="previa" id="previa" alt="">
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   Deckbuilder de Commander.
+
+   A regra desta tela: NADA espera o servidor pra responder ao clique. As
+   cartas chegam completas da busca (a base é local, ver `cartas.py`), então
+   contagem, curva, identidade de cor e singleton são recalculados aqui na
+   hora. O servidor guarda o deck e devolve a validação dele junto do
+   autosave — quando essa resposta chega, ela substitui a validação local,
+   que é só a versão instantânea da mesma regra.
+   ========================================================================= */
+
+const $ = (id) => document.getElementById(id);
+const CORES = ["W","U","B","R","G"];
+const NOME_COR = {W:"Branco",U:"Azul",B:"Preto",R:"Vermelho",G:"Verde",C:"Incolor"};
+
+/* Categorias da lista, na ordem em que aparecem. A primeira que casar o
+   type_line ganha — daí Terreno vir antes de Criatura (terreno-criatura é
+   terreno pra quem monta) e Artefato vir depois de Criatura (o Solemn é
+   criatura, não artefato, na hora de contar bicho). */
+const CATEGORIAS = [
+  ["Terrenos",      (t) => t.includes("land")],
+  ["Criaturas",     (t) => t.includes("creature")],
+  ["Planeswalkers", (t) => t.includes("planeswalker")],
+  ["Artefatos",     (t) => t.includes("artifact")],
+  ["Encantamentos", (t) => t.includes("enchantment")],
+  ["Instantâneos",  (t) => t.includes("instant")],
+  ["Feitiços",      (t) => t.includes("sorcery")],
+  ["Batalhas",      (t) => t.includes("battle")],
+];
+const FILTROS = [
+  ["Criatura","creature"], ["Instantâneo","instant"], ["Feitiço","sorcery"],
+  ["Artefato","artifact"], ["Encantamento","enchantment"],
+  ["Planeswalker","planeswalker"], ["Terreno","land"],
+];
+
+const estado = {
+  id: null,
+  nome: "Deck sem nome",
+  comandantes: [],   // cartas completas
+  cartas: [],        // [{quantidade, carta}]
+  validacao: null,   // a do servidor, quando chega
+  filtro: "",
+  desfazer: [],
+};
+
+/* ---------------------------------------------------------------- utilidades */
+
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("mostra");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("mostra"), 2200);
+}
+
+function identidadeDoDeck(){
+  const cores = new Set();
+  estado.comandantes.forEach(c => (c.identidade||"").split("").forEach(x => cores.add(x)));
+  return CORES.filter(c => cores.has(c)).join("");
+}
+
+function totalCartas(){
+  return estado.comandantes.length +
+         estado.cartas.reduce((n, e) => n + e.quantidade, 0);
+}
+
+function categoriaDe(carta){
+  const t = (carta.tipo || "").toLowerCase();
+  for (const [nome, casa] of CATEGORIAS) if (casa(t)) return nome;
+  return "Outros";
+}
+
+/* Símbolos de mana: "{2}{G}{W}" vira bolinhas. Híbrido ("{G/W}") sai com as
+   duas cores em gradiente, que é como o jogo desenha. */
+function manaHTML(custo){
+  if (!custo) return "";
+  const simbolos = custo.match(/\{[^}]+\}/g) || [];
+  // `title` em cada bolinha porque cor sozinha não é informação acessível —
+  // e num pip de 13px o daltônico não é o único que agradece.
+  return '<span class="mana">' + simbolos.map(s => {
+    const bruto = s.slice(1, -1);
+    const partes = bruto.split("/").filter(p => CORES.includes(p));
+    if (partes.length === 2){
+      return `<span class="pip" title="${NOME_COR[partes[0]]} ou ${NOME_COR[partes[1]]}"
+        style="background:linear-gradient(135deg,var(--mana-${partes[0]}) 50%,var(--mana-${partes[1]}) 50%)"></span>`;
+    }
+    if (partes.length === 1){
+      return `<span class="pip ${partes[0]}" title="${NOME_COR[partes[0]]}"></span>`;
+    }
+    const rotulo = bruto.replace(/[^0-9XYZC]/g, "") || "•";
+    return `<span class="pip C" title="${rotulo} genérico">${rotulo}</span>`;
+  }).join("") + "</span>";
+}
+
+function escapar(txt){
+  return String(txt == null ? "" : txt)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+function preco(carta){
+  return carta.preco_usd ? "$" + Number(carta.preco_usd).toFixed(2) : "";
+}
+
+/* ------------------------------------------------------- validação instantânea
+
+   Mesmas regras do `decks.validar` no servidor, na versão que roda a cada
+   clique. Ela é substituída pela do servidor assim que o autosave responde;
+   existe porque esperar a rede pra dizer "essa carta é de outra cor" tornaria
+   a tela lenta justamente no momento em que a informação importa. */
+function validarLocal(){
+  const identidade = identidadeDoDeck();
+  const apontamentos = [];
+  const total = totalCartas();
+
+  if (!estado.comandantes.length){
+    apontamentos.push({nivel:"erro", tipo:"sem-comandante",
+      mensagem:"Todo deck de Commander começa por um comandante."});
+  }
+  if (total < 100){
+    apontamentos.push({nivel:"erro", tipo:"faltam",
+      mensagem:`Faltam ${100 - total} carta(s) pras 100 do formato.`});
+  } else if (total > 100){
+    apontamentos.push({nivel:"erro", tipo:"sobram",
+      mensagem:`São ${total - 100} carta(s) além das 100 do formato.`});
+  }
+
+  for (const {carta, quantidade} of estado.cartas){
+    if (!carta) continue;
+    if (quantidade > 1 && !carta.basico && !carta.ilimitada){
+      apontamentos.push({nivel:"erro", tipo:"singleton", carta:carta.nome,
+        mensagem:`${carta.nome}: ${quantidade} cópias. Commander é singleton.`});
+    }
+    if (!carta.legal){
+      apontamentos.push({nivel:"erro", tipo:"banida", carta:carta.nome,
+        mensagem:`${carta.nome} não é legal em Commander.`});
+    }
+    const fora = (carta.identidade||"").split("").filter(c => !identidade.includes(c));
+    if (fora.length){
+      apontamentos.push({nivel:"erro", tipo:"identidade", carta:carta.nome,
+        mensagem:`${carta.nome} tem ${fora.join("")} na identidade de cor, que o comandante não tem.`});
+    }
+  }
+  const erros = apontamentos.filter(a => a.nivel === "erro").length;
+  return {ok: !erros, identidade, total, apontamentos, erros,
+          avisos: apontamentos.length - erros};
+}
+
+function validacaoAtual(){
+  return estado.validacao || validarLocal();
+}
+
+/* ------------------------------------------------------------------ servidor */
+
+async function api(caminho, opcoes){
+  const r = await fetch(caminho, opcoes);
+  if (!r.ok){
+    let detalhe = r.statusText;
+    try { detalhe = (await r.json()).detail || detalhe; } catch(e){}
+    throw new Error(detalhe);
+  }
+  return r.status === 204 ? null : r.json();
+}
+
+function corpoDoDeck(){
+  return {
+    nome: estado.nome,
+    comandantes: estado.comandantes.map(c => c.nome),
+    cartas: estado.cartas.map(e => ({nome: e.carta.nome, quantidade: e.quantidade})),
+  };
+}
+
+let salvarTimer = null, salvando = false, salvarDeNovo = false;
+
+function marcarEstado(texto, classe){
+  const el = $("estado-salvo");
+  el.textContent = texto;
+  el.className = "estado-salvo" + (classe ? " " + classe : "");
+}
+
+/* Autosave: agenda uma gravação pra 900 ms depois da última mudança. Um clique
+   em "+" não pode virar uma requisição — quem ajusta quantidade clica várias
+   vezes seguidas. */
+function agendarSalvar(){
+  marcarEstado("alterações não salvas");
+  clearTimeout(salvarTimer);
+  salvarTimer = setTimeout(salvarAgora, 900);
+}
+
+async function salvarAgora(){
+  if (salvando){ salvarDeNovo = true; return; }
+  // Deck sem comandante e sem carta não vira registro no servidor: senão cada
+  // pessoa que só abriu a página deixaria um deck vazio pra trás.
+  if (!estado.comandantes.length && !estado.cartas.length) return;
+  salvando = true;
+  marcarEstado("salvando…");
+  try {
+    const corpo = {method: estado.id ? "PUT" : "POST",
+                   headers: {"Content-Type": "application/json"},
+                   body: JSON.stringify(corpoDoDeck())};
+    const resposta = await api(estado.id ? `/decks/${estado.id}` : "/decks", corpo);
+    const novo = !estado.id;
+    estado.id = resposta.deck.id;
+    estado.validacao = resposta.validacao;
+    if (novo){
+      history.replaceState(null, "", `?deck=${estado.id}`);
+      $("btn-compartilhar").hidden = false;
+    }
+    lembrarDeck();
+    marcarEstado("salvo " + new Date().toLocaleTimeString("pt-BR",
+      {hour:"2-digit", minute:"2-digit"}), "ok");
+    desenharAnalise();
+  } catch (e){
+    marcarEstado("não consegui salvar: " + e.message, "erro");
+  } finally {
+    salvando = false;
+    if (salvarDeNovo){ salvarDeNovo = false; agendarSalvar(); }
+  }
+}
+
+/* ------------------------------------------------- meus decks (localStorage)
+
+   Mesma escolha da tela "Meus Pedidos": não existe login, então a lista de
+   quem montou o quê mora no navegador de quem montou. O servidor guarda os
+   decks e não sabe de quem são. */
+const CHAVE = "forja.decks";
+
+function lidos(){
+  try { return JSON.parse(localStorage.getItem(CHAVE) || "[]"); }
+  catch(e){ return []; }
+}
+
+function lembrarDeck(){
+  if (!estado.id) return;
+  try {
+    const lista = lidos().filter(d => d.id !== estado.id);
+    lista.unshift({id: estado.id, nome: estado.nome, quando: Date.now(),
+                   comandante: estado.comandantes[0]?.nome || ""});
+    localStorage.setItem(CHAVE, JSON.stringify(lista.slice(0, 20)));
+  } catch(e){ /* cota cheia ou navegador privado: a lista é conveniência */ }
+  atualizarBotaoMeus();
+}
+
+function atualizarBotaoMeus(){
+  const lista = lidos();
+  $("btn-meus").hidden = lista.length === 0;
+  $("meus-n").textContent = lista.length ? `(${lista.length})` : "";
+}
+
+/* ------------------------------------------------------------------- desenhar */
+
+function desenharTudo(){
+  desenharDeck();
+  desenharAnalise();
+  desenharContador();
+  atualizarNotaIdentidade();
+}
+
+function desenharContador(){
+  const total = totalCartas();
+  $("contador-n").textContent = total;
+  $("contador").className = "contador" +
+    (total === 100 ? " completo" : total > 100 ? " passou" : "");
+}
+
+function desenharDeck(){
+  const temComandante = estado.comandantes.length > 0;
+  $("heroi").hidden = temComandante;
+  $("painel-deck").hidden = !temComandante;
+  if (!temComandante) return;
+
+  const identidade = identidadeDoDeck();
+  $("cmd-box").innerHTML = estado.comandantes.map((c, i) => `
+    <img src="${escapar(c.imagem)}" alt="" loading="lazy">
+    <div class="dados">
+      <b>${escapar(c.nome)}</b>
+      <small>${escapar(c.tipo)}</small>
+    </div>
+    <div class="mana">${manaHTML(c.mana_cost)}</div>
+    <button class="mini sai" data-tirar-cmd="${i}" title="Trocar comandante">✕</button>
+  `).join('<div style="width:100%;height:1px;background:var(--border)"></div>');
+
+  // Segundo comandante só faz sentido quando o primeiro tem parceria.
+  if (estado.comandantes.length === 1 && estado.comandantes[0].parceiro){
+    $("cmd-box").insertAdjacentHTML("beforeend",
+      `<button class="btn" id="btn-parceiro" style="width:100%;margin-top:8px;">
+         + Adicionar parceiro</button>`);
+  }
+
+  const porCategoria = new Map();
+  for (const entrada of estado.cartas){
+    const cat = categoriaDe(entrada.carta);
+    if (!porCategoria.has(cat)) porCategoria.set(cat, []);
+    porCategoria.get(cat).push(entrada);
+  }
+
+  const ordem = CATEGORIAS.map(c => c[0]).concat(["Outros"]);
+  let html = "";
+  for (const cat of ordem){
+    const itens = porCategoria.get(cat);
+    if (!itens) continue;
+    itens.sort((a, b) => (a.carta.cmc - b.carta.cmc) ||
+                          a.carta.nome.localeCompare(b.carta.nome));
+    const n = itens.reduce((s, e) => s + e.quantidade, 0);
+    html += `<div class="grupo"><h3>${cat} <span class="n">${n}</span></h3>
+      <div class="colunas">` +
+      itens.map(e => linhaHTML(e, identidade)).join("") + `</div></div>`;
+  }
+  $("lista-deck").innerHTML = html;
+  $("deck-vazio").hidden = estado.cartas.length > 0;
+}
+
+function linhaHTML(entrada, identidade){
+  const c = entrada.carta;
+  const fora = (c.identidade||"").split("").filter(x => !identidade.includes(x));
+  const repetida = entrada.quantidade > 1 && !c.basico && !c.ilimitada;
+  const problema = fora.length || repetida || !c.legal;
+  let porque = "";
+  if (fora.length) porque = `fora da identidade (${fora.join("")})`;
+  else if (repetida) porque = "singleton: só uma cópia";
+  else if (!c.legal) porque = "não é legal em Commander";
+
+  return `<div class="linha ${problema ? "problema" : ""}" data-nome="${escapar(c.nome)}">
+    <span class="qtd">${entrada.quantidade}</span>
+    <span class="nome" data-arte="${escapar(c.imagem)}">${escapar(c.nome)}
+      ${porque ? `<span class="porque">· ${porque}</span>` : ""}</span>
+    ${manaHTML(c.mana_cost)}
+    <span class="ctrl">
+      <button class="mini" data-mais="${escapar(c.nome)}" title="Mais uma">+</button>
+      <button class="mini" data-menos="${escapar(c.nome)}" title="Menos uma">−</button>
+      <button class="mini sai" data-tirar="${escapar(c.nome)}" title="Tirar do deck">✕</button>
+    </span>
+  </div>`;
+}
+
+function desenharAnalise(){
+  const v = validacaoAtual();
+  const caixa = $("apontamentos");
+
+  if (!estado.comandantes.length){
+    caixa.innerHTML = `<div class="vazio" style="padding:8px 0;">Escolha o
+      comandante pra análise começar.</div>`;
+  } else if (v.ok){
+    caixa.innerHTML = `<div class="aponta ok">✓ Deck legal: 100 cartas,
+      singleton respeitado e tudo dentro da identidade
+      ${v.identidade ? pipsHTML(v.identidade) : "incolor"}.</div>`;
+  } else {
+    // "Faltam 43 cartas" sai da lista de erros e vira barra de progresso: é o
+    // estado normal de quem está montando, e pintá-lo de vermelho junto com
+    // uma carta banida ensinaria a ignorar os dois.
+    const faltam = v.apontamentos.filter(a => a.tipo === "faltam" || a.tipo === "sobram");
+    const resto = v.apontamentos.filter(a => a.tipo !== "faltam" && a.tipo !== "sobram");
+    let html = "";
+    if (faltam.length){
+      const pct = Math.min(100, (v.total / 100) * 100);
+      html += `<div class="progresso">
+        <div class="texto"><span>${v.total > 100 ? "Passou das 100" : "Montando o deck"}</span>
+          <b>${v.total}/100</b></div>
+        <span class="trilho"><span class="cheio" style="width:${pct}%"></span></span>
+      </div>`;
+    }
+
+    // Um erro por carta vira ruído numa lista de 99: agrupa por tipo e mostra
+    // "12 cartas fora da identidade" com os nomes juntos.
+    const porTipo = new Map();
+    for (const a of resto){
+      if (!porTipo.has(a.tipo)) porTipo.set(a.tipo, []);
+      porTipo.get(a.tipo).push(a);
+    }
+    caixa.innerHTML = html + [...porTipo.values()].map(grupo => {
+      const a = grupo[0];
+      const nomes = grupo.map(x => x.carta).filter(Boolean);
+      const texto = nomes.length > 1
+        ? `${nomes.length} cartas: ${escapar(nomes.slice(0, 6).join(", "))}` +
+          (nomes.length > 6 ? ` e mais ${nomes.length - 6}` : "")
+        : escapar(a.mensagem);
+      const titulo = nomes.length > 1 ? rotuloTipo(a.tipo) : "";
+      return `<div class="aponta ${a.nivel}">
+        <span>${titulo ? `<b>${titulo}</b> — ` : ""}${texto}</span></div>`;
+    }).join("");
+  }
+
+  desenharCurva();
+  desenharDistribuicao();
+}
+
+function rotuloTipo(tipo){
+  return {
+    identidade: "Fora da identidade de cor",
+    singleton: "Singleton quebrado",
+    banida: "Não é legal em Commander",
+    desconhecida: "Não achei na base local",
+    "comandante-repetido": "Comandante repetido nas 99",
+  }[tipo] || "";
+}
+
+function pipsHTML(identidade){
+  return `<span class="mana" title="${identidade.split("").map(c => NOME_COR[c]).join(", ")}">` +
+    identidade.split("").map(c => `<span class="pip ${c}"></span>`).join("") +
+    "</span>";
+}
+
+function desenharCurva(){
+  // Terreno fica de fora: ele não tem custo, e incluí-lo achataria a curva
+  // toda no zero, que é justamente o número que ninguém quer ler.
+  const faixas = [0,1,2,3,4,5,6,7];
+  const contas = faixas.map(() => 0);
+  for (const {carta, quantidade} of estado.cartas){
+    if (!carta || (carta.tipo||"").toLowerCase().includes("land")) continue;
+    const cmc = Math.min(7, Math.floor(carta.cmc || 0));
+    contas[cmc] += quantidade;
+  }
+  const teto = Math.max(1, ...contas);
+  $("curva").innerHTML = faixas.map((f, i) => `
+    <div class="barra" title="${contas[i]} carta(s) com custo ${f}${f === 7 ? "+" : ""}">
+      <span class="qt">${contas[i] || ""}</span>
+      <div class="haste" style="height:${(contas[i] / teto) * 100}%"></div>
+      <span class="cmc">${f}${f === 7 ? "+" : ""}</span>
+    </div>`).join("");
+}
+
+function desenharDistribuicao(){
+  // Fontes de cor (terreno e o que produz mana não entram: isso é a
+  // distribuição do que o deck PEDE de cor, não do que ele produz).
+  const pedidos = {W:0,U:0,B:0,R:0,G:0};
+  let totalPips = 0;
+  for (const {carta, quantidade} of estado.cartas){
+    if (!carta) continue;
+    for (const s of (carta.mana_cost || "").match(/\{[^}]+\}/g) || []){
+      for (const c of s.slice(1,-1).split("/")){
+        if (pedidos[c] !== undefined){ pedidos[c] += quantidade; totalPips += quantidade; }
+      }
+    }
+  }
+  const cores = CORES.filter(c => pedidos[c] > 0).map(c => `
+    <div class="item">
+      <span class="pip ${c}"></span>
+      <span style="width:56px">${NOME_COR[c]}</span>
+      <span class="trilho"><span class="cheio" style="width:${totalPips ? (pedidos[c]/totalPips)*100 : 0}%;background:var(--mana-${c})"></span></span>
+      <span class="num">${pedidos[c]}</span>
+    </div>`).join("");
+
+  const porCat = new Map();
+  for (const {carta, quantidade} of estado.cartas){
+    const cat = categoriaDe(carta);
+    porCat.set(cat, (porCat.get(cat) || 0) + quantidade);
+  }
+  const maiorCat = Math.max(1, ...porCat.values());
+  const tipos = [...porCat.entries()].sort((a,b) => b[1]-a[1]).map(([cat, n]) => `
+    <div class="item">
+      <span style="width:70px">${cat}</span>
+      <span class="trilho"><span class="cheio" style="width:${(n/maiorCat)*100}%;background:var(--purple)"></span></span>
+      <span class="num">${n}</span>
+    </div>`).join("");
+
+  $("distrib").innerHTML = (cores || "") +
+    (cores && tipos ? '<div style="height:6px"></div>' : "") + (tipos || "") ||
+    '<div class="vazio" style="padding:8px 0;">Sem cartas ainda.</div>';
+}
+
+function atualizarNotaIdentidade(){
+  const nota = $("nota-identidade");
+  if (!estado.comandantes.length){ nota.hidden = true; return; }
+  const identidade = identidadeDoDeck();
+  nota.hidden = false;
+  nota.innerHTML = identidade
+    ? `Mostrando só o que cabe na identidade ${pipsHTML(identidade)} do comandante.`
+    : "Comandante incolor: só cartas sem cor aparecem na busca.";
+}
+
+/* --------------------------------------------------------------- mexer no deck */
+
+function acharEntrada(nome){
+  return estado.cartas.find(e => e.carta.nome === nome);
+}
+
+function guardarDesfazer(){
+  estado.desfazer.push(JSON.stringify({
+    comandantes: estado.comandantes,
+    cartas: estado.cartas,
+  }));
+  if (estado.desfazer.length > 40) estado.desfazer.shift();
+}
+
+function desfazer(){
+  const anterior = estado.desfazer.pop();
+  if (!anterior){ toast("Nada pra desfazer."); return; }
+  const dados = JSON.parse(anterior);
+  estado.comandantes = dados.comandantes;
+  estado.cartas = dados.cartas;
+  estado.validacao = null;
+  desenharTudo();
+  agendarSalvar();
+  toast("Desfeito.");
+}
+
+function adicionar(carta){
+  guardarDesfazer();
+  const entrada = acharEntrada(carta.nome);
+  if (entrada){
+    entrada.quantidade += 1;
+  } else {
+    estado.cartas.push({carta, quantidade: 1});
+  }
+  estado.validacao = null;
+  desenharTudo();
+  agendarSalvar();
+}
+
+function mudarQuantidade(nome, delta){
+  const entrada = acharEntrada(nome);
+  if (!entrada) return;
+  guardarDesfazer();
+  entrada.quantidade += delta;
+  if (entrada.quantidade <= 0){
+    estado.cartas = estado.cartas.filter(e => e !== entrada);
+  }
+  estado.validacao = null;
+  desenharTudo();
+  agendarSalvar();
+}
+
+function tirar(nome){
+  guardarDesfazer();
+  estado.cartas = estado.cartas.filter(e => e.carta.nome !== nome);
+  estado.validacao = null;
+  desenharTudo();
+  agendarSalvar();
+  toast(`${nome} saiu do deck. Ctrl+Z desfaz.`);
+}
+
+function escolherComandante(carta){
+  guardarDesfazer();
+  if (escolherComandante.parceiro && estado.comandantes.length === 1){
+    estado.comandantes.push(carta);
+  } else {
+    estado.comandantes = [carta];
+  }
+  escolherComandante.parceiro = false;
+  if (!estado.nome || estado.nome === "Deck sem nome"){
+    estado.nome = carta.nome.split(",")[0];
+    $("nome-deck").value = estado.nome;
+  }
+  estado.validacao = null;
+  desenharTudo();
+  buscar();          // a lista da lateral agora tem identidade pra filtrar
+  agendarSalvar();
+}
+
+function tirarComandante(indice){
+  guardarDesfazer();
+  estado.comandantes.splice(indice, 1);
+  estado.validacao = null;
+  desenharTudo();
+  buscar();
+  agendarSalvar();
+}
+
+/* ------------------------------------------------------------------- buscar */
+
+let buscaTimer = null;
+
+function agendarBusca(){
+  clearTimeout(buscaTimer);
+  buscaTimer = setTimeout(buscar, 220);
+}
+
+async function buscar(){
+  const termo = $("busca").value.trim();
+  const identidade = estado.comandantes.length ? identidadeDoDeck() : null;
+  const params = new URLSearchParams({q: termo, limite: "40"});
+  if (identidade !== null) params.set("identidade", identidade);
+  if (estado.filtro) params.set("tipo", estado.filtro);
+  try {
+    const r = await api("/cartas/busca?" + params);
+    mostrarResultados($("res"), r.cartas, adicionar);
+  } catch (e){
+    $("res").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
+  }
+}
+
+async function buscarComandante(){
+  const termo = $("busca-cmd").value.trim();
+  const params = new URLSearchParams({q: termo, comandante: "true", limite: "25"});
+  try {
+    const r = await api("/cartas/busca?" + params);
+    mostrarResultados($("res-cmd"), r.cartas, escolherComandante, true);
+  } catch (e){
+    $("res-cmd").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
+  }
+}
+
+let ultimosResultados = [];
+
+function mostrarResultados(caixa, cartas, aoClicar, comandantes){
+  ultimosResultados = cartas;
+  caixa.aoClicar = aoClicar;
+  if (!cartas.length){
+    caixa.innerHTML = `<div class="vazio">Nada com esse nome.${
+      comandantes ? " Lembre: comandante é criatura lendária." : ""}</div>`;
+    return;
+  }
+  caixa.innerHTML = cartas.map((c, i) => `
+    <button class="achado ${acharEntrada(c.nome) ? "no-deck" : ""}" data-i="${i}"
+            data-arte="${escapar(c.imagem)}">
+      <span class="nome">
+        <b>${escapar(c.nome)}</b>
+        <small>${escapar(c.tipo)}</small>
+      </span>
+      ${manaHTML(c.mana_cost)}
+      <span class="preco">${preco(c)}</span>
+    </button>`).join("");
+}
+
+/* --------------------------------------------------------------- orçamento */
+
+let cotacaoTimer = null;
+
+async function cotar(){
+  if (!estado.id){ await salvarAgora(); }
+  if (!estado.id){ toast("Monte alguma coisa antes de cotar."); return; }
+  const botao = $("btn-cotar");
+  botao.disabled = true;
+  $("orc-resultado").innerHTML = `<div class="nota">Começando…</div>`;
+  try {
+    const inicio = await api(`/decks/${estado.id}/cotacao`, {method: "POST"});
+    acompanharCotacao(inicio.job_id);
+  } catch (e){
+    botao.disabled = false;
+    $("orc-resultado").innerHTML = `<div class="aponta erro">${escapar(e.message)}</div>`;
+  }
+}
+
+function acompanharCotacao(jobId){
+  clearInterval(cotacaoTimer);
+  const passo = async () => {
+    try {
+      const r = await api(`/cotacao/${jobId}`);
+      if (r.estado === "cotando"){
+        const pct = r.total ? Math.round((r.feitas / r.total) * 100) : 0;
+        $("orc-resultado").innerHTML = `
+          <div class="nota">Cotando ${r.cartas} cartas… ${pct}% (${r.decorrido}s)
+          <div class="distrib" style="margin-top:6px"><div class="item">
+            <span class="trilho"><span class="cheio" style="width:${pct}%;background:var(--green)"></span></span>
+          </div></div></div>`;
+        return;
+      }
+      clearInterval(cotacaoTimer);
+      $("btn-cotar").disabled = false;
+      if (r.estado === "erro"){
+        $("orc-resultado").innerHTML = `<div class="aponta erro">${escapar(r.detalhe)}</div>`;
+      } else {
+        mostrarCotacao(r.resultado);
+      }
+    } catch (e){
+      clearInterval(cotacaoTimer);
+      $("btn-cotar").disabled = false;
+      $("orc-resultado").innerHTML = `<div class="aponta erro">${escapar(e.message)}</div>`;
+    }
+  };
+  passo();
+  cotacaoTimer = setInterval(passo, 2000);
+}
+
+function mostrarCotacao(resultado){
+  // Total que não cobre o deck inteiro precisa dizer isso NO LUGAR do número,
+  // não embaixo dele: uma fonte fora do ar devolve zero carta cotada, e
+  // "US$ 0,00" lido como total é pior do que não ter cotado.
+  const fontes = (resultado.fontes || []).map(f => {
+    const pedidas = f.cartas_cotadas + f.cartas_faltando;
+    const moeda = f.moeda === "BRL" ? "R$" : "US$";
+    if (!f.cartas_cotadas){
+      return `<div class="aponta aviso" style="margin-top:6px">
+        <span><b>${escapar(f.rotulo)}</b> não devolveu preço de nenhuma das
+        ${pedidas} cartas. Fonte fora do ar ou bloqueando a consulta — não é
+        que o deck seja de graça.</span></div>`;
+    }
+    return `
+    <div class="fonte">
+      <span class="rot">${escapar(f.rotulo)}<br>
+        <small style="color:${f.cartas_faltando ? "var(--gold-light)" : "var(--text-muted)"}">
+          ${f.cartas_cotadas} de ${pedidas} cartas${
+            f.cartas_faltando ? " — total incompleto" : ""}</small></span>
+      <span class="tot">${moeda} ${Number(f.total).toFixed(2)}</span>
+    </div>`;
+  }).join("");
+
+  // As mais caras primeiro: é o que responde "onde está o dinheiro do deck",
+  // que é a pergunta de quem cota antes de proxiar.
+  const principal = (resultado.fontes || [])[0];
+  const caras = (resultado.cartas || [])
+    .filter(c => c.fontes && c.fontes[principal?.id]?.preco)
+    .sort((a,b) => b.fontes[principal.id].preco - a.fontes[principal.id].preco)
+    .slice(0, 8)
+    .map(c => `<div class="cara"><b>${escapar(c.nome)}</b>
+       <span>${principal.moeda === "BRL" ? "R$" : "US$"}
+       ${Number(c.fontes[principal.id].preco).toFixed(2)}</span></div>`).join("");
+
+  const excluidas = (resultado.excluidas || []).length;
+  $("orc-resultado").innerHTML = fontes +
+    (caras ? `<div class="caras"><h2 class="secao" style="margin-top:12px">Onde está o dinheiro</h2>${caras}</div>` : "") +
+    (excluidas ? `<p class="nota" style="margin-top:10px">${excluidas} carta(s)
+       fora do total: comandante e terrenos básicos, pelo critério do
+       Commander 500.</p>` : "");
+}
+
+/* --------------------------------------------------------------- exportar */
+
+function listaTexto(){
+  const linhas = estado.comandantes.map(c => `1 ${c.nome}`);
+  for (const e of estado.cartas) linhas.push(`${e.quantidade} ${e.carta.nome}`);
+  return linhas.join("\n");
+}
+
+async function exportar(){
+  const texto = listaTexto();
+  if (!texto){ toast("Deck vazio."); return; }
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast("Lista copiada — cole no MPC Fill pra escolher as artes.");
+  } catch (e){
+    // Navegador sem permissão de área de transferência (ou http sem TLS):
+    // mostra o texto pra copiar na mão em vez de falhar calado.
+    const janela = window.open("", "_blank");
+    if (janela){
+      janela.document.write("<pre>" + escapar(texto) + "</pre>");
+      janela.document.close();
+    } else {
+      toast("Não consegui copiar. Use o link de baixar a lista.");
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ eventos */
+
+function ligarEventos(){
+  $("busca").addEventListener("input", agendarBusca);
+  $("busca-cmd").addEventListener("input", () => {
+    clearTimeout(buscaTimer);
+    buscaTimer = setTimeout(buscarComandante, 220);
+  });
+
+  // Enter na busca adiciona o primeiro resultado: quem sabe o nome da carta
+  // digita e aperta Enter, sem tirar a mão do teclado.
+  $("busca").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && ultimosResultados.length){
+      adicionar(ultimosResultados[0]);
+      $("busca").select();
+    }
+  });
+  $("busca-cmd").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && ultimosResultados.length){
+      escolherComandante(ultimosResultados[0]);
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const digitando = ["INPUT","TEXTAREA"].includes(document.activeElement?.tagName);
+    if (e.key === "/" && !digitando){
+      e.preventDefault();
+      (estado.comandantes.length ? $("busca") : $("busca-cmd")).focus();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "z" && !digitando){
+      e.preventDefault();
+      desfazer();
+    }
+  });
+
+  $("filtros").innerHTML = FILTROS.map(([rotulo, valor]) =>
+    `<button class="chip" data-filtro="${valor}">${rotulo}</button>`).join("");
+  $("filtros").addEventListener("click", (e) => {
+    const botao = e.target.closest("[data-filtro]");
+    if (!botao) return;
+    const valor = botao.dataset.filtro;
+    estado.filtro = estado.filtro === valor ? "" : valor;
+    [...$("filtros").children].forEach(c =>
+      c.classList.toggle("ativo", c.dataset.filtro === estado.filtro));
+    buscar();
+  });
+
+  // Clique nos resultados (os dois painéis) e nos controles do deck.
+  document.addEventListener("click", (e) => {
+    const achado = e.target.closest(".achado");
+    if (achado){
+      const caixa = achado.closest(".resultados");
+      const carta = ultimosResultados[Number(achado.dataset.i)];
+      if (carta && caixa.aoClicar) caixa.aoClicar(carta);
+      return;
+    }
+    const mais = e.target.closest("[data-mais]");
+    if (mais) return mudarQuantidade(mais.dataset.mais, +1);
+    const menos = e.target.closest("[data-menos]");
+    if (menos) return mudarQuantidade(menos.dataset.menos, -1);
+    const sai = e.target.closest("[data-tirar]");
+    if (sai) return tirar(sai.dataset.tirar);
+    const saiCmd = e.target.closest("[data-tirar-cmd]");
+    if (saiCmd) return tirarComandante(Number(saiCmd.dataset.tirarCmd));
+    if (e.target.closest("#btn-parceiro")){
+      escolherComandante.parceiro = true;
+      $("heroi").hidden = false;
+      $("busca-cmd").value = "";
+      $("busca-cmd").focus();
+      buscarComandante();
+    }
+  });
+
+  $("nome-deck").addEventListener("input", () => {
+    estado.nome = $("nome-deck").value.trim() || "Deck sem nome";
+    agendarSalvar();
+  });
+
+  $("btn-novo").addEventListener("click", () => {
+    if (estado.cartas.length && !confirm("Começar um deck novo? O atual fica " +
+        "salvo e continua na lista de Meus decks.")) return;
+    location.href = location.pathname;
+  });
+
+  $("btn-compartilhar").addEventListener("click", async () => {
+    const url = location.origin + location.pathname + "?deck=" + estado.id;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("Link copiado. Quem abrir vê e edita este mesmo deck.");
+    } catch(e){ prompt("Link do deck:", url); }
+  });
+
+  $("btn-meus").addEventListener("click", () => {
+    const lista = lidos();
+    if (!lista.length) return;
+    const escolha = prompt("Seus decks neste navegador:\n\n" +
+      lista.map((d, i) => `${i + 1}. ${d.nome}${d.comandante ? " — " + d.comandante : ""}`)
+        .join("\n") + "\n\nDigite o número pra abrir:");
+    const i = Number(escolha) - 1;
+    if (lista[i]) location.href = `?deck=${lista[i].id}`;
+  });
+
+  $("btn-cotar").addEventListener("click", cotar);
+  $("btn-exportar").addEventListener("click", exportar);
+
+  $("abas").addEventListener("click", (e) => {
+    const botao = e.target.closest("[data-aba]");
+    if (!botao) return;
+    $("corpo").dataset.aba = botao.dataset.aba;
+    [...$("abas").children].forEach(b => b.classList.toggle("ativa", b === botao));
+    window.scrollTo({top: 0, behavior: "smooth"});
+  });
+
+  ligarPrevia();
+}
+
+/* Prévia da arte ao passar o mouse. Só no mouse: em toque ela roubaria o
+   clique, e a lista já mostra tipo e custo. */
+function ligarPrevia(){
+  const previa = $("previa");
+  document.addEventListener("mouseover", (e) => {
+    const alvo = e.target.closest("[data-arte]");
+    const arte = alvo?.dataset.arte;
+    if (!arte){ previa.classList.remove("mostra"); return; }
+    previa.src = arte;
+    previa.classList.add("mostra");
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!previa.classList.contains("mostra")) return;
+    const alturaPrevia = 310;
+    const y = Math.min(e.clientY + 14, window.innerHeight - alturaPrevia - 8);
+    const x = e.clientX > window.innerWidth - 250 ? e.clientX - 236 : e.clientX + 18;
+    previa.style.left = Math.max(8, x) + "px";
+    previa.style.top = Math.max(8, y) + "px";
+  });
+}
+
+/* ---------------------------------------------------------------- abertura */
+
+async function conferirBase(){
+  try {
+    const base = await api("/cartas/estado");
+    if (base.cartas > 0 && !base.erro) return;
+    const aviso = $("aviso-base");
+    aviso.hidden = false;
+    aviso.innerHTML = base.rodando
+      ? `<b>Montando a base de cartas</b> — ${base.lidas.toLocaleString("pt-BR")}
+         cartas lidas até agora. A busca fica vazia até isso terminar; leva
+         alguns minutos e só acontece na primeira vez.`
+      : `<b>A base de cartas está vazia.</b> Ela se monta sozinha a partir do
+         bulk data da Scryfall, mas ainda não rodou aqui — se isso não se
+         resolver em alguns minutos, veja o log por
+         <code>grep cartas</code>.`;
+    if (base.rodando) setTimeout(conferirBase, 5000);
+  } catch (e){ /* a busca vai avisar sozinha se estiver fora do ar */ }
+}
+
+async function abrir(){
+  ligarEventos();
+  atualizarBotaoMeus();
+  conferirBase();
+
+  const id = new URLSearchParams(location.search).get("deck");
+  if (id){
+    try {
+      const r = await api(`/decks/${id}`);
+      estado.id = r.deck.id;
+      estado.nome = r.deck.nome;
+      estado.validacao = r.validacao;
+      estado.comandantes = (r.deck.comandantes_completos || []).filter(Boolean);
+      estado.cartas = (r.deck.cartas_completas || [])
+        .filter(e => e.carta)
+        .map(e => ({carta: e.carta, quantidade: e.quantidade}));
+      $("nome-deck").value = estado.nome;
+      $("btn-compartilhar").hidden = false;
+      lembrarDeck();
+      marcarEstado("salvo", "ok");
+    } catch (e){
+      toast("Não achei esse deck: " + e.message);
+      history.replaceState(null, "", location.pathname);
+    }
+  }
+
+  desenharTudo();
+  if (estado.comandantes.length){ buscar(); $("busca").focus(); }
+  else { buscarComandante(); $("busca-cmd").focus(); }
+}
+
+abrir();
+</script>
+</body>
+</html>

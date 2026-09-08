@@ -1,15 +1,17 @@
 import os
 import re
+import threading
 import time
 
-from fastapi import FastAPI, Form, Header, HTTPException, Request, UploadFile
+from fastapi import (Body, FastAPI, Form, Header, HTTPException, Request,
+                     UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import (FileResponse, HTMLResponse, Response,
-                               StreamingResponse)
+from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
+                               Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (calc, cleanup, cotacao_job, fulfillment, log, notify, pix,
-               printer, storage, tinta, visitas)
+from . import (calc, cartas, cleanup, cotacao_job, decks, fulfillment, log,
+               notify, pix, printer, storage, tinta, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -124,10 +126,17 @@ async def registrar_visita(request: Request, call_next):
 @app.on_event("startup")
 def startup():
     storage.init_db()
+    decks.init_db()
+    cartas.init_db()
     cleanup.start_background()
+    # Monta a base de cartas se ela estiver vazia ou velha, em segundo plano.
+    # Sem isto o deckbuilder nasce sem carta nenhuma e dependeria de alguém
+    # lembrar de rodar o sync na mão depois de cada container novo.
+    cartas.start_background()
     log.evento("app", "subiu", log_dir=log.DIR, nivel=log.NIVEL,
                fontes=", ".join(f["id"] for f in cotacao_job.fontes_ativas())
-                      or "nenhuma")
+                      or "nenhuma",
+               cartas=cartas.estado().get("cartas", 0))
 
 
 @app.post("/orders")
@@ -626,6 +635,174 @@ def get_cotacao(job_id: str):
         raise HTTPException(404, "Cotação não encontrada (ou o backend "
                                  "reiniciou). Clique em cotar de novo.")
     return atual
+
+
+# --- Deckbuilder de Commander (app/static/deckbuilder.html) ----------------
+#
+# Uma tela pra MONTAR o deck, separada da que orça a impressão. As duas se
+# encontram no fim: o deck montado aqui vira uma decklist de texto que se cola
+# no MPC Fill, e o XML que sai de lá é o que sobe no orçamento de sempre.
+#
+# A busca não fala com a Scryfall: ela lê a cópia local do bulk data (ver
+# `cartas.py`), porque busca-a-cada-tecla contra a API de fora seria o jeito
+# mais rápido de levar 429 em cima de quem só está digitando.
+
+
+@app.get("/deckbuilder", response_class=HTMLResponse)
+def deckbuilder_page():
+    """A página do deckbuilder. Igual ao /admin: fica antes do mount estático
+    pra a URL ser /deckbuilder, sem o .html."""
+    return FileResponse("app/static/deckbuilder.html", media_type="text/html")
+
+
+@app.get("/cartas/estado")
+def cartas_estado():
+    """Quantas cartas a base local tem e quando foi montada.
+
+    Público, e a tela chama isso ao abrir: enquanto a primeira sincronização
+    não termina, a busca não acha nada, e sem esta rota a tela não teria como
+    dizer a diferença entre "carta não existe" e "a base ainda está vindo".
+    """
+    return cartas.estado()
+
+
+@app.get("/cartas/busca")
+def cartas_busca(q: str = "", identidade: str | None = None, tipo: str = "",
+                 comandante: bool = False, limite: int = 40):
+    """Busca na base local. Sem token: é catálogo público de carta de Magic.
+
+    `identidade` é a do comandante já escolhido — quando vem, some da lista
+    toda carta que aquele deck não poderia jogar. Vir vazio (`?identidade=`)
+    não é o mesmo que não vir: vazio é deck incolor, e aí só carta sem cor
+    aparece.
+    """
+    return {"cartas": cartas.buscar(termo=q, identidade=identidade, tipo=tipo,
+                                    comandante=comandante, limite=limite)}
+
+
+@app.post("/admin/cartas/sync")
+def cartas_sync(x_admin_token: str | None = Header(default=None)):
+    """Refaz a base de cartas na hora, sem esperar o ciclo diário.
+
+    Com token porque baixa mais de 100 MB da Scryfall: é a única rota daqui
+    que custa banda de verdade, e não é pra estar ao alcance de quem abrir a
+    página. Roda em segundo plano — a resposta volta na hora com o andamento,
+    que a tela do admin pode acompanhar por `GET /cartas/estado`.
+    """
+    _check_admin(x_admin_token)
+    if cartas.andamento()["rodando"]:
+        return {"ok": True, "ja_rodando": True, **cartas.estado()}
+    threading.Thread(target=cartas.sincronizar, daemon=True).start()
+    return {"ok": True, "comecou": True, **cartas.estado()}
+
+
+def _deck_completo(deck: dict) -> dict:
+    """O deck do jeito que a tela consome: cartas resolvidas + validação."""
+    return {
+        "deck": decks.com_cartas(deck),
+        "validacao": decks.validar(deck.get("comandantes"),
+                                   deck.get("cartas")),
+    }
+
+
+def _deck_ou_404(deck_id: str) -> dict:
+    deck = decks.obter(deck_id)
+    if not deck:
+        raise HTTPException(404, "Deck não encontrado.")
+    return deck
+
+
+@app.post("/decks")
+def criar_deck(corpo: dict = Body(default={})):
+    """Cria um deck e devolve o id.
+
+    Sem token e sem dono, pela mesma regra dos pedidos: quem tem o id, mexe.
+    O id tem 12 dígitos hex — mais que os 8 do pedido, porque aqui o estrago
+    de acertar um por sorte é reescrever o deck de alguém (ver `decks.py`).
+    """
+    try:
+        deck = decks.criar(corpo.get("nome", ""), corpo.get("comandantes"),
+                           corpo.get("cartas"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log.evento("deck", "criou", deck=deck["id"])
+    return _deck_completo(deck)
+
+
+@app.get("/decks/{deck_id}")
+def obter_deck(deck_id: str):
+    """O deck, com os dados completos de cada carta e a validação junto.
+
+    Tudo numa resposta só de propósito: a tela precisa das três coisas pra
+    desenhar a primeira vez, e três requisições em sequência atrasariam a
+    abertura de um link compartilhado.
+    """
+    return _deck_completo(_deck_ou_404(deck_id))
+
+
+@app.put("/decks/{deck_id}")
+def salvar_deck(deck_id: str, corpo: dict = Body(...)):
+    """Grava o deck por cima. É o autosave da tela.
+
+    A validação vai na resposta, mas NÃO impede de gravar: deck pela metade é
+    o estado normal de quem está montando (ver `decks.py`).
+    """
+    _deck_ou_404(deck_id)
+    try:
+        deck = decks.salvar(deck_id, corpo.get("nome", ""),
+                            corpo.get("comandantes"), corpo.get("cartas"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not deck:
+        raise HTTPException(404, "Deck não encontrado.")
+    return _deck_completo(deck)
+
+
+@app.post("/decks/{deck_id}/duplicar")
+def duplicar_deck(deck_id: str):
+    """Cópia com id novo — o "salvar como" de um sistema sem login."""
+    _deck_ou_404(deck_id)
+    copia = decks.duplicar(deck_id)
+    log.evento("deck", "duplicou", deck=deck_id, copia=copia["id"])
+    return _deck_completo(copia)
+
+
+@app.delete("/decks/{deck_id}")
+def apagar_deck(deck_id: str):
+    """Apaga o deck. Não tem volta: o deck vive só aqui."""
+    if not decks.apagar(deck_id):
+        raise HTTPException(404, "Deck não encontrado.")
+    log.evento("deck", "apagou", deck=deck_id)
+    return {"ok": True}
+
+
+@app.get("/decks/{deck_id}/lista", response_class=PlainTextResponse)
+def lista_do_deck(deck_id: str):
+    """A decklist em texto, uma carta por linha, comandante primeiro.
+
+    É o formato que se cola no MPC Fill pra escolher as artes — o passo que
+    liga esta tela ao fluxo de impressão. Este backend não consegue gerar o
+    XML sozinho: cada carta lá é um id de arquivo no Drive, e a biblioteca de
+    artes é do MPC Fill, não nossa (ver `pdf_generator.py`).
+    """
+    return decks.lista_texto(_deck_ou_404(deck_id))
+
+
+@app.post("/decks/{deck_id}/cotacao")
+def cotar_deck(deck_id: str):
+    """Começa a cotação de preço do deck e devolve o `job_id`.
+
+    Mesmo trabalho e mesmo acompanhamento do botão de cotar da tela de
+    pedidos: o andamento sai no `GET /cotacao/{job_id}` de sempre. O
+    comandante sai da conta, junto com os terrenos básicos — é o critério do
+    Commander 500 (ver `cotacao.filtrar_cotaveis`).
+    """
+    deck = _deck_ou_404(deck_id)
+    try:
+        return cotacao_job.iniciar_lista(decks.para_cotacao(deck),
+                                         deck.get("comandantes") or None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/impressora/tinta")

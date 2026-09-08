@@ -119,7 +119,7 @@ def e_basica(nome: str) -> bool:
     return normalizar_nome(nome) in BASICAS
 
 
-def filtrar_cotaveis(cartas, comandante: str | None = None):
+def filtrar_cotaveis(cartas, comandante: "str | list | None" = None):
     """Separa a decklist em `(cotaveis, excluidas)`, seguindo o Commander 500.
 
     Ficam de fora o terreno básico e, se apontado, o comandante. Esse é o
@@ -127,15 +127,22 @@ def filtrar_cotaveis(cartas, comandante: str | None = None):
     de preço se aplica ao deck SEM eles. Por isso o total que sai daqui é o
     número que se compara com o teto.
 
+    `comandante` aceita um nome ou uma LISTA de nomes: deck de parceiros tem
+    dois comandantes, e a regra do formato é sobre a zona de comando, não
+    sobre a carta — deixar o segundo na conta faria o total não bater com o
+    teto justamente nos decks que têm dois.
+
     As excluídas são DEVOLVIDAS, não descartadas em silêncio: quem olha um
     orçamento precisa ver o que não entrou na conta, senão o total parece
     menor do que é sem explicação.
     """
-    alvo = normalizar_nome(comandante) if comandante else None
+    if isinstance(comandante, str) or comandante is None:
+        comandante = [comandante] if comandante else []
+    alvos = {normalizar_nome(nome) for nome in comandante if nome}
     cotaveis, excluidas = [], []
     for carta in cartas:
         norma = normalizar_nome(carta["nome"])
-        if alvo and norma == alvo:
+        if norma in alvos:
             excluidas.append({**carta, "motivo": "comandante"})
         elif norma in BASICAS:
             excluidas.append({**carta, "motivo": "terreno básico"})
