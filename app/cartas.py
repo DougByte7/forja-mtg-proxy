@@ -27,6 +27,7 @@ base anterior intacta — é melhor buscar em cartas de ontem do que em meia
 base de hoje.
 """
 import codecs
+import itertools
 import json
 import os
 import re
@@ -34,6 +35,7 @@ import sqlite3
 import threading
 import time
 import unicodedata
+import zlib
 
 import requests
 
@@ -235,6 +237,72 @@ def objetos_do_array(pedacos) -> "list":
         raise CartasError("o bulk data acabou no meio — download incompleto")
 
 
+def objetos_do_jsonl(pedacos) -> "list":
+    """Gera cada objeto de um fluxo JSONL — um objeto JSON por linha.
+
+    `pedacos` é qualquer iterável de string. Levanta `CartasError` se alguma
+    linha não for JSON, ou se a última chegar cortada (conexão caiu): base
+    pela metade é pior que base de ontem.
+    """
+    buffer = ""
+    for pedaco in pedacos:
+        buffer += pedaco
+        while True:
+            quebra = buffer.find("\n")
+            if quebra < 0:
+                break
+            linha, buffer = buffer[:quebra].strip(), buffer[quebra + 1:]
+            if not linha:
+                continue
+            try:
+                obj = json.loads(linha)
+            except ValueError:
+                raise CartasError(
+                    "o bulk data tem linha que não é JSON — a Scryfall mudou "
+                    "o formato") from None
+            yield obj
+
+    resto = buffer.strip()
+    if resto:
+        # Arquivo sem quebra de linha no fim: a última carta mora aqui. Se ela
+        # não fechar, o download foi cortado no meio.
+        try:
+            obj = json.loads(resto)
+        except ValueError:
+            raise CartasError(
+                "o bulk data acabou no meio — download incompleto") from None
+        yield obj
+
+
+def objetos_do_bulk(pedacos) -> "list":
+    """Gera cada carta do bulk, seja ele array JSON ou JSONL.
+
+    A Scryfall serve hoje `jsonl_download_uri`, um objeto por linha; antes
+    servia `download_uri`, um array JSON único. Os dois se distinguem pelo
+    primeiro caractere que chega — `[` ou `{` —, então quem decide é o
+    conteúdo, não o nome do campo de onde veio a URL.
+    """
+    pedacos = iter(pedacos)
+    inicio: list = []
+    for pedaco in pedacos:
+        inicio.append(pedaco)
+        espiada = "".join(inicio).lstrip()
+        if not espiada:
+            continue
+        fluxo = itertools.chain(inicio, pedacos)
+        if espiada[0] == "[":
+            yield from objetos_do_array(fluxo)
+            return
+        if espiada[0] == "{":
+            yield from objetos_do_jsonl(fluxo)
+            return
+        raise CartasError(
+            "o bulk data não veio como JSON — a Scryfall mudou o formato, "
+            "ou isso é uma página de erro")
+
+    raise CartasError("o bulk data veio vazio")
+
+
 def _imagem(carta: dict) -> str:
     """URL da arte pequena. Em carta de duas faces ela mora dentro da face."""
     urls = carta.get("image_uris") or {}
@@ -354,10 +422,33 @@ def _pedacos(resposta) -> "list":
     decodificador incremental segura o pedaço órfão até o resto chegar.
     """
     decodificador = codecs.getincrementaldecoder("utf-8")()
-    for bruto in resposta.iter_content(chunk_size=256 * 1024):
+    for bruto in _descomprimido(resposta):
         if bruto:
             yield decodificador.decode(bruto)
     yield decodificador.decode(b"", True)
+
+
+def _descomprimido(resposta) -> "list":
+    """Bytes da resposta, gunzipados se vierem gzipados.
+
+    O JSONL da Scryfall vem `.gz` com `Content-Type: application/gzip` e sem
+    `Content-Encoding`, então o requests entrega comprimido e a conta é nossa.
+    Quem decide é o número mágico do gzip nos dois primeiros bytes — assim
+    funciona igual se um dia servirem o arquivo cru, ou se algum proxy
+    descomprimir no caminho.
+    """
+    descompressor = None
+    primeiro = True
+    for bruto in resposta.iter_content(chunk_size=256 * 1024):
+        if not bruto:
+            continue
+        if primeiro:
+            primeiro = False
+            if bruto[:2] == b"\x1f\x8b":
+                descompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        yield descompressor.decompress(bruto) if descompressor else bruto
+    if descompressor is not None:
+        yield descompressor.flush()
 
 
 def sincronizar() -> dict:
@@ -398,9 +489,14 @@ def _carregar() -> dict:
     catalogo = sessao.get(f"{BASE}/bulk-data/{BULK}", timeout=TIMEOUT)
     catalogo.raise_for_status()
     info = catalogo.json()
-    url = info.get("download_uri")
+    # `jsonl_download_uri` é o campo de hoje (JSONL gzipado); `download_uri`
+    # era o de antes (array JSON). Aceitamos os dois — `objetos_do_bulk` olha
+    # o conteúdo pra saber qual formato chegou.
+    url = info.get("jsonl_download_uri") or info.get("download_uri")
     if not url:
-        raise CartasError(f"a Scryfall não deu download_uri pro bulk {BULK}")
+        raise CartasError(f"a Scryfall não deu URI de download pro bulk "
+                          f"{BULK} — campos vindos: "
+                          f"{', '.join(sorted(info)) or '(nenhum)'}")
 
     init_db()
     conn = _conn()
@@ -412,7 +508,7 @@ def _carregar() -> dict:
         lote: list[tuple] = []
         with sessao.get(url, timeout=TIMEOUT, stream=True) as resposta:
             resposta.raise_for_status()
-            for carta in objetos_do_array(_pedacos(resposta)):
+            for carta in objetos_do_bulk(_pedacos(resposta)):
                 linha = _linha(carta)
                 if linha is None:
                     continue

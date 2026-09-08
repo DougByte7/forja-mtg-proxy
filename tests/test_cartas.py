@@ -20,6 +20,7 @@ Não precisa de rede nem de pytest. Rode de dentro da raiz do projeto:
 
 Sai com código 1 se qualquer checagem falhar.
 """
+import gzip
 import json
 import os
 import shutil
@@ -116,6 +117,60 @@ try:
     lidas = list(cartas.objetos_do_array(cartas._pedacos(RespostaFalsa(bruto, 3))))
     eq("caractere multibyte cortado entre pedaços",
        [c["name"] for c in lidas], ["Nazgûl", "Æther Vial"])
+
+    # ------------------------------------------------------------- bulk JSONL
+    print("\n--- bulk em JSONL gzipado (formato de hoje) ---")
+
+    jsonl = "".join(json.dumps(carta(f"Carta {i}")) + "\n" for i in range(5))
+
+    eq("jsonl inteiro num pedaço só",
+       len(list(cartas.objetos_do_jsonl([jsonl]))), 5)
+    eq("jsonl lido caractere a caractere",
+       [c["name"] for c in cartas.objetos_do_jsonl(list(jsonl))],
+       [f"Carta {i}" for i in range(5)])
+    eq("jsonl sem quebra de linha no fim",
+       len(list(cartas.objetos_do_jsonl([jsonl.rstrip("\n")]))), 5)
+    eq("linha em branco no meio não vira carta",
+       len(list(cartas.objetos_do_jsonl([jsonl.replace("\n", "\n\n", 1)]))), 5)
+
+    # Última linha cortada: download incompleto, tem que acusar.
+    try:
+        list(cartas.objetos_do_jsonl([jsonl[:len(jsonl) // 2]]))
+        check("jsonl cortado no meio levanta erro", False, "(passou calado)")
+    except cartas.CartasError:
+        check("jsonl cortado no meio levanta erro", True)
+
+    # O despachante decide pelo conteúdo, não pelo campo de onde veio a URL.
+    eq("despachante reconhece array", len(list(cartas.objetos_do_bulk([texto]))), 5)
+    eq("despachante reconhece jsonl", len(list(cartas.objetos_do_bulk([jsonl]))), 5)
+    eq("despachante aguenta espaço antes do conteúdo",
+       len(list(cartas.objetos_do_bulk(["  ", "\n", jsonl]))), 5)
+    for ruim, nome in ((["<html>erro</html>"], "página de erro"),
+                       ([], "fluxo vazio"),
+                       (["   "], "só espaço em branco")):
+        try:
+            list(cartas.objetos_do_bulk(ruim))
+            check(f"despachante recusa {nome}", False, "(passou calado)")
+        except cartas.CartasError:
+            check(f"despachante recusa {nome}", True)
+
+    # Gzip: a Scryfall manda `.gz` sem Content-Encoding, então o gunzip é
+    # nosso. O `_pedacos` decide pelo número mágico, não pelo cabeçalho.
+    comprimido = gzip.compress(jsonl.encode("utf-8"))
+    lidas = list(cartas.objetos_do_bulk(
+        cartas._pedacos(RespostaFalsa(comprimido, 7))))
+    eq("jsonl gzipado chega em cartas", len(lidas), 5)
+    eq("jsonl cru também passa",
+       len(list(cartas.objetos_do_bulk(
+           cartas._pedacos(RespostaFalsa(jsonl.encode("utf-8"), 7))))), 5)
+
+    bruto = gzip.compress(
+        "".join(json.dumps(carta(n)) + "\n"
+                for n in ("Nazgûl", "Æther Vial")).encode("utf-8"))
+    eq("multibyte sobrevive ao gunzip em pedaços",
+       [c["name"] for c in cartas.objetos_do_bulk(
+           cartas._pedacos(RespostaFalsa(bruto, 5)))],
+       ["Nazgûl", "Æther Vial"])
 
     # ------------------------------------------------------------ leitura de campo
     print("\n--- uma carta do bulk virando linha ---")
