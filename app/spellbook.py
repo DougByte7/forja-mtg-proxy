@@ -98,12 +98,12 @@ def _chave(comandantes: list[str], cartas: list[dict]) -> str:
     return hashlib.sha256(cru.encode("utf-8")).hexdigest()[:16]
 
 
-def _caminho_cache(chave: str) -> str:
-    return os.path.join(CACHE_DIR, f"combos-{chave}.json")
+def _caminho_cache(chave: str, prefixo: str = "combos") -> str:
+    return os.path.join(CACHE_DIR, f"{prefixo}-{chave}.json")
 
 
-def _do_cache(chave: str) -> dict | None:
-    caminho = _caminho_cache(chave)
+def _do_cache(chave: str, prefixo: str = "combos") -> dict | None:
+    caminho = _caminho_cache(chave, prefixo)
     try:
         with open(caminho, encoding="utf-8") as f:
             guardado = json.load(f)
@@ -114,37 +114,42 @@ def _do_cache(chave: str) -> dict | None:
     return guardado
 
 
-def _guardar_cache(chave: str, dados: dict) -> None:
+def _guardar_cache(chave: str, dados: dict, prefixo: str = "combos") -> None:
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
         # Escreve ao lado e renomeia: um processo morto no meio da escrita
         # deixaria um JSON pela metade que a próxima leitura teria que
         # adivinhar. Mesma ideia do `cache_precos`.
-        temporario = _caminho_cache(chave) + ".tmp"
+        temporario = _caminho_cache(chave, prefixo) + ".tmp"
         with open(temporario, "w", encoding="utf-8") as f:
             json.dump(dados, f, ensure_ascii=False)
-        os.replace(temporario, _caminho_cache(chave))
+        os.replace(temporario, _caminho_cache(chave, prefixo))
     except OSError as e:
         log.aviso("spellbook", "cache-nao-gravou",
                   motivo=f"{type(e).__name__}: {e}")
 
 
-def _pedir(corpo: dict) -> dict:
+def _pedir(corpo: dict, caminho: str = "find-my-combos",
+           metodo: str = "GET") -> dict:
     """A requisição, com as tentativas e o freio de 429.
+
+    O método varia por rota, e não por gosto: o `find-my-combos` só define
+    `get` (POST volta 405), enquanto o `estimate-bracket` define os dois e
+    aceita POST — que é o que se usa lá, porque GET com corpo é o tipo de
+    coisa que um proxy no meio do caminho pode descartar.
 
     Levanta `SpellbookError` quando não deu pra perguntar. Nunca devolve
     resultado parcial: combo que não veio é combo que a tela não pode
     inventar.
     """
     sessao = _sessao()
-    url = f"{BASE}/find-my-combos/"
+    url = f"{BASE}/{caminho}/"
     ultimo_erro = "?"
 
     for tentativa in range(1, TENTATIVAS + 1):
         _freio.esperar()
         try:
-            # GET com corpo. É o que a API deles pede — ver o cabeçalho.
-            resposta = sessao.request("GET", url, data=json.dumps(corpo),
+            resposta = sessao.request(metodo, url, data=json.dumps(corpo),
                                       timeout=TIMEOUT)
         except requests.RequestException as e:
             ultimo_erro = f"{type(e).__name__}: {e}"
@@ -240,6 +245,22 @@ def _combo(bruto: dict, no_deck: set[str]) -> dict:
     }
 
 
+def _corpo_do_deck(comandantes: list[str], cartas: list[dict]) -> dict:
+    """O deck no formato que as duas rotas deles esperam.
+
+    Comandante vai SEPARADO do resto, e não é firula: combo que exige a peça
+    na zona de comando só conta se ela estiver lá, e o cálculo de bracket
+    trata carta do comando de forma diferente na hora de decidir se um combo
+    é "de duas cartas".
+    """
+    return {
+        "commanders": [{"card": nome, "quantity": 1}
+                       for nome in comandantes[:MAX_COMANDANTES]],
+        "main": [{"card": c["nome"], "quantity": int(c["quantidade"])}
+                 for c in cartas[:MAX_CARTAS]],
+    }
+
+
 def buscar(comandantes: list[str], cartas: list[dict],
            usar_cache: bool = True) -> dict:
     """Os combos do deck, pelo Commander Spellbook.
@@ -267,15 +288,8 @@ def buscar(comandantes: list[str], cartas: list[dict],
                       combos=len(guardado.get("no_deck", [])))
             return {**guardado, "cache": True}
 
-    corpo = {
-        "commanders": [{"card": nome, "quantity": 1}
-                       for nome in comandantes[:MAX_COMANDANTES]],
-        "main": [{"card": c["nome"], "quantity": int(c["quantidade"])}
-                 for c in cartas[:MAX_CARTAS]],
-    }
-
     inicio = time.time()
-    resposta = _pedir(corpo)
+    resposta = _pedir(_corpo_do_deck(comandantes, cartas))
 
     # A resposta vem paginada; o que interessa mora em `results`. Aceitar os
     # dois formatos deixa o cliente vivo se eles tirarem a paginação um dia.
@@ -309,3 +323,56 @@ def buscar(comandantes: list[str], cartas: list[dict],
 
     _guardar_cache(chave, achados)
     return {**achados, "cache": False}
+
+
+def estimar_bracket(comandantes: list[str], cartas: list[dict],
+                    usar_cache: bool = True) -> dict:
+    """A classificação do deck pelo `estimate-bracket` deles, crua.
+
+    Devolve o `bracket_tag` e — o que interessa tanto quanto — a lista do que
+    o justifica: cada carta classificada como *game changer*, negação de
+    terreno em massa, turno extra ou banida, e cada combo com a velocidade e
+    se ele é de duas cartas. Quem transforma isso na nota que a tela mostra é
+    o `poder.py`; aqui é só o transporte.
+
+    Esta rota aceita POST (a de combos não), então vai POST: GET com corpo
+    funciona, mas é o tipo de coisa que um proxy no meio do caminho descarta.
+
+    Ao contrário do `find-my-combos`, a resposta NÃO vem paginada — é o
+    objeto direto.
+    """
+    if not LIGADO:
+        raise SpellbookError("a análise de poder está desligada no .env "
+                             "(SPELLBOOK=0).")
+    if not comandantes and not cartas:
+        raise SpellbookError("deck vazio: não há o que classificar.")
+
+    chave = _chave(comandantes, cartas)
+    if usar_cache:
+        guardado = _do_cache(chave, "bracket")
+        if guardado:
+            log.debug("spellbook", "cache-bracket", chave=chave)
+            return {**guardado, "cache": True}
+
+    inicio = time.time()
+    dados = _pedir(_corpo_do_deck(comandantes, cartas),
+                   caminho="estimate-bracket", metodo="POST")
+
+    if not isinstance(dados, dict) or "bracketTag" not in dados:
+        raise SpellbookError(
+            "o Spellbook respondeu num formato que eu não reconheço — o "
+            "contrato da API mudou (esperava um campo 'bracketTag')")
+
+    resultado = {
+        "bracket_tag": dados.get("bracketTag") or "",
+        "cartas": dados.get("cards") or [],
+        "templates": dados.get("templates") or [],
+        "combos": dados.get("combos") or [],
+        "quando": time.time(),
+    }
+    log.evento("spellbook", "bracket", cartas=len(cartas),
+               tag=resultado["bracket_tag"], combos=len(resultado["combos"]),
+               ms=int((time.time() - inicio) * 1000))
+
+    _guardar_cache(chave, resultado, "bracket")
+    return {**resultado, "cache": False}

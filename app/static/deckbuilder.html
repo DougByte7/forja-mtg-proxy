@@ -280,6 +280,45 @@
   .progresso .cheio{display:block;height:100%;border-radius:3px;
     background:linear-gradient(90deg,var(--purple),var(--gold));transition:width .3s;}
 
+  /* ---------------- nível de poder (brackets) ---------------- */
+  .escala{display:flex;gap:5px;margin:4px 0 12px;}
+  .degrau{
+    flex:1;text-align:center;border:1px solid var(--border);border-radius:8px;
+    padding:7px 2px 6px;background:var(--surface-2);cursor:help;
+  }
+  .degrau .n{
+    display:block;font-family:'IBM Plex Mono',monospace;font-size:16px;
+    font-weight:600;color:var(--text-muted);line-height:1.1;
+  }
+  .degrau .rot{display:block;font-size:9px;color:#6F6490;margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .degrau.aqui{border-color:var(--gold);background:rgba(201,162,39,.14);}
+  .degrau.aqui .n{color:var(--gold-light);font-size:19px;}
+  .degrau.aqui .rot{color:var(--gold-light);}
+  /* O 5 nasce tracejado e apagado: cEDH é definido pelo metagame, não pela
+     lista de cartas, então nenhuma conta sobre o papel chega nele. Mostrar o
+     degrau e explicar por que ele é inalcançável é mais honesto do que
+     esconder e deixar a escala parecendo ir só até 4. */
+  .degrau.fora{border-style:dashed;opacity:.5;}
+
+  .poder-nome{font-family:'Cinzel',serif;font-size:15px;color:var(--gold-light);
+    margin-bottom:3px;}
+  .poder-explica{font-size:12px;color:var(--text-muted);line-height:1.55;
+    margin-bottom:12px;}
+  .motivo{
+    border:1px solid var(--border);border-radius:9px;padding:9px 11px;
+    margin-bottom:6px;background:var(--surface-2);
+  }
+  .motivo.erro{border-color:rgba(217,99,74,.55);background:rgba(217,99,74,.09);}
+  .motivo b{font-size:12.5px;display:block;margin-bottom:3px;}
+  .motivo.erro b{color:#F2AFA1;}
+  .motivo .porque{font-size:11.5px;color:var(--text-muted);line-height:1.5;}
+  .motivo .quais{font-size:11.5px;color:var(--text);line-height:1.6;margin-top:5px;}
+  .motivo .quais span{
+    display:inline-block;background:var(--surface);border:1px solid var(--border);
+    border-radius:6px;padding:1px 7px;margin:2px 3px 0 0;
+  }
+
   /* ---------------- combos (Commander Spellbook) ---------------- */
   .combo{
     border:1px solid var(--border);border-radius:10px;padding:10px 11px;
@@ -400,6 +439,7 @@
     .corpo[data-aba="deck"] .lateral{display:none;}
     .corpo[data-aba="buscar"] .principal{display:none;}
     .corpo[data-aba="buscar"] #painel-analise,
+    .corpo[data-aba="buscar"] #painel-poder,
     .corpo[data-aba="buscar"] #painel-combos,
     .corpo[data-aba="buscar"] #painel-orcamento{display:none;}
     .corpo[data-aba="analise"] .principal{display:none;}
@@ -485,6 +525,17 @@
       </div>
     </div>
 
+    <div class="painel" id="painel-poder">
+      <h2 class="secao">Nível de poder</h2>
+      <p class="nota" id="poder-nota">Classifica o deck na escala oficial de
+        brackets do Commander — e mostra <b>por quê</b>, carta por carta. Quem
+        classifica é o Commander Spellbook, que acompanha a lista de game
+        changers da Wizards.</p>
+      <button class="btn" id="btn-poder" style="width:100%;margin-top:10px;">
+        Estimar nível</button>
+      <div id="poder-resultado" style="margin-top:12px;"></div>
+    </div>
+
     <div class="painel" id="painel-combos">
       <h2 class="secao">Combos</h2>
       <p class="nota" id="combos-nota">O Commander Spellbook conhece os combos
@@ -567,6 +618,8 @@ const estado = {
   desfazer: [],
   combos: null,             // a última resposta do Spellbook
   combosAssinatura: null,   // como o deck estava quando ela foi buscada
+  poder: null,              // a última estimativa de bracket
+  poderAssinatura: null,
 };
 
 /* ---------------------------------------------------------------- utilidades */
@@ -783,6 +836,7 @@ function desenharTudo(){
   // Redesenha os combos pra o aviso de "o deck mudou desde esta busca"
   // aparecer no mesmo instante em que ele passa a ser verdade.
   if (estado.combos) desenharCombos();
+  if (estado.poder) desenharPoder();
 }
 
 function desenharContador(){
@@ -1233,6 +1287,95 @@ function mostrarCotacao(resultado){
        Commander 500.</p>` : "");
 }
 
+/* --------------------------------------------------------- nível de poder */
+
+const BRACKETS = [
+  [1, "Exibição",  "Deck de mesa leve: sem combo, sem game changer."],
+  [2, "Núcleo",    "Nível de precon de fábrica — a régua da maioria das mesas."],
+  [3, "Turbinado", "Precon melhorado: até três game changers."],
+  [4, "Otimizado", "Sem freio: o deck joga pra ganhar o quanto antes."],
+  [5, "cEDH",      "Não dá pra calcular: cEDH é definido pelo metagame e pela " +
+                   "intenção de quem monta, não pela lista de cartas."],
+];
+
+async function estimarPoder(){
+  if (!estado.comandantes.length && !estado.cartas.length){
+    toast("Monte alguma coisa antes de estimar o nível.");
+    return;
+  }
+  if (!estado.id) await salvarAgora();
+  if (!estado.id){ toast("Não consegui salvar o deck antes de estimar."); return; }
+
+  const botao = $("btn-poder");
+  botao.disabled = true;
+  $("poder-resultado").innerHTML = `<div class="nota">Classificando…</div>`;
+  try {
+    estado.poder = await api(`/decks/${estado.id}/poder`, {method: "POST"});
+    estado.poderAssinatura = assinaturaDoDeck();
+  } catch (e){
+    $("poder-resultado").innerHTML =
+      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    return;
+  } finally {
+    botao.disabled = false;
+  }
+  desenharPoder();
+}
+
+function desenharPoder(){
+  const caixa = $("poder-resultado");
+  const p = estado.poder;
+  if (!p){ caixa.innerHTML = ""; return; }
+
+  let html = "";
+  if (estado.poderAssinatura !== assinaturaDoDeck()){
+    html += `<div class="combo-desatualizado">O deck mudou desde esta
+      estimativa — rode de novo pra atualizar.</div>`;
+  }
+  // Deck pela metade não tem nível: a estimativa só descreve as cartas que
+  // existem, e dizer "bracket 1" pra um deck de 20 cartas seria mentira por
+  // omissão.
+  const total = totalCartas();
+  if (total < 100){
+    html += `<div class="combo-desatualizado">O deck tem ${total} de 100
+      cartas — esta estimativa vale só pelo que já está montado.</div>`;
+  }
+
+  html += `<div class="escala">` + BRACKETS.map(([n, nome, explica]) => `
+    <div class="degrau ${p.bracket === n ? "aqui" : ""} ${n === 5 ? "fora" : ""}"
+         title="${escapar(nome)} — ${escapar(explica)}">
+      <span class="n">${n}</span><span class="rot">${escapar(nome)}</span>
+    </div>`).join("") + `</div>`;
+
+  if (p.bracket){
+    html += `<div class="poder-nome">Bracket ${p.bracket} — ${escapar(p.nome)}</div>
+             <div class="poder-explica">${escapar(p.explicacao)}</div>`;
+  } else {
+    html += `<div class="poder-nome">Fora do formato</div>
+      <div class="poder-explica">Com carta banida o deck não está em bracket
+        nenhum.</div>`;
+  }
+
+  html += p.motivos.length
+    ? p.motivos.map(m => `
+        <div class="motivo ${m.nivel === "erro" ? "erro" : ""}">
+          <b>${escapar(m.titulo)}</b>
+          <div class="porque">${escapar(m.detalhe)}</div>
+          ${m.cartas.length ? `<div class="quais">` +
+            m.cartas.map(c => `<span>${escapar(c)}</span>`).join("") +
+            `</div>` : ""}
+        </div>`).join("")
+    : `<div class="nota">Nada no deck puxa a nota pra cima: sem game changer,
+       sem combo de duas cartas, sem negação de terreno em massa e sem turno
+       extra.</div>`;
+
+  if (p.cache){
+    html += `<div class="nota" style="margin-top:10px">Resposta guardada de uma
+      estimativa recente com este mesmo deck.</div>`;
+  }
+  caixa.innerHTML = html;
+}
+
 /* ----------------------------------------------------------------- combos
 
    Uma consulta só ao Commander Spellbook, e só no clique: o deck muda a cada
@@ -1504,6 +1647,7 @@ function ligarEventos(){
   $("btn-cotar").addEventListener("click", cotar);
   $("btn-exportar").addEventListener("click", exportar);
   $("btn-combos").addEventListener("click", procurarCombos);
+  $("btn-poder").addEventListener("click", estimarPoder);
 
   $("abas").addEventListener("click", (e) => {
     const botao = e.target.closest("[data-aba]");

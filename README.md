@@ -234,9 +234,12 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   sem tocar na API deles) e a sincronização diária que a mantém.
 - `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
   cartas, parceria) e onde os decks ficam guardados.
-- `app/spellbook.py` — os combos do deck, pelo Commander Spellbook. **É `GET`
-  com corpo JSON e a resposta é camelCase** — leia o cabeçalho do arquivo
-  antes de mexer.
+- `app/spellbook.py` — o cliente do Commander Spellbook: os combos do deck e a
+  classificação de bracket. **A rota de combos é `GET` com corpo JSON, a de
+  bracket é POST, e as duas respondem em camelCase** — leia o cabeçalho do
+  arquivo antes de mexer.
+- `app/poder.py` — a resposta do `estimate-bracket` virando a nota de 1 a 4 e
+  o "por que essa nota". A conta não é nossa; a tradução é.
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
@@ -315,6 +318,10 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   resposta sintética no formato real: o `GET` com corpo, a leitura do
   camelCase dentro de `results`, a conta de qual peça está faltando e o que
   acontece quando eles não respondem: `python tests/test_spellbook.py`.
+- `tests/test_poder.py` — o mapa de brackets (duas tags caem no mesmo número,
+  e carta banida não cai em nenhum), o agrupamento dos motivos, e o cache das
+  duas rotas do Spellbook, que partem da mesma chave e não podem se misturar:
+  `python tests/test_poder.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -363,6 +370,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /decks/{id}/lista` | deckbuilder | a decklist em texto, comandante primeiro — é o que se cola no MPC Fill |
 | `POST /decks/{id}/cotacao` | botão **Cotar preços** | cota o deck montado, sem precisar de XML. O andamento sai no `GET /cotacao/{job_id}` de sempre |
 | `POST /decks/{id}/combos` | botão **Procurar combos** | pergunta ao Commander Spellbook os combos do deck e os que faltam uma carta. Uma consulta só, e só no clique |
+| `POST /decks/{id}/poder` | botão **Estimar nível** | classifica o deck nos brackets do Commander e devolve o que justifica a nota, carta por carta |
 | `GET /impressora/tinta` | front | nível de tinta da impressora, pra pastilha do cabeçalho e o aviso de prazo (público, em cache, sem endereço nem nome de fila na resposta) |
 | `GET /admin/tinta` | você (`X-Admin-Token`) | o que a impressora respondeu sobre tinta, cru — é aqui que se descobre se ela informa o nível |
 
@@ -616,10 +624,44 @@ dar o peso do combo sem precisar abrir o link.
 
 `SPELLBOOK=0` no `.env` desliga o painel.
 
+### Nível de poder (brackets do Commander)
+
+O painel **Nível de poder** classifica o deck na escala oficial de brackets —
+e, mais importante, **mostra por quê, carta por carta**. Uma nota sozinha não
+ajuda ninguém a decidir nada: "bracket 4" só vira informação útil quando vem
+com "por causa destes 5 game changers e deste combo de duas cartas".
+
+| Bracket | Nome | O que é |
+|---|---|---|
+| 1 | Exibição | deck de mesa leve: sem combo, sem game changer |
+| 2 | Núcleo | nível de precon de fábrica — a régua da maioria das mesas |
+| 3 | Turbinado | precon melhorado: até três game changers |
+| 4 | Otimizado | sem freio: o deck joga pra ganhar o quanto antes |
+| 5 | cEDH | **não é calculado** — ver abaixo |
+
+**A nota não é conta nossa.** Quem classifica é o `estimate-bracket` do
+Commander Spellbook, que é mantido por quem cataloga combo de Magic em tempo
+integral e acompanha a lista oficial de *game changers* da Wizards — uma lista
+que muda a cada anúncio deles e que, mantida na mão aqui, envelheceria em
+semanas. O que este projeto faz é traduzir a resposta: o número, pelo mesmo
+mapa que o backend deles usa, e os motivos, agrupados e em português.
+
+**O bracket 5 não é estimado, e isso não é limitação de implementação:** cEDH
+é definido pelo metagame e pela intenção de quem monta, não pela lista de
+cartas. Um deck bracket 4 e um cEDH podem ter a mesma decklist. Por isso o
+degrau 5 aparece na escala tracejado e apagado, com a explicação no título —
+esconder faria a escala parecer ir só até 4.
+
+**Carta banida não dá bracket baixo, dá bracket nenhum:** o deck está fora do
+formato, e é isso que o painel diz.
+
+E a estimativa vale pelo deck **inteiro**: num deck pela metade ela só
+descreve a metade que existe, e o painel avisa isso com a contagem.
+
 ### O que ainda não tem
 
-Ficaram pra depois, nesta ordem: nível de poder pelos brackets 1–5, sugestão
-de cartas por tema (EDHREC) e sugestão de mana base.
+Ficaram pra depois, nesta ordem: sugestão de cartas por tema (EDHREC) e
+sugestão de mana base.
 
 ## Cotação de preços das cartas
 

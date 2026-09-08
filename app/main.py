@@ -11,7 +11,8 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
 from fastapi.staticfiles import StaticFiles
 
 from . import (calc, cartas, cleanup, cotacao_job, decks, fulfillment, log,
-               notify, pix, printer, spellbook, storage, tinta, visitas)
+               notify, pix, poder, printer, spellbook, storage, tinta,
+               visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -825,6 +826,29 @@ def combos_do_deck(deck_id: str):
                                 deck.get("cartas") or [])
     except spellbook.SpellbookError as e:
         raise HTTPException(502, str(e))
+
+
+@app.post("/decks/{deck_id}/poder")
+def poder_do_deck(deck_id: str):
+    """Classifica o deck na escala de brackets do Commander (1 a 4).
+
+    Quem classifica é o `estimate-bracket` do Spellbook, não a gente: a lista
+    oficial de *game changers* muda a cada anúncio da Wizards, e mantê-la na
+    mão aqui envelheceria em semanas (ver `poder.py`).
+
+    A resposta traz o número E o que o justifica, carta por carta — uma nota
+    sozinha não ajuda ninguém a decidir o que trocar.
+
+    Mesma regra dos combos: só no clique, e falha vira 502 em vez de uma
+    classificação inventada.
+    """
+    deck = _deck_ou_404(deck_id)
+    try:
+        estimativa = spellbook.estimar_bracket(deck.get("comandantes") or [],
+                                               deck.get("cartas") or [])
+    except spellbook.SpellbookError as e:
+        raise HTTPException(502, str(e))
+    return poder.ler(estimativa)
 
 
 @app.get("/impressora/tinta")
