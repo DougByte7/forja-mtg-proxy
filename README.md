@@ -240,6 +240,8 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   arquivo antes de mexer.
 - `app/poder.py` — a resposta do `estimate-bracket` virando a nota de 1 a 4 e
   o "por que essa nota". A conta não é nossa; a tradução é.
+- `app/edhrec.py` — as sugestões por sinergia e tema. **Endpoint não oficial,
+  sem contrato** — leia o aviso no topo do arquivo antes de mexer.
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
@@ -322,6 +324,10 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   e carta banida não cai em nenhum), o agrupamento dos motivos, e o cache das
   duas rotas do Spellbook, que partem da mesma chave e não podem se misturar:
   `python tests/test_poder.py`.
+- `tests/test_edhrec.py` — o slug da página (apóstrofo some, acento é
+  achatado, parceiros entram em ordem alfabética), a leitura das listas, e a
+  garantia de que formato mudado vira ERRO e não lista vazia. Também o filtro
+  que tira o que já está no deck: `python tests/test_edhrec.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -371,6 +377,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /decks/{id}/cotacao` | botão **Cotar preços** | cota o deck montado, sem precisar de XML. O andamento sai no `GET /cotacao/{job_id}` de sempre |
 | `POST /decks/{id}/combos` | botão **Procurar combos** | pergunta ao Commander Spellbook os combos do deck e os que faltam uma carta. Uma consulta só, e só no clique |
 | `POST /decks/{id}/poder` | botão **Estimar nível** | classifica o deck nos brackets do Commander e devolve o que justifica a nota, carta por carta |
+| `POST /decks/{id}/sugestoes` | botão **Buscar sugestões** | cartas que combinam com o comandante, pelo EDHREC, já filtradas contra o deck. `tema` opcional no corpo |
 | `GET /impressora/tinta` | front | nível de tinta da impressora, pra pastilha do cabeçalho e o aviso de prazo (público, em cache, sem endereço nem nome de fila na resposta) |
 | `GET /admin/tinta` | você (`X-Admin-Token`) | o que a impressora respondeu sobre tinta, cru — é aqui que se descobre se ela informa o nível |
 
@@ -658,10 +665,52 @@ formato, e é isso que o painel diz.
 E a estimativa vale pelo deck **inteiro**: num deck pela metade ela só
 descreve a metade que existe, e o painel avisa isso com a contagem.
 
+### Sugestões de carta (EDHREC)
+
+O painel **Sugestões** responde "o que mais entra num deck desse comandante?".
+Cada carta vem com a **sinergia**: o quanto ela aparece mais com *este*
+comandante do que com os outros. +51% é carta que praticamente define o deck;
+−5% é carta popular no geral que ali rende menos.
+
+Dá pra filtrar por **tema** (Terrenos, Cemitério, Aristocratas…) — os temas
+disponíveis vêm do próprio EDHREC e mudam por comandante.
+
+As sugestões chegam **já filtradas**: sai o que o deck já tem, o que a base
+local de cartas não conhece (não daria pra adicionar num clique) e o que não
+cabe na identidade de cor. Clicar numa sugestão põe a carta no deck e a tira
+da lista.
+
+**Por que o EDHREC e não a Scryfall:** a Scryfall responde "que cartas
+existem". Ela não sabe dizer que *Deadly Rollick* combina com um comandante e
+*Murder* não. Sinergia é dado agregado de decks reais, e quem tem isso é o
+EDHREC.
+
+#### Aviso: isto é o módulo mais frágil do projeto depois da LigaMagic
+
+O EDHREC **não tem API oficial**. O que existe é `json.edhrec.com`, o endpoint
+que o front-end do próprio site chama pra desenhar as páginas: aberto, sem
+chave e **sem contrato**. Pode mudar de forma ou sumir sem aviso nenhum.
+
+Por isso o módulo **grita** quando o formato muda — uma resposta sem
+`cardlists` vira erro na tela, nunca lista vazia. "Nenhuma sugestão" se leria
+como "esse comandante não combina com nada", que é o oposto de "eu não sei".
+
+O que este projeto faz diferente das bibliotecas de EDHREC que existem por aí:
+
+- **Se identifica.** O `User-Agent` diz quem é e leva o e-mail de contato do
+  `.env`. Bibliotecas populares sorteiam um User-Agent de navegador a cada
+  chamada pra parecer gente; aqui não. Se eles quiserem falar com a gente, ou
+  bloquear, que seja pelo caminho fácil.
+- **Vai devagar.** Um pedido por segundo (`EDHREC_DELAY_SEGUNDOS`), com o
+  resultado em cache por 24h. Os números do EDHREC são agregados de milhares
+  de decks e não mudam de hora em hora.
+- **Pede pouco.** Uma requisição por consulta, e só quando alguém clica.
+
+`EDHREC=0` no `.env` desliga o painel.
+
 ### O que ainda não tem
 
-Ficaram pra depois, nesta ordem: sugestão de cartas por tema (EDHREC) e
-sugestão de mana base.
+Falta a sugestão de mana base.
 
 ## Cotação de preços das cartas
 

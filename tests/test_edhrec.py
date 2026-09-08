@@ -1,0 +1,329 @@
+"""
+Confere as sugestões do EDHREC e o filtro que decide o que vale mostrar.
+
+Motivo de existir. Este é o módulo mais frágil do projeto depois da
+LigaMagic: `json.edhrec.com` é o endpoint que o front-end deles usa, sem
+contrato nenhum, e pode mudar de forma sem aviso. Duas coisas precisam estar
+garantidas:
+
+1. **Quando o formato mudar, tem que GRITAR.** Uma resposta sem `cardlists`
+   não pode virar "nenhuma sugestão" — na tela isso se lê como "esse
+   comandante não combina com nada", que é o oposto de "eu não sei".
+2. **O slug tem que estar certo.** Ele é montado por nós a partir do nome da
+   carta, e um slug errado vira 404. Apóstrofo e vírgula somem, acento é
+   achatado, o resto vira hífen — e com dois comandantes os dois slugs entram
+   em ordem alfabética.
+
+E o filtro do que mostrar (`decks.sugestoes_uteis`) tem que tirar o que já
+está no deck: sugerir a carta que a pessoa acabou de adicionar é o jeito mais
+rápido de a lista parecer burra.
+
+Não precisa de rede nem de pytest. Rode de dentro da raiz do projeto:
+
+    python tests/test_edhrec.py
+
+Sai com código 1 se qualquer checagem falhar.
+"""
+import json
+import os
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+RAIZ = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(RAIZ))
+
+TMP = tempfile.mkdtemp(prefix="teste-edhrec-")
+os.environ["EDHREC_CACHE_DIR"] = os.path.join(TMP, "cache")
+os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
+os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
+os.environ["EDHREC_BACKOFF"] = "0"
+os.environ["EDHREC_DELAY_SEGUNDOS"] = "0"
+os.environ["EDHREC_TENTATIVAS"] = "2"
+
+from app import cartas, decks, edhrec  # noqa: E402
+
+falhas = []
+
+
+def check(nome, condicao, detalhe=""):
+    print(f"{'ok   ' if condicao else 'FALHA'} {nome} {detalhe}")
+    if not condicao:
+        falhas.append(nome)
+
+
+def eq(nome, obtido, esperado):
+    check(nome, obtido == esperado,
+          "" if obtido == esperado else f"(obtido {obtido!r}, esperado {esperado!r})")
+
+
+def cardview(nome, sinergia=None, inclusao=None, potencial=None):
+    return {"name": nome, "sanitized": nome.lower().replace(" ", "-"),
+            "synergy": sinergia, "inclusion": inclusao,
+            "potential_decks": potencial, "num_decks": potencial}
+
+
+def pagina(listas, temas=()):
+    return {
+        "container": {"json_dict": {"cardlists": [
+            {"tag": tag, "header": cabecalho, "cardviews": cartas_}
+            for tag, cabecalho, cartas_ in listas]}},
+        "panels": {"taglinks": [{"value": n, "slug": s, "count": c}
+                                for n, s, c in temas]},
+    }
+
+
+class RespostaFalsa:
+    def __init__(self, corpo, status=200, texto=None, headers=None):
+        self.status_code = status
+        self._corpo = corpo
+        self.text = texto if texto is not None else json.dumps(corpo)
+        self.headers = headers or {}
+
+    def json(self):
+        if self._corpo is None:
+            raise ValueError("não é json")
+        return self._corpo
+
+
+class SessaoFalsa:
+    def __init__(self, respostas):
+        self.respostas = list(respostas)
+        self.chamadas = []
+        self.headers = {}
+
+    def get(self, url, **kwargs):
+        self.chamadas.append(url)
+        resposta = self.respostas.pop(0)
+        if isinstance(resposta, Exception):
+            raise resposta
+        return resposta
+
+
+def com_sessao(*respostas):
+    sessao = SessaoFalsa(respostas)
+    edhrec._sessao = lambda: sessao
+    return sessao
+
+
+PAGINA = pagina(
+    listas=[
+        ("topcards", "Top Cards", [cardview("Sol Ring", 0.02, 900, 1000),
+                                   cardview("Arcane Signet", 0.05, 800, 1000)]),
+        ("highsynergycards", "High Synergy Cards",
+         [cardview("Deadly Rollick", 0.42, 400, 1000),
+          cardview("Carta Que A Base Nao Tem", 0.38, 300, 1000),
+          cardview("Lightning Bolt", 0.30, 200, 1000)]),
+        ("creatures", "Creatures", [cardview("Eternal Witness", -0.10, 100, 1000)]),
+        ("vazia", "Nada", []),
+    ],
+    temas=[("Aristocratas", "aristocrats", 1200),
+           ("Superfriends", "superfriends", 800)],
+)
+
+try:
+    # ------------------------------------------------------------------ slug
+    print("\n--- o slug da página ---")
+
+    eq("apóstrofo e vírgula somem",
+       edhrec.slug("Atraxa, Praetors' Voice"), "atraxa-praetors-voice")
+    eq("apóstrofo tipográfico também",
+       edhrec.slug("Atraxa, Praetors’ Voice"), "atraxa-praetors-voice")
+    eq("acento é achatado, não vira hífen",
+       edhrec.slug("Jötun Grunt"), "jotun-grunt")
+    eq("hífen do nome vira hífen só",
+       edhrec.slug("Shang-Chi, Master of Kung Fu"),
+       "shang-chi-master-of-kung-fu")
+    eq("pontuação virando um hífen só",
+       edhrec.slug("Kongming, \"Sleeping Dragon\""), "kongming-sleeping-dragon")
+    eq("nome com // usa tudo",
+       edhrec.slug("Fire // Ice"), "fire-ice")
+
+    eq("um comandante", edhrec.slug_do_deck(["Muldrotha, the Gravetide"]),
+       "muldrotha-the-gravetide")
+    # Dois comandantes entram em ordem alfabética, não na ordem que a tela
+    # mandou — senão a mesma dupla teria duas páginas diferentes.
+    dupla = ["Tymna the Weaver", "Thrasios, Triton Hero"]
+    eq("dois comandantes saem em ordem alfabética",
+       edhrec.slug_do_deck(dupla), "thrasios-triton-hero-tymna-the-weaver")
+    eq("e a ordem inversa dá o mesmo slug",
+       edhrec.slug_do_deck(list(reversed(dupla))),
+       edhrec.slug_do_deck(dupla))
+
+    try:
+        edhrec.slug_do_deck([])
+        check("sem comandante levanta", False, "(passou)")
+    except edhrec.EDHRECError:
+        check("sem comandante levanta", True)
+
+    # -------------------------------------------------------- leitura da página
+    print("\n--- o que a gente entende da página ---")
+
+    sessao = com_sessao(RespostaFalsa(PAGINA))
+    achado = edhrec.sugerir(["Muldrotha, the Gravetide"])
+    eq("bate na URL do comandante", sessao.chamadas[0],
+       f"{edhrec.BASE}/commanders/muldrotha-the-gravetide.json")
+
+    eq("lista vazia não entra",
+       [l["tag"] for l in achado["listas"]],
+       ["highsynergycards", "topcards", "creatures"])
+    check("alta sinergia vem antes das mais jogadas",
+          achado["listas"][0]["tag"] == "highsynergycards")
+    eq("categoria conhecida ganha nome em português",
+       achado["listas"][0]["titulo"], "Alta sinergia")
+
+    carta = achado["listas"][0]["cartas"][0]
+    eq("nome da carta", carta["nome"], "Deadly Rollick")
+    # A sinergia vem como fração e vira pontos inteiros: 0.42 -> 42.
+    eq("sinergia vira porcentagem inteira", carta["sinergia"], 42)
+    eq("e a inclusão vira porcentagem", carta["porcento"], 40)
+
+    negativa = achado["listas"][2]["cartas"][0]
+    eq("sinergia negativa é preservada", negativa["sinergia"], -10)
+
+    eq("os temas saem dos taglinks",
+       [(t["nome"], t["slug"]) for t in achado["temas"]],
+       [("Aristocratas", "aristocrats"), ("Superfriends", "superfriends")])
+
+    sessao = com_sessao(RespostaFalsa(PAGINA))
+    com_tema = edhrec.sugerir(["Muldrotha, the Gravetide"], "Aristocratas")
+    eq("tema entra no caminho da URL", sessao.chamadas[0],
+       f"{edhrec.BASE}/commanders/muldrotha-the-gravetide/aristocratas.json")
+
+    # ------------------------------------------------------------------ cache
+    print("\n--- cache ---")
+
+    sessao = com_sessao()   # se pedir, explode
+    de_novo = edhrec.sugerir(["Muldrotha, the Gravetide"])
+    eq("a mesma página volta do cache, sem rede",
+       (de_novo["cache"], len(sessao.chamadas)), (True, 0))
+    eq("e o conteúdo é o mesmo",
+       len(de_novo["listas"]), len(achado["listas"]))
+
+    # ----------------------------------------------------------------- falhas
+    print("\n--- quando dá errado ---")
+
+    def espera_erro(nome, *respostas, comandante="Comandante Unico"):
+        com_sessao(*respostas)
+        try:
+            edhrec.sugerir([comandante])
+            check(nome, False, "(não levantou)")
+        except edhrec.EDHRECError as e:
+            check(nome, True, f"({str(e)[:58]}…)")
+
+    # A que mais importa: formato mudado NÃO pode virar lista vazia.
+    espera_erro("resposta sem 'container' levanta",
+                RespostaFalsa({"outra": "coisa"}), comandante="Sem Container")
+    espera_erro("resposta sem 'cardlists' levanta",
+                RespostaFalsa({"container": {"json_dict": {}}}),
+                comandante="Sem Cardlists")
+    espera_erro("resposta que não é JSON levanta",
+                RespostaFalsa(None, texto="<html>bloqueado</html>"),
+                comandante="Nao Json")
+    espera_erro("404 diz que a página não existe",
+                RespostaFalsa({}, status=404), comandante="Nao Existe")
+    espera_erro("rede caída depois das tentativas",
+                *[__import__("requests").ConnectionError("sem rota")] * 2,
+                comandante="Sem Rede")
+
+    # 404 não é insistido: a página não existe, repetir não vai criá-la.
+    sessao = com_sessao(RespostaFalsa({}, status=404))
+    try:
+        edhrec.sugerir(["Outro Que Nao Existe"])
+    except edhrec.EDHRECError:
+        pass
+    eq("404 não é tentado de novo", len(sessao.chamadas), 1)
+
+    # 500 é transitório: tenta de novo.
+    sessao = com_sessao(RespostaFalsa({}, status=500), RespostaFalsa(PAGINA))
+    tentou = edhrec.sugerir(["Comandante Do Cinco Zero Zero"])
+    eq("erro de servidor é tentado de novo",
+       (len(sessao.chamadas), len(tentou["listas"])), (2, 3))
+
+    edhrec.LIGADO = False
+    try:
+        edhrec.sugerir(["Muldrotha, the Gravetide"])
+        check("desligado no .env levanta em vez de dar lista vazia", False)
+    except edhrec.EDHRECError:
+        check("desligado no .env levanta em vez de dar lista vazia", True)
+    edhrec.LIGADO = True
+
+    # ------------------------------------------- o filtro do que vale mostrar
+    print("\n--- o filtro contra o deck ---")
+
+    cartas.init_db()
+    def base(nome, tipo="Creature — Elf", ident="G", legal="legal"):
+        return {"oracle_id": nome.lower(), "name": nome, "type_line": tipo,
+                "oracle_text": "", "cmc": 2.0, "mana_cost": "{1}{G}",
+                "colors": list(ident), "color_identity": list(ident),
+                "legalities": {"commander": legal}, "prices": {"usd": "1"},
+                "layout": "normal", "image_uris": {"normal": "http://x"}}
+
+    conn = cartas._conn()
+    conn.executemany(
+        f"INSERT OR REPLACE INTO cartas ({cartas._COLUNAS}) "
+        f"VALUES ({cartas._INTERROGACOES})",
+        [cartas._linha(c) for c in [
+            base("Muldrotha, the Gravetide",
+                 tipo="Legendary Creature — Avatar", ident="BGU"),
+            base("Sol Ring", tipo="Artifact", ident=""),
+            base("Arcane Signet", tipo="Artifact", ident=""),
+            base("Deadly Rollick", tipo="Instant", ident="B"),
+            base("Eternal Witness", ident="G"),
+            base("Lightning Bolt", tipo="Instant", ident="R"),
+        ]])
+    conn.commit()
+    conn.close()
+
+    deck = {"comandantes": ["Muldrotha, the Gravetide"],
+            "cartas": [{"nome": "Sol Ring", "quantidade": 1}]}
+
+    uteis = decks.sugestoes_uteis(deck, achado["listas"])
+    nomes = [c["carta"]["nome"] for l in uteis for c in l["cartas"]]
+
+    check("o que já está no deck não é sugerido",
+          "Sol Ring" not in nomes, f"({nomes})")
+    check("o que a base local não conhece não é sugerido",
+          "Carta Que A Base Nao Tem" not in nomes, f"({nomes})")
+    check("o que não cabe na identidade não é sugerido",
+          "Lightning Bolt" not in nomes, f"({nomes})")
+    check("o que sobra é sugerido",
+          {"Deadly Rollick", "Arcane Signet", "Eternal Witness"} == set(nomes),
+          f"({nomes})")
+
+    primeira = uteis[0]["cartas"][0]
+    check("a carta completa vai junto, pra adicionar num clique",
+          primeira["carta"]["tipo"] == "Instant" and primeira["sinergia"] == 42,
+          f"({primeira['carta']['nome']})")
+
+    # O comandante também conta como "já está no deck".
+    deck_cmd = {"comandantes": ["Deadly Rollick"], "cartas": []}
+    nomes_cmd = [c["carta"]["nome"]
+                 for l in decks.sugestoes_uteis(deck_cmd, achado["listas"])
+                 for c in l["cartas"]]
+    check("o próprio comandante não é sugerido",
+          "Deadly Rollick" not in nomes_cmd, f"({nomes_cmd})")
+
+    # Teto por lista, pra uma página de comandante não despejar 100 linhas.
+    muitas = [{"tag": "topcards", "titulo": "Mais jogadas com ele",
+               "cartas": [{"nome": "Arcane Signet", "sinergia": 1},
+                          {"nome": "Deadly Rollick", "sinergia": 2},
+                          {"nome": "Eternal Witness", "sinergia": 3}]}]
+    eq("o teto por lista é respeitado",
+       len(decks.sugestoes_uteis(deck, muitas, por_lista=2)[0]["cartas"]), 2)
+
+    eq("lista que fica vazia depois do filtro some",
+       decks.sugestoes_uteis(
+           deck, [{"tag": "topcards", "titulo": "x",
+                   "cartas": [{"nome": "Sol Ring", "sinergia": 1}]}]),
+       [])
+
+finally:
+    shutil.rmtree(TMP, ignore_errors=True)
+
+print()
+if falhas:
+    print(f"{len(falhas)} checagem(ns) falharam: {', '.join(falhas)}")
+    sys.exit(1)
+print("tudo certo")

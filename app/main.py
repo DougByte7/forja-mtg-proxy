@@ -10,8 +10,8 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (calc, cartas, cleanup, cotacao_job, decks, fulfillment, log,
-               notify, pix, poder, printer, spellbook, storage, tinta,
+from . import (calc, cartas, cleanup, cotacao_job, decks, edhrec, fulfillment,
+               log, notify, pix, poder, printer, spellbook, storage, tinta,
                visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
@@ -849,6 +849,32 @@ def poder_do_deck(deck_id: str):
     except spellbook.SpellbookError as e:
         raise HTTPException(502, str(e))
     return poder.ler(estimativa)
+
+
+@app.post("/decks/{deck_id}/sugestoes")
+def sugestoes_do_deck(deck_id: str, corpo: dict = Body(default={})):
+    """Cartas que combinam com o comandante, pelo EDHREC.
+
+    `tema` no corpo é opcional e restringe a página consultada ("aristocrats",
+    "superfriends"). Os temas disponíveis voltam na resposta pra tela montar
+    o seletor.
+
+    As sugestões voltam já filtradas: sem o que o deck tem, sem o que a base
+    local não conhece e sem o que não cabe na identidade de cor (ver
+    `decks.sugestoes_uteis`).
+
+    Isto lê um endpoint NÃO OFICIAL do EDHREC e pode quebrar sem aviso — daí
+    o 502 com a mensagem em vez de uma lista vazia, que a tela leria como
+    "esse comandante não tem sinergia com nada".
+    """
+    deck = _deck_ou_404(deck_id)
+    tema = (corpo.get("tema") or "").strip() or None
+    try:
+        achado = edhrec.sugerir(deck.get("comandantes") or [], tema)
+    except edhrec.EDHRECError as e:
+        raise HTTPException(502, str(e))
+    return {**achado,
+            "listas": decks.sugestoes_uteis(deck, achado["listas"])}
 
 
 @app.get("/impressora/tinta")

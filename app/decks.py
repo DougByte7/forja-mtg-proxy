@@ -370,6 +370,56 @@ def para_cotacao(deck: dict) -> list[dict]:
     return lista
 
 
+def sugestoes_uteis(deck: dict, listas: list[dict],
+                    por_lista: int = 12) -> list[dict]:
+    """As sugestões do EDHREC que este deck ainda pode usar.
+
+    Três filtros, nesta ordem, e cada um por um motivo diferente:
+
+    1. **Já está no deck** — sugerir o que a pessoa acabou de adicionar é o
+       jeito mais rápido de a lista parecer burra.
+    2. **Não existe na base local** — sem a carta completa não dá pra
+       adicionar num clique nem desenhar custo e tipo. Costuma ser carta
+       nova, com a base local atrasada.
+    3. **Não cabe na identidade de cor** — o EDHREC já devolve a página do
+       comandante, então isso quase nunca acontece; quando acontece (página
+       de tema com dupla de parceiros, por exemplo), é carta que o deck não
+       poderia jogar.
+
+    A carta completa vai junto de cada sugestão, pra tela poder adicionar sem
+    uma segunda consulta.
+    """
+    ja_tem = {base_cartas.normalizar(n) for n in deck.get("comandantes") or []}
+    ja_tem |= {base_cartas.normalizar(c["nome"])
+               for c in deck.get("cartas") or []}
+
+    comandantes = base_cartas.por_nomes(deck.get("comandantes") or [])
+    identidade = identidade_de([c for c in comandantes.values() if c])
+
+    # Uma consulta ao banco pra todos os nomes de todas as listas, em vez de
+    # uma por carta: são centenas de sugestões numa página de comandante.
+    nomes = [c["nome"] for lista in listas for c in lista["cartas"]]
+    conhecidas = base_cartas.por_nomes(nomes)
+
+    saida = []
+    for lista in listas:
+        cartas_uteis = []
+        for sugestao in lista["cartas"]:
+            if base_cartas.normalizar(sugestao["nome"]) in ja_tem:
+                continue
+            carta = conhecidas.get(sugestao["nome"])
+            if carta is None or not carta["legal"]:
+                continue
+            if not _cabe_na_identidade(carta, identidade):
+                continue
+            cartas_uteis.append({**sugestao, "carta": carta})
+            if len(cartas_uteis) >= por_lista:
+                break
+        if cartas_uteis:
+            saida.append({**lista, "cartas": cartas_uteis})
+    return saida
+
+
 def lista_texto(deck: dict) -> str:
     """A decklist em texto, uma carta por linha, comandante primeiro.
 

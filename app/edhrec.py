@@ -1,0 +1,328 @@
+"""
+Sugestões de carta por sinergia, lidas do EDHREC.
+
+AVISO, leia antes de mexer: isto NÃO é uma API oficial. O EDHREC não oferece
+uma. O que existe é `json.edhrec.com`, o endpoint que o front-end do próprio
+site chama pra desenhar as páginas — aberto, sem chave, e **sem contrato**:
+pode mudar de forma ou sumir sem aviso nenhum.
+
+Consequência prática, a mesma da LigaMagic: **este módulo quebra sem aviso
+quando eles mudarem qualquer coisa**. Por isso ele grita alto (exceção com
+mensagem explicando o quê) em vez de devolver lista vazia. Sugestão vazia é
+indistinguível de "esse comandante não tem sinergia nenhuma", e as duas
+coisas são opostas.
+
+O QUE ESTE MÓDULO FAZ DIFERENTE das bibliotecas prontas que existem por aí:
+
+  * **Se identifica.** O `User-Agent` diz quem é e traz o e-mail de contato
+    do `.env` (ver `identidade.py`). Bibliotecas populares de EDHREC sorteiam
+    um User-Agent de navegador a cada chamada pra parecer gente; aqui não. Se
+    eles quiserem falar com a gente, ou bloquear, que seja pelo caminho
+    fácil.
+  * **Vai devagar.** Um pedido por segundo, que é o ritmo que a comunidade
+    trata como aceitável ali, e o resultado fica em cache por horas. Uma
+    página de comandante muda de conteúdo devagar — os dados são agregados de
+    milhares de decks e não mudam de hora em hora.
+  * **Pede pouco.** Uma requisição por consulta (duas quando há tema), e só
+    quando alguém clica.
+
+POR QUE ISSO EXISTE. A Scryfall responde "que cartas existem"; ela não sabe
+dizer que *Deadly Rollick* combina com um comandante e *Murder* não. Sinergia
+é dado agregado de decks reais, e quem tem isso é o EDHREC.
+"""
+import json
+import os
+import re
+import time
+import unicodedata
+
+import requests
+
+from . import identidade as ident, log, ritmo
+
+BASE = os.environ.get("EDHREC_URL", "https://json.edhrec.com/pages")
+SITE = os.environ.get("EDHREC_SITE", "https://edhrec.com")
+USER_AGENT = os.environ.get(
+    "EDHREC_USER_AGENT", ident.user_agent("sugestões de deck"))
+TIMEOUT = float(os.environ.get("EDHREC_TIMEOUT", "20"))
+TENTATIVAS = int(os.environ.get("EDHREC_TENTATIVAS", "3"))
+BACKOFF = float(os.environ.get("EDHREC_BACKOFF", "2"))
+# Um pedido por segundo. Ver o aviso no topo.
+DELAY_SEGUNDOS = float(os.environ.get("EDHREC_DELAY_SEGUNDOS", "1"))
+# Cache longo de propósito: os números do EDHREC são agregados de milhares de
+# decks e não mudam de hora em hora. Cada acerto aqui é um acesso a menos.
+CACHE_TTL = float(os.environ.get("EDHREC_CACHE_TTL", str(24 * 3600)))
+CACHE_DIR = os.environ.get("EDHREC_CACHE_DIR", "/app/data/edhrec-cache")
+LIGADO = os.environ.get("EDHREC", "1") == "1"
+
+_freio = ritmo.Freio("edhrec", DELAY_SEGUNDOS)
+
+
+class EDHRECError(Exception):
+    """Falha lendo o EDHREC. A mensagem diz se foi rede ou mudança de formato."""
+
+
+# As categorias que valem a pena mostrar, na ordem em que aparecem, com o
+# nome em português. O EDHREC devolve mais que isso (cartas novas, terrenos
+# básicos, "cartas do topo do formato"); estas são as que respondem "o que
+# mais falta no meu deck".
+CATEGORIAS = [
+    ("highsynergycards", "Alta sinergia"),
+    ("newcards", "Cartas novas"),
+    ("topcards", "Mais jogadas com ele"),
+    ("creatures", "Criaturas"),
+    ("instants", "Instantâneos"),
+    ("sorceries", "Feitiços"),
+    ("enchantments", "Encantamentos"),
+    ("utilityartifacts", "Artefatos"),
+    ("planeswalkers", "Planeswalkers"),
+    ("manaartifacts", "Rampa de artefato"),
+    ("utilitylands", "Terrenos utilitários"),
+    ("lands", "Terrenos"),
+]
+NOME_DA_CATEGORIA = dict(CATEGORIAS)
+
+
+def slug(nome: str) -> str:
+    """O nome de uma carta no formato de URL do EDHREC.
+
+    Apóstrofo e vírgula SOMEM; qualquer outra sequência de caractere que não
+    é letra nem número vira um hífen só. "Atraxa, Praetors' Voice" ->
+    "atraxa-praetors-voice".
+
+    Acento é achatado antes disso: o EDHREC escreve "Jötun Grunt" como
+    "jotun-grunt", e sem essa passagem o "ö" viraria hífen e o slug sairia
+    "j-tun-grunt".
+    """
+    texto = unicodedata.normalize("NFKD", (nome or "").strip())
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    texto = texto.lower().replace("'", "").replace("’", "").replace(",", "")
+    return re.sub(r"[^a-z0-9]+", "-", texto).strip("-")
+
+
+def slug_do_deck(comandantes: list[str]) -> str:
+    """O slug da página do deck: um comandante, ou os dois de uma parceria.
+
+    Com dois comandantes o EDHREC junta os slugs em ordem alfabética. Se essa
+    convenção mudar, a página volta 404 — e o 404 daqui vira uma mensagem
+    dizendo que não existe página pra essa dupla, que é o que a pessoa
+    precisa saber.
+    """
+    slugs = [s for s in (slug(n) for n in comandantes) if s]
+    if not slugs:
+        raise EDHRECError("sem comandante não dá pra pedir sugestão: é ele "
+                          "que define o que combina com o quê.")
+    return "-".join(sorted(slugs))
+
+
+def _sessao() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
+    return s
+
+
+def _caminho_cache(caminho: str) -> str:
+    limpo = re.sub(r"[^a-z0-9]+", "-", caminho.lower()).strip("-") or "vazio"
+    return os.path.join(CACHE_DIR, f"{limpo[:120]}.json")
+
+
+def _do_cache(caminho: str) -> dict | None:
+    try:
+        with open(_caminho_cache(caminho), encoding="utf-8") as f:
+            guardado = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if time.time() - guardado.get("_quando", 0) > CACHE_TTL:
+        return None
+    return guardado
+
+
+def _guardar_cache(caminho: str, dados: dict) -> None:
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        temporario = _caminho_cache(caminho) + ".tmp"
+        with open(temporario, "w", encoding="utf-8") as f:
+            json.dump({**dados, "_quando": time.time()}, f, ensure_ascii=False)
+        os.replace(temporario, _caminho_cache(caminho))
+    except OSError as e:
+        log.aviso("edhrec", "cache-nao-gravou",
+                  motivo=f"{type(e).__name__}: {e}")
+
+
+def _pedir(caminho: str) -> dict:
+    """Busca uma página do EDHREC, com cache, freio e tentativas.
+
+    `caminho` é o pedaço depois de `/pages/`, sem o `.json` — por exemplo
+    `commanders/atraxa-praetors-voice`.
+    """
+    guardado = _do_cache(caminho)
+    if guardado is not None:
+        log.debug("edhrec", "cache", caminho=caminho)
+        return {**guardado, "_cache": True}
+
+    sessao = _sessao()
+    url = f"{BASE}/{caminho}.json"
+    ultimo_erro = "?"
+
+    for tentativa in range(1, TENTATIVAS + 1):
+        _freio.esperar()
+        try:
+            resposta = sessao.get(url, timeout=TIMEOUT)
+        except requests.RequestException as e:
+            ultimo_erro = f"{type(e).__name__}: {e}"
+            log.aviso("edhrec", "falhou", tentativa=tentativa, caminho=caminho,
+                      motivo=ultimo_erro)
+            time.sleep(ritmo.backoff(tentativa, BACKOFF))
+            continue
+
+        if resposta.status_code == 404:
+            # 404 aqui é informação, não falha de rede: a página não existe.
+            # Insistir não vai criá-la.
+            raise EDHRECError(
+                f"o EDHREC não tem página pra isso ({caminho}). Se for uma "
+                f"dupla de parceiros, pode ser que ninguém tenha registrado "
+                f"deck com ela ainda.")
+
+        if resposta.status_code == 429:
+            espera = ritmo.espera_pedida(resposta) or ritmo.backoff(tentativa, BACKOFF)
+            _freio.recuar(espera, motivo="HTTP 429")
+            ultimo_erro = "HTTP 429"
+            continue
+
+        if resposta.status_code != 200:
+            ultimo_erro = f"HTTP {resposta.status_code}"
+            log.aviso("edhrec", "status-inesperado", caminho=caminho,
+                      status=resposta.status_code)
+            time.sleep(ritmo.backoff(tentativa, BACKOFF))
+            continue
+
+        try:
+            dados = resposta.json()
+        except ValueError:
+            raise EDHRECError(
+                "o EDHREC respondeu algo que não é JSON. Isso costuma "
+                "significar que o endpoint mudou de endereço ou que veio uma "
+                "página de bloqueio no lugar dos dados.")
+
+        _guardar_cache(caminho, dados)
+        return {**dados, "_cache": False}
+
+    raise EDHRECError(f"não consegui ler o EDHREC ({ultimo_erro})")
+
+
+def _cardlists(dados: dict) -> list[dict]:
+    """As listas de carta de dentro da página.
+
+    Elas moram fundo (`container.json_dict.cardlists`) porque o JSON é o
+    estado da página do site, não uma resposta desenhada pra gente. Se esse
+    caminho deixar de existir, é sinal de que o formato mudou — e aí é erro,
+    não lista vazia.
+    """
+    container = dados.get("container")
+    if not isinstance(container, dict):
+        raise EDHRECError("o formato do EDHREC mudou: não achei o 'container' "
+                          "na resposta.")
+    listas = (container.get("json_dict") or {}).get("cardlists")
+    if listas is None:
+        raise EDHRECError("o formato do EDHREC mudou: não achei "
+                          "'cardlists' na resposta.")
+    return [c for c in listas if isinstance(c, dict)]
+
+
+def _carta(bruta: dict) -> dict | None:
+    """Uma carta sugerida, com os números que justificam a sugestão."""
+    nome = (bruta.get("name") or "").strip()
+    if not nome:
+        return None
+    # `synergy` vem como fração (0.42 = 42 pontos acima da média do formato).
+    # Pode ser negativa: carta muito jogada em geral, mas menos com ESSE
+    # comandante do que com os outros.
+    sinergia = bruta.get("synergy")
+    inclusao = bruta.get("inclusion")
+    potencial = bruta.get("potential_decks") or bruta.get("num_decks")
+    return {
+        "nome": nome,
+        "sinergia": round(sinergia * 100) if isinstance(sinergia, (int, float))
+                    else None,
+        "decks": inclusao,
+        "decks_possiveis": potencial,
+        "porcento": (round(100 * inclusao / potencial)
+                     if isinstance(inclusao, int) and isinstance(potencial, int)
+                     and potencial else None),
+    }
+
+
+def temas_de(dados: dict) -> list[dict]:
+    """Os temas que o EDHREC conhece pra esse comandante.
+
+    Sai dos `panels.taglinks` da página. É o que enche o seletor de tema da
+    tela — "Superfriends", "Aristocratas", "+1/+1 Counters". Nunca levanta:
+    tema é enfeite útil, e uma página sem eles ainda serve pra sugerir carta.
+    """
+    painel = dados.get("panels")
+    if not isinstance(painel, dict):
+        return []
+    achados = []
+    for link in painel.get("taglinks") or []:
+        if not isinstance(link, dict):
+            continue
+        nome = (link.get("value") or link.get("text") or "").strip()
+        alvo = (link.get("slug") or link.get("href") or "").strip("/")
+        if nome and alvo:
+            achados.append({"nome": nome, "slug": alvo.split("/")[-1],
+                            "decks": link.get("count")})
+    return achados
+
+
+def sugerir(comandantes: list[str], tema: str | None = None) -> dict:
+    """As sugestões do EDHREC pro comandante (e tema) pedidos.
+
+    Devolve as listas por categoria, já com o nome em português, e os temas
+    disponíveis. NÃO filtra o que já está no deck — quem faz isso é quem
+    chama, que é quem conhece o deck.
+
+    Levanta `EDHRECError` quando não deu pra ler. Nunca devolve lista vazia
+    fingindo que não há sugestão.
+    """
+    if not LIGADO:
+        raise EDHRECError("as sugestões estão desligadas no .env (EDHREC=0).")
+
+    base = f"commanders/{slug_do_deck(comandantes)}"
+    caminho = f"{base}/{slug(tema)}" if tema else base
+
+    inicio = time.time()
+    dados = _pedir(caminho)
+
+    listas = []
+    for lista in _cardlists(dados):
+        etiqueta = (lista.get("tag") or "").strip()
+        cartas = [c for c in (_carta(x) for x in lista.get("cardviews") or [])
+                  if c]
+        if not cartas:
+            continue
+        listas.append({
+            "tag": etiqueta,
+            # O título do EDHREC vem em inglês ("High Synergy Cards"); quando
+            # a categoria é conhecida, usa o nome em português.
+            "titulo": NOME_DA_CATEGORIA.get(etiqueta)
+                      or (lista.get("header") or "Cartas").strip(),
+            "cartas": cartas,
+        })
+
+    ordem = {tag: i for i, (tag, _) in enumerate(CATEGORIAS)}
+    listas.sort(key=lambda l: ordem.get(l["tag"], len(ordem)))
+
+    log.evento("edhrec", "sugeriu", caminho=caminho, listas=len(listas),
+               cartas=sum(len(l["cartas"]) for l in listas),
+               cache=dados.get("_cache"),
+               ms=int((time.time() - inicio) * 1000))
+
+    return {
+        "comandantes": comandantes,
+        "tema": tema,
+        "temas": temas_de(dados),
+        "listas": listas,
+        "link": f"{SITE}/commanders/{slug_do_deck(comandantes)}",
+        "cache": bool(dados.get("_cache")),
+        "quando": time.time(),
+    }
