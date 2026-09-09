@@ -994,6 +994,29 @@ def manabase_do_deck(deck_id: str, teto: float | None = None):
                              else manabase.TETO_USD)
 
 
+@app.get("/decks/{deck_id}/tokens")
+def tokens_do_deck(deck_id: str):
+    """As fichas que o deck cria, agrupadas pela carta que as cria.
+
+    Como a mana base, é conta que não sai daqui: o bulk da Scryfall já diz,
+    carta por carta, quais fichas ela cria, e a base local guarda isso. Sem
+    rede, então é GET e a tela pode chamar sempre que a aba abrir.
+
+    O sideboard fica de fora (`CATEGORIAS_FORA_DA_CONTA`) porque ficha é o que
+    a pessoa leva pra mesa junto com as 100. O maybeboard também: carta que
+    ainda não entrou no deck não gera ficha pra levar. Comandante entra, e
+    entra primeiro — é a carta que mais define o que o deck vai criar.
+    """
+    deck = _deck_ou_404(deck_id)
+    fora = decks.CATEGORIAS_FORA_DA_CONTA
+    nomes = list(deck.get("comandantes") or []) + [
+        c["nome"] for c in deck.get("cartas") or []
+        if (c.get("categoria") or "") not in fora]
+    grupos = cartas.tokens_de(nomes)
+    return {"grupos": grupos,
+            "total": sum(len(g["tokens"]) for g in grupos)}
+
+
 @app.get("/impressora/tinta")
 def ink_level():
     """Nível de tinta da impressora, pra tela avisar quando vai demorar.

@@ -1133,6 +1133,46 @@ subtipo ("Forest Island") ou do texto, **só do que vem depois de "Add"** —
 O preço que separa "barato" de "se o orçamento deixar" (`MANABASE_TETO_USD`)
 é o da Scryfall no dia da sincronização, em dólar, só pra ordem de grandeza.
 
+### Tokens
+
+A aba **Tokens** responde a pergunta que só aparece quando o deck já está
+montado: **o que eu preciso levar além das 100 cartas?** Ficha não vai dentro
+do deck — é material separado, e por isso é a parte que se esquece em casa.
+
+A lista é uma **grade de artes** de 160 px agrupada pela **carta que cria**,
+com o zoom no hover levando a ficha aos mesmos 250 px da prévia de arte do
+resto da tela. Grade e não lista de nomes porque ficha se reconhece pela
+imagem; agrupada por quem cria porque uma tela com seis "Token Creature —
+Soldier" de artes parecidas não diz de onde saiu nenhuma. Como a mana base, é
+conta local: depois de aberta uma vez, **acompanha cada autosave**.
+
+Sideboard e maybeboard ficam de fora — ficha é o que vai pra mesa junto com as
+100. Comandante entra, e entra primeiro.
+
+**A ficha é guardada por ID de impressão, e isso não é detalhe.** A tentação é
+casar ficha por nome, e ela quebra calado: o Wurmcoil Engine cria **duas**
+"Token Artifact Creature — Wurm" 3/3 de mesmo nome e mesmo tipo, e a única
+diferença entre elas é uma ter deathtouch e a outra lifelink. Por nome, as
+duas viram uma. E não é caso isolado — a base tem 30 "Token Creature —
+Elemental" diferentes e 11 "Insect". Casar por nome mostraria a arte errada
+sem erro nenhum.
+
+**Daí um remendo que o bulk sozinho não cobre.** O `oracle_cards` traz uma
+impressão por ficha, escolhida pela Scryfall; o `all_parts` das cartas aponta
+pra uma impressão *qualquer* da mesma ficha. Os dois raramente são o mesmo id:
+medindo, só 1201 dos 4124 ids citados existem no bulk. O que falta é buscado
+na API em lote (`/cards/collection`, 75 por POST) no fim da sincronização —
+~860 ids na primeira carga, **12 requisições**. A tabela `tokens` **não** é
+reconstruída junto com a de cartas, justamente pra isso não voltar todo dia;
+das próximas vezes sobram só as fichas das cartas novas.
+
+Emblema fica de fora: apesar de parecer ficha, a Scryfall o marca como
+`combo_piece`, e o filtro aqui é `component == "token"`.
+
+Se a busca em lote falhar, a sincronização **não** cai junto — a base de
+cartas já está trocada e no lugar, e o que se perde é a aba ficar incompleta
+até a carga seguinte.
+
 ### Escolher as artes pelo MPC Fill: dá, e o que custaria
 
 **Isto é uma avaliação, não um recurso.** Nada disso está implementado; o que

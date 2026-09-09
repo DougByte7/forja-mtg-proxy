@@ -532,6 +532,103 @@ try:
     finally:
         cartas._sessao = sessao_real
 
+    # ------------------------------------------------------------------ fichas
+    #
+    # As fichas são o único dado que a base guarda por ID de IMPRESSÃO, e é
+    # isso que este bloco protege. A tentação é casar ficha por nome, e ela
+    # quebra calado: o Wurmcoil Engine cria duas "Token Artifact Creature —
+    # Wurm" 3/3 de mesmo nome e mesmo tipo, e a única diferença entre elas é
+    # uma ter deathtouch e a outra lifelink. Por nome, as duas viram uma — e a
+    # tela mostra a arte errada sem erro nenhum.
+    #
+    # O outro laço solto é o `all_parts` apontar pra uma impressão que o bulk
+    # não trouxe (acontece com 7 de cada 10 ids), que é o que a busca em lote
+    # na API cobre.
+    print("\n--- fichas ---")
+
+    def ficha(ident, texto, nome="Wurm"):
+        return {"id": ident, "oracle_id": "o-" + ident, "name": nome,
+                "type_line": "Token Artifact Creature — Wurm",
+                "oracle_text": texto, "power": "3", "toughness": "3",
+                "colors": [], "color_identity": [], "cmc": 0.0,
+                "layout": "token", "legalities": {}, "prices": {},
+                "image_uris": {"normal": f"http://exemplo/{ident}.jpg"},
+                "scryfall_uri": f"http://exemplo/{ident}"}
+
+    def parte(ident):
+        return {"object": "related_card", "id": ident, "component": "token",
+                "name": "Wurm", "type_line": "Token Artifact Creature — Wurm"}
+
+    # "no-bulk" vem no arquivo; "so-na-api" só existe na API.
+    motor = carta("Motor de Wurm", tipo="Artifact Creature — Phyrexian Wurm",
+                  all_parts=[parte("no-bulk"), parte("so-na-api"),
+                             # `combo_piece` é a própria carta de novo, e
+                             # emblema também vem assim: nada disso é ficha.
+                             {"object": "related_card", "id": "eu-mesmo",
+                              "component": "combo_piece", "name": "Motor de Wurm",
+                              "type_line": "Artifact Creature"}])
+    sem_ficha = carta("Anel de Sol", tipo="Artifact")
+
+    linhas = [json.dumps(c) for c in
+              ([motor, sem_ficha, ficha("no-bulk", "Lifelink")] +
+               [carta(f"Enchimento {i}") for i in range(1200)])]
+    corpo_fichas = gzip.compress(("\n".join(linhas) + "\n").encode("utf-8"))
+
+    pedidos = []
+
+    class SessaoComFichas(SessaoFalsa):
+        def post(self, url, json=None, timeout=None):
+            pedidos.append([i["id"] for i in json["identifiers"]])
+            # A Scryfall devolve só o que conhece: "eu-mesmo" nem chega a ser
+            # pedido, e uma ficha some do lote sem quebrar o resto.
+            return RespostaFalsaHTTP(info={
+                "data": [ficha("so-na-api", "Deathtouch")], "not_found": []})
+
+    cartas._sessao = lambda: SessaoComFichas(info, corpo_fichas)
+    try:
+        cartas._carregar()
+    finally:
+        cartas._sessao = sessao_real
+
+    eq("só a ficha que faltava foi buscada na API", pedidos, [["so-na-api"]])
+    # A ficha "Wurm" mora no banco agora, mas não é carta de deck: a busca por
+    # "Wurm" só pode achar a CARTA cujo nome tem Wurm.
+    eq("ficha não entra na busca de cartas",
+       [c["nome"] for c in cartas.buscar("Wurm", limite=5)], ["Motor de Wurm"])
+    eq("carta que cria ficha fica marcada",
+       cartas.por_nomes(["Motor de Wurm"])["Motor de Wurm"]["faz_tokens"], True)
+    eq("carta que não cria ficha também fica marcada",
+       cartas.por_nomes(["Anel de Sol"])["Anel de Sol"]["faz_tokens"], False)
+
+    grupos = cartas.tokens_de(["Motor de Wurm", "Anel de Sol"])
+    eq("só quem cria ficha aparece", [g["carta"] for g in grupos],
+       ["Motor de Wurm"])
+    eq("as duas fichas de mesmo nome continuam duas",
+       [t["texto"] for t in grupos[0]["tokens"]], ["Lifelink", "Deathtouch"])
+    eq("a ficha que veio do bulk e a que veio da API convivem",
+       [t["id"] for t in grupos[0]["tokens"]], ["no-bulk", "so-na-api"])
+    eq("`combo_piece` não vira ficha",
+       [t["id"] for t in grupos[0]["tokens"]].count("eu-mesmo"), 0)
+    eq("cada ficha leva a própria arte",
+       [t["imagem"] for t in grupos[0]["tokens"]],
+       ["http://exemplo/no-bulk.jpg", "http://exemplo/so-na-api.jpg"])
+    eq("lista vazia não vai ao banco", cartas.tokens_de([]), [])
+    eq("nome que a base não conhece some sem quebrar",
+       cartas.tokens_de(["Carta Que Não Existe"]), [])
+
+    # A tabela de fichas NÃO é reconstruída a cada sincronização — é o que
+    # evita repetir as ~860 buscas na API todo dia. Uma carga nova por cima
+    # não pode perder o que a API já resolveu.
+    pedidos.clear()
+    cartas._sessao = lambda: SessaoComFichas(info, corpo_fichas)
+    try:
+        cartas._carregar()
+    finally:
+        cartas._sessao = sessao_real
+    eq("segunda carga não repete a busca na API", pedidos, [])
+    eq("as fichas sobrevivem à troca da base",
+       len(cartas.tokens_de(["Motor de Wurm"])[0]["tokens"]), 2)
+
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

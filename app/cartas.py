@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     layout TEXT,
     scryfall TEXT,
     imagem_verso TEXT,
-    deitada INTEGER
+    deitada INTEGER,
+    tokens TEXT
 )
 """
 
@@ -153,6 +154,29 @@ _INDICES = [
     "CREATE INDEX IF NOT EXISTS ix_{tabela}_comandante "
     "ON {tabela}(comandante, busca)",
 ]
+
+# As fichas que as cartas criam. Tabela à parte, e não linhas na `cartas`,
+# porque ficha não é carta de deck: não entra em busca, não conta pro
+# singleton e não tem preço. O `LAYOUTS_FORA` já as tira da `cartas` — aqui
+# elas voltam pela porta dos fundos, só pra tela de Tokens poder desenhá-las.
+_ESQUEMA_TOKENS = """
+CREATE TABLE IF NOT EXISTS tokens (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    tipo TEXT,
+    texto TEXT,
+    poder TEXT,
+    resistencia TEXT,
+    cores TEXT,
+    imagem TEXT,
+    imagem_verso TEXT,
+    scryfall TEXT
+)
+"""
+
+_COLUNAS_TOKENS = ("id, nome, tipo, texto, poder, resistencia, cores, "
+                   "imagem, imagem_verso, scryfall")
+_INTERROGACOES_TOKENS = ",".join("?" * len(_COLUNAS_TOKENS.split(",")))
 
 
 def _conn() -> sqlite3.Connection:
@@ -178,7 +202,8 @@ def _conn() -> sqlite3.Connection:
 # a tabela QUANDO ELA NÃO EXISTE, então numa base já sincronizada elas nunca
 # apareceriam — e a primeira busca morreria com "no such column". Ficam vazias
 # até a próxima sincronização, o que a tela trata como "sem verso, não deita".
-_COLUNAS_NOVAS = (("imagem_verso", "TEXT"), ("deitada", "INTEGER"))
+_COLUNAS_NOVAS = (("imagem_verso", "TEXT"), ("deitada", "INTEGER"),
+                  ("tokens", "TEXT"))
 
 
 def _completar_colunas(conn, tabela: str = "cartas") -> None:
@@ -195,6 +220,7 @@ def init_db():
     conn = _conn()
     try:
         conn.execute(_ESQUEMA.format(tabela="cartas"))
+        conn.execute(_ESQUEMA_TOKENS)
         _completar_colunas(conn)
         for sql in _INDICES:
             conn.execute(sql.format(tabela="cartas"))
@@ -385,6 +411,54 @@ def _das_faces(carta: dict, campo: str, junta: str) -> str:
     return junta.join(p for p in partes if p)
 
 
+def _tokens_da_carta(carta: dict) -> str:
+    """Os ids das fichas que esta carta cria, em JSON. Vazio se não cria.
+
+    `all_parts` lista tudo o que se relaciona com a carta: outras peças do
+    combo, as metades de um meld e a própria carta de novo. Ficha de verdade
+    é só `component == "token"` — emblema, apesar de parecer ficha, vem
+    marcado como `combo_piece` e por isso fica de fora.
+
+    Guarda ID, e não nome: carta que cria mais de uma ficha costuma criar
+    fichas de mesmo nome e mesmo tipo. O Wurmcoil Engine cria duas "Token
+    Artifact Creature — Wurm" 3/3, e o que as separa é uma ter deathtouch e a
+    outra lifelink. Por nome, as duas viram uma.
+    """
+    ids = [p.get("id") for p in (carta.get("all_parts") or [])
+           if p.get("component") == "token" and p.get("id")]
+    return json.dumps(ids) if ids else ""
+
+
+# Os layouts que SÃO ficha. Subconjunto do `LAYOUTS_FORA` — emblema e carta de
+# arte continuam fora de tudo.
+LAYOUTS_TOKEN = ("token", "double_faced_token")
+
+
+def _linha_token(carta: dict) -> tuple | None:
+    """Uma ficha do bulk virando linha da tabela `tokens`.
+
+    A chave é o `id` da IMPRESSÃO, não o `oracle_id`, porque é o `id` que o
+    `all_parts` das cartas cita — é por ele que a busca vai casar.
+    """
+    if carta.get("layout") not in LAYOUTS_TOKEN:
+        return None
+    nome = (carta.get("name") or "").strip()
+    if not nome:
+        return None
+    return (
+        carta.get("id"),
+        nome,
+        _das_faces(carta, "type_line", " // "),
+        _das_faces(carta, "oracle_text", "\n//\n"),
+        _das_faces(carta, "power", " // "),
+        _das_faces(carta, "toughness", " // "),
+        "".join(carta.get("colors") or []),
+        _imagem(carta),
+        _imagem_verso(carta),
+        carta.get("scryfall_uri") or "",
+    )
+
+
 def _pode_ser_comandante(tipo_frente: str, texto: str) -> bool:
     """Regra do formato: criatura lendária, ou carta que diz que pode.
 
@@ -450,13 +524,14 @@ def _linha(carta: dict) -> tuple | None:
         carta.get("scryfall_uri") or "",
         _imagem_verso(carta),
         _deitada(carta),
+        _tokens_da_carta(carta),
     )
 
 
 _COLUNAS = ("id, nome, busca, busca_frente, mana_cost, cmc, tipo, texto, "
             "cores, identidade, legal, comandante, parceiro, basico, "
             "ilimitada, preco_usd, imagem, layout, scryfall, imagem_verso, "
-            "deitada")
+            "deitada, tokens")
 _INTERROGACOES = ",".join("?" * len(_COLUNAS.split(",")))
 
 
@@ -537,6 +612,71 @@ def _gravar(conn, lote: list) -> None:
     conn.execute("COMMIT")
 
 
+def _gravar_tokens(conn, lote: list) -> None:
+    """Grava um lote de fichas. `INSERT OR REPLACE` porque a tabela `tokens`
+    NÃO é reconstruída a cada sincronização (ver `_resolver_tokens_faltantes`):
+    ela se atualiza por cima do que já está lá."""
+    conn.execute("BEGIN")
+    try:
+        conn.executemany(
+            f"INSERT OR REPLACE INTO tokens ({_COLUNAS_TOKENS}) "
+            f"VALUES ({_INTERROGACOES_TOKENS})", lote)
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")
+
+
+# Teto da Scryfall pra `/cards/collection`: 75 identificadores por POST.
+COLECAO_LOTE = 75
+
+
+def _resolver_tokens_faltantes(conn, sessao, ids: set) -> int:
+    """Busca na API as fichas que o bulk não trouxe. Devolve quantas achou.
+
+    POR QUE FALTA ALGUMA COISA. O `oracle_cards` traz UMA impressão por ficha,
+    escolhida pela Scryfall; o `all_parts` das cartas aponta pra uma impressão
+    QUALQUER da mesma ficha. Os dois raramente são o mesmo id — medindo o bulk
+    de hoje, só 1201 dos 4124 ids citados existem nele.
+
+    POR QUE NÃO CASAR POR NOME. Porque nome não identifica ficha: existem 30
+    "Token Creature — Elemental" diferentes na base, e as duas Wurm do Wurmcoil
+    Engine têm nome, tipo e corpo iguais. Casar por nome mostraria a arte e o
+    texto da ficha errada, calado.
+
+    O CUSTO. São ~860 ids na primeira carga e a Scryfall aceita 75 por POST:
+    12 requisições. Como a tabela `tokens` não é jogada fora entre
+    sincronizações, das próximas vezes sobram só as fichas das cartas novas.
+
+    Falha aqui não derruba a sincronização: a base de cartas já está trocada e
+    no lugar, e o que se perde é a aba de Tokens ficar incompleta até amanhã.
+    """
+    ids = sorted(ids)
+    achadas = 0
+    for comeco in range(0, len(ids), COLECAO_LOTE):
+        pedaco = ids[comeco:comeco + COLECAO_LOTE]
+        try:
+            resposta = sessao.post(
+                f"{BASE}/cards/collection",
+                json={"identifiers": [{"id": i} for i in pedaco]},
+                timeout=TIMEOUT)
+            resposta.raise_for_status()
+            vindas = resposta.json().get("data") or []
+        except (requests.RequestException, ValueError) as e:
+            log.aviso("cartas", "tokens-nao-vieram", quantos=len(pedaco),
+                      motivo=str(e))
+            continue
+        lote = [linha for linha in (_linha_token(c) for c in vindas)
+                if linha is not None]
+        if lote:
+            _gravar_tokens(conn, lote)
+            achadas += len(lote)
+        # A mesma cortesia que a cotação já pratica: a Scryfall pede ~100 ms
+        # entre requisições, e aqui não há pressa nenhuma.
+        time.sleep(0.25)
+    return achadas
+
+
 def sincronizar() -> dict:
     """Baixa o bulk data e reconstrói a tabela de cartas.
 
@@ -592,12 +732,28 @@ def _carregar() -> dict:
 
         lidas = 0
         lote: list[tuple] = []
+        fichas: list[tuple] = []
+        # Os ids de ficha que as cartas citam. Junta durante a leitura porque
+        # o bulk passa uma vez só, e no fim se compara com o que a tabela
+        # `tokens` já tem pra saber o que ainda falta buscar.
+        citados: set[str] = set()
         with sessao.get(url, timeout=TIMEOUT, stream=True) as resposta:
             resposta.raise_for_status()
             for carta in objetos_do_bulk(_pedacos(resposta)):
+                # Ficha vem no mesmo arquivo das cartas e o `_linha` a
+                # descarta (`LAYOUTS_FORA`). Pegamos antes disso: fora da
+                # busca, sim; fora do banco, não.
+                ficha = _linha_token(carta)
+                if ficha is not None:
+                    fichas.append(ficha)
+                    if len(fichas) >= LOTE:
+                        _gravar_tokens(conn, fichas)
+                        fichas.clear()
+                    continue
                 linha = _linha(carta)
                 if linha is None:
                     continue
+                citados.update(json.loads(linha[-1] or "[]"))
                 lote.append(linha)
                 if len(lote) >= LOTE:
                     _gravar(conn, lote)
@@ -608,6 +764,8 @@ def _carregar() -> dict:
         if lote:
             _gravar(conn, lote)
             lidas += len(lote)
+        if fichas:
+            _gravar_tokens(conn, fichas)
 
         if lidas < 1000:
             # Bulk legítimo tem dezenas de milhares de cartas. Menos que isso
@@ -634,6 +792,20 @@ def _carregar() -> dict:
         conn.commit()
         with _trava:
             _andamento["lidas"] = lidas
+
+        # Depois da troca, e não antes: a base de cartas já está valendo, e
+        # completar as fichas é um extra que pode falhar sem levar a
+        # sincronização junto.
+        try:
+            ja_tem = {l["id"] for l in conn.execute("SELECT id FROM tokens")}
+            faltando = citados - ja_tem
+            if faltando:
+                achadas = _resolver_tokens_faltantes(conn, sessao, faltando)
+                log.evento("cartas", "tokens-completados",
+                           faltavam=len(faltando), achadas=achadas)
+        except (sqlite3.Error, requests.RequestException) as e:
+            log.aviso("cartas", "tokens-incompletos", motivo=str(e))
+
         return {"cartas": lidas, "atualizado_em": float(agora),
                 "segundos": 0}
     finally:
@@ -906,26 +1078,111 @@ def por_nomes(nomes: list[str]) -> dict[str, dict]:
         return {}
     conn = _conn()
     try:
-        achadas: dict[str, dict] = {}
-        for nome in nomes:
-            alvo = normalizar(nome)
-            if not alvo:
-                continue
-            linha = conn.execute(
-                f"SELECT {_COLUNAS} FROM cartas WHERE busca = ? "
-                f"OR busca_frente = ? ORDER BY (busca = ?) DESC LIMIT 1",
-                (alvo, alvo, alvo)).fetchone()
-            if linha is None:
-                linha = conn.execute(
-                    f"SELECT {_COLUNAS} FROM cartas WHERE busca_frente = ? "
-                    f"LIMIT 1", (normalizar(face_da_frente(nome)),)).fetchone()
-            if linha is not None:
-                achadas[nome] = _dict(linha)
-        return achadas
+        achadas = _linhas_por_nome(conn, nomes)
+        return {nome: _dict(linha) for nome, linha in achadas.items()}
     except sqlite3.OperationalError:
         return {}
     finally:
         conn.close()
+
+
+def _linhas_por_nome(conn, nomes: list[str]) -> "dict":
+    """O casamento de nome, cru. `por_nomes` e `tokens_de` usam o mesmo — o
+    deck guarda nome e as duas precisam chegar na mesma linha por ele."""
+    achadas: dict = {}
+    for nome in nomes:
+        alvo = normalizar(nome)
+        if not alvo:
+            continue
+        linha = conn.execute(
+            f"SELECT {_COLUNAS} FROM cartas WHERE busca = ? "
+            f"OR busca_frente = ? ORDER BY (busca = ?) DESC LIMIT 1",
+            (alvo, alvo, alvo)).fetchone()
+        if linha is None:
+            linha = conn.execute(
+                f"SELECT {_COLUNAS} FROM cartas WHERE busca_frente = ? "
+                f"LIMIT 1", (normalizar(face_da_frente(nome)),)).fetchone()
+        if linha is not None:
+            achadas[nome] = linha
+    return achadas
+
+
+def tokens_de(nomes: list[str]) -> list[dict]:
+    """As fichas que uma lista de cartas cria, agrupadas por quem as cria.
+
+    Devolve `[{"carta", "imagem", "tokens": [...]}, ...]` na ordem em que os
+    nomes chegaram, pulando carta que não cria ficha nenhuma. Agrupado por
+    carta, e não uma lista única de fichas, porque a pergunta da mesa não é
+    "quantas fichas o deck faz" e sim "de que fichas eu preciso, e por causa
+    de quê" — sem a carta ao lado, uma tela de vinte "Token Creature —
+    Soldier" não diz nada.
+
+    Carta que cria a MESMA ficha que outra aparece nas duas: é a mesma ficha
+    física, mas quem monta o baralho precisa ver que as duas a pedem.
+    """
+    if not nomes:
+        return []
+    conn = _conn()
+    try:
+        linhas = _linhas_por_nome(conn, nomes)
+        pedidos: dict[str, list[str]] = {}
+        for nome, linha in linhas.items():
+            ids = _ids_de_token(linha["tokens"])
+            if ids:
+                pedidos[nome] = ids
+        if not pedidos:
+            return []
+
+        # Uma consulta só pras fichas todas: um deck que cria trinta fichas
+        # faria trinta idas ao banco pra ler trinta linhas de uma tabela de
+        # mil. O teto de variáveis do SQLite (999 por padrão) é folgado aqui,
+        # mas o pedaço existe pra ele nunca ser o que quebra.
+        todos = sorted({i for ids in pedidos.values() for i in ids})
+        fichas: dict[str, dict] = {}
+        for comeco in range(0, len(todos), 500):
+            pedaco = todos[comeco:comeco + 500]
+            vagas = ",".join("?" * len(pedaco))
+            for linha in conn.execute(
+                    f"SELECT {_COLUNAS_TOKENS} FROM tokens "
+                    f"WHERE id IN ({vagas})", pedaco):
+                fichas[linha["id"]] = dict(linha)
+
+        saida = []
+        for nome in nomes:
+            ids = pedidos.get(nome)
+            if not ids:
+                continue
+            # Ficha que a base ainda não tem (carta nova, sincronização que
+            # não completou) some da lista em vez de virar quadro vazio.
+            minhas = [fichas[i] for i in ids if i in fichas]
+            if minhas:
+                saida.append({"carta": linhas[nome]["nome"],
+                              "imagem": linhas[nome]["imagem"],
+                              "tokens": minhas})
+        return saida
+    except sqlite3.OperationalError:
+        # Base ainda sendo montada, ou de uma versão sem a tabela `tokens`.
+        return []
+    finally:
+        conn.close()
+
+
+def _ids_de_token(guardado: str | None) -> list[str]:
+    """A coluna `tokens` virando lista, sem repetir id.
+
+    Repetição existe: há carta cujo `all_parts` cita a mesma impressão de
+    ficha duas vezes, e mostrar a mesma arte lado a lado pareceria defeito.
+    """
+    try:
+        ids = json.loads(guardado or "[]")
+    except ValueError:
+        return []
+    vistos, saida = set(), []
+    for i in ids:
+        if isinstance(i, str) and i not in vistos:
+            vistos.add(i)
+            saida.append(i)
+    return saida
 
 
 def _dict(linha: sqlite3.Row) -> dict:
@@ -933,4 +1190,8 @@ def _dict(linha: sqlite3.Row) -> dict:
     carta = dict(linha)
     for campo in ("legal", "comandante", "parceiro", "basico", "ilimitada"):
         carta[campo] = bool(carta.get(campo))
+    # A lista de ids de ficha é detalhe de armazenamento: quem quer as fichas
+    # chama `tokens_de`, que devolve as fichas inteiras. Aqui vira só o sim ou
+    # não que a tela usa pra marcar a carta na lista.
+    carta["faz_tokens"] = bool(_ids_de_token(carta.pop("tokens", None)))
     return carta

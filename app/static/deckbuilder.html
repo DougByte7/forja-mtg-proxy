@@ -1276,6 +1276,55 @@
     border:1px dashed var(--gold);border-radius:8px;padding:7px 10px;margin-bottom:8px;
   }
 
+  /* ---------------- tokens ----------------
+     Grade de artes, não lista de nomes: ficha se reconhece pela imagem, e
+     quem chega nesta aba já sabe o nome — o que ele quer é ver o que precisa
+     levar pra mesa. O título de cada bloco é a CARTA QUE CRIA, e não a ficha:
+     sem ele, uma tela com seis "Token Creature — Soldier" de artes parecidas
+     não diz de onde saiu nenhuma, nem o que acontece se a carta sair do deck. */
+  .token-grupo{margin-bottom:18px;}
+  .token-grupo:last-child{margin-bottom:0;}
+  .token-grupo h3{
+    display:flex;align-items:center;gap:8px;margin:0 0 8px;
+    font-size:12.5px;font-weight:600;color:var(--text);
+  }
+  .token-grupo h3 .quantas{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:400;
+    color:var(--text-muted);border:1px solid var(--border);
+    border-radius:999px;padding:1px 7px;flex:none;
+  }
+  /* Coluna de largura FIXA, e não `1fr`: o zoom do hover é um `scale` de
+     número fechado (160px -> os 250px que a prévia de arte usa no resto da
+     tela), e ele só cai no tamanho certo se a miniatura sempre partir dos
+     mesmos 160px. Com `1fr` a mesma ficha ficaria maior ou menor conforme a
+     largura da janela. */
+  .token-grade{
+    display:grid;grid-template-columns:repeat(auto-fill,160px);gap:10px;
+  }
+  .token{
+    display:block;width:160px;aspect-ratio:488/680;border-radius:8px;
+    border:1px solid var(--border);background:var(--surface);position:relative;
+    transition:transform .13s ease-out,box-shadow .13s ease-out;
+  }
+  /* `scale`, e não largura de verdade: crescer a caixa re-fluiria a grade e
+     as fichas vizinhas dançariam a cada passada de mouse. A ficha da borda
+     cresce por cima do painel, e é assim mesmo — é o gesto da prévia de arte,
+     que também flutua sobre a tela. Recuar a grade pra caber o zoom deixaria
+     uma faixa vazia dos dois lados o tempo todo, por uma carta de cada vez. */
+  .token:hover{
+    transform:scale(1.5625);z-index:20;
+    box-shadow:0 22px 44px -14px rgba(0,0,0,.85);
+  }
+  /* Em tela de toque não existe hover: o `:hover` que o toque acende ficaria
+     preso na última ficha tocada, grande, até tocar outra coisa. E sem zoom
+     some a razão de a coluna ser fixa em 160px — no telefone ela passa a
+     esticar, senão cabe UMA ficha por linha com meia tela sobrando ao lado. */
+  @media (hover:none){
+    .token:hover{transform:none;box-shadow:none;}
+    .token-grade{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));}
+    .token{width:100%;}
+  }
+
   /* ---------------- prévia da arte (só no mouse) ---------------- */
   /* Contêiner e não <img> porque carta de duas faces mostra as duas lado a
      lado: ver só a frente de um transform é ver metade da carta. */
@@ -1539,6 +1588,8 @@
         <button role="tab" data-painel="manabase" aria-selected="false">Mana base</button>
         <button role="tab" data-painel="combos" aria-selected="false">
           Combos <span class="n" id="aba-combos-n"></span></button>
+        <button role="tab" data-painel="tokens" aria-selected="false">
+          Tokens <span class="n" id="aba-tokens-n"></span></button>
       </div>
 
       <div class="painel" id="painel-deck" data-painel="deck">
@@ -1608,6 +1659,18 @@
           carta</b> de fechar aparecem na aba <b>Combos</b> do painel de
           adicionar — lá eles viram carta pra pôr no deck.</p>
         <div id="combos-resultado" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- As fichas são a única parte do deck que não vai dentro do deck: é
+           material separado, que se esquece em casa. Aba própria porque a
+           pergunta ("o que preciso levar além das 100?") só aparece no fim da
+           montagem, e até lá não deve ocupar espaço nenhum. -->
+      <div class="painel" id="painel-tokens" data-painel="tokens" hidden>
+        <h2 class="secao">Tokens do deck</h2>
+        <p class="nota" id="tokens-nota">As fichas que as cartas do deck criam,
+          agrupadas por quem as cria. Sai da própria base de cartas, sem rede —
+          acompanha cada mudança do deck.</p>
+        <div id="tokens-resultado" style="margin-top:12px;"></div>
       </div>
     </div>
   </section>
@@ -1974,6 +2037,8 @@ const estado = {
   sugestoesRodando: false,
   manabase: null,           // a última análise de mana base
   manabaseTeto: null,       // teto de preço escolhido (null = o padrão)
+  tokens: null,             // as fichas que o deck cria
+  tokensAssinatura: null,   // o deck de quando elas foram listadas
   mbPagina: 0,              // página da lista de terrenos que fixam
   combosMexidos: 0,         // combos fechados aqui na tela desde a busca
 
@@ -2424,6 +2489,9 @@ async function salvarAgora(){
     // A mana base é conta local, sem custo de fora: depois de aberta uma
     // vez, acompanha cada autosave em vez de envelhecer com aviso.
     if (estado.manabase) analisarManabase();
+    // Fichas idem: a resposta sai da base local, então acompanhar o deck
+    // custa o mesmo que avisar que a lista envelheceu.
+    if (estado.tokens) buscarTokens();
   } catch (e){
     marcarEstado("não consegui salvar: " + e.message, "erro");
   } finally {
@@ -2505,6 +2573,9 @@ function rodarAoAbrir(nome){
   }
   if (nome === "combos" && estado.combosAssinatura !== assinatura){
     return procurarCombos();
+  }
+  if (nome === "tokens" && estado.tokensAssinatura !== assinatura){
+    return buscarTokens();
   }
 }
 
@@ -4351,6 +4422,82 @@ function desenharPoder(){
   caixa.innerHTML = html;
   const refazer = caixa.querySelector("[data-repoder]");
   if (refazer) refazer.addEventListener("click", estimarPoder);
+}
+
+/* ------------------------------------------------------------------ tokens
+
+   A aba responde uma pergunta que só aparece no fim da montagem: "o que eu
+   preciso levar ALÉM das 100 cartas?". Ficha não vai dentro do deck — é
+   material separado, e por isso é a parte que se esquece em casa.
+
+   Sem botão de buscar, ao contrário dos combos: a base local já guarda, carta
+   por carta, quais fichas ela cria, então a resposta não custa rede e pode
+   acompanhar o deck como a mana base acompanha.
+
+   Agrupado por carta que cria, e não numa lista única: a mesma ficha pedida
+   por duas cartas continua sendo duas linhas da conta, porque tirar uma das
+   duas do deck não tira a ficha da caixa. */
+async function buscarTokens(){
+  if (!estado.comandantes.length) return;
+  if (!estado.id) await salvarAgora();
+  if (!estado.id){
+    toast("Não consegui salvar o deck antes de listar as fichas.");
+    return;
+  }
+  // Só avisa que está procurando quando ainda não há lista na tela. Nos
+  // recálculos do autosave, apagar a grade faria as artes piscarem a cada
+  // carta adicionada.
+  if (!estado.tokens){
+    $("tokens-resultado").innerHTML = `<div class="nota">Procurando…</div>`;
+  }
+  try {
+    estado.tokens = await api(`/decks/${estado.id}/tokens`);
+    estado.tokensAssinatura = assinaturaDoDeck();
+  } catch (e){
+    $("tokens-nota").hidden = false;
+    $("tokens-resultado").innerHTML =
+      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    return;
+  }
+  desenharTokens();
+}
+
+/* Uma ficha vira uma imagem por FACE. Ficha de duas faces existe (o lobisomem
+   que nasce Humano e vira Lobo é uma carta só, com dois lados) e quem vai
+   imprimir ou procurar na caixa precisa dos dois — mostrar só a frente
+   esconderia metade do que tem que ser levado. */
+function fichaHTML(t){
+  const nome = [t.nome, t.tipo].filter(Boolean).join(" — ");
+  // Ficha sem corpo é ficha que não é criatura (Treasure, Clue, Food): sem
+  // isto elas apareceriam como "/" no título, que parece dado faltando.
+  const corpo = t.poder && t.resistencia ? ` ${t.poder}/${t.resistencia}` : "";
+  return [t.imagem, t.imagem_verso].filter(Boolean).map(url =>
+    `<img class="token" loading="lazy" src="${escapar(url)}"
+          alt="${escapar(nome)}" title="${escapar(nome + corpo)}">`).join("");
+}
+
+function desenharTokens(){
+  const dados = estado.tokens;
+  const grupos = dados?.grupos || [];
+  // Vazio, e não "0": deck que não cria ficha nenhuma não tem contagem pra
+  // mostrar, do mesmo jeito que a aba de combos antes da primeira busca.
+  $("aba-tokens-n").textContent = dados && dados.total ? dados.total : "";
+
+  const caixa = $("tokens-resultado");
+  if (!dados){ caixa.innerHTML = ""; return; }
+  // A lista está na tela: a explicação do que a aba faz vira ruído acima dela.
+  $("tokens-nota").hidden = grupos.length > 0;
+  if (!grupos.length){
+    caixa.innerHTML = `<div class="nota">Nenhuma carta deste deck cria ficha —
+      não há nada a levar além das cartas.</div>`;
+    return;
+  }
+  caixa.innerHTML = grupos.map(g => `
+    <div class="token-grupo">
+      <h3><span class="peca"${ganchosDaPrevia(g)}>${escapar(g.carta)}</span>
+          <span class="quantas">${g.tokens.length}</span></h3>
+      <div class="token-grade">${g.tokens.map(fichaHTML).join("")}</div>
+    </div>`).join("");
 }
 
 /* ----------------------------------------------------------------- combos
