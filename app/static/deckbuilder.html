@@ -222,11 +222,14 @@
      olhadas ENQUANTO se rola a lista do deck, então ele gruda no topo — uma
      coluna de apoio que some quando a pessoa desce nas 99 cartas não apoia
      nada. */
-  .trilho{
+  /* Filho direto de propósito: `trilho` também é o nome do sulco das
+     barrinhas de proporção (curva, distribuição, fontes por cor), e uma regra
+     solta grudaria cada barrinha no topo da tela. */
+  .corpo > .trilho{
     position:sticky;top:74px;display:flex;flex-direction:column;gap:14px;
     max-height:calc(100vh - 92px);min-height:0;min-width:0;
   }
-  .trilho > .painel{min-width:0;}
+  .corpo > .trilho > .painel{min-width:0;}
   /* A curva é a única análise que vale a pena estar sempre à vista: ela
      muda a cada carta adicionada e é o gráfico que se consulta DURANTE a
      montagem, não depois. As outras quatro respondem perguntas que se faz de
@@ -264,7 +267,7 @@
      nem a curva nem o maybeboard devolve a largura toda pro deck, e a escolha
      fica guardada no navegador. */
   .corpo.talvez-fechado{grid-template-columns:372px minmax(0,1fr) 44px;}
-  .corpo.talvez-fechado .trilho{align-items:center;gap:10px;}
+  .corpo.talvez-fechado > .trilho{align-items:center;gap:10px;}
   .corpo.talvez-fechado .trilho-recolher{align-self:center;}
   .corpo.talvez-fechado .trilho-conteudo{display:none;}
   .corpo.talvez-fechado .trilho-vertical{display:block;}
@@ -703,8 +706,8 @@
   .cotacao-topo h2{flex:1;margin:0;}
 
   /* ---------------- abas ----------------
-     Deck, análise, mana base, poder e combos são cinco RESPOSTAS sobre o
-     mesmo deck, e só uma está sendo perguntada de cada vez. Uma superfície
+     Deck, análise, mana base e combos são quatro RESPOSTAS sobre o mesmo
+     deck, e só uma está sendo perguntada de cada vez. Uma superfície
      só, com um seletor em cima: empilhados na mesma rolagem, quem quer a
      curva de mana atravessa 99 cartas pra chegar nela.
 
@@ -947,6 +950,50 @@
   .distrib .cheio{display:block;height:100%;border-radius:3px;}
   .distrib .num{font-family:'IBM Plex Mono',monospace;font-size:10px;width:20px;text-align:right;}
 
+  /* ---------------- chances de comprar ---------------- */
+  /* Tabela e não gráfico: são oito ou nove categorias que todas carregam
+     significado, com três números cada — barra nenhuma responde "quantos por
+     cento" melhor do que o número escrito. */
+  .chances{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}
+  .chances th{
+    font-weight:400;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--text-muted);text-align:right;padding:0 0 5px 8px;
+    vertical-align:bottom;cursor:help;
+  }
+  .chances th:first-child{text-align:left;padding-left:0;cursor:default;}
+  .chances td{
+    padding:4px 0 4px 8px;text-align:right;border-top:1px solid var(--border);
+    color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;
+    font-variant-numeric:tabular-nums;
+  }
+  .chances td:first-child{
+    text-align:left;padding-left:0;font-family:inherit;font-size:11.5px;
+    color:var(--text-muted);
+  }
+  .chances .qt{color:var(--text-muted);font-family:'IBM Plex Mono',monospace;
+    font-size:10px;}
+  /* As duas pontas da mesma mana base: terreno de menos perde o turno, terreno
+     demais saca terreno no lugar de carta. Ficam fora da tabela porque só
+     valem pra uma linha dela. */
+  .risco-duo{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
+  .risco{
+    flex:1;min-width:158px;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:9px;padding:9px 11px;
+  }
+  .risco .rot{display:block;font-size:11px;color:var(--text-muted);}
+  .risco .val{
+    display:block;font-family:'IBM Plex Mono',monospace;font-size:21px;
+    line-height:1.25;margin:2px 0;color:var(--gold-light);
+  }
+  /* A cor nunca conta a história sozinha: o estado vem escrito na linha de
+     baixo, que é o que sobra pra quem não separa verde de vermelho. */
+  .risco.ok .val{color:var(--green);}
+  .risco.atencao .val{color:var(--gold-light);}
+  .risco.alto .val{color:#F2AFA1;}
+  .risco .porque{display:block;font-size:10.5px;color:var(--text-muted);
+    line-height:1.45;}
+  .risco .estado{color:var(--text);}
+
   .aponta{
     display:flex;gap:7px;align-items:flex-start;font-size:12px;line-height:1.45;
     padding:8px 10px;border-radius:8px;margin-bottom:5px;
@@ -1013,7 +1060,7 @@
     gap:7px;font-size:11.5px;color:var(--text-muted);padding:3px 0;
   }
   .mb-cor .trilho{display:block;height:6px;border-radius:3px;
-    background:var(--surface-2);overflow:hidden;position:relative;}
+    background:var(--surface-2);position:relative;}
   .mb-cor .cheio{display:block;height:100%;border-radius:3px;}
   /* A marca é o que o deck PEDE; a barra é o que ele TEM. Barra que não
      chega na marca é fonte faltando — dá pra ver sem ler número. */
@@ -1055,6 +1102,13 @@
      degrau e explicar por que ele é inalcançável é mais honesto do que
      esconder e deixar a escala parecendo ir só até 4. */
   .degrau.fora{border-style:dashed;opacity:.5;}
+
+  .refazer{
+    border:1px solid var(--gold);border-radius:6px;background:transparent;
+    color:var(--gold-light);font:inherit;font-size:10.5px;padding:1px 8px;
+    margin-left:6px;cursor:pointer;
+  }
+  .refazer:hover{background:rgba(233,199,101,.14);}
 
   .poder-nome{font-family:'Cinzel',serif;font-size:15px;color:var(--gold-light);
     margin-bottom:3px;}
@@ -1193,6 +1247,14 @@
 
   .nota{font-size:11px;color:var(--text-muted);line-height:1.55;}
   .nota a{color:var(--gold-light);}
+  /* A conta é heurística nossa, e quem lê um número tem direito de saber de
+     onde ele veio. Fica no fim do painel, fora do caminho de quem só queria o
+     número. */
+  .rodape-conta{
+    margin-top:14px;padding-top:10px;border-top:1px solid var(--border);
+    font-size:11px;color:var(--text-muted);line-height:1.55;
+  }
+  .rodape-conta b{color:var(--text);font-weight:600;}
   .vazio{color:var(--text-muted);font-size:12.5px;line-height:1.6;text-align:center;padding:22px 8px;}
 
   .aviso-base{
@@ -1239,8 +1301,8 @@
   /* ---------------- o celular ----------------
      Aqui não existem colunas nem barra de abas de região: existe o DECK, e
      tudo o mais é uma tarefa que se abre por cima dele. A busca é uma folha
-     que sobe do botão fixo; a análise, a mana base, o poder e os combos são
-     as mesmas abas do computador, na mesma fita que rola de lado; o trilho
+     que sobe do botão fixo; a análise, a mana base e os combos são as
+     mesmas abas do computador, na mesma fita que rola de lado; o trilho
      (curva e maybeboard) desce pro fim da página, que é onde se confere
      depois de montar.
 
@@ -1256,7 +1318,7 @@
     .corpo > .trilho{order:2;}
     .corpo > .lateral{order:3;}
 
-    .trilho{position:static;max-height:none;}
+    .corpo > .trilho{position:static;max-height:none;}
     .painel-talvez{flex:none;}
     .talvez-lista{max-height:none;}
     /* No telefone a coluna nunca nasce recolhida: aqui ela é uma seção no fim
@@ -1370,8 +1432,8 @@
       <div class="resultados" id="res-cmd"></div>
     </div>
 
-    <!-- ---------------- as cinco respostas sobre o deck ----------------
-         Deck, análise, mana base, poder e combos são cinco perguntas sobre a
+    <!-- ---------------- as quatro respostas sobre o deck ----------------
+         Deck, análise, mana base e combos são quatro perguntas sobre a
          MESMA lista, e só uma está sendo feita de cada vez: uma superfície
          só, com abas. Abrir a aba já dispara a conta dela. -->
     <div id="area-deck" hidden>
@@ -1380,7 +1442,6 @@
           Deck <span class="n" id="aba-deck-n">0</span></button>
         <button role="tab" data-painel="analise" aria-selected="false">Análise</button>
         <button role="tab" data-painel="manabase" aria-selected="false">Mana base</button>
-        <button role="tab" data-painel="poder" aria-selected="false">Nível de poder</button>
         <button role="tab" data-painel="combos" aria-selected="false">
           Combos <span class="n" id="aba-combos-n"></span></button>
       </div>
@@ -1408,7 +1469,18 @@
       <div class="painel" id="painel-analise" data-painel="analise" hidden>
         <h2 class="secao">Como o deck está</h2>
         <div id="apontamentos"></div>
-        <div class="distrib-duo" style="margin-top:14px;">
+
+        <!-- O nível de poder é a segunda coisa que se pergunta depois de "o
+             deck está legal?", e a resposta cabe em três linhas: aba própria
+             pra isso era uma aba a mais pra atravessar. -->
+        <h2 class="secao" style="margin-top:16px">Nível de poder</h2>
+        <p class="nota" id="poder-nota">A escala oficial de brackets do
+          Commander — e <b>por quê</b>, carta por carta. Quem classifica é o
+          Commander Spellbook, que acompanha a lista de game changers da
+          Wizards. Sai sozinho ao abrir esta aba.</p>
+        <div id="poder-resultado" style="margin-top:10px;"></div>
+
+        <div class="distrib-duo" style="margin-top:16px;">
           <div>
             <h2 class="secao">Cores</h2>
             <div class="distrib" id="distrib-cores"></div>
@@ -1418,6 +1490,9 @@
             <div class="distrib" id="distrib-tipos"></div>
           </div>
         </div>
+
+        <h2 class="secao" style="margin-top:16px">Chances de comprar</h2>
+        <div id="chances"></div>
       </div>
 
       <div class="painel" id="painel-manabase" data-painel="manabase" hidden>
@@ -1426,17 +1501,6 @@
           fontes de cada cor o deck tem e quantas precisaria. Conta feita aqui,
           sobre o seu deck — acompanha cada mudança.</p>
         <div id="mb-resultado" style="margin-top:12px;"></div>
-      </div>
-
-      <div class="painel" id="painel-poder" data-painel="poder" hidden>
-        <h2 class="secao">Nível de poder</h2>
-        <p class="nota" id="poder-nota">Classifica o deck na escala oficial de
-          brackets do Commander — e mostra <b>por quê</b>, carta por carta. Quem
-          classifica é o Commander Spellbook, que acompanha a lista de game
-          changers da Wizards.</p>
-        <button class="btn" id="btn-poder" style="width:100%;margin-top:10px;">
-          Estimar nível</button>
-        <div id="poder-resultado" style="margin-top:12px;"></div>
       </div>
 
       <!-- Aqui só o que JÁ FECHA no deck. O que está a uma carta de fechar é
@@ -2298,10 +2362,10 @@ function desenharTudo(){
    os cinco painéis do centro são desenhados a cada mudança do deck, estejam
    à vista ou não, senão abrir "Análise" mostraria o deck de dois minutos
    atrás por um quadro. */
-/* Abrir a aba é o pedido: quem clica em "Nível de poder" quer o nível, não um
-   botão que promete o nível. A conta só sai se ainda não houver resposta ou se
-   o deck tiver mudado desde a última — trocar de aba ida e volta não repete
-   consulta. O botão de cada painel continua existindo pra forçar de novo. */
+/* Abrir a aba é o pedido: quem clica em "Análise" quer a análise inteira,
+   nível de poder incluído, não um botão que promete o nível. A conta só sai se
+   ainda não houver resposta ou se o deck tiver mudado desde a última — trocar
+   de aba ida e volta não repete consulta. */
 function rodarAoAbrir(nome){
   if (!estado.comandantes.length) return;
   if (nome === "manabase" && !estado.manabase) return analisarManabase();
@@ -2312,7 +2376,7 @@ function rodarAoAbrir(nome){
     return buscarSugestoes(estado.sugestoesTema);
   }
   const assinatura = assinaturaDoDeck();
-  if (nome === "poder" && estado.poderAssinatura !== assinatura){
+  if (nome === "analise" && estado.poderAssinatura !== assinatura){
     return estimarPoder();
   }
   if (nome === "combos" && estado.combosAssinatura !== assinatura){
@@ -2606,6 +2670,7 @@ function desenharAnalise(){
 
   desenharCurva();
   desenharDistribuicao();
+  desenharChances();
 }
 
 function rotuloTipo(tipo){
@@ -3703,6 +3768,142 @@ function desenharSugestoes(){
   caixa.innerHTML = html;
 }
 
+/* ------------------------------------------------------ chances de comprar
+
+   A conta da urna, hipergeométrica: a biblioteca tem N cartas, K delas são da
+   categoria, e a pergunta é quantas aparecem nas primeiras compras. O
+   comandante não entra na conta — ele começa na zona de comando, não no
+   baralho.
+
+   Todas as janelas assumem quem JOGA PRIMEIRO, que é o lado sem a compra do
+   turno 1: é o caso pior, e é sobre o caso pior que se decide quantos terrenos
+   o deck leva. */
+
+const VISTAS_MAO = 7;       // a mão inicial
+const VISTAS_T3 = 9;        // a mão mais as compras dos turnos 2 e 3
+const VISTAS_T4 = 10;       // idem, até o turno 4
+const VISTAS_MULLIGAN = 6;  // o que fica na mão depois de um mulligan
+
+/* Fatorial em logaritmo, e não fatorial direto: C(99,10) já passa de 10^13, e
+   a divisão de dois números desses perde dígito. Em log tudo vira soma. */
+const _logFatorial = [0];
+function logFatorial(n){
+  for (let i = _logFatorial.length; i <= n; i++){
+    _logFatorial[i] = _logFatorial[i - 1] + Math.log(i);
+  }
+  return _logFatorial[n];
+}
+
+function logCombinacoes(n, k){
+  if (k < 0 || k > n) return -Infinity;
+  return logFatorial(n) - logFatorial(k) - logFatorial(n - k);
+}
+
+/* Chance de sair EXATAMENTE `k` cartas da categoria em `n` compras. */
+function hipergeometrica(N, K, n, k){
+  if (k < 0 || k > K || n - k < 0 || n - k > N - K) return 0;
+  return Math.exp(logCombinacoes(K, k) + logCombinacoes(N - K, n - k)
+                  - logCombinacoes(N, n));
+}
+
+function chanceAoMenos(N, K, n, minimo){
+  let soma = 0;
+  for (let k = minimo; k <= Math.min(n, K); k++) soma += hipergeometrica(N, K, n, k);
+  return soma;
+}
+
+function chanceAteh(N, K, n, maximo){
+  let soma = 0;
+  for (let k = 0; k <= Math.min(maximo, n, K); k++) soma += hipergeometrica(N, K, n, k);
+  return soma;
+}
+
+function porcento(p){ return Math.round(p * 100) + "%"; }
+
+/* Os dois riscos da mana base viram um estado escrito, não só uma cor: numa
+   base de 36 terrenos em 99 os dois ficam perto de 10%, e é dos dois lados
+   dessa marca que a régua foi tirada. */
+const ESTADO_DO_RISCO = [
+  [0.12, "ok",      "dentro do normal"],
+  [0.18, "atencao", "no limite"],
+  [1.01, "alto",    "alto"],
+];
+
+function riscoDaMana(p){
+  return ESTADO_DO_RISCO.find(([teto]) => p <= teto);
+}
+
+function desenharChances(){
+  const caixa = $("chances");
+  const entradas = cartasContadas();
+  const N = entradas.reduce((n, e) => n + e.quantidade, 0);
+  if (N < VISTAS_T4){
+    caixa.innerHTML = `<div class="vazio" style="padding:8px 0;">Com menos de
+      ${VISTAS_T4} cartas na lista ainda não há compra pra calcular.</div>`;
+    return;
+  }
+
+  // Pela categoria automática, a mesma da distribuição de tipos: a pergunta é
+  // "quando é que eu vejo uma criatura?", e um deck cujas criaturas estão
+  // guardadas em "combo principal" responderia nunca.
+  const porCat = new Map();
+  for (const {carta, quantidade} of entradas){
+    const cat = categoriaAutomatica(carta);
+    porCat.set(cat, (porCat.get(cat) || 0) + quantidade);
+  }
+
+  const linhas = [...porCat.entries()].sort((a, b) => b[1] - a[1]).map(([cat, K]) => `
+    <tr>
+      <td>${cat} <span class="qt">${K}</span></td>
+      <td>${porcento(chanceAoMenos(N, K, VISTAS_MAO, 1))}</td>
+      <td>${porcento(chanceAoMenos(N, K, VISTAS_T3, 1))}</td>
+      <td>${porcento(chanceAoMenos(N, K, VISTAS_MULLIGAN, 1))}</td>
+    </tr>`).join("");
+
+  let html = `<table class="chances">
+    <thead><tr>
+      <th>Chance de ver 1</th>
+      <th title="Na mão inicial de 7 cartas">Mão de 7</th>
+      <th title="Nas 9 cartas vistas até o turno 3, jogando primeiro">Até o T3</th>
+      <th title="Nas 6 cartas que ficam depois de um mulligan">Mão de 6</th>
+    </tr></thead>
+    <tbody>${linhas}</tbody></table>`;
+
+  const terrenos = porCat.get("Terrenos") || 0;
+  const falta = chanceAteh(N, terrenos, VISTAS_T3, 1);
+  const excesso = chanceAoMenos(N, terrenos, VISTAS_T4, 6);
+  const [, classeFalta, ditoFalta] = riscoDaMana(falta);
+  const [, classeExcesso, ditoExcesso] = riscoDaMana(excesso);
+  html += `<div class="risco-duo">
+    <div class="risco ${classeFalta}">
+      <span class="rot">Falta de mana</span>
+      <span class="val">${porcento(falta)}</span>
+      <span class="porque"><span class="estado">${ditoFalta}</span> — chegar ao
+        turno 3 com um terreno ou nenhum, dois drops perdidos.</span>
+    </div>
+    <div class="risco ${classeExcesso}">
+      <span class="rot">Excesso de mana</span>
+      <span class="val">${porcento(excesso)}</span>
+      <span class="porque"><span class="estado">${ditoExcesso}</span> — ver 6
+        terrenos ou mais até o turno 4, mana que virou carta morta.</span>
+    </div>
+  </div>`;
+
+  html += `<div class="rodape-conta">
+    <b>Como a conta é feita.</b> Distribuição hipergeométrica sobre as ${N}
+    cartas da lista — o comandante fica de fora porque começa na zona de
+    comando. Tudo jogando primeiro, sem a compra do turno 1, que é o lado pior:
+    <b>Mão de 7</b> é a mão inicial, <b>até o T3</b> são 9 cartas (a mão mais
+    as compras dos turnos 2 e 3) e o excesso de mana olha 10, até o turno 4.
+    <b>Mão de 6</b> conta só as 6 que ficam depois de um mulligan; no mulligan
+    de Londres você olha 7 e devolve 1, então na mesa a chance é um pouco
+    melhor — você devolve o que não fazia falta. Enquanto a lista não fechar em
+    99, os números saem inflados: menos carta no baralho é menos carta pra
+    atrapalhar.</div>`;
+
+  caixa.innerHTML = html;
+}
+
 /* ------------------------------------------------------------- mana base */
 
 async function analisarManabase(){
@@ -3827,6 +4028,19 @@ function desenharManabase(){
       falta.</div>`;
   }
   html += `</div></div>`;
+
+  html += `<div class="rodape-conta">
+    <b>Como a conta é feita.</b> Parte de 36 terrenos numa curva média de
+    3,20: um terreno a mais a cada 0,25 de curva acima disso, um a menos a
+    cada 0,25 abaixo. Cada rampa barata — rock ou dork de custo até 2 — vale
+    meio terreno a menos, no máximo quatro. O resultado fica preso entre 32 e
+    40. As fontes pedidas de cada cor são proporcionais aos símbolos de mana
+    que o deck pede daquela cor, com piso de 8 fontes pra um respingo (menos
+    de 12% dos símbolos) e 12 pra uma cor de verdade — e fonte é o que
+    <i>produz</i> a cor, então um terreno de duas cores conta pras duas. É
+    regra de mesa, feita pra conferir de cabeça, não a simulação de Frank
+    Karsten: ela aponta o buraco, não fecha a lista.</div>`;
+
   caixa.innerHTML = html;
 }
 
@@ -3863,8 +4077,6 @@ async function estimarPoder(){
   if (!estado.id) await salvarAgora();
   if (!estado.id){ toast("Não consegui salvar o deck antes de estimar."); return; }
 
-  const botao = $("btn-poder");
-  botao.disabled = true;
   $("poder-resultado").innerHTML = `<div class="nota">Classificando…</div>`;
   try {
     estado.poder = await api(`/decks/${estado.id}/poder`, {method: "POST"});
@@ -3873,8 +4085,6 @@ async function estimarPoder(){
     $("poder-resultado").innerHTML =
       `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
     return;
-  } finally {
-    botao.disabled = false;
   }
   desenharPoder();
 }
@@ -3887,7 +4097,7 @@ function desenharPoder(){
   let html = "";
   if (estado.poderAssinatura !== assinaturaDoDeck()){
     html += `<div class="combo-desatualizado">O deck mudou desde esta
-      estimativa — rode de novo pra atualizar.</div>`;
+      estimativa.<button class="refazer" data-repoder>Atualizar</button></div>`;
   }
   // Deck pela metade não tem nível: a estimativa só descreve as cartas que
   // existem, e dizer "bracket 1" pra um deck de 20 cartas seria mentira por
@@ -3931,6 +4141,8 @@ function desenharPoder(){
       estimativa recente com este mesmo deck.</div>`;
   }
   caixa.innerHTML = html;
+  const refazer = caixa.querySelector("[data-repoder]");
+  if (refazer) refazer.addEventListener("click", estimarPoder);
 }
 
 /* ----------------------------------------------------------------- combos
@@ -4636,7 +4848,6 @@ function ligarEventos(){
   });
 
   $("btn-recolher-talvez").addEventListener("click", () => recolherTalvez());
-  $("btn-poder").addEventListener("click", estimarPoder);
   $("btn-ver-analise").addEventListener("click", () => {
     trocarAba("analise");
     $("painel-analise").scrollIntoView({behavior: "smooth", block: "nearest"});
