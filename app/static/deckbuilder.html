@@ -589,7 +589,16 @@
     font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.62;
   }
   /* Variante estreita, pra fita de abas dentro de uma coluna de 372px. */
-  .abas-painel.miuda{margin-bottom:11px;padding:4px;overflow:visible;}
+  /* As abas do painel de adicionar trocam de conteúdo dentro de uma coluna
+     que a pessoa já está olhando: a aba ativa só precisa se distinguir das
+     outras duas, não chamar atenção da tela inteira. O dourado fica reservado
+     pras abas do deck, que mudam o assunto do meio da tela. */
+  .abas-painel.miuda{
+    margin-bottom:11px;padding:4px;overflow:visible;background:var(--inset);
+  }
+  .abas-painel.miuda button.ativa{
+    background:var(--surface-2);color:var(--text);
+  }
   /* Um terço da largura pra cada: são três destinos irmãos, e larguras
      diferentes fariam parecer que um deles é o principal. */
   .abas-painel.miuda button{
@@ -697,6 +706,7 @@
   }
 
   .linha{
+    position:relative;
     display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:7px;
     border:1px solid transparent;transition:background .12s;
   }
@@ -714,8 +724,26 @@
     font-size:10px;color:#F2AFA1;white-space:nowrap;overflow:hidden;
     text-overflow:ellipsis;max-width:100%;
   }
-  .linha .ctrl{display:flex;gap:2px;flex:none;opacity:0;transition:opacity .12s;}
+  /* Os quatro botões flutuam por cima do fim da linha em vez de ocuparem uma
+     coluna fixa nela: reservados no fluxo, eles tiravam ~90px do nome da
+     carta o tempo todo pra aparecerem no hover. O degradê à esquerda separa
+     os botões do texto que passa por baixo. */
+  .linha .ctrl{
+    position:absolute;top:50%;right:5px;transform:translateY(-50%);
+    display:flex;gap:2px;opacity:0;transition:opacity .12s;
+    padding-left:18px;border-radius:7px;
+    background:linear-gradient(to right,
+      rgba(36,31,61,0), var(--surface-2) 18px);
+  }
   .linha:hover .ctrl,.linha:focus-within .ctrl{opacity:1;}
+  /* A linha com problema não fica cinza no hover: mantém o tom avermelhado, e
+     o degradê dos botões precisa terminar nessa cor pra não abrir um retângulo
+     de outra cor por cima dela. rgb(40,28,50) é o vermelho a 7% já aplicado
+     sobre o fundo do painel. */
+  .linha.problema .ctrl{
+    background:linear-gradient(to right,
+      rgba(40,28,50,0), rgb(40,28,50) 18px);
+  }
   .mini{
     width:21px;height:21px;border-radius:6px;border:1px solid var(--border);
     background:var(--surface);color:var(--text-muted);cursor:pointer;
@@ -724,8 +752,14 @@
   .mini:hover{border-color:var(--gold);color:var(--gold-light);}
   .mini.sai:hover{border-color:var(--red);color:var(--red);}
   /* Em telas de toque não existe hover: os controles ficam sempre à vista,
-     senão não teria como mexer na quantidade. */
-  @media (hover:none){ .linha .ctrl{opacity:1;} }
+     senão não teria como mexer na quantidade. E, sempre à vista, voltam pro
+     fluxo — flutuando eles cobririam o fim de todo nome, o tempo todo. */
+  @media (hover:none){
+    .linha .ctrl{
+      position:static;transform:none;opacity:1;
+      flex:none;padding-left:0;background:none;
+    }
+  }
 
   /* comandante em destaque */
   .comandante{
@@ -1084,7 +1118,10 @@
     .previa{display:none;}
     /* Sem hover em toque: os controles da linha ficam sempre à vista, senão
        não haveria como mexer na quantidade. */
-    .linha .ctrl{opacity:1;}
+    .linha .ctrl{
+      position:static;transform:none;opacity:1;
+      flex:none;padding-left:0;background:none;
+    }
     .linha{padding:7px 6px;}
     .mini{width:28px;height:28px;font-size:15px;}
   }
@@ -2064,6 +2101,12 @@ function desenharTudo(){
 function rodarAoAbrir(nome){
   if (!estado.comandantes.length) return;
   if (nome === "manabase" && !estado.manabase) return analisarManabase();
+  // As sugestões dependem do comandante, não da lista: refazê-las a cada
+  // carta adicionada seria uma consulta por clique pra receber quase a mesma
+  // resposta. Busca uma vez; o botão do painel refaz quando a pessoa quiser.
+  if (nome === "sugestoes" && !estado.sugestoes){
+    return buscarSugestoes(estado.sugestoesTema);
+  }
   const assinatura = assinaturaDoDeck();
   if (nome === "poder" && estado.poderAssinatura !== assinatura){
     return estimarPoder();
@@ -2102,7 +2145,7 @@ function trocarRail(nome){
   // aba é o que se espera. No celular ela é uma folha: quem abre a folha é
   // `abrirFolha`, e é ele quem foca — depois da animação.
   if (nome === "buscar" && window.innerWidth > 900) $("busca").focus();
-  if (nome === "combos") rodarAoAbrir("combos");
+  if (nome === "combos" || nome === "sugestoes") rodarAoAbrir(nome);
 }
 
 /* Os dois medidores do cabeçalho. O ponto colorido carrega a validação
@@ -3427,6 +3470,8 @@ function desenharSugestoes(){
           title="Aparece ${sin > 0 ? sin + " pontos a mais" : Math.abs(sin) + " pontos a menos"} com este comandante do que com os outros${
             item.porcento ? " · está em " + item.porcento + "% dos decks dele" : ""}"
          >${sin > 0 ? "+" : ""}${sin}%</span>`;
+      // Preço na mesma posição da linha da busca: as duas abas mostram carta
+      // pra adicionar, e "quanto custa" é parte da escolha nas duas.
       return `
         <button class="achado" data-sug="${i}" data-arte="${escapar(item.carta.imagem)}">
           <span class="nome">
@@ -3434,6 +3479,7 @@ function desenharSugestoes(){
             <small>${escapar(item.carta.tipo)}</small>
           </span>
           ${manaHTML(item.carta.mana_cost)}
+          <span class="preco">${preco(item.carta)}</span>
           ${chip}
         </button>`;
     }).join("");
