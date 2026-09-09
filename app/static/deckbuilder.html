@@ -112,18 +112,49 @@
   .btn.verde:hover:not(:disabled){background:rgba(76,154,107,.10);border-color:var(--green);color:var(--green);}
   .acoes{display:flex;gap:7px;flex-wrap:wrap;}
 
-  /* contador 100 cartas, no cabeçalho: é o número que a pessoa mais olha */
-  .contador{
-    display:flex;align-items:baseline;gap:4px;flex:none;
-    font-family:'IBM Plex Mono',monospace;padding:5px 11px;
-    border:1px solid var(--border);border-radius:999px;background:var(--surface);
+  /* ---------------- medidores do cabeçalho ----------------
+     Contagem e dinheiro são os dois números que a pessoa mais olha, e os dois
+     moram no cabeçalho porque valem pra tela inteira — não pra uma coluna.
+     Sem pílula: a borda arredondada em volta de cada um fazia dois botões
+     falsos ao lado do nome do deck. Aqui são texto, separados por um traço
+     vertical, e só o que É clicável tem estado de clique. */
+  .divisor{
+    width:1px;align-self:stretch;background:var(--border);flex:none;
+    margin:2px 2px;
   }
-  .contador b{font-size:17px;color:var(--gold-light);font-weight:600;}
-  .contador span{font-size:11px;color:var(--text-muted);}
-  .contador.completo{border-color:var(--green);}
-  .contador.completo b{color:var(--green);}
-  .contador.passou{border-color:var(--red);}
-  .contador.passou b{color:var(--red);}
+  .medidores{display:flex;align-items:center;gap:14px;flex:none;}
+  .medidor{
+    display:flex;align-items:baseline;gap:5px;flex:none;padding:2px 0;
+    background:transparent;border:none;color:inherit;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .medidor b{font-size:17px;color:var(--gold-light);font-weight:600;line-height:1;}
+  .medidor .de{font-size:11px;color:var(--text-muted);}
+  .medidor .ponto{
+    width:7px;height:7px;border-radius:50%;background:var(--text-muted);
+    flex:none;align-self:center;
+  }
+  .medidor.completo .ponto{background:var(--green);}
+  .medidor.completo b{color:var(--green);}
+  .medidor.passou .ponto{background:var(--red);}
+  .medidor.passou b{color:var(--red);}
+  .medidor.erro .ponto{background:var(--red);}
+  /* Clicável: só o total, e só porque copiar a lista é a ação que se faz
+     olhando pra ele. Cursor e sublinhado no hover dizem isso antes do clique. */
+  button.medidor{cursor:pointer;border-radius:7px;padding:2px 6px;margin:0 -6px;}
+  button.medidor:hover{background:var(--surface);}
+  button.medidor:hover b{color:var(--gold);}
+  /* Enquanto a cotação não voltou, o número é a soma da base local. O ponto
+     de interrogação diz que ainda não é o preço de comprar. */
+  .medidor .previa{
+    font-size:10px;color:var(--text-muted);font-family:'Inter',sans-serif;
+  }
+  .medidor.cotando .de::after{
+    content:"";display:inline-block;width:7px;height:7px;margin-left:5px;
+    border:1.5px solid var(--gold-light);border-right-color:transparent;
+    border-radius:50%;animation:girando .7s linear infinite;vertical-align:middle;
+  }
+  @keyframes girando{to{transform:rotate(360deg);}}
 
   /* ---------------- corpo ----------------
 
@@ -137,15 +168,28 @@
      Em 1560, num monitor de 1440 real, o deck ainda fecha as duas colunas de
      352px que a lista precisa pra não truncar nome. */
   .corpo{
-    max-width:var(--largura);margin:0 auto;padding:18px 16px 90px;
+    max-width:var(--largura);margin:0 auto;padding:18px 16px 40px;
     display:grid;
-    grid-template-columns:288px minmax(0,1fr) 372px;
+    grid-template-columns:372px minmax(0,1fr) 300px;
     gap:18px;align-items:start;
   }
-  /* A faixa de orçamento atravessa as três colunas, logo abaixo do
-     cabeçalho: é um número só, e um número só não merece uma coluna inteira
-     — era o painel mais alto da lateral pelo mais raso dos conteúdos. */
-  .corpo > .faixa{grid-column:1 / -1;}
+  /* A ordem do HTML é a do celular (o deck primeiro, porque é o assunto), e
+     a ordem visual do computador vem daqui. Leitor de tela e telefone pegam
+     a lista do deck de cara; a tela larga põe a busca à esquerda, o deck no
+     meio e o trilho de apoio à direita. */
+  .corpo > .lateral{order:1;}
+  .corpo > .principal{order:2;}
+  .corpo > .trilho{order:3;}
+  /* Sem comandante não existe deck de Commander, e as duas colunas de apoio
+     não têm sobre o que apoiar: a busca de cartas filtra por uma identidade
+     que ainda não existe, e a curva e o maybeboard estariam vazios. A tela
+     inteira é a pergunta do meio — e duas caixas de busca ao mesmo tempo,
+     uma pedindo comandante e a outra pedindo carta, é a forma mais rápida de
+     alguém digitar o comandante na caixa errada. */
+  .corpo.sem-comandante{grid-template-columns:minmax(0,1fr);}
+  .corpo.sem-comandante > .lateral,
+  .corpo.sem-comandante > .trilho,
+  .corpo.sem-comandante ~ .barra-mobile{display:none;}
   .painel{
     background:var(--surface);border:1px solid var(--border);border-radius:14px;
     padding:16px;box-shadow:0 20px 40px -22px rgba(0,0,0,.6);
@@ -155,17 +199,33 @@
      sobrar só o título dele — que foi exatamente o que aconteceu quando o
      painel de combos entrou como quarto. */
   .lateral{position:sticky;top:74px;display:flex;flex-direction:column;gap:14px;
-    max-height:calc(100vh - 92px);overflow-y:auto;}
+    max-height:calc(100vh - 92px);overflow-y:auto;min-width:0;}
   .lateral > .painel{flex:none;}
+  /* Um painel só, com abas, em vez de dois empilhados: busca e sugestões
+     fazem a MESMA coisa (pôr carta no deck), e dois cartões separados
+     obrigavam a rolar a coluna pra trocar entre duas formas de escolher. */
+  #painel-adicionar{display:flex;flex-direction:column;min-height:0;}
+  .rail-conteudo{display:flex;flex-direction:column;min-height:0;}
 
-  /* ---------------- coluna do maybeboard ----------------
-     Grudada no topo como a busca, e pelo mesmo motivo: as duas são usadas
-     ENQUANTO se rola a lista do deck, e uma coluna de apoio que sai da tela
-     quando a pessoa desce nas 99 cartas não apoia nada. */
-  .talvez-col{position:sticky;top:74px;display:flex;flex-direction:column;
-    max-height:calc(100vh - 92px);min-height:0;}
-  .talvez-col > .painel{display:flex;flex-direction:column;min-height:0;
-    max-height:100%;}
+  /* ---------------- trilho da direita: curva e maybeboard ----------------
+     A coluna de apoio, do lado oposto à busca, com o deck entre as duas: à
+     esquerda o que se procura pra entrar, à direita o que já entrou (a
+     curva) e o que talvez entre (o maybeboard). As duas coisas do trilho são
+     olhadas ENQUANTO se rola a lista do deck, então ele gruda no topo — uma
+     coluna de apoio que some quando a pessoa desce nas 99 cartas não apoia
+     nada. */
+  .trilho{
+    position:sticky;top:74px;display:flex;flex-direction:column;gap:14px;
+    max-height:calc(100vh - 92px);min-height:0;min-width:0;
+  }
+  .trilho > .painel{min-width:0;}
+  /* A curva é a única análise que vale a pena estar sempre à vista: ela
+     muda a cada carta adicionada e é o gráfico que se consulta DURANTE a
+     montagem, não depois. As outras quatro respondem perguntas que se faz de
+     vez em quando, e por isso vivem nas abas. */
+  .cartao-curva{flex:none;}
+  .cartao-curva .barras{height:66px;}
+  .painel-talvez{display:flex;flex-direction:column;min-height:0;flex:1;}
   .talvez-lista{overflow-y:auto;margin:0 -4px;padding:0 4px;min-height:0;}
   /* Uma coluna, não duas: a área é estreita de propósito. É a margem do
      caderno, não uma segunda lista de deck. */
@@ -179,22 +239,15 @@
     font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);
     border:1px solid var(--border);border-radius:999px;padding:1px 7px;flex:none;
   }
-  /* Recolher é botão de verdade, não enfeite: quem não usa maybeboard tem
-     uma coluna inteira devolvida pro deck, e a escolha fica guardada no
-     navegador pra não ser refeita a cada visita. */
-  .corpo.talvez-fechado{grid-template-columns:44px minmax(0,1fr) 372px;}
-  .corpo.talvez-fechado .talvez-col > .painel{padding:10px 6px;align-items:center;}
+  /* Recolher é botão de verdade, não enfeite: quem não usa maybeboard fica
+     com a curva sozinha no trilho, e a escolha fica guardada no navegador
+     pra não ser refeita a cada visita. Recolhe só o maybeboard, não o
+     trilho inteiro — a curva não tem por que pagar por isso. */
   .corpo.talvez-fechado .talvez-lista,
-  .corpo.talvez-fechado .talvez-topo h2,
   .corpo.talvez-fechado .talvez-nota,
   .corpo.talvez-fechado .talvez-vazio{display:none;}
-  .corpo.talvez-fechado .talvez-topo{flex-direction:column;gap:8px;}
-  .talvez-vertical{
-    display:none;writing-mode:vertical-rl;font-family:'IBM Plex Mono',monospace;
-    font-size:10px;letter-spacing:.09em;text-transform:uppercase;
-    color:var(--gold-light);white-space:nowrap;
-  }
-  .corpo.talvez-fechado .talvez-vertical{display:block;}
+  .corpo.talvez-fechado .painel-talvez{flex:none;padding-bottom:12px;}
+  .corpo.talvez-fechado .talvez-topo{margin-bottom:0;}
   .talvez-vazio{
     color:var(--text-muted);font-size:11.5px;line-height:1.55;
     border:1px dashed var(--border);border-radius:10px;padding:12px 10px;
@@ -205,6 +258,63 @@
   .alvo-solta{outline:2px dashed var(--gold);outline-offset:3px;
     background:rgba(201,162,39,.07);border-radius:10px;}
   .linha.arrastando{opacity:.4;}
+
+  /* ---------------- destino da carta que está entrando ----------------
+     A busca sempre soube achar carta e sempre jogou o resultado no mesmo
+     lugar: o deck. Mas quem procura já sabe pra onde a carta vai — pro
+     sideboard, pro maybeboard, pra "combo principal" — e antes disto essa
+     decisão só podia ser tomada DEPOIS, carta por carta, no ⋯ de cada linha.
+     Dizer o destino uma vez e adicionar vinte cartas seguidas é a mesma
+     decisão, tomada uma vez em vez de vinte. */
+  .destino{
+    display:flex;flex-direction:column;gap:7px;margin:9px 0 2px;
+    padding:9px 10px;background:var(--surface-2);
+    border:1px solid var(--border);border-radius:10px;
+  }
+  .destino-linha{display:flex;align-items:center;gap:8px;}
+  .destino-rot{
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--text-muted);flex:none;width:62px;
+  }
+  .segmento{
+    display:flex;gap:3px;flex:1;min-width:0;background:var(--bg);
+    border:1px solid var(--border);border-radius:999px;padding:3px;
+  }
+  .segmento button{
+    flex:1;min-width:0;border:none;background:transparent;color:var(--text-muted);
+    border-radius:999px;padding:5px 6px;font-size:11.5px;font-weight:600;
+    cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .segmento button:hover{color:var(--text);}
+  .segmento button.ativa{background:var(--gold);color:#1A1408;}
+  .destino select.campo{
+    flex:1;min-width:0;padding:6px 30px 6px 10px;font-size:12px;
+    border-radius:999px;background-color:var(--bg);
+  }
+  .destino select.campo:disabled{opacity:.45;cursor:not-allowed;}
+
+  /* ---------------- folha de baixo (só no celular) ----------------
+     No telefone a busca não é uma coluna: é uma tarefa que se abre, se usa e
+     se fecha. Ela cobre a tela por cima do deck em vez de dividir a tela com
+     ele, e some quando a carta entrou — que é o instante em que a lista do
+     deck volta a ser o assunto. */
+  .folha-fundo{
+    position:fixed;inset:0;z-index:60;background:rgba(10,8,18,.65);
+    backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .18s;
+  }
+  .folha-fundo.aberta{opacity:1;pointer-events:auto;}
+  .puxador{display:none;}
+  /* A barra fixa do celular: um alvo grande e sempre no mesmo lugar pro
+     único verbo que a tela tem. */
+  .barra-mobile{
+    display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;
+    gap:9px;align-items:center;padding:12px 14px calc(14px + env(safe-area-inset-bottom));
+    background:linear-gradient(to top,var(--bg) 62%,rgba(15,13,23,0));
+  }
+  .barra-mobile .btn{flex:1;padding:14px 16px;font-size:14.5px;border-radius:999px;}
+  .barra-mobile .btn.redondo{flex:none;width:48px;height:48px;font-size:16px;}
+
   h2.secao{
     font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;
     text-transform:uppercase;color:var(--gold-light);margin:0 0 10px;font-weight:600;
@@ -238,7 +348,14 @@
     margin-top:10px;overflow-y:auto;flex:1;min-height:120px;
     display:flex;flex-direction:column;gap:3px;padding-right:2px;
   }
-  .lateral .resultados{max-height:min(46vh, 340px);}
+  /* Cinco resultados e nada de rolagem: a lista era de quarenta e a pessoa
+     rolava uma coluna inteira pra escolher entre nomes quase iguais. Quem não
+     achou nos cinco primeiros não vai achar no vigésimo — vai refinar a busca,
+     que é o que os filtros ao lado servem pra fazer. */
+  .lateral .resultados{max-height:none;overflow:visible;}
+  .resultados .demais{
+    font-size:11px;color:var(--text-muted);padding:5px 8px 0;line-height:1.5;
+  }
   .heroi .resultados{max-height:340px;text-align:left;margin:12px auto 0;max-width:440px;}
 
   .achado{
@@ -332,18 +449,23 @@
   .cor-btn.ativo{border-color:var(--gold-light);transform:scale(1.06);}
   .cor-btn:hover{border-color:var(--gold);}
 
+  /* Busca e filtros na mesma linha: eram duas linhas empilhadas pra dizer
+     uma coisa só ("o que eu quero achar"), e a segunda delas roubava do
+     resultado a altura que ele precisa. */
+  .linha-busca{display:flex;gap:7px;align-items:stretch;}
+  .linha-busca .campo{flex:1;min-width:0;}
   /* A fita de filtros ligados: mostra fora da gaveta o que está ligado
      dentro dela, senão a busca filtrada pareceria uma busca quebrada. */
-  .barra-filtros{display:flex;gap:6px;align-items:center;margin:9px 0 2px;flex-wrap:wrap;}
+  .ligados:not(:empty){margin:8px 0 0;}
   .btn-filtros{
-    display:flex;align-items:center;gap:6px;flex:none;
+    display:flex;align-items:center;gap:6px;flex:none;border-radius:9px;
   }
   .btn-filtros .conta{
     font-family:'IBM Plex Mono',monospace;font-size:10px;
     background:var(--gold);color:#1A1408;border-radius:999px;
     padding:0 5px;min-width:16px;text-align:center;font-weight:700;
   }
-  .ligados{display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:0;}
+  .ligados{display:flex;gap:4px;flex-wrap:wrap;min-width:0;}
   .ligado{
     display:inline-flex;align-items:center;gap:4px;
     border:1px solid var(--gold);background:rgba(201,162,39,.12);
@@ -381,52 +503,62 @@
   .pip.B{background:var(--mana-B);} .pip.R{background:var(--mana-R);}
   .pip.G{background:var(--mana-G);} .pip.C{background:var(--mana-C);}
 
-  /* ---------------- faixa de orçamento ----------------
-     Era um painel de coluna inteira com título, parágrafo de explicação,
-     prévia, dois botões e o resultado — tudo isso pra dizer um número. Aqui
-     é uma linha: o número grande à esquerda, os botões à direita, a
-     explicação atrás de um "?" pra quem quiser. O resultado da cotação, que
-     é o único conteúdo alto, abre embaixo e usa a largura das três colunas
-     em vez de descer 400px numa coluna de 372. */
-  .faixa{padding:11px 14px;}
-  .faixa-in{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
-  .faixa-num{display:flex;align-items:baseline;gap:9px;flex:1;min-width:210px;}
-  .faixa-num .tot{
-    font-family:'IBM Plex Mono',monospace;font-size:23px;color:var(--gold-light);
-    line-height:1;flex:none;
-  }
-  .faixa-num .tot small{font-size:11px;color:var(--text-muted);}
-  .faixa-num .rot{font-size:11.5px;color:var(--text-muted);line-height:1.45;}
-  .faixa-acoes{display:flex;gap:7px;flex-wrap:wrap;flex:none;}
   .btn.redondo{width:31px;height:31px;padding:0;border-radius:50%;flex:none;}
-  .faixa-nota{
-    font-size:11.5px;color:var(--text-muted);line-height:1.55;
-    margin:9px 0 0;padding-top:9px;border-top:1px dashed var(--border);
+  /* ---------------- detalhe da cotação ----------------
+     A cotação virou automática: o número dela mora no cabeçalho e ninguém
+     mais aperta um botão pra vê-lo. O que sobrou de conteúdo alto — as duas
+     fontes, as cartas caras, o que ficou de fora — não cabe num tooltip e
+     não merece uma coluna, então abre num painel ancorado embaixo do próprio
+     número. Fica onde a pergunta nasceu, e some quando não interessa mais. */
+  .cotacao-caixa{
+    position:fixed;z-index:75;width:min(460px,calc(100vw - 24px));
+    background:var(--surface);border:1px solid var(--border);border-radius:13px;
+    box-shadow:0 24px 48px -16px rgba(0,0,0,.85);padding:14px 15px;
+    max-height:min(72vh,540px);overflow-y:auto;
   }
-  /* A cotação em colunas: fontes, cartas caras e o resto lado a lado, que é
-     o formato que uma faixa larga pede — e o que evita o resultado empurrar
-     o deck pra baixo. */
-  .orc-resultado:not(:empty){
-    margin-top:11px;padding-top:11px;border-top:1px dashed var(--border);
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-    gap:4px 22px;align-items:start;
+  .cotacao-caixa .orc-resultado{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:4px 20px;align-items:start;
   }
-  .orc-resultado .caras{margin-top:0;}
+  .cotacao-caixa .caras{margin-top:0;}
+  .cotacao-topo{
+    display:flex;align-items:center;gap:8px;margin:0 0 10px;
+  }
+  .cotacao-topo h2{flex:1;margin:0;}
 
-  /* ---------------- ferramentas de análise ----------------
-     Abaixo do deck e em duas colunas. A lateral direita tinha cinco painéis
-     empilhados e achar cada um custava rolar a coluna inteira; aqui as
-     quatro análises ficam juntas, no lugar onde se OLHA o deck em vez de no
-     lugar onde se ADICIONA carta. É a divisão que a tela passou a ter:
-     direita monta, embaixo confere. */
-  .ferramentas{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
-    gap:14px;align-items:start;margin-top:14px;
+  /* ---------------- abas ----------------
+     Deck, análise, mana base, poder e combos eram cinco painéis empilhados
+     na mesma rolagem: quem queria a curva de mana rolava por 99 cartas, e
+     quem queria a lista rolava de volta. São cinco RESPOSTAS sobre o mesmo
+     deck, não cinco coisas ao mesmo tempo — então é uma superfície só, com
+     um seletor em cima.
+
+     A fita rola de lado em vez de quebrar em duas linhas: no celular ela é a
+     única navegação da tela, e uma navegação que muda de altura empurra o
+     conteúdo toda vez que se troca de aba. */
+  .abas-painel{
+    display:flex;gap:5px;background:var(--surface);border:1px solid var(--border);
+    border-radius:999px;padding:5px;margin-bottom:14px;
+    overflow-x:auto;scrollbar-width:none;
   }
-  .ferramentas > .painel{min-width:0;}
+  .abas-painel::-webkit-scrollbar{display:none;}
+  .abas-painel button{
+    flex:0 0 auto;border:none;background:transparent;color:var(--text-muted);
+    border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;
+    cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;
+    font-family:'Inter',sans-serif;transition:color .12s,background .12s;
+  }
+  .abas-painel button:hover{color:var(--text);}
+  .abas-painel button.ativa{background:var(--gold);color:#1A1408;}
+  .abas-painel button .n{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.62;
+  }
+  /* Variante estreita, pra fita de abas dentro de uma coluna de 372px. */
+  .abas-painel.miuda{margin-bottom:11px;padding:4px;}
+  .abas-painel.miuda button{padding:6px 11px;font-size:12px;}
   /* Aberto por um atalho de outro canto da tela (o botão de mana base no
-     cabeçalho de Terrenos), o painel pisca uma vez: sem isso o clique rola
-     a página e não fica claro o que respondeu. */
+     cabeçalho de Terrenos), o painel pisca uma vez: sem isso a troca de aba
+     acontece sem nada dizendo o que respondeu. */
   @keyframes pisca-painel{
     from{box-shadow:0 0 0 2px var(--gold);}
     to{box-shadow:0 20px 40px -22px rgba(0,0,0,.6);}
@@ -777,19 +909,6 @@
     border:1px dashed var(--gold);border-radius:8px;padding:7px 10px;margin-bottom:8px;
   }
 
-  /* ---------------- abas (só no celular) ---------------- */
-  .abas{
-    display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;
-    background:rgba(15,13,23,.96);backdrop-filter:blur(10px);
-    border-top:1px solid var(--border);padding:7px 10px calc(7px + env(safe-area-inset-bottom));
-    gap:6px;
-  }
-  .abas button{
-    flex:1;background:transparent;border:1px solid transparent;border-radius:9px;
-    color:var(--text-muted);padding:9px 4px;font-size:11px;cursor:pointer;
-  }
-  .abas button.ativa{border-color:var(--gold);color:var(--gold-light);background:rgba(201,162,39,.08);}
-
   /* ---------------- prévia da arte (só no mouse) ---------------- */
   .previa{
     position:fixed;z-index:60;pointer-events:none;width:220px;border-radius:11px;
@@ -832,85 +951,89 @@
   .toast.mostra{opacity:1;transform:translateX(-50%) translateY(0);}
 
   /* No celular o cabeçalho é grudado no topo, então cada linha dele é espaço
-     que some do deck pro resto da sessão. Os botões viram uma fita que rola
-     de lado em vez de quebrar em três linhas. */
+     que some do deck pro resto da sessão. Os medidores viram uma fita que
+     rola de lado em vez de quebrarem em três linhas. */
   @media (max-width:600px){
-    .acoes{flex-wrap:nowrap;overflow-x:auto;width:100%;scrollbar-width:none;}
-    .acoes::-webkit-scrollbar{display:none;}
-    .btn{padding:7px 10px;}
     .topo-in{padding:8px 12px;gap:9px;}
+    .btn{padding:7px 10px;}
+    .titulo-deck input{font-size:15px;}
   }
 
   /* Em tela estreita a linha do deck não cabe inteira, e aí é preciso
      escolher o que sai. Sai o preço: em toque os controles de quantidade
      ficam sempre visíveis (não há hover pra escondê-los), e sem esta regra
      um "Badgermole Cub" vira "Badgermol…" pra caber num número que o
-     subtotal do grupo e a prévia do orçamento já dizem — os dois continuam
-     na tela. Nome truncado, não. */
+     subtotal do grupo e o total do cabeçalho já dizem — os dois continuam na
+     tela. Nome truncado, não. */
   @media (max-width:480px){
     .linha .valor{display:none;}
   }
 
-  /* Entre 900 e 1200 não cabem três colunas com o deck em duas: o
-     maybeboard recolhe sozinho e vira a fita vertical, que continua sendo um
-     clique pra abrir. Recolher uma coluna é melhor do que espremer as três
-     até nenhuma servir. */
+  /* Entre 900 e 1200 não cabem três colunas com o deck em duas: o trilho da
+     direita recolhe o maybeboard sozinho e fica só a curva. Encolher uma
+     coluna é melhor do que espremer as três até nenhuma servir. */
   @media (max-width:1200px){
-    .corpo{grid-template-columns:44px minmax(0,1fr) 340px;}
-    .corpo .talvez-col > .painel{padding:10px 6px;align-items:center;}
-    .corpo .talvez-lista,.corpo .talvez-topo h2,
-    .corpo .talvez-nota,.corpo .talvez-vazio{display:none;}
-    .corpo .talvez-topo{flex-direction:column;gap:8px;}
-    .corpo .talvez-vertical{display:block;}
-    /* …a não ser que a pessoa tenha aberto de propósito. Aí ele volta a ser
-       coluna, e quem cede o espaço é a busca. */
-    .corpo.talvez-aberto{grid-template-columns:250px minmax(0,1fr) 320px;}
-    .corpo.talvez-aberto .talvez-col > .painel{padding:16px;align-items:stretch;}
-    .corpo.talvez-aberto .talvez-lista,
-    .corpo.talvez-aberto .talvez-topo h2,
-    .corpo.talvez-aberto .talvez-nota,
-    .corpo.talvez-aberto .talvez-vazio{display:block;}
-    .corpo.talvez-aberto .talvez-topo{flex-direction:row;gap:6px;}
-    .corpo.talvez-aberto .talvez-vertical{display:none;}
+    .corpo{grid-template-columns:330px minmax(0,1fr) 250px;gap:14px;}
   }
 
-  /* No celular não existem colunas: existem abas, e cada aba é uma tela
-     inteira de uma coisa só. A regra esconde TUDO e mostra a região da aba —
-     assim uma região nova (o maybeboard foi uma) não precisa ser lembrada em
-     cinco lugares pra não vazar nas outras abas, que foi como a lista antiga
-     de exceções cresceu. */
-  @media (max-width:900px){
-    .corpo,.corpo.talvez-fechado,.corpo.talvez-aberto{
-      grid-template-columns:minmax(0,1fr);padding-bottom:76px;
-    }
-    .lateral{position:static;max-height:none;}
-    .lateral .resultados{max-height:52vh;}
-    .talvez-col{position:static;max-height:none;}
-    .talvez-col > .painel{max-height:none;padding:16px;align-items:stretch;}
-    .talvez-lista,.talvez-topo h2,.talvez-nota,.talvez-vazio{display:block;}
-    .talvez-topo{flex-direction:row;gap:6px;}
-    .talvez-vertical,#btn-recolher-talvez{display:none;}
-    .ferramentas{grid-template-columns:minmax(0,1fr);}
-    .abas{display:flex;}
-    .previa{display:none;}
+  /* ---------------- o celular ----------------
+     Aqui não existem colunas nem barra de abas de região: existe o DECK, e
+     tudo o mais é uma tarefa que se abre por cima dele. A busca é uma folha
+     que sobe do botão fixo; a análise, a mana base, o poder e os combos são
+     as mesmas abas do computador, na mesma fita que rola de lado; o trilho
+     (curva e maybeboard) desce pro fim da página, que é onde se confere
+     depois de montar.
 
-    .corpo > [data-regiao]{display:none;}
-    .corpo[data-aba="deck"] [data-regiao="deck"],
-    .corpo[data-aba="deck"] [data-regiao="orcamento"],
-    .corpo[data-aba="talvez"] [data-regiao="talvez"],
-    .corpo[data-aba="buscar"] [data-regiao="buscar"],
-    .corpo[data-aba="analise"] [data-regiao="deck"],
-    .corpo[data-aba="analise"] [data-regiao="orcamento"]{display:block;}
-    .corpo[data-aba="buscar"] [data-regiao="buscar"]{display:flex;}
-    /* Deck e análise moram na MESMA coluna agora, então as duas abas
-       mostram a mesma região e escondem metade dela: sem isto a aba "Deck"
-       traria as quatro análises junto e a aba "Análise" traria as 99
-       cartas na frente delas. */
-    .corpo[data-aba="deck"] .ferramentas{display:none;}
-    .corpo[data-aba="analise"] #painel-deck,
-    .corpo[data-aba="analise"] #heroi,
-    .corpo[data-aba="analise"] #aviso-base{display:none;}
-    .corpo[data-aba="analise"] .ferramentas{display:grid;margin-top:0;}
+     A barra de quatro abas de região que existia aqui sumiu porque ela
+     dividia a tela em quatro telas de uma coisa só, e três delas eram apoio:
+     a pessoa passava a sessão trocando de aba pra pôr uma carta e voltar. */
+  @media (max-width:900px){
+    .corpo{
+      grid-template-columns:minmax(0,1fr);gap:14px;
+      padding:14px 14px 96px;
+    }
+    .corpo > .principal{order:1;}
+    .corpo > .trilho{order:2;}
+    .corpo > .lateral{order:3;}
+
+    .trilho{position:static;max-height:none;}
+    .painel-talvez{flex:none;}
+    .talvez-lista{max-height:none;}
+    /* No telefone o maybeboard nunca nasce recolhido: aqui ele é uma seção
+       no fim da página, e não uma coluna que rouba largura de ninguém. */
+    .corpo.talvez-fechado .talvez-lista,
+    .corpo.talvez-fechado .talvez-nota,
+    .corpo.talvez-fechado .talvez-vazio{display:block;}
+    #btn-recolher-talvez{display:none;}
+
+    /* A coluna da busca vira folha de baixo. */
+    .lateral{
+      position:fixed;left:0;right:0;bottom:0;top:auto;z-index:61;
+      max-height:86vh;gap:0;
+      background:var(--surface);border-top:1px solid var(--border);
+      border-radius:18px 18px 0 0;
+      box-shadow:0 -24px 48px -24px rgba(0,0,0,.9);
+      padding:8px 12px calc(12px + env(safe-area-inset-bottom));
+      transform:translateY(101%);transition:transform .22s ease-out;
+      overflow-y:auto;
+    }
+    .lateral.aberta{transform:translateY(0);}
+    .lateral > .painel{
+      background:transparent;border:none;box-shadow:none;padding:0;
+    }
+    .lateral .resultados{max-height:none;}
+    /* A alça de arrastar: diz "isto sobe e desce" antes de qualquer texto. */
+    .puxador{
+      display:block;width:38px;height:4px;border-radius:999px;
+      background:var(--border);margin:2px auto 10px;flex:none;
+    }
+    .barra-mobile{display:flex;}
+    .previa{display:none;}
+    /* Sem hover em toque: os controles da linha ficam sempre à vista, senão
+       não haveria como mexer na quantidade. */
+    .linha .ctrl{opacity:1;}
+    .linha{padding:7px 6px;}
+    .mini{width:28px;height:28px;font-size:15px;}
   }
 </style>
 </head>
@@ -924,70 +1047,47 @@
              aria-label="Nome do deck" spellcheck="false">
       <div class="estado-salvo" id="estado-salvo"></div>
     </div>
-    <div class="contador" id="contador" title="Cartas no deck, comandante incluído">
-      <b id="contador-n">0</b><span>/100</span>
+
+    <!-- Os dois números da tela inteira, como texto ao lado do nome do deck.
+         Eram uma pílula (a contagem) e um painel de coluna inteira (o
+         dinheiro); virar dois números no cabeçalho é o que eles sempre
+         foram. O traço separa "que deck é este" de "como ele está". -->
+    <div class="divisor"></div>
+    <div class="medidores">
+      <span class="medidor" id="contador"
+            title="Cartas no deck, comandante incluído">
+        <span class="ponto" id="contador-ponto"></span>
+        <b id="contador-n">0</b><span class="de">/100</span>
+      </span>
+      <!-- O total é botão porque copiar a lista é a ação que se faz olhando
+           pra ele: era um "Exportar lista" a uma coluna de distância do
+           número que ele exporta. O detalhe da cotação (as duas fontes, as
+           cartas caras) abre no ⌄ ao lado — não cabe num tooltip. -->
+      <button class="medidor" id="btn-total" type="button" hidden
+              title="Clique pra copiar a lista do deck">
+        <b id="total-n">—</b><span class="de" id="total-de">USD</span>
+      </button>
+      <button class="btn redondo" id="btn-cotacao" type="button" hidden
+              aria-expanded="false" aria-controls="cotacao-caixa"
+              title="Detalhe da cotação" aria-label="Detalhe da cotação">⌄</button>
     </div>
+
     <div class="acoes">
-      <button class="btn" id="btn-meus" hidden>Meus decks <span id="meus-n"></span></button>
-      <button class="btn" id="btn-compartilhar" hidden>Compartilhar</button>
-      <button class="btn" id="btn-importar">Importar</button>
-      <button class="btn" id="btn-novo">Novo</button>
-      <a class="btn" href="/" style="text-decoration:none;display:inline-block;">Imprimir proxies</a>
+      <button class="btn ouro" id="btn-compartilhar" hidden>Compartilhar</button>
+      <button class="btn redondo" id="btn-mais" type="button"
+              aria-haspopup="menu" aria-expanded="false"
+              title="Mais ações" aria-label="Mais ações">···</button>
     </div>
   </div>
 </header>
 
-<main class="corpo" id="corpo" data-aba="deck">
+<main class="corpo" id="corpo">
 
-  <!-- ------------------ faixa de orçamento ------------------
-       Atravessa as três colunas, entre o cabeçalho e o deck. Era um painel
-       de coluna inteira pra dizer um número; aqui é uma linha, com a
-       explicação atrás do "?" e o resultado da cotação abrindo embaixo, na
-       largura toda. -->
-  <section class="painel faixa" id="faixa-orcamento" data-regiao="orcamento" hidden>
-    <div class="faixa-in">
-      <div class="faixa-num" id="faixa-num"></div>
-      <div class="faixa-acoes">
-        <button class="btn verde" id="btn-cotar">Cotar preços</button>
-        <button class="btn" id="btn-exportar">Exportar lista</button>
-        <button class="btn redondo" id="btn-orc-nota" aria-expanded="false"
-                aria-controls="orc-nota" title="Como esta conta é feita"
-                aria-label="Como esta conta é feita">?</button>
-      </div>
-    </div>
-    <p class="faixa-nota" id="orc-nota" hidden>Cota o preço de comprar as cartas
-      de verdade, nas mesmas duas fontes da tela de impressão. O comandante e os
-      terrenos básicos ficam de fora do total — é o critério do Commander 500.
-      O <b>maybeboard nunca entra</b> na cotação; o sideboard entra, e essa é a
-      diferença prática entre os dois.</p>
-    <div id="orc-resultado" class="orc-resultado"></div>
-  </section>
-
-  <!-- ------------------ coluna da esquerda: maybeboard ------------------
-       Do lado oposto aos filtros, com o deck no meio: o que talvez entre de
-       um lado, o que se procura pra entrar do outro, e o deck entre os dois.
-       Uma coluna só, de propósito — é a margem do caderno, não uma segunda
-       lista de deck. -->
-  <aside class="talvez-col" data-regiao="talvez">
-    <div class="painel">
-      <div class="talvez-topo">
-        <h2 class="secao">Maybeboard</h2>
-        <span class="talvez-vertical">Maybeboard</span>
-        <span class="talvez-n" id="talvez-n" hidden></span>
-        <button class="mini" id="btn-recolher-talvez" aria-expanded="true"
-                title="Recolher o maybeboard">‹</button>
-      </div>
-      <p class="nota talvez-nota">Cartas em dúvida. Não contam pras 100, não
-        entram na cotação e não aparecem em análise nenhuma — ficam aqui até
-        você decidir. As categorias são as mesmas do deck.</p>
-      <div class="talvez-lista" id="talvez-lista"></div>
-      <div class="talvez-vazio" id="talvez-vazio">Arraste uma carta do deck pra
-        cá — ou use o <b>⋯</b> da linha dela.</div>
-    </div>
-  </aside>
-
-  <!-- ------------------ coluna principal: o deck ------------------ -->
-  <section class="principal" data-regiao="deck">
+  <!-- ================= centro: o deck =================
+       Primeiro no HTML de propósito: é o assunto da tela. Leitor de tela e
+       telefone pegam a lista de cara, e a ordem visual do computador (busca à
+       esquerda, deck no meio, apoio à direita) vem do CSS. -->
+  <section class="principal">
     <div class="aviso-base" id="aviso-base" hidden></div>
 
     <!-- Estado inicial: sem comandante não existe deck de Commander, então a
@@ -1004,41 +1104,61 @@
       <div class="resultados" id="res-cmd"></div>
     </div>
 
-    <!-- Deck montado -->
-    <div class="painel" id="painel-deck" hidden>
-      <div class="comandante" id="cmd-box"></div>
-      <div id="lista-deck"></div>
-      <div class="vazio" id="deck-vazio">
-        As 99 cartas entram pela busca à direita. Comece pelas que o comandante
-        pede — a análise embaixo acompanha a curva e as cores enquanto você monta.
+    <!-- ---------------- as cinco respostas sobre o deck ----------------
+         Deck, análise, mana base, poder e combos eram cinco painéis na mesma
+         rolagem. São cinco perguntas sobre a MESMA lista, e só uma delas está
+         sendo feita de cada vez — então é uma superfície só, com abas. -->
+    <div id="area-deck" hidden>
+      <div class="abas-painel" id="abas-deck" role="tablist">
+        <button role="tab" data-painel="deck" class="ativa" aria-selected="true">
+          Deck <span class="n" id="aba-deck-n">0</span></button>
+        <button role="tab" data-painel="analise" aria-selected="false">Análise</button>
+        <button role="tab" data-painel="manabase" aria-selected="false">Mana base</button>
+        <button role="tab" data-painel="poder" aria-selected="false">Nível de poder</button>
+        <button role="tab" data-painel="combos" aria-selected="false">
+          Combos <span class="n" id="aba-combos-n"></span></button>
       </div>
-      <div class="rodape-deck">
-        <button class="btn" id="btn-nova-categoria">+ Nova categoria</button>
-        <span class="nota" style="flex:1;min-width:160px;">Categoria é sua:
-          "combo principal", "sac outlet". A carta sem categoria fica no grupo
-          do tipo dela.</span>
-      </div>
-    </div>
 
-    <!-- As análises, embaixo do deck e lado a lado. Eram cinco painéis
-         empilhados na lateral direita, e achar cada um custava rolar a coluna
-         inteira; aqui ficam no lugar onde se OLHA o deck. -->
-    <div class="ferramentas">
-
-      <div class="painel" id="painel-analise">
-        <h2 class="secao">Análise</h2>
-        <div id="apontamentos"></div>
-        <div style="margin-top:14px;">
-          <h2 class="secao">Curva de mana</h2>
-          <div class="barras" id="curva"></div>
+      <div class="painel" id="painel-deck" data-painel="deck">
+        <div class="comandante" id="cmd-box"></div>
+        <!-- O que está ERRADO fica aqui, sempre à vista, mesmo com a análise
+             numa aba: uma carta fora da identidade não pode esperar a pessoa
+             lembrar de conferir. O resto da análise (curva, cores, progresso)
+             mora na aba, porque é conferência, não alarme. -->
+        <div id="alertas-deck"></div>
+        <div id="lista-deck"></div>
+        <div class="vazio" id="deck-vazio">
+          As 99 cartas entram pela busca. Comece pelas que o comandante pede —
+          a curva ao lado e a aba de análise acompanham enquanto você monta.
         </div>
+        <div class="rodape-deck">
+          <button class="btn" id="btn-nova-categoria">+ Nova categoria</button>
+          <span class="nota" style="flex:1;min-width:160px;">Categoria é sua:
+            "combo principal", "sac outlet". A carta sem categoria fica no grupo
+            do tipo dela.</span>
+        </div>
+      </div>
+
+      <div class="painel" id="painel-analise" data-painel="analise" hidden>
+        <h2 class="secao">Como o deck está</h2>
+        <div id="apontamentos"></div>
         <div style="margin-top:14px;">
           <h2 class="secao">Cores e tipos</h2>
           <div class="distrib" id="distrib"></div>
         </div>
       </div>
 
-      <div class="painel" id="painel-poder">
+      <div class="painel" id="painel-manabase" data-painel="manabase" hidden>
+        <h2 class="secao">Mana base</h2>
+        <p class="nota" id="mb-nota">Quantos terrenos a curva pede, quantas
+          fontes de cada cor o deck tem e quantas precisaria. Conta feita aqui,
+          sobre o seu deck — depois da primeira vez, acompanha cada mudança.</p>
+        <button class="btn" id="btn-manabase" style="width:100%;margin-top:10px;">
+          Analisar mana base</button>
+        <div id="mb-resultado" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="painel" id="painel-poder" data-painel="poder" hidden>
         <h2 class="secao">Nível de poder</h2>
         <p class="nota" id="poder-nota">Classifica o deck na escala oficial de
           brackets do Commander — e mostra <b>por quê</b>, carta por carta. Quem
@@ -1049,71 +1169,125 @@
         <div id="poder-resultado" style="margin-top:12px;"></div>
       </div>
 
-      <div class="painel" id="painel-manabase">
-        <h2 class="secao">Mana base</h2>
-        <p class="nota" id="mb-nota">Quantos terrenos a curva pede, quantas
-          fontes de cada cor o deck tem e quantas precisaria. Conta feita aqui,
-          sobre o seu deck — depois da primeira vez, acompanha cada mudança.</p>
-        <button class="btn" id="btn-manabase" style="width:100%;margin-top:10px;">
-          Analisar mana base</button>
-        <div id="mb-resultado" style="margin-top:12px;"></div>
-      </div>
-
-      <div class="painel" id="painel-combos">
-        <h2 class="secao">Combos</h2>
-        <p class="nota" id="combos-nota">O Commander Spellbook conhece os combos
-          que já existem no deck — e os que ficam a <b>uma carta</b> de fechar.
-          A busca é uma consulta só, e só acontece quando você pede.</p>
+      <!-- Aqui só o que JÁ FECHA no deck. O que está a uma carta de fechar é
+           uma lista de compras, não uma leitura do deck, e por isso mora do
+           outro lado da tela, junto da busca. -->
+      <div class="painel" id="painel-combos" data-painel="combos" hidden>
+        <h2 class="secao">Combos no deck</h2>
+        <p class="nota" id="combos-nota">Os combos que o Commander Spellbook
+          reconhece entre as cartas que você já tem. Os que ficam a <b>uma
+          carta</b> de fechar aparecem na aba <b>Combos</b> do painel de
+          adicionar — lá eles viram carta pra pôr no deck.</p>
         <button class="btn" id="btn-combos" style="width:100%;margin-top:10px;">
           Procurar combos</button>
         <div id="combos-resultado" style="margin-top:12px;"></div>
       </div>
-
     </div>
   </section>
 
-  <!-- ------------------ lateral direita: só o que ADICIONA carta ------------------
-       Busca e sugestões, e mais nada. As análises desceram pra baixo do
-       deck: esta coluna é usada com a mão na busca enquanto a lista do deck
-       fica parada do lado, e cinco painéis de análise no meio do caminho
-       transformavam "achar a busca" em rolar a coluna inteira. -->
-  <aside class="lateral" data-regiao="buscar">
-
-    <div class="painel" id="painel-busca" style="display:flex;flex-direction:column;min-height:0;">
-      <h2 class="secao">Adicionar cartas</h2>
-      <input class="campo" id="busca" autocomplete="off" spellcheck="false"
-             placeholder="Buscar carta…  (tecle /)">
-      <div class="barra-filtros">
-        <button class="btn btn-filtros" id="btn-gaveta-filtros"
-                aria-haspopup="dialog" aria-controls="gaveta-filtros">
-          <span>Filtros</span><span class="conta" id="conta-filtros" hidden></span>
-        </button>
-        <div class="ligados" id="ligados"></div>
+  <!-- ================= esquerda: pôr carta no deck =================
+       Um painel só, com abas. Busca, sugestão do EDHREC e combo a uma carta
+       de fechar são três formas de responder a MESMA pergunta ("que carta
+       entra agora?"), e eram três cartões empilhados: trocar de forma custava
+       rolar a coluna. -->
+  <aside class="lateral" id="lateral">
+    <span class="puxador" id="puxador"></span>
+    <div class="painel" id="painel-adicionar">
+      <div class="abas-painel miuda" id="abas-rail" role="tablist">
+        <button role="tab" data-rail="buscar" class="ativa" aria-selected="true">Adicionar</button>
+        <button role="tab" data-rail="sugestoes" aria-selected="false">Sugestões</button>
+        <button role="tab" data-rail="combos" aria-selected="false">
+          Combos <span class="n" id="rail-combos-n"></span></button>
       </div>
-      <div class="nota" id="nota-identidade" hidden></div>
-      <div class="resultados" id="res"></div>
+
+      <div class="rail-conteudo" data-rail="buscar">
+        <div class="linha-busca">
+          <input class="campo" id="busca" autocomplete="off" spellcheck="false"
+                 placeholder="Buscar carta…  (tecle /)">
+          <button class="btn btn-filtros" id="btn-gaveta-filtros"
+                  aria-haspopup="dialog" aria-controls="gaveta-filtros">
+            <span>Filtros</span><span class="conta" id="conta-filtros" hidden></span>
+          </button>
+        </div>
+        <div class="ligados" id="ligados"></div>
+
+        <!-- Pra onde a carta vai, decidido UMA vez em vez de carta por carta
+             no ⋯ de cada linha depois de adicionada. -->
+        <div class="destino">
+          <div class="destino-linha">
+            <span class="destino-rot">Vai para</span>
+            <div class="segmento" id="seg-destino">
+              <button type="button" data-destino="deck" class="ativa">Deck</button>
+              <button type="button" data-destino="side">Sideboard</button>
+              <button type="button" data-destino="talvez">Maybe</button>
+            </div>
+          </div>
+          <div class="destino-linha">
+            <span class="destino-rot">Categoria</span>
+            <select class="campo" id="sel-categoria"
+                    aria-label="Categoria da carta que entra"></select>
+          </div>
+        </div>
+
+        <div class="nota" id="nota-identidade" hidden></div>
+        <div class="resultados" id="res"></div>
+      </div>
+
+      <div class="rail-conteudo" data-rail="sugestoes" hidden>
+        <p class="nota" id="sug-nota">Cartas que combinam com o comandante,
+          segundo os decks registrados no EDHREC. A sinergia diz o quanto a
+          carta aparece mais <b>com ele</b> do que com os outros comandantes.</p>
+        <button class="btn" id="btn-sugestoes" style="width:100%;margin-top:10px;">
+          Buscar sugestões</button>
+        <div id="sug-resultado" style="margin-top:4px;"></div>
+      </div>
+
+      <div class="rail-conteudo" data-rail="combos" hidden>
+        <p class="nota" id="combos-rail-nota">Combos que o deck fecha com
+          <b>uma carta</b> a mais. Cada peça que falta tem um botão pra entrar
+          direto no deck — é a lista de compras que o Spellbook enxerga.</p>
+        <button class="btn" id="btn-combos-rail" style="width:100%;margin-top:10px;">
+          Procurar combos</button>
+        <div id="combos-rail-resultado" style="margin-top:4px;"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= direita: o que se olha enquanto monta ================= -->
+  <aside class="trilho">
+    <div class="painel cartao-curva">
+      <h2 class="secao">Curva de mana</h2>
+      <div class="barras" id="curva"></div>
+      <button class="btn" id="btn-ver-analise" style="width:100%;margin-top:11px;">
+        Ver análise</button>
     </div>
 
-    <!-- Logo abaixo da busca, e não junto da análise: sugestão é pra
-         ADICIONAR carta, que é a mesma coisa que se faz no painel de cima. -->
-    <div class="painel" id="painel-sugestoes">
-      <h2 class="secao">Sugestões</h2>
-      <p class="nota" id="sug-nota">Cartas que combinam com o comandante,
-        segundo os decks registrados no EDHREC. A sinergia diz o quanto a
-        carta aparece mais <b>com ele</b> do que com os outros comandantes.</p>
-      <button class="btn" id="btn-sugestoes" style="width:100%;margin-top:10px;">
-        Buscar sugestões</button>
-      <div id="sug-resultado" style="margin-top:4px;"></div>
+    <!-- O maybeboard: do lado oposto à busca, com o deck no meio. O que
+         talvez entre de um lado, o que se procura pra entrar do outro. -->
+    <div class="painel painel-talvez">
+      <div class="talvez-topo">
+        <h2 class="secao">Maybeboard</h2>
+        <span class="talvez-n" id="talvez-n" hidden></span>
+        <button class="mini" id="btn-recolher-talvez" aria-expanded="true"
+                title="Recolher o maybeboard">−</button>
+      </div>
+      <p class="nota talvez-nota">Cartas em dúvida. Não contam pras 100, não
+        entram na cotação e não aparecem em análise nenhuma — ficam aqui até
+        você decidir.</p>
+      <div class="talvez-lista" id="talvez-lista"></div>
+      <div class="talvez-vazio" id="talvez-vazio">Arraste uma carta do deck pra
+        cá — ou mande direto, pelo <b>Vai para</b> da busca.</div>
     </div>
-
   </aside>
 </main>
 
-<nav class="abas" id="abas">
-  <button data-aba="deck" class="ativa">Deck</button>
-  <button data-aba="talvez">Talvez <span id="aba-talvez-n"></span></button>
-  <button data-aba="buscar">Buscar</button>
-  <button data-aba="analise">Análise</button>
+<!-- No celular a busca sobe por cima do deck a partir daqui, e some quando a
+     carta entrou. -->
+<div class="folha-fundo" id="folha-fundo"></div>
+<nav class="barra-mobile">
+  <button class="btn ouro" id="btn-abrir-busca">+ Adicionar carta</button>
+  <button class="btn redondo" id="btn-subir" title="Voltar ao topo"
+          aria-label="Voltar ao topo">↑</button>
 </nav>
 
 <!-- ------------------ gavetas ------------------ -->
@@ -1228,6 +1402,15 @@
   </div>
 </aside>
 
+<!-- O detalhe da cotação, ancorado no número do cabeçalho. -->
+<div class="cotacao-caixa" id="cotacao-caixa" hidden>
+  <div class="cotacao-topo">
+    <h2 class="secao">Cotação</h2>
+    <button class="mini sai" id="btn-fechar-cotacao" title="Fechar">✕</button>
+  </div>
+  <div id="orc-resultado" class="orc-resultado"></div>
+</div>
+
 <img class="previa" id="previa" alt="">
 <div class="toast" id="toast"></div>
 
@@ -1326,6 +1509,20 @@ const estado = {
   manabase: null,           // a última análise de mana base
   manabaseTeto: null,       // teto de preço escolhido (null = o padrão)
   combosMexidos: 0,         // combos fechados aqui na tela desde a busca
+
+  // Pra onde vai a próxima carta escolhida na busca. Fica no estado, e não
+  // num parâmetro de cada clique, porque é uma decisão que vale pra várias
+  // cartas seguidas: "agora estou montando o sideboard".
+  destino: "deck",          // "deck" | "side" | "talvez"
+  destinoCategoria: "",     // "" = pelo tipo da carta
+
+  cotacao: null,            // o último resultado do servidor
+  cotacaoAssinatura: null,  // o deck de quando ela foi pedida
+  cotacaoRodando: false,
+  cotacaoErro: null,
+
+  aba: "deck",              // aba do centro
+  rail: "buscar",           // aba do painel de adicionar
 };
 
 // As cartas das sugestões, achatadas numa lista só — é o que o clique usa
@@ -1519,27 +1716,84 @@ function orcamentoLocal(){
   return {total, semPreco, fora, cartas};
 }
 
+/* O dinheiro, no cabeçalho, ao lado da contagem.
+
+   O número mostrado é o melhor que a tela tem no momento: enquanto a cotação
+   automática não voltou, é a soma da base local (marcada como prévia); depois
+   dela, é o total de comprar de verdade, na fonte principal. Os dois nunca
+   aparecem juntos — duas contas diferentes pro mesmo deck lado a lado seriam
+   pior do que número nenhum.
+
+   Tudo o mais que a antiga faixa dizia por extenso (quantas contam, quantas
+   ficam de fora, quantas não têm preço) virou o título: é conferência de uma
+   vez na vida, e ocupava uma linha permanente do cabeçalho pra isso. */
 function desenharPreviaOrcamento(){
-  const faixa = $("faixa-orcamento");
-  // A faixa acompanha o DECK, não o total: um deck de comandante e 30
-  // florestas soma zero (básico não entra na conta do Commander 500) e
-  // mesmo assim precisa dos botões de cotar e de exportar. Esconder a faixa
-  // pelo total esconderia o "Exportar lista" de quem tem o que exportar.
-  faixa.hidden = !estado.comandantes.length && !estado.cartas.length;
-  if (faixa.hidden) return;
+  const botao = $("btn-total");
+  const caret = $("btn-cotacao");
+  const temDeck = estado.comandantes.length || estado.cartas.length;
+  botao.hidden = !temDeck;
+  caret.hidden = !temDeck || !(estado.cotacao || estado.cotacaoErro);
+  if (!temDeck) return;
 
   const o = orcamentoLocal();
   const talvez = estado.maybe.reduce((n, e) => n + e.quantidade, 0);
   const partes = [];
   if (o.cartas) partes.push(`${o.cartas} carta(s) contadas`);
-  if (o.fora) partes.push(`${o.fora} fora do total`);
+  if (o.fora) partes.push(`${o.fora} fora do total (comandante e básicos)`);
   if (o.semPreco) partes.push(`${o.semPreco} sem preço na base`);
   if (talvez) partes.push(`${talvez} no maybeboard, fora da conta`);
-  if (!partes.length) partes.push("nada a somar ainda");
-  $("faixa-num").innerHTML = `
-    <span class="tot" title="Soma do preço da base local, do dia da última
-sincronização. Não é cotação.">${moeda(o.total)} <small>USD</small></span>
-    <span class="rot"><b>Prévia pela base local</b><br>${partes.join(" · ")}</span>`;
+
+  const fonte = (estado.cotacao?.fontes || [])[0];
+  const cotado = fonte && fonte.cartas_cotadas;
+  const simbolo = cotado ? (fonte.moeda === "BRL" ? "R$" : "US$") : "US$";
+  const valor = cotado ? Number(fonte.total).toFixed(2).replace(".", ",")
+                       : moeda(o.total).replace("US$ ", "");
+
+  $("total-n").textContent = `${simbolo} ${valor}`;
+  $("total-de").textContent = cotado ? fonte.rotulo : "prévia";
+  // Entre mexer no deck e a cotação nova voltar existe uma janela em que o
+  // número mostrado é de OUTRO deck. O giro cobre essa janela inteira — a
+  // espera e a consulta — em vez de só a consulta.
+  const esperando = estado.cotacaoRodando ||
+    (estado.id && assinaturaDeCotacao() !== estado.cotacaoAssinatura && o.cartas);
+  botao.className = "medidor" + (esperando ? " cotando" : "");
+  botao.title = [
+    cotado ? `Preço de comprar em ${fonte.rotulo}, cotado agora.`
+           : "Soma da base local — a cotação de verdade chega em alguns segundos.",
+    partes.join(" · "),
+    "Clique pra copiar a lista do deck.",
+  ].filter(Boolean).join("\n");
+}
+
+/* ------------------------------------------------------- cotação automática
+
+   A cotação era um botão: a pessoa montava o deck, lembrava de apertar, e o
+   número ficava velho no instante seguinte. Agora ela roda sozinha — mas
+   sozinha de um jeito que não vira uma raspagem por carta adicionada:
+
+   * espera o deck ficar QUIETO (quem adiciona trinta florestas faz trinta
+     mudanças em vinte segundos, e isso é uma cotação, não trinta);
+   * só sai se a lista cotável mudou de verdade — trocar o nome do deck ou
+     mexer no maybeboard não muda preço nenhum;
+   * nunca começa uma segunda enquanto a primeira não voltou. */
+const ESPERA_COTACAO = 4000;
+let cotacaoTimerAgenda = null;
+
+function assinaturaDeCotacao(){
+  // O que a cotação cobre (`decks.para_cotacao`): as 99 e o sideboard, sem
+  // comandante e sem básico. O maybeboard fica fora — é a razão de ele
+  // existir.
+  return JSON.stringify(estado.cartas
+    .filter(e => e.carta && !e.carta.basico)
+    .map(e => [e.carta.nome, e.quantidade]).sort());
+}
+
+function agendarCotacao(){
+  clearTimeout(cotacaoTimerAgenda);
+  if (!estado.id || estado.cotacaoRodando) return;
+  if (assinaturaDeCotacao() === estado.cotacaoAssinatura) return;
+  if (!orcamentoLocal().cartas) return;   // só básico e comandante: nada a cotar
+  cotacaoTimerAgenda = setTimeout(cotar, ESPERA_COTACAO);
 }
 
 /* ------------------------------------------------------- validação instantânea
@@ -1661,6 +1915,14 @@ async function salvarAgora(){
     marcarEstado("salvo " + new Date().toLocaleTimeString("pt-BR",
       {hour:"2-digit", minute:"2-digit"}), "ok");
     desenharAnalise();
+    // A validação que chega do servidor substitui a local, e o ponto do
+    // cabeçalho é desenhado a partir dela: sem isto o ponto ficaria contando
+    // a versão instantânea até a próxima carta entrar.
+    desenharContador();
+    // O primeiro salvamento é o instante em que o deck ganha id — e é só com
+    // id que dá pra cotar. Sem esta chamada, um deck de uma carta só nunca
+    // seria cotado: a cotação esperaria uma segunda mudança que não vem.
+    agendarCotacao();
     // A mana base é conta local, sem custo de fora: depois de aberta uma
     // vez, acompanha cada autosave em vez de envelhecer com aviso.
     if (estado.manabase) analisarManabase();
@@ -1695,11 +1957,10 @@ function lembrarDeck(){
   atualizarBotaoMeus();
 }
 
-function atualizarBotaoMeus(){
-  const lista = lidos();
-  $("btn-meus").hidden = lista.length === 0;
-  $("meus-n").textContent = lista.length ? `(${lista.length})` : "";
-}
+/* "Meus decks" virou item do menu do cabeçalho, e o menu se monta na hora do
+   clique — então não há mais botão pra manter atualizado. A função fica como
+   ponto único caso o cabeçalho volte a mostrar a contagem. */
+function atualizarBotaoMeus(){ /* nada a fazer: o menu se monta ao abrir */ }
 
 /* ------------------------------------------------------------------- desenhar */
 
@@ -1710,23 +1971,84 @@ function desenharTudo(){
   desenharContador();
   desenharPreviaOrcamento();
   atualizarNotaIdentidade();
+  atualizarCategoriasDoDestino();
   // Redesenha os combos pra o aviso de "o deck mudou desde esta busca"
   // aparecer no mesmo instante em que ele passa a ser verdade.
   if (estado.combos) desenharCombos();
   if (estado.poder) desenharPoder();
+  // A cotação persegue o deck: cada mudança marca uma nova, que só sai depois
+  // de o deck ficar quieto.
+  agendarCotacao();
 }
 
+/* ------------------------------------------------------------------- abas
+
+   Duas fitas de abas, e as duas funcionam do mesmo jeito: a que está ativa
+   ganha a classe, os painéis irmãos somem. Trocar de aba não recalcula nada —
+   os cinco painéis do centro são desenhados a cada mudança do deck, estejam
+   à vista ou não, senão abrir "Análise" mostraria o deck de dois minutos
+   atrás por um quadro. */
+function trocarAba(nome){
+  estado.aba = nome;
+  const fita = $("abas-deck");
+  for (const b of fita.children){
+    const ativa = b.dataset.painel === nome;
+    b.classList.toggle("ativa", ativa);
+    b.setAttribute("aria-selected", String(ativa));
+  }
+  for (const painel of document.querySelectorAll("#area-deck > [data-painel]")){
+    painel.hidden = painel.dataset.painel !== nome;
+  }
+}
+
+function trocarRail(nome){
+  estado.rail = nome;
+  const fita = $("abas-rail");
+  for (const b of fita.children){
+    const ativa = b.dataset.rail === nome;
+    b.classList.toggle("ativa", ativa);
+    b.setAttribute("aria-selected", String(ativa));
+  }
+  for (const bloco of document.querySelectorAll(".rail-conteudo")){
+    bloco.hidden = bloco.dataset.rail !== nome;
+  }
+  // No computador a busca está sempre à vista e receber o foco ao trocar de
+  // aba é o que se espera. No celular ela é uma folha: quem abre a folha é
+  // `abrirFolha`, e é ele quem foca — depois da animação.
+  if (nome === "buscar" && window.innerWidth > 900) $("busca").focus();
+}
+
+/* Os dois medidores do cabeçalho. O ponto colorido carrega a validação
+   inteira num pixel: verde é deck legal, vermelho é erro de verdade (carta
+   fora da identidade, singleton quebrado, banida), cinza é "ainda montando" —
+   que não é erro nenhum e por isso não é vermelho. O título diz o que o ponto
+   resume, pra quem quiser a frase. */
 function desenharContador(){
   const total = totalCartas();
+  const v = validacaoAtual();
+  const graves = (v.apontamentos || []).filter(
+    a => a.nivel === "erro" && a.tipo !== "faltam" && a.tipo !== "sobram");
+
   $("contador-n").textContent = total;
-  $("contador").className = "contador" +
-    (total === 100 ? " completo" : total > 100 ? " passou" : "");
+  const el = $("contador");
+  el.className = "medidor" +
+    (graves.length ? " erro" : total === 100 && v.ok ? " completo"
+                             : total > 100 ? " passou" : "");
+  el.title = graves.length
+    ? `${graves.length} problema(s) — veja a aba Análise`
+    : total === 100 && v.ok
+      ? "Deck legal: 100 cartas, singleton respeitado e tudo na identidade"
+      : total > 100
+        ? `${total - 100} carta(s) além das 100`
+        : `Faltam ${100 - total} carta(s) pras 100`;
 }
 
 function desenharDeck(){
   const temComandante = estado.comandantes.length > 0;
   $("heroi").hidden = temComandante;
-  $("painel-deck").hidden = !temComandante;
+  $("area-deck").hidden = !temComandante;
+  $("corpo").classList.toggle("sem-comandante", !temComandante);
+  $("aba-deck-n").textContent = totalCartas();
   if (!temComandante) return;
 
   const identidade = identidadeDoDeck();
@@ -1761,7 +2083,6 @@ function desenharMaybe(){
   const n = estado.maybe.reduce((soma, e) => soma + e.quantidade, 0);
   $("talvez-n").hidden = !n;
   $("talvez-n").textContent = n;
-  $("aba-talvez-n").textContent = n ? `(${n})` : "";
   $("talvez-vazio").hidden = n > 0;
   $("talvez-lista").innerHTML = n
     ? gruposHTML(estado.maybe, identidadeDoDeck(), "talvez") : "";
@@ -1866,9 +2187,42 @@ function linhaHTML(entrada, identidade, tabuleiro){
   </div>`;
 }
 
+/* O que está errado NÃO pode morar só numa aba: uma carta fora da identidade
+   precisa aparecer na mesma tela em que ela foi adicionada, senão o erro
+   espera a pessoa lembrar de conferir. Então a análise se divide em duas: os
+   erros de verdade ficam presos acima da lista do deck, e o resto (progresso,
+   curva, cores) fica na aba, que é conferência e não alarme. */
+function desenharAlertasDoDeck(){
+  const v = validacaoAtual();
+  const graves = (v.apontamentos || []).filter(
+    a => a.nivel === "erro" && a.tipo !== "faltam" && a.tipo !== "sobram");
+  const caixa = $("alertas-deck");
+  if (!graves.length){ caixa.innerHTML = ""; return; }
+
+  // Agrupado por tipo, como na aba: um erro por carta vira ruído numa lista
+  // de 99, e "12 cartas fora da identidade" é a mesma informação numa linha.
+  const porTipo = new Map();
+  for (const a of graves){
+    if (!porTipo.has(a.tipo)) porTipo.set(a.tipo, []);
+    porTipo.get(a.tipo).push(a);
+  }
+  caixa.innerHTML = [...porTipo.values()].map(grupo => {
+    const a = grupo[0];
+    const nomes = grupo.map(x => x.carta).filter(Boolean);
+    const texto = nomes.length > 1
+      ? `${nomes.length} cartas: ${escapar(nomes.slice(0, 6).join(", "))}` +
+        (nomes.length > 6 ? ` e mais ${nomes.length - 6}` : "")
+      : escapar(a.mensagem);
+    const titulo = nomes.length > 1 ? rotuloTipo(a.tipo) : "";
+    return `<div class="aponta erro" style="margin-bottom:8px">
+      <span>${titulo ? `<b>${titulo}</b> — ` : ""}${texto}</span></div>`;
+  }).join("");
+}
+
 function desenharAnalise(){
   const v = validacaoAtual();
   const caixa = $("apontamentos");
+  desenharAlertasDoDeck();
 
   if (!estado.comandantes.length){
     caixa.innerHTML = `<div class="vazio" style="padding:8px 0;">Escolha o
@@ -2412,7 +2766,7 @@ function ligarArrastar(){
   });
 
   const alvoDe = (e) => e.target.closest?.("[data-categoria]") ||
-                        e.target.closest?.(".talvez-col");
+                        e.target.closest?.(".painel-talvez");
 
   document.addEventListener("dragover", (e) => {
     if (!arrastando) return;
@@ -2466,7 +2820,7 @@ function agendarBusca(){
 async function buscar(){
   const termo = $("busca").value.trim();
   const identidade = estado.comandantes.length ? identidadeDoDeck() : null;
-  const params = new URLSearchParams({q: termo, limite: "40"});
+  const params = new URLSearchParams({q: termo, limite: "24"});
   if (identidade !== null) params.set("identidade", identidade);
   const f = estado.filtros;
   if (f.tipo) params.set("tipo", f.tipo);
@@ -2478,7 +2832,7 @@ async function buscar(){
   if (f.ordem && f.ordem !== "nome") params.set("ordem", f.ordem);
   try {
     const r = await api("/cartas/busca?" + params);
-    mostrarResultados($("res"), r.cartas, adicionar);
+    mostrarResultados($("res"), r.cartas, adicionarPeloDestino);
   } catch (e){
     $("res").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
   }
@@ -2497,6 +2851,16 @@ async function buscarComandante(){
 
 let ultimosResultados = [];
 
+/* Cinco resultados, e o resto vira uma frase.
+
+   A lista era de quarenta numa caixa com rolagem própria, dentro de uma
+   coluna que já rolava: escolher entre "Llanowar Elves" e "Llanowar Tribe"
+   custava rolar duas superfícies aninhadas. Quem não achou nos cinco
+   primeiros não vai achar no vigésimo — vai escrever mais uma letra, ou usar
+   os filtros. A frase no fim existe pra dizer isso em vez de deixar a pessoa
+   achando que o acervo acabou. */
+const TETO_RESULTADOS = 5;
+
 function mostrarResultados(caixa, cartas, aoClicar, comandantes){
   ultimosResultados = cartas;
   caixa.aoClicar = aoClicar;
@@ -2505,10 +2869,16 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
       comandantes ? " Lembre: comandante é criatura lendária." : ""}</div>`;
     return;
   }
+  const sobrando = cartas.length - TETO_RESULTADOS;
+  const resto = sobrando > 0
+    ? `<div class="demais">E mais ${sobrando}${
+        cartas.length >= 24 ? "+" : ""} carta(s) casam. Escreva mais uma letra
+       ou use os filtros pra chegar na certa.</div>`
+    : "";
   // Três estados, não dois: uma carta que já está no maybeboard não é uma
   // carta nova nem uma carta do deck, e mostrá-la como qualquer um dos dois
   // faria a pessoa adicionar de novo o que ela mesma pôs em dúvida.
-  caixa.innerHTML = cartas.map((c, i) => {
+  caixa.innerHTML = cartas.slice(0, TETO_RESULTADOS).map((c, i) => {
     const onde = ondeEsta(c.nome);
     return `
     <button class="achado ${onde === "deck" ? "no-deck" : ""} ${
@@ -2521,7 +2891,63 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
       ${manaHTML(c.mana_cost)}
       <span class="preco">${preco(c)}</span>
     </button>`;
-  }).join("");
+  }).join("") + resto;
+}
+
+/* ------------------------------------------------------- destino da carta
+
+   Antes desta escolha existir, toda carta escolhida na busca caía no deck, e
+   pôr uma no sideboard ou no maybeboard era uma segunda operação no ⋯ da
+   linha, depois de adicionada. Quem monta o sideboard põe dez cartas
+   seguidas nele: a decisão é a mesma pras dez, e agora se diz uma vez.
+
+   "Sideboard" é categoria e não tabuleiro (é o que o servidor entende em
+   `decks.CATEGORIAS_FORA_DA_CONTA`), então escolhê-lo aqui ocupa a vaga da
+   categoria — e o seletor ao lado se desliga em vez de oferecer uma escolha
+   que seria ignorada. */
+function adicionarPeloDestino(carta){
+  const d = estado.destino;
+  if (d === "side"){
+    adicionar(carta, "deck", CATEGORIA_SIDEBOARD);
+    toast(`${carta.nome} entrou no sideboard.`);
+  } else if (d === "talvez"){
+    adicionar(carta, "talvez", estado.destinoCategoria || undefined);
+    toast(`${carta.nome} foi pro maybeboard.`);
+  } else {
+    adicionar(carta, "deck", estado.destinoCategoria || undefined);
+  }
+}
+
+function escolherDestino(destino){
+  estado.destino = destino;
+  for (const b of $("seg-destino").children){
+    b.classList.toggle("ativa", b.dataset.destino === destino);
+  }
+  $("sel-categoria").disabled = destino === "side";
+  atualizarCategoriasDoDestino();
+}
+
+/* O seletor de categoria acompanha as categorias que existem: uma criada no
+   ⋯ de uma carta tem que aparecer aqui na hora, senão a pessoa a criaria duas
+   vezes. Sideboard não entra na lista — ele é o segmento ao lado. */
+function atualizarCategoriasDoDestino(){
+  const sel = $("sel-categoria");
+  if (!sel) return;
+  const atual = estado.destinoCategoria;
+  const opcoes = todasAsCategorias().filter(c => c !== CATEGORIA_SIDEBOARD);
+  sel.innerHTML =
+    `<option value="">Pelo tipo da carta</option>` +
+    opcoes.map(c => `<option value="${escapar(c)}"${
+      c === atual ? " selected" : ""}>${escapar(c)}</option>`).join("") +
+    `<option value="__nova__">+ Nova categoria…</option>`;
+  // A categoria escolhida pode ter sido apagada por baixo: sem isto o seletor
+  // voltaria pro topo calado e as próximas cartas iriam pro lugar errado.
+  if (atual && !opcoes.includes(atual)){
+    estado.destinoCategoria = "";
+    sel.value = "";
+  } else {
+    sel.value = atual || "";
+  }
 }
 
 /* ------------------------------------------------------- gaveta e filtros
@@ -2678,18 +3104,36 @@ function limparFiltros(){
 let cotacaoTimer = null;
 
 async function cotar(){
-  if (!estado.id){ await salvarAgora(); }
-  if (!estado.id){ toast("Monte alguma coisa antes de cotar."); return; }
-  const botao = $("btn-cotar");
-  botao.disabled = true;
-  $("orc-resultado").innerHTML = `<div class="nota">Começando…</div>`;
+  if (estado.cotacaoRodando) return;
+  if (!estado.id) await salvarAgora();
+  if (!estado.id) return;
+  // A assinatura é gravada ANTES da resposta: se o deck mudar durante a
+  // cotação, `agendarCotacao` vê a diferença e marca outra pra depois desta.
+  estado.cotacaoAssinatura = assinaturaDeCotacao();
+  estado.cotacaoRodando = true;
+  estado.cotacaoErro = null;
+  desenharPreviaOrcamento();
   try {
     const inicio = await api(`/decks/${estado.id}/cotacao`, {method: "POST"});
     acompanharCotacao(inicio.job_id);
   } catch (e){
-    botao.disabled = false;
-    $("orc-resultado").innerHTML = `<div class="aponta erro">${escapar(e.message)}</div>`;
+    terminarCotacao(null, e.message);
   }
+}
+
+/* Fim de cotação, com sucesso ou não, num lugar só: são quatro caminhos de
+   saída (erro ao começar, erro no meio, erro do servidor, pronto) e cada um
+   precisa desligar o giro, guardar o resultado e redesenhar. */
+function terminarCotacao(resultado, erro){
+  clearInterval(cotacaoTimer);
+  estado.cotacaoRodando = false;
+  estado.cotacaoErro = erro || null;
+  if (resultado) estado.cotacao = resultado;
+  desenharCotacao();
+  desenharPreviaOrcamento();
+  // O deck pode ter mudado enquanto o servidor cotava: se mudou, esta
+  // resposta já nasce velha e a próxima é marcada agora.
+  agendarCotacao();
 }
 
 function acompanharCotacao(jobId){
@@ -2697,39 +3141,36 @@ function acompanharCotacao(jobId){
   const passo = async () => {
     try {
       const r = await api(`/cotacao/${jobId}`);
-      if (r.estado === "cotando"){
-        const pct = r.total ? Math.round((r.feitas / r.total) * 100) : 0;
-        $("orc-resultado").innerHTML = `
-          <div class="nota">Cotando ${r.cartas} cartas… ${pct}% (${r.decorrido}s)
-          <div class="distrib" style="margin-top:6px"><div class="item">
-            <span class="trilho"><span class="cheio" style="width:${pct}%;background:var(--green)"></span></span>
-          </div></div></div>`;
-        return;
-      }
-      clearInterval(cotacaoTimer);
-      $("btn-cotar").disabled = false;
-      if (r.estado === "erro"){
-        $("orc-resultado").innerHTML = `<div class="aponta erro">${escapar(r.detalhe)}</div>`;
-      } else {
-        mostrarCotacao(r.resultado);
-      }
+      if (r.estado === "cotando") return;
+      if (r.estado === "erro") terminarCotacao(null, r.detalhe);
+      else terminarCotacao(r.resultado, null);
     } catch (e){
-      clearInterval(cotacaoTimer);
-      $("btn-cotar").disabled = false;
-      $("orc-resultado").innerHTML = `<div class="aponta erro">${escapar(e.message)}</div>`;
+      terminarCotacao(null, e.message);
     }
   };
   passo();
   cotacaoTimer = setInterval(passo, 2000);
 }
 
-function mostrarCotacao(resultado){
+/* O detalhe da cotação, no painel que abre embaixo do número. Só o que não
+   cabe no cabeçalho: as duas fontes, onde está o dinheiro, o que ficou de
+   fora. */
+function desenharCotacao(){
+  const caixa = $("orc-resultado");
+  if (estado.cotacaoErro){
+    caixa.innerHTML = `<div class="aponta erro" style="grid-column:1/-1">
+      <span>${escapar(estado.cotacaoErro)}</span></div>`;
+    return;
+  }
+  const resultado = estado.cotacao;
+  if (!resultado){ caixa.innerHTML = ""; return; }
+
   // Total que não cobre o deck inteiro precisa dizer isso NO LUGAR do número,
   // não embaixo dele: uma fonte fora do ar devolve zero carta cotada, e
   // "US$ 0,00" lido como total é pior do que não ter cotado.
   const fontes = (resultado.fontes || []).map(f => {
     const pedidas = f.cartas_cotadas + f.cartas_faltando;
-    const moeda = f.moeda === "BRL" ? "R$" : "US$";
+    const simbolo = f.moeda === "BRL" ? "R$" : "US$";
     if (!f.cartas_cotadas){
       return `<div class="aponta aviso" style="margin-top:6px">
         <span><b>${escapar(f.rotulo)}</b> não devolveu preço de nenhuma das
@@ -2742,7 +3183,7 @@ function mostrarCotacao(resultado){
         <small style="color:${f.cartas_faltando ? "var(--gold-light)" : "var(--text-muted)"}">
           ${f.cartas_cotadas} de ${pedidas} cartas${
             f.cartas_faltando ? " — total incompleto" : ""}</small></span>
-      <span class="tot">${moeda} ${Number(f.total).toFixed(2)}</span>
+      <span class="tot">${simbolo} ${Number(f.total).toFixed(2)}</span>
     </div>`;
   }).join("");
 
@@ -2759,7 +3200,7 @@ function mostrarCotacao(resultado){
 
   const excluidas = (resultado.excluidas || []).length;
   const talvez = estado.maybe.reduce((n, e) => n + e.quantidade, 0);
-  $("orc-resultado").innerHTML =
+  caixa.innerHTML =
     `<div>${fontes}</div>` +
     (caras ? `<div class="caras"><h2 class="secao">Onde está o dinheiro</h2>${caras}</div>` : "") +
     `<div>${excluidas ? `<p class="nota">${excluidas} carta(s) fora do total:
@@ -3091,9 +3532,13 @@ async function procurarCombos(){
   if (!estado.id) await salvarAgora();
   if (!estado.id){ toast("Não consegui salvar o deck antes de buscar."); return; }
 
-  const botao = $("btn-combos");
-  botao.disabled = true;
-  $("combos-resultado").innerHTML = `<div class="nota">Perguntando ao Spellbook…</div>`;
+  // Dois botões pedem a mesma coisa (o do deck e o da lista de compras), e a
+  // consulta é uma só: os dois esperam juntos.
+  const botoes = [$("btn-combos"), $("btn-combos-rail")];
+  botoes.forEach(b => b.disabled = true);
+  const esperando = `<div class="nota">Perguntando ao Spellbook…</div>`;
+  $("combos-resultado").innerHTML = esperando;
+  $("combos-rail-resultado").innerHTML = esperando;
   try {
     estado.combos = await api(`/decks/${estado.id}/combos`, {method: "POST"});
     estado.combosAssinatura = assinaturaDoDeck();
@@ -3101,58 +3546,92 @@ async function procurarCombos(){
   } catch (e){
     // "Não sei" nunca pode virar "não tem combo": são opostos que parecem
     // iguais numa lista vazia.
-    $("combos-resultado").innerHTML =
-      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    const erro = `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    $("combos-resultado").innerHTML = erro;
+    $("combos-rail-resultado").innerHTML = erro;
     return;
   } finally {
-    botao.disabled = false;
+    botoes.forEach(b => b.disabled = false);
   }
   desenharCombos();
 }
 
-function desenharCombos(){
-  const caixa = $("combos-resultado");
-  const dados = estado.combos;
-  if (!dados){ caixa.innerHTML = ""; return; }
+/* Os combos moram em DOIS lugares, e a divisão não é arbitrária: são duas
+   perguntas diferentes que a mesma resposta do Spellbook atende.
 
-  const mudou = estado.combosAssinatura !== assinaturaDoDeck();
-  let html = mudou
+   * O que JÁ FECHA no deck é uma leitura da lista — "o que este deck faz" —
+     e fica na aba de combos, junto das outras leituras do deck.
+   * O que fica a UMA CARTA de fechar é uma lista de compras: cada linha tem
+     um botão que põe carta no deck. Isso é a mesma coisa que a busca faz, e
+     por isso mora no painel de adicionar, do outro lado da tela.
+
+   Eram os dois na mesma coluna, um embaixo do outro, e a segunda lista (a
+   longa, a de doze itens) empurrava a primeira pra fora da vista. */
+function desenharCombos(){
+  const dados = estado.combos;
+  const noDeck = dados?.no_deck || [];
+  const faltando = dados?.faltando_uma || [];
+
+  $("aba-combos-n").textContent = dados ? noDeck.length : "";
+  $("rail-combos-n").textContent = dados ? faltando.length : "";
+
+  desenharCombosNoDeck(noDeck, dados);
+  desenharCombosFaltando(faltando, dados);
+}
+
+/* O aviso de "esta resposta é sobre um deck que não existe mais". Vale pras
+   duas listas, e por isso é uma função. */
+function avisoDeCombosVelhos(){
+  return estado.combosAssinatura !== assinaturaDoDeck()
     ? `<div class="combo-desatualizado">O deck mudou desde esta busca —
        procure de novo pra atualizar.</div>` : "";
+}
 
+function desenharCombosNoDeck(noDeck, dados){
+  const caixa = $("combos-resultado");
+  if (!dados){ caixa.innerHTML = ""; return; }
+
+  const velho = avisoDeCombosVelhos();
+  let html = velho;
   // O que a tela fechou sozinha, e o que ela não tem como saber: a carta que
   // entrou pode ter deixado OUTROS combos a uma peça de fechar, e isso só o
-  // Spellbook responde.
-  if (estado.combosMexidos && !mudou){
+  // Spellbook responde. Não vale a pena dizer isso quando a resposta inteira
+  // já está marcada como velha — seriam dois avisos sobre a mesma coisa.
+  if (estado.combosMexidos && !velho){
     html += `<div class="combo-mexido">✓ ${estado.combosMexidos} combo(s)
       fecharam aqui na tela com as cartas que você adicionou. Procure de novo
       pra ver os combos <b>novos</b> que essas cartas abriram — essa parte só
       o Spellbook sabe.</div>`;
   }
 
-  const noDeck = dados.no_deck || [];
-  const faltando = dados.faltando_uma || [];
-
-  html += `<h2 class="secao">No deck (${noDeck.length})</h2>`;
   html += noDeck.length
     ? noDeck.map(c => comboHTML(c, false)).join("")
-    : `<div class="nota">Nenhum combo fechado ainda${
-        faltando.length ? " — mas veja os que estão a uma carta." : "."}</div>`;
-
-  if (faltando.length){
-    html += `<h2 class="secao" style="margin-top:14px">A uma carta (${faltando.length})</h2>`;
-    // Só as primeiras: a lista de "quase lá" de um deck grande passa de 100 e
-    // viraria rolagem infinita numa coluna de 370px.
-    html += faltando.slice(0, 12).map(c => comboHTML(c, true)).join("");
-    if (faltando.length > 12){
-      html += `<div class="nota">E mais ${faltando.length - 12} — as mais
-        populares aparecem primeiro.</div>`;
-    }
-  }
+    : `<div class="nota">Nenhum combo fechado ainda. Os que estão a uma carta
+       de fechar ficam na aba <b>Combos</b> do painel de adicionar.</div>`;
 
   if (dados.cache){
     html += `<div class="nota" style="margin-top:10px">Resposta guardada de uma
       busca recente com este mesmo deck.</div>`;
+  }
+  caixa.innerHTML = html;
+}
+
+function desenharCombosFaltando(faltando, dados){
+  const caixa = $("combos-rail-resultado");
+  if (!dados){ caixa.innerHTML = ""; return; }
+
+  let html = avisoDeCombosVelhos();
+  if (!faltando.length){
+    caixa.innerHTML = html + `<div class="nota">Nenhum combo a uma carta de
+      fechar — pelo menos entre os que o Spellbook conhece.</div>`;
+    return;
+  }
+  // Só os primeiros: a lista de "quase lá" de um deck grande passa de 100 e
+  // viraria rolagem infinita numa coluna estreita.
+  html += faltando.slice(0, 12).map(c => comboHTML(c, true)).join("");
+  if (faltando.length > 12){
+    html += `<div class="nota">E mais ${faltando.length - 12} — as mais
+      populares aparecem primeiro.</div>`;
   }
   caixa.innerHTML = html;
 }
@@ -3518,7 +3997,7 @@ function ligarEventos(){
   // digita e aperta Enter, sem tirar a mão do teclado.
   $("busca").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && ultimosResultados.length){
-      adicionar(ultimosResultados[0]);
+      adicionarPeloDestino(ultimosResultados[0]);
       $("busca").select();
     }
   });
@@ -3541,6 +4020,14 @@ function ligarEventos(){
       e.preventDefault();
       return fecharGaveta();
     }
+    if (e.key === "Escape" && !$("cotacao-caixa").hidden){
+      e.preventDefault();
+      return fecharCotacao();
+    }
+    if (e.key === "Escape" && folhaAberta()){
+      e.preventDefault();
+      return fecharFolha();
+    }
     if (gavetaAberta) return;   // dentro da gaveta, o teclado é dela
     if (e.key === "/" && !digitando){
       e.preventDefault();
@@ -3560,7 +4047,6 @@ function ligarEventos(){
     preencherGavetaFiltros();
     abrirGaveta("gaveta-filtros");
   });
-  $("btn-importar").addEventListener("click", () => abrirGaveta("gaveta-importar"));
   $("btn-fazer-importar").addEventListener("click", fazerImportar);
   $("btn-limpar-filtros").addEventListener("click", limparFiltros);
   $("gaveta-fundo").addEventListener("click", fecharGaveta);
@@ -3584,6 +4070,11 @@ function ligarEventos(){
     // Clique fora fecha o menu aberto — inclusive quando o clique é num
     // botão que abre OUTRO menu, que o `abrirMenu` fecha de novo sozinho.
     if (menuAberto && !menuAberto.contains(e.target)) fecharMenu();
+    // O popover da cotação fecha no clique de fora, como o menu — menos o
+    // clique no próprio ⌄, que é quem o alterna.
+    const caixaCot = $("cotacao-caixa");
+    if (!caixaCot.hidden && !caixaCot.contains(e.target) &&
+        !e.target.closest("#btn-cotacao")) fecharCotacao();
     if (e.target.closest("[data-fecha-gaveta]")) return fecharGaveta();
     const tira = e.target.closest("[data-tira-filtro]");
     if (tira) return tirarFiltro(tira.dataset.tiraFiltro);
@@ -3593,8 +4084,9 @@ function ligarEventos(){
     if (sugerida){
       const carta = sugestoesPlanas[Number(sugerida.dataset.sug)];
       if (carta){
-        adicionar(carta);
-        toast(`${carta.nome} entrou no deck.`);
+        // Mesmo destino da busca: as duas abas do painel respondem a mesma
+        // pergunta, e obedecer o segmentado só numa delas seria armadilha.
+        adicionarPeloDestino(carta);
         // Sai da lista: já está no deck, e continuar sugerindo o que a pessoa
         // acabou de adicionar é o jeito mais rápido de a lista parecer burra.
         for (const lista of (estado.sugestoes?.listas || [])){
@@ -3671,12 +4163,6 @@ function ligarEventos(){
     agendarSalvar();
   });
 
-  $("btn-novo").addEventListener("click", () => {
-    if (estado.cartas.length && !confirm("Começar um deck novo? O atual fica " +
-        "salvo e continua na lista de Meus decks.")) return;
-    location.href = location.pathname;
-  });
-
   $("btn-compartilhar").addEventListener("click", async () => {
     const url = location.origin + location.pathname + "?deck=" + estado.id;
     try {
@@ -3685,26 +4171,16 @@ function ligarEventos(){
     } catch(e){ prompt("Link do deck:", url); }
   });
 
-  $("btn-meus").addEventListener("click", () => {
-    const lista = lidos();
-    if (!lista.length) return;
-    const escolha = prompt("Seus decks neste navegador:\n\n" +
-      lista.map((d, i) => `${i + 1}. ${d.nome}${d.comandante ? " — " + d.comandante : ""}`)
-        .join("\n") + "\n\nDigite o número pra abrir:");
-    const i = Number(escolha) - 1;
-    if (lista[i]) location.href = `?deck=${lista[i].id}`;
-  });
+  // O total copia a lista. Era um "Exportar lista" morando a uma coluna de
+  // distância do número que ele exporta; aqui a ação está no objeto.
+  $("btn-total").addEventListener("click", exportar);
+  $("btn-cotacao").addEventListener("click", alternarCotacao);
+  $("btn-fechar-cotacao").addEventListener("click", fecharCotacao);
 
-  $("btn-cotar").addEventListener("click", cotar);
-  $("btn-exportar").addEventListener("click", exportar);
-
-  // A explicação do orçamento vive dobrada: ela é longa, é lida uma vez na
-  // vida, e a faixa existe justamente pra ser uma linha.
-  $("btn-orc-nota").addEventListener("click", () => {
-    const nota = $("orc-nota");
-    nota.hidden = !nota.hidden;
-    $("btn-orc-nota").setAttribute("aria-expanded", String(!nota.hidden));
-  });
+  // Um botão de ouro (compartilhar) e um "···" com o resto. Eram cinco botões
+  // de mesmo peso no cabeçalho, e quatro deles são coisas que se faz uma vez
+  // por deck — enquanto compartilhar é o fim de todo deck montado.
+  $("btn-mais").addEventListener("click", () => abrirMenu($("btn-mais"), menuDoCabecalho()));
 
   $("btn-nova-categoria").addEventListener("click", () => {
     const nome = prompt("Nome da nova categoria:\n\n" +
@@ -3714,22 +4190,128 @@ function ligarEventos(){
 
   $("btn-recolher-talvez").addEventListener("click", () => recolherTalvez());
   $("btn-combos").addEventListener("click", procurarCombos);
+  $("btn-combos-rail").addEventListener("click", procurarCombos);
   $("btn-poder").addEventListener("click", estimarPoder);
   $("btn-sugestoes").addEventListener("click", () =>
     buscarSugestoes(estado.sugestoesTema));
   $("btn-manabase").addEventListener("click", analisarManabase);
+  $("btn-ver-analise").addEventListener("click", () => {
+    trocarAba("analise");
+    $("painel-analise").scrollIntoView({behavior: "smooth", block: "nearest"});
+  });
 
   ligarArrastar();
 
-  $("abas").addEventListener("click", (e) => {
-    const botao = e.target.closest("[data-aba]");
-    if (!botao) return;
-    $("corpo").dataset.aba = botao.dataset.aba;
-    [...$("abas").children].forEach(b => b.classList.toggle("ativa", b === botao));
-    window.scrollTo({top: 0, behavior: "smooth"});
+  // ---- as duas fitas de abas ----
+  $("abas-deck").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-painel]");
+    if (b) trocarAba(b.dataset.painel);
+  });
+  $("abas-rail").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-rail]");
+    if (b) trocarRail(b.dataset.rail);
   });
 
+  // ---- destino da carta que entra ----
+  $("seg-destino").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-destino]");
+    if (b) escolherDestino(b.dataset.destino);
+  });
+  $("sel-categoria").addEventListener("change", (e) => {
+    if (e.target.value === "__nova__"){
+      // Criar daqui não mexe em carta nenhuma: cria a categoria vazia e já a
+      // deixa escolhida, que é o que quem veio por este caminho quer.
+      const nome = prompt("Nome da nova categoria:\n\n" +
+        "Ex.: Combo principal, Sac outlet, Proteção do comandante");
+      const criada = nome ? criarCategoria(nome) : null;
+      estado.destinoCategoria = criada || "";
+      atualizarCategoriasDoDestino();
+      return;
+    }
+    estado.destinoCategoria = e.target.value;
+  });
+
+  // ---- a folha de baixo do celular ----
+  $("btn-abrir-busca").addEventListener("click", abrirFolha);
+  $("folha-fundo").addEventListener("click", fecharFolha);
+  $("puxador").addEventListener("click", fecharFolha);
+  $("btn-subir").addEventListener("click", () =>
+    window.scrollTo({top: 0, behavior: "smooth"}));
+
   ligarPrevia();
+}
+
+/* O menu do "···". Ele guarda o que se faz uma vez por deck; o cabeçalho
+   guarda o que se faz sempre. */
+function menuDoCabecalho(){
+  const itens = [];
+  const meus = lidos();
+  if (meus.length){
+    itens.push({rotulo: `Meus decks (${meus.length})`, aoClicar: abrirMeusDecks});
+  }
+  itens.push({rotulo: "Importar lista", aoClicar: () => abrirGaveta("gaveta-importar")});
+  itens.push({rotulo: "Exportar lista (copiar)", aoClicar: exportar});
+  itens.push("risco");
+  itens.push({rotulo: "Novo deck", aoClicar: comecarNovo});
+  itens.push({rotulo: "Imprimir proxies", aoClicar: () => { location.href = "/"; }});
+  return itens;
+}
+
+function abrirMeusDecks(){
+  const lista = lidos();
+  if (!lista.length) return;
+  const escolha = prompt("Seus decks neste navegador:\n\n" +
+    lista.map((d, i) => `${i + 1}. ${d.nome}${d.comandante ? " — " + d.comandante : ""}`)
+      .join("\n") + "\n\nDigite o número pra abrir:");
+  const i = Number(escolha) - 1;
+  if (lista[i]) location.href = `?deck=${lista[i].id}`;
+}
+
+function comecarNovo(){
+  if (estado.cartas.length && !confirm("Começar um deck novo? O atual fica " +
+      "salvo e continua na lista de Meus decks.")) return;
+  location.href = location.pathname;
+}
+
+/* ------------------------------------------------- popover da cotação */
+
+function alternarCotacao(){
+  const caixa = $("cotacao-caixa");
+  if (!caixa.hidden) return fecharCotacao();
+  caixa.hidden = false;
+  const ancora = $("btn-cotacao").getBoundingClientRect();
+  const m = caixa.getBoundingClientRect();
+  caixa.style.left = Math.max(8,
+    Math.min(ancora.left - m.width + ancora.width,
+             window.innerWidth - m.width - 8)) + "px";
+  caixa.style.top = (ancora.bottom + 6) + "px";
+  $("btn-cotacao").setAttribute("aria-expanded", "true");
+}
+
+function fecharCotacao(){
+  $("cotacao-caixa").hidden = true;
+  $("btn-cotacao").setAttribute("aria-expanded", "false");
+}
+
+/* ------------------------------------------------- folha de baixo (celular)
+
+   A busca não é uma coluna no telefone: é uma tarefa que se abre por cima do
+   deck, se usa e se fecha. O `inert` do resto da página não é enfeite — sem
+   ele o Tab sai da folha e vai parar na lista do deck por baixo dela. */
+function abrirFolha(){
+  $("lateral").classList.add("aberta");
+  $("folha-fundo").classList.add("aberta");
+  trocarRail(estado.rail);
+  setTimeout(() => $("busca").focus(), 220);
+}
+
+function fecharFolha(){
+  $("lateral").classList.remove("aberta");
+  $("folha-fundo").classList.remove("aberta");
+}
+
+function folhaAberta(){
+  return $("lateral").classList.contains("aberta");
 }
 
 /* ---------------------------------------------------- coluna do maybeboard
@@ -3743,14 +4325,11 @@ function recolherTalvez(forcar){
   const corpo = $("corpo");
   const fechado = forcar !== undefined ? forcar
     : !corpo.classList.contains("talvez-fechado");
+  // Recolhe só o maybeboard, não o trilho inteiro: a curva de mana mora na
+  // mesma coluna e não tem por que sumir junto.
   corpo.classList.toggle("talvez-fechado", fechado);
-  // `talvez-aberto` não é o contrário de `talvez-fechado`: é o "abri de
-  // propósito" que vence o recolhimento automático das telas médias (ver o
-  // @media de 1200px). Sem ele, abrir a coluna entre 900 e 1200 não faria
-  // nada e o botão pareceria quebrado.
-  corpo.classList.toggle("talvez-aberto", !fechado);
   const botao = $("btn-recolher-talvez");
-  botao.textContent = fechado ? "›" : "‹";
+  botao.textContent = fechado ? "+" : "−";
   botao.title = fechado ? "Abrir o maybeboard" : "Recolher o maybeboard";
   botao.setAttribute("aria-expanded", String(!fechado));
   try { localStorage.setItem(CHAVE_TALVEZ, fechado ? "0" : "1"); } catch(e){}
@@ -3760,8 +4339,9 @@ function recolherTalvez(forcar){
    que já existe embaixo do deck e o faz piscar, porque duas mana bases na
    mesma tela seriam duas respostas pra mesma pergunta. */
 function chamarManabase(){
+  trocarAba("manabase");
   const painel = $("painel-manabase");
-  painel.scrollIntoView({behavior: "smooth", block: "center"});
+  painel.scrollIntoView({behavior: "smooth", block: "nearest"});
   painel.classList.remove("chamado");
   void painel.offsetWidth;          // reinicia a animação se já tiver rodado
   painel.classList.add("chamado");
@@ -3816,6 +4396,9 @@ async function abrir(){
   ligarEventos();
   atualizarBotaoMeus();
   conferirBase();
+  trocarAba("deck");
+  trocarRail("buscar");
+  escolherDestino("deck");
   try {
     if (localStorage.getItem(CHAVE_TALVEZ) === "0") recolherTalvez(true);
   } catch(e){ /* navegador privado: a coluna abre, que é o padrão */ }
@@ -3846,8 +4429,12 @@ async function abrir(){
   }
 
   desenharTudo();
-  if (estado.comandantes.length){ buscar(); $("busca").focus(); }
+  if (estado.comandantes.length){ buscar(); }
   else { buscarComandante(); $("busca-cmd").focus(); }
+  // O foco na busca só faz sentido onde ela está sempre à vista: no celular
+  // ela é uma folha fechada, e focar dentro dela abriria o teclado sobre uma
+  // superfície invisível.
+  if (estado.comandantes.length && window.innerWidth > 900) $("busca").focus();
 }
 
 abrir();
