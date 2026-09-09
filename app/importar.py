@@ -8,9 +8,24 @@ o caminho é digitar 100 nomes numa caixa de busca, e ninguém faz isso duas
 vezes.
 
 O QUE SAI DAQUI. Sempre a mesma coisa, venha de onde vier: `{"nome",
-"comandantes": [nome], "cartas": [{"nome", "quantidade"}], "fonte",
-"link"}`. Nomes, não cartas — quem resolve nome em carta é a base local
-(`cartas.por_nomes`), do mesmo jeito que um deck salvo é resolvido ao abrir.
+"comandantes": [nome], "cartas": [{"nome", "quantidade", "categoria"}],
+"maybeboard": [...], "fonte", "link"}`. Nomes, não cartas — quem resolve
+nome em carta é a base local (`cartas.por_nomes`), do mesmo jeito que um
+deck salvo é resolvido ao abrir.
+
+O QUE ESTAVA FORA DO DECK AGORA VEM JUNTO. O deckbuilder ganhou maybeboard,
+então descartar a parte da lista que o site marcou como "fora" passou a ser
+perda de informação: quem mantém 20 cartas em dúvida lá teria que copiá-las
+à mão. A regra é a do rótulo — o que o site chama de *sideboard* vira a
+categoria `Sideboard` (fora das 100, dentro da cotação) e todo o resto do
+que está fora (*maybeboard*, *considering*, *acquire*, *wishlist*) vira
+maybeboard. Token continua sendo descartado: não é carta de deck.
+
+CATEGORIA NÃO VEM DE FORA. O Archidekt tem categorias por carta, mas as
+dele são quase sempre o TIPO ("Creature", "Land") — e o deckbuilder já
+agrupa por tipo sozinho. Trazê-las criaria uma categoria à mão em cima de
+cada grupo automático, duplicando a lista inteira em inglês. Só o rótulo de
+tabuleiro (sideboard/maybeboard) atravessa.
 
 AS DUAS FONTES NÃO SÃO IGUAIS, e isso não é escolha nossa:
 
@@ -47,7 +62,7 @@ import time
 
 import requests
 
-from . import identidade as ident, log, ritmo
+from . import decks, identidade as ident, log, ritmo
 
 TIMEOUT = float(os.environ.get("IMPORTAR_TIMEOUT", "20"))
 TENTATIVAS = int(os.environ.get("IMPORTAR_TENTATIVAS", "3"))
@@ -65,6 +80,17 @@ MOXFIELD_USER_AGENT = os.environ.get("MOXFIELD_USER_AGENT", "")
 # `decks.MAX_ENTRADAS`: impedir que um link estranho vire uma lista de 50 mil
 # linhas, não policiar quem importa um cube grande.
 MAX_LINHAS = 800
+
+# O nome da categoria que o deckbuilder trata como "fora das 100, dentro da
+# cotação". Vem de `decks` e não de uma string aqui: renomeá-la um dia não
+# pode deixar o importador escrevendo num grupo que não existe mais.
+SIDEBOARD = decks.CATEGORIA_SIDEBOARD
+
+# Como reconhecer o rótulo que o site de origem deu ao que ficou fora do
+# deck. É busca no nome da categoria, não casamento exato: o Archidekt
+# aceita "Sideboard", "sideboard", "Sideboard (troca)".
+_EH_SIDEBOARD = re.compile(r"side\s*board|reserva", re.I)
+_EH_TOKEN = re.compile(r"\btokens?\b|\bemblems?\b|\bfichas?\b", re.I)
 
 _freio = ritmo.Freio("importar", DELAY_SEGUNDOS)
 
@@ -196,13 +222,11 @@ def _archidekt(deck_id: str) -> dict:
     fora = {c.get("name") for c in (dados.get("categories") or [])
             if isinstance(c, dict) and c.get("includedInDeck") is False}
 
-    comandantes, cartas = [], []
+    comandantes, cartas, maybeboard = [], [], []
     for item in dados.get("cards") or []:
         if not isinstance(item, dict):
             continue
         categorias = [c for c in (item.get("categories") or []) if c]
-        if any(c in fora for c in categorias):
-            continue
         nome = _nome_archidekt(item)
         if not nome:
             continue
@@ -212,13 +236,27 @@ def _archidekt(deck_id: str) -> dict:
             quantidade = 1
         if quantidade <= 0:
             continue
+        excluida = [c for c in categorias if c in fora]
+        if excluida:
+            if _EH_TOKEN.search(" ".join(excluida)):
+                continue
+            entrada = {"nome": nome, "quantidade": quantidade}
+            # O rótulo do dono do deck decide: o que ele chamou de sideboard
+            # continua sendo sideboard aqui; o resto do que ele tirou da
+            # conta é dúvida, e dúvida é maybeboard.
+            if _EH_SIDEBOARD.search(" ".join(excluida)):
+                cartas.append({**entrada, "categoria": SIDEBOARD})
+            else:
+                maybeboard.append(entrada)
+            continue
         if "Commander" in categorias:
             comandantes.append(nome)
         else:
             cartas.append({"nome": nome, "quantidade": quantidade})
 
     return _resultado(dados.get("name") or "", comandantes, cartas,
-                      "Archidekt", f"https://archidekt.com/decks/{deck_id}")
+                      "Archidekt", f"https://archidekt.com/decks/{deck_id}",
+                      maybeboard)
 
 
 def _nome_archidekt(item: dict) -> str:
@@ -242,9 +280,13 @@ def _nome_archidekt(item: dict) -> str:
 
 # Onde as cartas moram na resposta v3, e o que cada tabuleiro é pra nós.
 # `commanders` vira comandante; `mainboard` e `companions` viram as 99;
-# `sideboard`, `maybeboard` e afins ficam de fora.
+# `sideboard` vira a categoria de mesmo nome e `maybeboard` vira o
+# maybeboard. O que sobra (tokens, attractions, stickers, planes) fica de
+# fora: não é carta de deck de Commander.
 _MOX_COMANDANTE = ("commanders",)
 _MOX_DECK = ("mainboard", "companions")
+_MOX_SIDEBOARD = ("sideboard",)
+_MOX_MAYBE = ("maybeboard",)
 
 
 def _moxfield(public_id: str) -> dict:
@@ -256,9 +298,10 @@ def _moxfield(public_id: str) -> dict:
             "o Moxfield respondeu num formato que eu não reconheço — o "
             "contrato da API deles mudou (esperava um campo 'boards').")
 
-    comandantes, cartas = [], []
+    conhecidos = (_MOX_COMANDANTE + _MOX_DECK + _MOX_SIDEBOARD + _MOX_MAYBE)
+    comandantes, cartas, maybeboard = [], [], []
     for chave, tabuleiro in tabuleiros.items():
-        if chave not in _MOX_COMANDANTE and chave not in _MOX_DECK:
+        if chave not in conhecidos:
             continue
         for item in ((tabuleiro or {}).get("cards") or {}).values():
             if not isinstance(item, dict):
@@ -274,11 +317,17 @@ def _moxfield(public_id: str) -> dict:
                 continue
             if chave in _MOX_COMANDANTE:
                 comandantes.append(nome)
+            elif chave in _MOX_MAYBE:
+                maybeboard.append({"nome": nome, "quantidade": quantidade})
+            elif chave in _MOX_SIDEBOARD:
+                cartas.append({"nome": nome, "quantidade": quantidade,
+                               "categoria": SIDEBOARD})
             else:
                 cartas.append({"nome": nome, "quantidade": quantidade})
 
     return _resultado(dados.get("name") or "", comandantes, cartas,
-                      "Moxfield", f"https://www.moxfield.com/decks/{public_id}")
+                      "Moxfield", f"https://www.moxfield.com/decks/{public_id}",
+                      maybeboard)
 
 
 # ---------------------------------------------------------------------------
@@ -308,9 +357,16 @@ _SUFIXOS = re.compile(r"""
 # "fora" é ignorado até a próxima seção.
 _CABECALHO_COMANDANTE = re.compile(
     r"^(?:\/\/\s*)?(?:commander|comandante)s?\s*[:(]?", re.I)
-_CABECALHO_FORA = re.compile(
-    r"^(?:\/\/\s*)?(?:sideboard|maybeboard|considering|acquire|wishlist|"
-    r"tokens?|sideboard de|reserva)\s*[:(]?", re.I)
+# As três seções que não são o deck, agora com destinos diferentes: o que o
+# exportador chamou de sideboard vira a categoria `Sideboard`; o que ele
+# chamou de dúvida vira maybeboard; token é descartado.
+_CABECALHO_SIDEBOARD = re.compile(
+    r"^(?:\/\/\s*)?(?:sideboard|reserva)\s*(?:de\b[^:(]*)?[:(]?", re.I)
+_CABECALHO_MAYBE = re.compile(
+    r"^(?:\/\/\s*)?(?:maybe\s*board|maybeboard|maybe|considering|"
+    r"consider|acquire|wishlist|lista de desejos|talvez)\s*[:(]?", re.I)
+_CABECALHO_DESCARTE = re.compile(
+    r"^(?:\/\/\s*)?(?:tokens?|emblems?|fichas?)\s*[:(]?", re.I)
 _CABECALHO_DECK = re.compile(
     r"^(?:\/\/\s*)?(?:deck|mainboard|main|creature|land|artifact|enchantment|"
     r"instant|sorcery|planeswalker|battle|companion)s?\s*[:(]?", re.I)
@@ -326,8 +382,12 @@ def de_texto(texto: str, nome_deck: str = "") -> dict:
     de um cabeçalho "Commander", de um `*CMDR*` na linha, ou — se não houver
     nem um nem outro — fica pra tela decidir, porque adivinhar qual das 100
     é o comandante daria errado calado.
+
+    Um cabeçalho de sideboard manda o que vem depois pra categoria
+    `Sideboard`; um de maybeboard (ou "considering", "wishlist"), pro
+    maybeboard; um de tokens, pro lixo. Antes tudo isso era descartado junto.
     """
-    comandantes, cartas = [], []
+    comandantes, cartas, maybeboard = [], [], []
     secao = "deck"
 
     for linha in (texto or "").splitlines():
@@ -337,18 +397,28 @@ def de_texto(texto: str, nome_deck: str = "") -> dict:
             # volta pro deck: se a anterior era sideboard, o que vem depois
             # continua sendo, até um cabeçalho dizer o contrário.
             continue
-        if _CABECALHO_COMANDANTE.match(crua) and not _tem_carta(crua):
-            secao = "comandante"
-            continue
-        if _CABECALHO_FORA.match(crua) and not _tem_carta(crua):
-            secao = "fora"
-            continue
-        if _CABECALHO_DECK.match(crua) and not _tem_carta(crua):
-            secao = "deck"
-            continue
+        if not _tem_carta(crua):
+            # A ordem importa: "Maybeboard" casaria com o cabeçalho de deck
+            # se ele viesse antes, e "Sideboard" precisa ser testado antes do
+            # de dúvida pra não ser engolido por um `maybe` genérico.
+            if _CABECALHO_COMANDANTE.match(crua):
+                secao = "comandante"
+                continue
+            if _CABECALHO_SIDEBOARD.match(crua):
+                secao = "sideboard"
+                continue
+            if _CABECALHO_MAYBE.match(crua):
+                secao = "maybe"
+                continue
+            if _CABECALHO_DESCARTE.match(crua):
+                secao = "descarte"
+                continue
+            if _CABECALHO_DECK.match(crua):
+                secao = "deck"
+                continue
         if crua.startswith("//") or crua.startswith("#"):
             continue
-        if secao == "fora":
+        if secao == "descarte":
             continue
 
         marcada = bool(_MARCA_COMANDANTE.search(crua))
@@ -367,18 +437,24 @@ def de_texto(texto: str, nome_deck: str = "") -> dict:
 
         if marcada or secao == "comandante":
             comandantes.append(nome)
+        elif secao == "maybe":
+            maybeboard.append({"nome": nome, "quantidade": quantidade})
+        elif secao == "sideboard":
+            cartas.append({"nome": nome, "quantidade": quantidade,
+                           "categoria": SIDEBOARD})
         else:
             cartas.append({"nome": nome, "quantidade": quantidade})
-        if len(cartas) > MAX_LINHAS:
+        if len(cartas) + len(maybeboard) > MAX_LINHAS:
             raise ImportarError(
                 f"a lista passa de {MAX_LINHAS} linhas distintas — isso não "
                 f"é um deck de Commander.")
 
-    if not comandantes and not cartas:
+    if not comandantes and not cartas and not maybeboard:
         raise ImportarError(
             "não achei carta nenhuma nesse texto. O formato é uma carta por "
             "linha, tipo \"1 Sol Ring\".")
-    return _resultado(nome_deck, comandantes, cartas, "lista colada", "")
+    return _resultado(nome_deck, comandantes, cartas, "lista colada", "",
+                      maybeboard)
 
 
 def _tem_carta(linha: str) -> bool:
@@ -414,17 +490,22 @@ def _limpar_nome(bruto: str) -> str:
 
 
 def _resultado(nome: str, comandantes: list[str], cartas: list[dict],
-               fonte: str, link: str) -> dict:
-    if not comandantes and not cartas:
+               fonte: str, link: str, maybeboard: list[dict] | None = None) -> dict:
+    maybeboard = maybeboard or []
+    # Um deck que só tem maybeboard não é deck vazio: é alguém que guarda a
+    # lista de compras num site e vem cotar aqui.
+    if not comandantes and not cartas and not maybeboard:
         raise ImportarError(
             f"o deck veio vazio do {fonte}. Se ele é privado ou está sem "
             f"cartas, não tem o que trazer.")
     log.evento("importar", "ok", fonte=fonte,
-               comandantes=len(comandantes), linhas=len(cartas))
+               comandantes=len(comandantes), linhas=len(cartas),
+               maybe=len(maybeboard))
     return {
         "nome": (nome or "").strip(),
         "comandantes": comandantes,
         "cartas": cartas,
+        "maybeboard": maybeboard,
         "fonte": fonte,
         "link": link,
     }

@@ -24,6 +24,9 @@
        distinguíveis a 12px de diâmetro. */
     --mana-W:#F5F0D8; --mana-U:#9FC7E8; --mana-B:#9A8FA8;
     --mana-R:#E4907A; --mana-G:#89B894; --mana-C:#B9B4C8;
+    /* A largura útil da tela, num lugar só: o cabeçalho e o corpo têm que
+       ter a mesma, senão o nome do deck não fica em cima do deck. */
+    --largura:1560px;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -71,7 +74,7 @@
     border-bottom:1px solid var(--border);
   }
   .topo-in{
-    max-width:1320px;margin:0 auto;padding:10px 16px;
+    max-width:var(--largura);margin:0 auto;padding:10px 16px;
     display:flex;align-items:center;gap:12px;flex-wrap:wrap;
   }
   .rune{
@@ -122,11 +125,27 @@
   .contador.passou{border-color:var(--red);}
   .contador.passou b{color:var(--red);}
 
-  /* ---------------- corpo ---------------- */
+  /* ---------------- corpo ----------------
+
+     Três colunas: maybeboard, deck, busca. O deck no meio porque é o que a
+     pessoa olha; as duas colunas de apoio de cada lado dele porque as duas
+     SERVEM ao deck — a da esquerda guarda o que ainda não entrou, a da
+     direita procura o que vai entrar.
+
+     1560 e não os 1320 de antes: a coluna do maybeboard tirou 306px do
+     deck, e no 1320 a lista dele voltaria a caber numa coluna só de cartas.
+     Em 1560, num monitor de 1440 real, o deck ainda fecha as duas colunas de
+     352px que a lista precisa pra não truncar nome. */
   .corpo{
-    max-width:1320px;margin:0 auto;padding:18px 16px 90px;
-    display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:18px;align-items:start;
+    max-width:var(--largura);margin:0 auto;padding:18px 16px 90px;
+    display:grid;
+    grid-template-columns:288px minmax(0,1fr) 372px;
+    gap:18px;align-items:start;
   }
+  /* A faixa de orçamento atravessa as três colunas, logo abaixo do
+     cabeçalho: é um número só, e um número só não merece uma coluna inteira
+     — era o painel mais alto da lateral pelo mais raso dos conteúdos. */
+  .corpo > .faixa{grid-column:1 / -1;}
   .painel{
     background:var(--surface);border:1px solid var(--border);border-radius:14px;
     padding:16px;box-shadow:0 20px 40px -22px rgba(0,0,0,.6);
@@ -138,6 +157,54 @@
   .lateral{position:sticky;top:74px;display:flex;flex-direction:column;gap:14px;
     max-height:calc(100vh - 92px);overflow-y:auto;}
   .lateral > .painel{flex:none;}
+
+  /* ---------------- coluna do maybeboard ----------------
+     Grudada no topo como a busca, e pelo mesmo motivo: as duas são usadas
+     ENQUANTO se rola a lista do deck, e uma coluna de apoio que sai da tela
+     quando a pessoa desce nas 99 cartas não apoia nada. */
+  .talvez-col{position:sticky;top:74px;display:flex;flex-direction:column;
+    max-height:calc(100vh - 92px);min-height:0;}
+  .talvez-col > .painel{display:flex;flex-direction:column;min-height:0;
+    max-height:100%;}
+  .talvez-lista{overflow-y:auto;margin:0 -4px;padding:0 4px;min-height:0;}
+  /* Uma coluna, não duas: a área é estreita de propósito. É a margem do
+     caderno, não uma segunda lista de deck. */
+  .talvez-lista .colunas{grid-template-columns:minmax(0,1fr);}
+  .talvez-lista .grupo{margin-bottom:11px;}
+  .talvez-lista .linha{gap:6px;padding:4px 4px;}
+  .talvez-lista .grupo h3{font-size:11px;}
+  .talvez-topo{display:flex;align-items:center;gap:6px;margin:0 0 8px;}
+  .talvez-topo h2{margin:0;flex:1;}
+  .talvez-n{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);
+    border:1px solid var(--border);border-radius:999px;padding:1px 7px;flex:none;
+  }
+  /* Recolher é botão de verdade, não enfeite: quem não usa maybeboard tem
+     uma coluna inteira devolvida pro deck, e a escolha fica guardada no
+     navegador pra não ser refeita a cada visita. */
+  .corpo.talvez-fechado{grid-template-columns:44px minmax(0,1fr) 372px;}
+  .corpo.talvez-fechado .talvez-col > .painel{padding:10px 6px;align-items:center;}
+  .corpo.talvez-fechado .talvez-lista,
+  .corpo.talvez-fechado .talvez-topo h2,
+  .corpo.talvez-fechado .talvez-nota,
+  .corpo.talvez-fechado .talvez-vazio{display:none;}
+  .corpo.talvez-fechado .talvez-topo{flex-direction:column;gap:8px;}
+  .talvez-vertical{
+    display:none;writing-mode:vertical-rl;font-family:'IBM Plex Mono',monospace;
+    font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--gold-light);white-space:nowrap;
+  }
+  .corpo.talvez-fechado .talvez-vertical{display:block;}
+  .talvez-vazio{
+    color:var(--text-muted);font-size:11.5px;line-height:1.55;
+    border:1px dashed var(--border);border-radius:10px;padding:12px 10px;
+    text-align:center;
+  }
+  /* O alvo de soltar precisa ficar visível ANTES de a carta chegar nele,
+     senão ninguém descobre que dá pra arrastar. */
+  .alvo-solta{outline:2px dashed var(--gold);outline-offset:3px;
+    background:rgba(201,162,39,.07);border-radius:10px;}
+  .linha.arrastando{opacity:.4;}
   h2.secao{
     font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;
     text-transform:uppercase;color:var(--gold-light);margin:0 0 10px;font-weight:600;
@@ -191,6 +258,10 @@
   }
   .achado.no-deck{opacity:.45;}
   .achado.no-deck .nome b::after{content:" ✓";color:var(--green);}
+  /* No maybeboard não é "já tem": é "você já olhou pra ela". Some menos que
+     a do deck (ainda é uma carta que pode entrar) e a marca é outra. */
+  .achado.no-talvez{opacity:.62;}
+  .achado.no-talvez .nome b::after{content:" ◇";color:var(--gold-light);}
 
   /* ---------------- gaveta (filtros avançados e importação) ----------------
      Sete filtros não cabem como chip na lateral de 372px, e mesmo que
@@ -297,17 +368,6 @@
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;
     color:var(--text-muted);font-weight:400;
   }
-  .previa-orc{
-    display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-    padding:9px 11px;border:1px solid var(--border);border-radius:9px;
-    background:var(--surface-2);margin-top:10px;
-  }
-  .previa-orc .rot{font-size:11.5px;color:var(--text-muted);line-height:1.4;}
-  .previa-orc .tot{
-    font-family:'IBM Plex Mono',monospace;font-size:20px;color:var(--gold-light);
-    flex:none;
-  }
-  .previa-orc .tot small{font-size:11px;color:var(--text-muted);}
 
   /* ---------------- símbolos de mana ---------------- */
   .mana{display:inline-flex;gap:2px;align-items:center;flex:none;}
@@ -321,6 +381,58 @@
   .pip.B{background:var(--mana-B);} .pip.R{background:var(--mana-R);}
   .pip.G{background:var(--mana-G);} .pip.C{background:var(--mana-C);}
 
+  /* ---------------- faixa de orçamento ----------------
+     Era um painel de coluna inteira com título, parágrafo de explicação,
+     prévia, dois botões e o resultado — tudo isso pra dizer um número. Aqui
+     é uma linha: o número grande à esquerda, os botões à direita, a
+     explicação atrás de um "?" pra quem quiser. O resultado da cotação, que
+     é o único conteúdo alto, abre embaixo e usa a largura das três colunas
+     em vez de descer 400px numa coluna de 372. */
+  .faixa{padding:11px 14px;}
+  .faixa-in{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .faixa-num{display:flex;align-items:baseline;gap:9px;flex:1;min-width:210px;}
+  .faixa-num .tot{
+    font-family:'IBM Plex Mono',monospace;font-size:23px;color:var(--gold-light);
+    line-height:1;flex:none;
+  }
+  .faixa-num .tot small{font-size:11px;color:var(--text-muted);}
+  .faixa-num .rot{font-size:11.5px;color:var(--text-muted);line-height:1.45;}
+  .faixa-acoes{display:flex;gap:7px;flex-wrap:wrap;flex:none;}
+  .btn.redondo{width:31px;height:31px;padding:0;border-radius:50%;flex:none;}
+  .faixa-nota{
+    font-size:11.5px;color:var(--text-muted);line-height:1.55;
+    margin:9px 0 0;padding-top:9px;border-top:1px dashed var(--border);
+  }
+  /* A cotação em colunas: fontes, cartas caras e o resto lado a lado, que é
+     o formato que uma faixa larga pede — e o que evita o resultado empurrar
+     o deck pra baixo. */
+  .orc-resultado:not(:empty){
+    margin-top:11px;padding-top:11px;border-top:1px dashed var(--border);
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+    gap:4px 22px;align-items:start;
+  }
+  .orc-resultado .caras{margin-top:0;}
+
+  /* ---------------- ferramentas de análise ----------------
+     Abaixo do deck e em duas colunas. A lateral direita tinha cinco painéis
+     empilhados e achar cada um custava rolar a coluna inteira; aqui as
+     quatro análises ficam juntas, no lugar onde se OLHA o deck em vez de no
+     lugar onde se ADICIONA carta. É a divisão que a tela passou a ter:
+     direita monta, embaixo confere. */
+  .ferramentas{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+    gap:14px;align-items:start;margin-top:14px;
+  }
+  .ferramentas > .painel{min-width:0;}
+  /* Aberto por um atalho de outro canto da tela (o botão de mana base no
+     cabeçalho de Terrenos), o painel pisca uma vez: sem isso o clique rola
+     a página e não fica claro o que respondeu. */
+  @keyframes pisca-painel{
+    from{box-shadow:0 0 0 2px var(--gold);}
+    to{box-shadow:0 20px 40px -22px rgba(0,0,0,.6);}
+  }
+  .painel.chamado{animation:pisca-painel 1.1s ease-out;}
+
   /* ---------------- lista do deck ---------------- */
   .grupo{margin-bottom:16px;}
   .grupo:last-child{margin-bottom:0;}
@@ -329,8 +441,81 @@
     font-size:12px;font-weight:600;color:var(--text-muted);
     text-transform:uppercase;letter-spacing:.05em;
   }
-  .grupo h3::after{content:"";flex:1;border-top:1px dashed var(--border);}
+  /* O tracejado era um `::after` e virou um elemento: ele precisa ficar
+     ENTRE o nome do grupo e as ações dele, e um pseudoelemento só sabe ficar
+     no fim. */
+  .grupo h3 .traco{flex:1;border-top:1px dashed var(--border);min-width:10px;}
   .grupo h3 .n{font-family:'IBM Plex Mono',monospace;color:var(--gold-light);}
+  /* A categoria feita à mão se distingue da que sai do tipo da carta: uma é
+     decisão de quem monta e a outra é fato da carta — e só a primeira pode
+     ser renomeada, movida ou apagada. */
+  .grupo.propria h3{color:var(--gold-light);}
+  .grupo.propria h3::before{
+    content:"";width:5px;height:5px;border-radius:50%;background:var(--gold);flex:none;
+  }
+  .grupo.fora-da-conta h3 .n{color:var(--text-muted);}
+  .grupo h3 .fora-rot{
+    font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.05em;
+    color:var(--text-muted);border:1px solid var(--border);border-radius:999px;
+    padding:1px 7px;text-transform:none;cursor:help;font-weight:400;flex:none;
+  }
+  /* As ações do grupo só aparecem no hover, como as da linha: um ⋮ em cada
+     um dos dez cabeçalhos seria mais ruído do que lista. */
+  .grupo h3 .acoes-grupo{display:flex;gap:3px;flex:none;opacity:0;
+    transition:opacity .12s;}
+  .grupo:hover h3 .acoes-grupo,
+  .grupo h3 .acoes-grupo:focus-within{opacity:1;}
+  @media (hover:none){ .grupo h3 .acoes-grupo{opacity:1;} }
+  .grupo h3 .mini{width:19px;height:19px;font-size:11px;}
+  /* O botão da mana base mora no cabeçalho de Terrenos: é onde a pergunta
+     "meus terrenos estão certos?" nasce, e isso poupa procurar a resposta
+     num painel do outro lado da tela. */
+  .btn-atalho{
+    border:1px solid var(--border);background:var(--surface-2);
+    color:var(--text-muted);border-radius:999px;padding:2px 9px;font-size:10px;
+    cursor:pointer;flex:none;font-family:'Inter',sans-serif;
+    text-transform:none;letter-spacing:0;font-weight:500;
+  }
+  .btn-atalho:hover{border-color:var(--gold);color:var(--gold-light);}
+  .rodape-deck{
+    display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;
+    padding-top:12px;border-top:1px dashed var(--border);
+  }
+  .grupo-vazio{
+    font-size:11.5px;color:var(--text-muted);border:1px dashed var(--border);
+    border-radius:9px;padding:9px 11px;line-height:1.5;
+  }
+
+  /* ---------------- menu de categoria ----------------
+     Um menu ancorado, e não arrastar-e-soltar como único caminho: arrastar
+     funciona no mouse e não funciona no toque, e esta tela inteira é usável
+     no celular. O arrastar existe POR CIMA disto, como atalho de quem tem
+     mouse — nunca como a única forma de mover uma carta. */
+  .menu{
+    position:fixed;z-index:80;min-width:226px;max-width:290px;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:11px;
+    box-shadow:0 22px 44px -14px rgba(0,0,0,.85);padding:6px;
+    max-height:min(70vh,440px);overflow-y:auto;
+  }
+  .menu h4{
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--text-muted);margin:7px 8px 4px;
+    font-weight:600;
+  }
+  .menu button{
+    display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+    background:transparent;border:1px solid transparent;border-radius:8px;
+    color:var(--text);padding:7px 9px;font-size:12.5px;cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  .menu button:hover,.menu button:focus-visible{
+    background:var(--surface);border-color:var(--border);
+  }
+  .menu button .marca{width:12px;flex:none;color:var(--gold-light);}
+  .menu button .rot-menu{flex:1;min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;}
+  .menu button.perigo:hover{border-color:var(--red);color:var(--red);}
+  .menu .risco{height:1px;background:var(--border);margin:5px 4px;}
   /* 352px e não os 288px de antes: a coluna de preço tomou ~46px de cada
      linha, e no 288 o nome passou a ser cortado em quase um terço das cartas
      nas larguras de tablet. Medido — abaixo de 352 o corte volta; acima,
@@ -666,24 +851,66 @@
     .linha .valor{display:none;}
   }
 
+  /* Entre 900 e 1200 não cabem três colunas com o deck em duas: o
+     maybeboard recolhe sozinho e vira a fita vertical, que continua sendo um
+     clique pra abrir. Recolher uma coluna é melhor do que espremer as três
+     até nenhuma servir. */
+  @media (max-width:1200px){
+    .corpo{grid-template-columns:44px minmax(0,1fr) 340px;}
+    .corpo .talvez-col > .painel{padding:10px 6px;align-items:center;}
+    .corpo .talvez-lista,.corpo .talvez-topo h2,
+    .corpo .talvez-nota,.corpo .talvez-vazio{display:none;}
+    .corpo .talvez-topo{flex-direction:column;gap:8px;}
+    .corpo .talvez-vertical{display:block;}
+    /* …a não ser que a pessoa tenha aberto de propósito. Aí ele volta a ser
+       coluna, e quem cede o espaço é a busca. */
+    .corpo.talvez-aberto{grid-template-columns:250px minmax(0,1fr) 320px;}
+    .corpo.talvez-aberto .talvez-col > .painel{padding:16px;align-items:stretch;}
+    .corpo.talvez-aberto .talvez-lista,
+    .corpo.talvez-aberto .talvez-topo h2,
+    .corpo.talvez-aberto .talvez-nota,
+    .corpo.talvez-aberto .talvez-vazio{display:block;}
+    .corpo.talvez-aberto .talvez-topo{flex-direction:row;gap:6px;}
+    .corpo.talvez-aberto .talvez-vertical{display:none;}
+  }
+
+  /* No celular não existem colunas: existem abas, e cada aba é uma tela
+     inteira de uma coisa só. A regra esconde TUDO e mostra a região da aba —
+     assim uma região nova (o maybeboard foi uma) não precisa ser lembrada em
+     cinco lugares pra não vazar nas outras abas, que foi como a lista antiga
+     de exceções cresceu. */
   @media (max-width:900px){
-    .corpo{grid-template-columns:minmax(0,1fr);padding-bottom:76px;}
+    .corpo,.corpo.talvez-fechado,.corpo.talvez-aberto{
+      grid-template-columns:minmax(0,1fr);padding-bottom:76px;
+    }
     .lateral{position:static;max-height:none;}
     .lateral .resultados{max-height:52vh;}
+    .talvez-col{position:static;max-height:none;}
+    .talvez-col > .painel{max-height:none;padding:16px;align-items:stretch;}
+    .talvez-lista,.talvez-topo h2,.talvez-nota,.talvez-vazio{display:block;}
+    .talvez-topo{flex-direction:row;gap:6px;}
+    .talvez-vertical,#btn-recolher-talvez{display:none;}
+    .ferramentas{grid-template-columns:minmax(0,1fr);}
     .abas{display:flex;}
     .previa{display:none;}
-    .corpo[data-aba="deck"] .lateral{display:none;}
-    .corpo[data-aba="buscar"] .principal{display:none;}
-    .corpo[data-aba="buscar"] #painel-analise,
-    .corpo[data-aba="buscar"] #painel-manabase,
-    .corpo[data-aba="buscar"] #painel-poder,
-    .corpo[data-aba="buscar"] #painel-combos,
-    .corpo[data-aba="buscar"] #painel-orcamento{display:none;}
-    .corpo[data-aba="analise"] .principal{display:none;}
-    /* Sugestão fica na aba Buscar, e não na Análise: ela existe pra ADICIONAR
-       carta, que é o que a pessoa está fazendo ali. */
-    .corpo[data-aba="analise"] #painel-busca,
-    .corpo[data-aba="analise"] #painel-sugestoes{display:none;}
+
+    .corpo > [data-regiao]{display:none;}
+    .corpo[data-aba="deck"] [data-regiao="deck"],
+    .corpo[data-aba="deck"] [data-regiao="orcamento"],
+    .corpo[data-aba="talvez"] [data-regiao="talvez"],
+    .corpo[data-aba="buscar"] [data-regiao="buscar"],
+    .corpo[data-aba="analise"] [data-regiao="deck"],
+    .corpo[data-aba="analise"] [data-regiao="orcamento"]{display:block;}
+    .corpo[data-aba="buscar"] [data-regiao="buscar"]{display:flex;}
+    /* Deck e análise moram na MESMA coluna agora, então as duas abas
+       mostram a mesma região e escondem metade dela: sem isto a aba "Deck"
+       traria as quatro análises junto e a aba "Análise" traria as 99
+       cartas na frente delas. */
+    .corpo[data-aba="deck"] .ferramentas{display:none;}
+    .corpo[data-aba="analise"] #painel-deck,
+    .corpo[data-aba="analise"] #heroi,
+    .corpo[data-aba="analise"] #aviso-base{display:none;}
+    .corpo[data-aba="analise"] .ferramentas{display:grid;margin-top:0;}
   }
 </style>
 </head>
@@ -712,8 +939,55 @@
 
 <main class="corpo" id="corpo" data-aba="deck">
 
+  <!-- ------------------ faixa de orçamento ------------------
+       Atravessa as três colunas, entre o cabeçalho e o deck. Era um painel
+       de coluna inteira pra dizer um número; aqui é uma linha, com a
+       explicação atrás do "?" e o resultado da cotação abrindo embaixo, na
+       largura toda. -->
+  <section class="painel faixa" id="faixa-orcamento" data-regiao="orcamento" hidden>
+    <div class="faixa-in">
+      <div class="faixa-num" id="faixa-num"></div>
+      <div class="faixa-acoes">
+        <button class="btn verde" id="btn-cotar">Cotar preços</button>
+        <button class="btn" id="btn-exportar">Exportar lista</button>
+        <button class="btn redondo" id="btn-orc-nota" aria-expanded="false"
+                aria-controls="orc-nota" title="Como esta conta é feita"
+                aria-label="Como esta conta é feita">?</button>
+      </div>
+    </div>
+    <p class="faixa-nota" id="orc-nota" hidden>Cota o preço de comprar as cartas
+      de verdade, nas mesmas duas fontes da tela de impressão. O comandante e os
+      terrenos básicos ficam de fora do total — é o critério do Commander 500.
+      O <b>maybeboard nunca entra</b> na cotação; o sideboard entra, e essa é a
+      diferença prática entre os dois.</p>
+    <div id="orc-resultado" class="orc-resultado"></div>
+  </section>
+
+  <!-- ------------------ coluna da esquerda: maybeboard ------------------
+       Do lado oposto aos filtros, com o deck no meio: o que talvez entre de
+       um lado, o que se procura pra entrar do outro, e o deck entre os dois.
+       Uma coluna só, de propósito — é a margem do caderno, não uma segunda
+       lista de deck. -->
+  <aside class="talvez-col" data-regiao="talvez">
+    <div class="painel">
+      <div class="talvez-topo">
+        <h2 class="secao">Maybeboard</h2>
+        <span class="talvez-vertical">Maybeboard</span>
+        <span class="talvez-n" id="talvez-n" hidden></span>
+        <button class="mini" id="btn-recolher-talvez" aria-expanded="true"
+                title="Recolher o maybeboard">‹</button>
+      </div>
+      <p class="nota talvez-nota">Cartas em dúvida. Não contam pras 100, não
+        entram na cotação e não aparecem em análise nenhuma — ficam aqui até
+        você decidir. As categorias são as mesmas do deck.</p>
+      <div class="talvez-lista" id="talvez-lista"></div>
+      <div class="talvez-vazio" id="talvez-vazio">Arraste uma carta do deck pra
+        cá — ou use o <b>⋯</b> da linha dela.</div>
+    </div>
+  </aside>
+
   <!-- ------------------ coluna principal: o deck ------------------ -->
-  <section class="principal">
+  <section class="principal" data-regiao="deck">
     <div class="aviso-base" id="aviso-base" hidden></div>
 
     <!-- Estado inicial: sem comandante não existe deck de Commander, então a
@@ -735,14 +1009,75 @@
       <div class="comandante" id="cmd-box"></div>
       <div id="lista-deck"></div>
       <div class="vazio" id="deck-vazio">
-        As 99 cartas entram pela busca ao lado. Comece pelas que o comandante
+        As 99 cartas entram pela busca à direita. Comece pelas que o comandante
         pede — a análise embaixo acompanha a curva e as cores enquanto você monta.
       </div>
+      <div class="rodape-deck">
+        <button class="btn" id="btn-nova-categoria">+ Nova categoria</button>
+        <span class="nota" style="flex:1;min-width:160px;">Categoria é sua:
+          "combo principal", "sac outlet". A carta sem categoria fica no grupo
+          do tipo dela.</span>
+      </div>
+    </div>
+
+    <!-- As análises, embaixo do deck e lado a lado. Eram cinco painéis
+         empilhados na lateral direita, e achar cada um custava rolar a coluna
+         inteira; aqui ficam no lugar onde se OLHA o deck. -->
+    <div class="ferramentas">
+
+      <div class="painel" id="painel-analise">
+        <h2 class="secao">Análise</h2>
+        <div id="apontamentos"></div>
+        <div style="margin-top:14px;">
+          <h2 class="secao">Curva de mana</h2>
+          <div class="barras" id="curva"></div>
+        </div>
+        <div style="margin-top:14px;">
+          <h2 class="secao">Cores e tipos</h2>
+          <div class="distrib" id="distrib"></div>
+        </div>
+      </div>
+
+      <div class="painel" id="painel-poder">
+        <h2 class="secao">Nível de poder</h2>
+        <p class="nota" id="poder-nota">Classifica o deck na escala oficial de
+          brackets do Commander — e mostra <b>por quê</b>, carta por carta. Quem
+          classifica é o Commander Spellbook, que acompanha a lista de game
+          changers da Wizards.</p>
+        <button class="btn" id="btn-poder" style="width:100%;margin-top:10px;">
+          Estimar nível</button>
+        <div id="poder-resultado" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="painel" id="painel-manabase">
+        <h2 class="secao">Mana base</h2>
+        <p class="nota" id="mb-nota">Quantos terrenos a curva pede, quantas
+          fontes de cada cor o deck tem e quantas precisaria. Conta feita aqui,
+          sobre o seu deck — depois da primeira vez, acompanha cada mudança.</p>
+        <button class="btn" id="btn-manabase" style="width:100%;margin-top:10px;">
+          Analisar mana base</button>
+        <div id="mb-resultado" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="painel" id="painel-combos">
+        <h2 class="secao">Combos</h2>
+        <p class="nota" id="combos-nota">O Commander Spellbook conhece os combos
+          que já existem no deck — e os que ficam a <b>uma carta</b> de fechar.
+          A busca é uma consulta só, e só acontece quando você pede.</p>
+        <button class="btn" id="btn-combos" style="width:100%;margin-top:10px;">
+          Procurar combos</button>
+        <div id="combos-resultado" style="margin-top:12px;"></div>
+      </div>
+
     </div>
   </section>
 
-  <!-- ------------------ lateral: busca, análise, orçamento ------------------ -->
-  <aside class="lateral">
+  <!-- ------------------ lateral direita: só o que ADICIONA carta ------------------
+       Busca e sugestões, e mais nada. As análises desceram pra baixo do
+       deck: esta coluna é usada com a mão na busca enquanto a lista do deck
+       fica parada do lado, e cinco painéis de análise no meio do caminho
+       transformavam "achar a busca" em rolar a coluna inteira. -->
+  <aside class="lateral" data-regiao="buscar">
 
     <div class="painel" id="painel-busca" style="display:flex;flex-direction:column;min-height:0;">
       <h2 class="secao">Adicionar cartas</h2>
@@ -771,72 +1106,12 @@
       <div id="sug-resultado" style="margin-top:4px;"></div>
     </div>
 
-    <div class="painel" id="painel-analise">
-      <h2 class="secao">Análise</h2>
-      <div id="apontamentos"></div>
-      <div style="margin-top:14px;">
-        <h2 class="secao">Curva de mana</h2>
-        <div class="barras" id="curva"></div>
-      </div>
-      <div style="margin-top:14px;">
-        <h2 class="secao">Cores e tipos</h2>
-        <div class="distrib" id="distrib"></div>
-      </div>
-    </div>
-
-    <div class="painel" id="painel-manabase">
-      <h2 class="secao">Mana base</h2>
-      <p class="nota" id="mb-nota">Quantos terrenos a curva pede, quantas
-        fontes de cada cor o deck tem e quantas precisaria. Conta feita aqui,
-        sobre o seu deck — depois da primeira vez, acompanha cada mudança.</p>
-      <button class="btn" id="btn-manabase" style="width:100%;margin-top:10px;">
-        Analisar mana base</button>
-      <div id="mb-resultado" style="margin-top:12px;"></div>
-    </div>
-
-    <div class="painel" id="painel-poder">
-      <h2 class="secao">Nível de poder</h2>
-      <p class="nota" id="poder-nota">Classifica o deck na escala oficial de
-        brackets do Commander — e mostra <b>por quê</b>, carta por carta. Quem
-        classifica é o Commander Spellbook, que acompanha a lista de game
-        changers da Wizards.</p>
-      <button class="btn" id="btn-poder" style="width:100%;margin-top:10px;">
-        Estimar nível</button>
-      <div id="poder-resultado" style="margin-top:12px;"></div>
-    </div>
-
-    <div class="painel" id="painel-combos">
-      <h2 class="secao">Combos</h2>
-      <p class="nota" id="combos-nota">O Commander Spellbook conhece os combos
-        que já existem no deck — e os que ficam a <b>uma carta</b> de fechar.
-        A busca é uma consulta só, e só acontece quando você pede.</p>
-      <button class="btn" id="btn-combos" style="width:100%;margin-top:10px;">
-        Procurar combos</button>
-      <div id="combos-resultado" style="margin-top:12px;"></div>
-    </div>
-
-    <div class="painel" id="painel-orcamento">
-      <h2 class="secao">Orçamento</h2>
-      <p class="nota" id="orc-nota">Cota o preço de comprar as cartas de
-        verdade, nas mesmas duas fontes da tela de impressão. O comandante e os
-        terrenos básicos ficam de fora do total — é o critério do Commander 500.</p>
-      <!-- A prévia é conta local, sobre o preço que a base de cartas já
-           guarda: aparece sozinha e acompanha cada carta adicionada. Ela NÃO
-           substitui a cotação — diz a ordem de grandeza enquanto se monta,
-           que é a pergunta de quem monta com teto de preço na cabeça. -->
-      <div id="orc-previa"></div>
-      <div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap;">
-        <button class="btn verde" id="btn-cotar" style="flex:1;">Cotar preços</button>
-        <button class="btn" id="btn-exportar">Exportar lista</button>
-      </div>
-      <div id="orc-resultado" style="margin-top:12px;"></div>
-    </div>
-
   </aside>
 </main>
 
 <nav class="abas" id="abas">
   <button data-aba="deck" class="ativa">Deck</button>
+  <button data-aba="talvez">Talvez <span id="aba-talvez-n"></span></button>
   <button data-aba="buscar">Buscar</button>
   <button data-aba="analise">Análise</button>
 </nav>
@@ -974,7 +1249,30 @@ const $ = (id) => document.getElementById(id);
 const CORES = ["W","U","B","R","G"];
 const NOME_COR = {W:"Branco",U:"Azul",B:"Preto",R:"Vermelho",G:"Verde",C:"Incolor"};
 
-/* Categorias da lista, na ordem em que aparecem. A primeira que casar o
+/* -------------------------------------------------------------- categorias
+
+   Duas espécies, e a diferença entre elas é quem decidiu:
+
+   * As AUTOMÁTICAS saem do tipo da carta e ninguém escolhe — um Sol Ring
+     está em Artefatos porque ele é um artefato.
+   * As PRÓPRIAS são de quem monta ("combo principal", "sac outlet") e moram
+     na entrada da carta. Elas existem porque a pergunta que a lista responde
+     não é "que tipo é isto?", é "o que esta carta faz no meu deck?".
+
+   Uma carta com categoria própria sai do grupo do tipo dela e vai pro grupo
+   escolhido: são grupos do mesmo tipo de coisa, não duas camadas. Ter uma
+   carta em dois lugares faria a soma dos grupos passar de 100.
+
+   `Sideboard` é a única embutida que não sai do tipo, e a única categoria
+   que muda uma conta: fica FORA das 100 (senão o contador viveria acusando
+   "5 cartas além das 100" num deck legal), mas continua na cotação e na
+   lista de impressão — é carta que a pessoa quer ter. É o que a separa do
+   maybeboard, e o servidor tem a mesma regra em `decks.CATEGORIAS_FORA_DA_CONTA`. */
+
+const CATEGORIA_SIDEBOARD = "Sideboard";
+const CATEGORIAS_FORA_DA_CONTA = new Set([CATEGORIA_SIDEBOARD]);
+
+/* Categorias automáticas, na ordem em que aparecem. A primeira que casar o
    type_line ganha — daí Terreno vir antes de Criatura (terreno-criatura é
    terreno pra quem monta) e Artefato vir depois de Criatura (o Solemn é
    criatura, não artefato, na hora de contar bicho). */
@@ -1013,7 +1311,9 @@ const estado = {
   id: null,
   nome: "Deck sem nome",
   comandantes: [],   // cartas completas
-  cartas: [],        // [{quantidade, carta}]
+  cartas: [],        // [{quantidade, carta, categoria}]
+  maybe: [],         // o mesmo formato — o que ainda está em dúvida
+  categorias: [],    // os nomes criados à mão, na ordem escolhida
   validacao: null,   // a do servidor, quando chega
   filtros: {...FILTROS_VAZIOS},
   desfazer: [],
@@ -1048,15 +1348,73 @@ function identidadeDoDeck(){
   return CORES.filter(c => cores.has(c)).join("");
 }
 
-function totalCartas(){
-  return estado.comandantes.length +
-         estado.cartas.reduce((n, e) => n + e.quantidade, 0);
+/* As cartas que valem pras 100. Toda conta sobre "o deck" passa por aqui:
+   contador, curva, distribuição, assinatura pros combos. O sideboard fica de
+   fora, e o maybeboard nem está nesta lista. */
+function cartasContadas(){
+  return estado.cartas.filter(e => !foraDaConta(e));
 }
 
-function categoriaDe(carta){
-  const t = (carta.tipo || "").toLowerCase();
+function foraDaConta(entrada){
+  return CATEGORIAS_FORA_DA_CONTA.has(entrada.categoria || "");
+}
+
+function totalCartas(){
+  return estado.comandantes.length +
+         cartasContadas().reduce((n, e) => n + e.quantidade, 0);
+}
+
+/* A categoria automática, a que sai do tipo da carta. */
+function categoriaAutomatica(carta){
+  const t = ((carta && carta.tipo) || "").toLowerCase();
   for (const [nome, casa] of CATEGORIAS) if (casa(t)) return nome;
   return "Outros";
+}
+
+/* Onde a carta é desenhada. A escolhida à mão ganha da automática — é o
+   único jeito de "combo principal" existir, já que nenhum type_line diz
+   isso. */
+function categoriaDe(entrada){
+  return (entrada && entrada.categoria) || categoriaAutomatica(entrada?.carta);
+}
+
+/* A ordem dos grupos na lista, e ela conta uma história: primeiro o que a
+   pessoa decidiu (as categorias próprias, na ordem em que ela as pôs),
+   depois o que a carta é (os tipos), e por último o que está fora da conta.
+   O contrário — tipos primeiro — enterraria a organização que ela fez no
+   meio de nove grupos automáticos. */
+function ordemDasCategorias(entradas){
+  const usadas = new Set(entradas.map(categoriaDe));
+  const automaticas = CATEGORIAS.map(c => c[0]).concat(["Outros"]);
+  const proprias = estado.categorias.filter(c => !automaticas.includes(c));
+  const ordem = [
+    ...proprias,
+    ...automaticas.filter(c => usadas.has(c)),
+    ...[...CATEGORIAS_FORA_DA_CONTA].filter(c => usadas.has(c)),
+  ];
+  // Rede de segurança, e ela não é teórica: uma carta pode carregar uma
+  // categoria que a lista não tem (um deck salvo por uma versão anterior, um
+  // Ctrl+Z pra antes da categoria existir). Sem isto o grupo dela não seria
+  // desenhado e a carta SUMIRIA da tela — continuando no deck, no contador e
+  // na cotação. Uma carta invisível que se paga é o pior estrago possível
+  // aqui, e custa uma linha evitá-lo.
+  for (const cat of usadas) if (!ordem.includes(cat)) ordem.push(cat);
+  return ordem;
+}
+
+/* Toda categoria que a tela sabe oferecer no menu, própria ou não. */
+function todasAsCategorias(){
+  return [...estado.categorias,
+          ...CATEGORIAS.map(c => c[0]), "Outros", CATEGORIA_SIDEBOARD];
+}
+
+function ehPropria(cat){
+  return estado.categorias.includes(cat);
+}
+
+/* As duas listas pelo nome que o resto do código usa pra falar delas. */
+function lista(tabuleiro){
+  return tabuleiro === "talvez" ? estado.maybe : estado.cartas;
 }
 
 /* Símbolos de mana: "{2}{G}{W}" vira bolinhas. Híbrido ("{G/W}") sai com as
@@ -1142,6 +1500,11 @@ function valorHTML(entrada){
    (`cotacao.filtrar_cotaveis`): comandante e terreno básico ficam de fora.
    Duas contas diferentes pro mesmo deck na mesma tela seriam pior do que
    número nenhum. */
+/* O maybeboard NÃO entra aqui, e isso é a razão de ele existir: quem põe
+   uma carta em dúvida quer saber quanto o deck custa SEM ela. O sideboard
+   entra — é carta que a pessoa quer ter. É a mesma divisão do servidor
+   (`decks.para_cotacao`), e as duas precisam concordar, senão a prévia e a
+   cotação dão números diferentes pro mesmo deck. */
 function orcamentoLocal(){
   let total = 0, semPreco = 0, fora = 0, cartas = 0;
   for (const entrada of estado.cartas){
@@ -1157,23 +1520,26 @@ function orcamentoLocal(){
 }
 
 function desenharPreviaOrcamento(){
-  const caixa = $("orc-previa");
-  if (!caixa) return;
+  const faixa = $("faixa-orcamento");
+  // A faixa acompanha o DECK, não o total: um deck de comandante e 30
+  // florestas soma zero (básico não entra na conta do Commander 500) e
+  // mesmo assim precisa dos botões de cotar e de exportar. Esconder a faixa
+  // pelo total esconderia o "Exportar lista" de quem tem o que exportar.
+  faixa.hidden = !estado.comandantes.length && !estado.cartas.length;
+  if (faixa.hidden) return;
+
   const o = orcamentoLocal();
-  if (!o.cartas){
-    caixa.innerHTML = "";
-    return;
-  }
-  const incompleto = o.semPreco
-    ? `<br>${o.semPreco} sem preço na base — o total é menor que o real.` : "";
-  caixa.innerHTML = `
-    <div class="previa-orc" title="Soma do preço da base local, que é o do dia
-da última sincronização. Não é cotação.">
-      <span class="rot">Prévia pela base local<br>
-        <span style="font-size:11px">${o.cartas} carta(s) contadas,
-        ${o.fora} fora do total${incompleto}</span></span>
-      <span class="tot">${moeda(o.total)} <small>USD</small></span>
-    </div>`;
+  const talvez = estado.maybe.reduce((n, e) => n + e.quantidade, 0);
+  const partes = [];
+  if (o.cartas) partes.push(`${o.cartas} carta(s) contadas`);
+  if (o.fora) partes.push(`${o.fora} fora do total`);
+  if (o.semPreco) partes.push(`${o.semPreco} sem preço na base`);
+  if (talvez) partes.push(`${talvez} no maybeboard, fora da conta`);
+  if (!partes.length) partes.push("nada a somar ainda");
+  $("faixa-num").innerHTML = `
+    <span class="tot" title="Soma do preço da base local, do dia da última
+sincronização. Não é cotação.">${moeda(o.total)} <small>USD</small></span>
+    <span class="rot"><b>Prévia pela base local</b><br>${partes.join(" · ")}</span>`;
 }
 
 /* ------------------------------------------------------- validação instantânea
@@ -1199,6 +1565,11 @@ function validarLocal(){
       mensagem:`São ${total - 100} carta(s) além das 100 do formato.`});
   }
 
+  // O maybeboard não passa por aqui: é rascunho, e acusar identidade de cor
+  // numa carta que a pessoa ainda está pensando se usa seria alarme sobre
+  // uma decisão que ela nem tomou. O sideboard passa — fora da CONTA não é
+  // fora das REGRAS, e uma carta guardada pra trocar depois precisa caber no
+  // deck em que vai entrar. Mesma divisão do `decks.validar`.
   for (const {carta, quantidade} of estado.cartas){
     if (!carta) continue;
     if (quantidade > 1 && !carta.basico && !carta.ilimitada){
@@ -1237,10 +1608,16 @@ async function api(caminho, opcoes){
 }
 
 function corpoDoDeck(){
+  const linha = (e) => ({nome: e.carta.nome, quantidade: e.quantidade,
+                         categoria: e.categoria || ""});
   return {
     nome: estado.nome,
     comandantes: estado.comandantes.map(c => c.nome),
-    cartas: estado.cartas.map(e => ({nome: e.carta.nome, quantidade: e.quantidade})),
+    cartas: estado.cartas.map(linha),
+    maybeboard: estado.maybe.map(linha),
+    // Vão inteiras, inclusive as vazias: uma categoria recém-criada some
+    // antes de receber a primeira carta se ela só existir nas entradas.
+    categorias: estado.categorias,
   };
 }
 
@@ -1328,6 +1705,7 @@ function atualizarBotaoMeus(){
 
 function desenharTudo(){
   desenharDeck();
+  desenharMaybe();
   desenharAnalise();
   desenharContador();
   desenharPreviaOrcamento();
@@ -1369,51 +1747,121 @@ function desenharDeck(){
          + Adicionar parceiro</button>`);
   }
 
+  $("lista-deck").innerHTML = gruposHTML(estado.cartas, identidade, "deck");
+  $("deck-vazio").hidden = estado.cartas.length > 0;
+}
+
+/* ---------------------------------------------------------------- maybeboard
+
+   A mesma lista, com as mesmas categorias e o mesmo desenho de linha — de
+   propósito. Mover uma carta pra cá não pode parecer mudar de programa: é a
+   mesma carta, no mesmo deck, com a decisão adiada. O que muda é uma coluna
+   só (a área é estreita) e o fato de nada aqui contar em lugar nenhum. */
+function desenharMaybe(){
+  const n = estado.maybe.reduce((soma, e) => soma + e.quantidade, 0);
+  $("talvez-n").hidden = !n;
+  $("talvez-n").textContent = n;
+  $("aba-talvez-n").textContent = n ? `(${n})` : "";
+  $("talvez-vazio").hidden = n > 0;
+  $("talvez-lista").innerHTML = n
+    ? gruposHTML(estado.maybe, identidadeDoDeck(), "talvez") : "";
+}
+
+/* Os grupos de uma lista, do jeito que as duas áreas desenham.
+
+   As categorias próprias VAZIAS aparecem mesmo sem carta, e só no deck: uma
+   categoria recém-criada que não se vê na tela parece não ter sido criada, e
+   é justamente nela que a próxima carta vai. No maybeboard elas não
+   aparecem — dez grupos vazios numa coluna de 288px seriam a coluna
+   inteira. */
+function gruposHTML(entradas, identidade, tabuleiro){
   const porCategoria = new Map();
-  for (const entrada of estado.cartas){
-    const cat = categoriaDe(entrada.carta);
+  for (const entrada of entradas){
+    const cat = categoriaDe(entrada);
     if (!porCategoria.has(cat)) porCategoria.set(cat, []);
     porCategoria.get(cat).push(entrada);
   }
 
-  const ordem = CATEGORIAS.map(c => c[0]).concat(["Outros"]);
-  let html = "";
-  for (const cat of ordem){
-    const itens = porCategoria.get(cat);
-    if (!itens) continue;
+  let ordem = ordemDasCategorias(entradas);
+  if (tabuleiro === "talvez") ordem = ordem.filter(c => porCategoria.has(c));
+
+  return ordem.map(cat => {
+    const itens = porCategoria.get(cat) || [];
     itens.sort((a, b) => (a.carta.cmc - b.carta.cmc) ||
                           a.carta.nome.localeCompare(b.carta.nome));
-    const n = itens.reduce((s, e) => s + e.quantidade, 0);
-    const subtotal = itens.reduce((s, e) => s + precoDaEntrada(e), 0);
-    html += `<div class="grupo"><h3>${cat} <span class="n">${n}</span>
-      ${subtotal ? `<span class="valor-grupo">${moeda(subtotal)}</span>` : ""}</h3>
-      <div class="colunas">` +
-      itens.map(e => linhaHTML(e, identidade)).join("") + `</div></div>`;
-  }
-  $("lista-deck").innerHTML = html;
-  $("deck-vazio").hidden = estado.cartas.length > 0;
+    const n = itens.reduce((soma, e) => soma + e.quantidade, 0);
+    // Sem subtotal no maybeboard: ele não entra na cotação, e um preço ao
+    // lado do grupo diria o contrário — a pessoa somaria de cabeça um
+    // dinheiro que a faixa de orçamento não está cobrando dela.
+    const subtotal = tabuleiro === "talvez"
+      ? 0 : itens.reduce((soma, e) => soma + precoDaEntrada(e), 0);
+    const propria = ehPropria(cat);
+    const fora = CATEGORIAS_FORA_DA_CONTA.has(cat);
+    const corpo = itens.length
+      ? `<div class="colunas">${itens.map(e =>
+            linhaHTML(e, identidade, tabuleiro)).join("")}</div>`
+      : `<div class="grupo-vazio">Categoria vazia. Arraste uma carta pra cá,
+           ou escolha esta categoria no <b>⋯</b> da linha dela.</div>`;
+    return `<div class="grupo ${propria ? "propria" : ""} ${fora ? "fora-da-conta" : ""}"
+      data-categoria="${escapar(cat)}" data-tabuleiro="${tabuleiro}">
+      <h3>
+        <span>${escapar(cat)}</span>
+        <span class="n">${n}</span>
+        ${fora ? `<span class="fora-rot" title="O sideboard fica fora das 100
+e fora das análises, mas entra na cotação e na lista de impressão — é carta
+que você quer ter.">fora das 100</span>` : ""}
+        ${subtotal ? `<span class="valor-grupo">${moeda(subtotal)}</span>` : ""}
+        <span class="traco"></span>
+        ${cat === "Terrenos" && tabuleiro === "deck"
+          ? `<button class="btn-atalho" data-abrir-manabase
+               title="A conta de terrenos deste deck, no painel de baixo">⚄ Mana base</button>` : ""}
+        <span class="acoes-grupo">
+          ${propria ? `<button class="mini" data-menu-grupo="${escapar(cat)}"
+             title="Renomear, mover ou apagar a categoria"
+             aria-label="Ações da categoria ${escapar(cat)}">⋯</button>` : ""}
+        </span>
+      </h3>${corpo}</div>`;
+  }).join("");
 }
 
-function linhaHTML(entrada, identidade){
+function linhaHTML(entrada, identidade, tabuleiro){
   const c = entrada.carta;
   const fora = (c.identidade||"").split("").filter(x => !identidade.includes(x));
   const repetida = entrada.quantidade > 1 && !c.basico && !c.ilimitada;
-  const problema = fora.length || repetida || !c.legal;
+  // O maybeboard não acusa nada: é rascunho, e uma carta em dúvida marcada
+  // de vermelho por estar fora da identidade seria alarme sobre uma decisão
+  // que ainda não foi tomada.
+  const problema = tabuleiro === "deck" && (fora.length || repetida || !c.legal);
   let porque = "";
-  if (fora.length) porque = `fora da identidade (${fora.join("")})`;
-  else if (repetida) porque = "singleton: só uma cópia";
-  else if (!c.legal) porque = "não é legal em Commander";
+  if (problema && fora.length) porque = `fora da identidade (${fora.join("")})`;
+  else if (problema && repetida) porque = "singleton: só uma cópia";
+  else if (problema && !c.legal) porque = "não é legal em Commander";
 
-  return `<div class="linha ${problema ? "problema" : ""}" data-nome="${escapar(c.nome)}">
-    <span class="qtd">${entrada.quantidade}</span>
-    <span class="nome" data-arte="${escapar(c.imagem)}">${escapar(c.nome)}
+  const nome = escapar(c.nome);
+  // A coluna do maybeboard tem 288px, e a linha do deck não cabe nela
+  // inteira: sai o preço (ele não entra na cotação — mostrá-lo diria o
+  // contrário) e saem os botões de quantidade (o formato é singleton, e a
+  // dúvida é sobre a carta, não sobre quantas). Sobram o ⋯ e o ✕, que são
+  // as duas coisas que se faz com uma carta em dúvida: decidir e desistir.
+  const estreita = tabuleiro === "talvez";
+  return `<div class="linha ${problema ? "problema" : ""}" data-nome="${nome}"
+    data-tabuleiro="${tabuleiro}" draggable="true">
+    ${estreita && entrada.quantidade === 1 ? ""
+      : `<span class="qtd">${entrada.quantidade}</span>`}
+    <span class="nome" data-arte="${escapar(c.imagem)}">${nome}
       ${porque ? `<span class="porque">· ${porque}</span>` : ""}</span>
     ${manaHTML(c.mana_cost)}
-    ${valorHTML(entrada)}
+    ${estreita ? "" : valorHTML(entrada)}
     <span class="ctrl">
-      <button class="mini" data-mais="${escapar(c.nome)}" title="Mais uma">+</button>
-      <button class="mini" data-menos="${escapar(c.nome)}" title="Menos uma">−</button>
-      <button class="mini sai" data-tirar="${escapar(c.nome)}" title="Tirar do deck">✕</button>
+      ${estreita ? "" : `
+      <button class="mini" data-mais="${nome}" title="Mais uma">+</button>
+      <button class="mini" data-menos="${nome}" title="Menos uma">−</button>`}
+      <button class="mini" data-menu-carta="${nome}"
+              title="${estreita ? "Categoria, voltar pro deck e mais"
+                                : "Categoria, maybeboard e mais"}"
+              aria-label="Opções de ${nome}">⋯</button>
+      <button class="mini sai" data-tirar="${nome}"
+              title="${estreita ? "Tirar do maybeboard" : "Tirar do deck"}">✕</button>
     </span>
   </div>`;
 }
@@ -1490,7 +1938,7 @@ function desenharCurva(){
   // toda no zero, que é justamente o número que ninguém quer ler.
   const faixas = [0,1,2,3,4,5,6,7];
   const contas = faixas.map(() => 0);
-  for (const {carta, quantidade} of estado.cartas){
+  for (const {carta, quantidade} of cartasContadas()){
     if (!carta || (carta.tipo||"").toLowerCase().includes("land")) continue;
     const cmc = Math.min(7, Math.floor(carta.cmc || 0));
     contas[cmc] += quantidade;
@@ -1509,7 +1957,7 @@ function desenharDistribuicao(){
   // distribuição do que o deck PEDE de cor, não do que ele produz).
   const pedidos = {W:0,U:0,B:0,R:0,G:0};
   let totalPips = 0;
-  for (const {carta, quantidade} of estado.cartas){
+  for (const {carta, quantidade} of cartasContadas()){
     if (!carta) continue;
     for (const s of (carta.mana_cost || "").match(/\{[^}]+\}/g) || []){
       for (const c of s.slice(1,-1).split("/")){
@@ -1525,9 +1973,12 @@ function desenharDistribuicao(){
       <span class="num">${pedidos[c]}</span>
     </div>`).join("");
 
+  // Por tipo, e não pela categoria escolhida à mão: aqui a pergunta é "meu
+  // deck tem criatura demais?", e um deck cujas criaturas estão em "combo
+  // principal" responderia zero.
   const porCat = new Map();
-  for (const {carta, quantidade} of estado.cartas){
-    const cat = categoriaDe(carta);
+  for (const {carta, quantidade} of cartasContadas()){
+    const cat = categoriaAutomatica(carta);
     porCat.set(cat, (porCat.get(cat) || 0) + quantidade);
   }
   const maiorCat = Math.max(1, ...porCat.values());
@@ -1555,14 +2006,24 @@ function atualizarNotaIdentidade(){
 
 /* --------------------------------------------------------------- mexer no deck */
 
-function acharEntrada(nome){
-  return estado.cartas.find(e => e.carta.nome === nome);
+function acharEntrada(nome, tabuleiro){
+  return lista(tabuleiro || "deck").find(e => e.carta.nome === nome);
+}
+
+/* Onde a carta está — deck, maybeboard ou lugar nenhum. É o que os cliques
+   usam pra não precisarem carregar o tabuleiro em cada botão. */
+function ondeEsta(nome){
+  if (estado.cartas.some(e => e.carta.nome === nome)) return "deck";
+  if (estado.maybe.some(e => e.carta.nome === nome)) return "talvez";
+  return null;
 }
 
 function guardarDesfazer(){
   estado.desfazer.push(JSON.stringify({
     comandantes: estado.comandantes,
     cartas: estado.cartas,
+    maybe: estado.maybe,
+    categorias: estado.categorias,
   }));
   if (estado.desfazer.length > 40) estado.desfazer.shift();
 }
@@ -1573,45 +2034,205 @@ function desfazer(){
   const dados = JSON.parse(anterior);
   estado.comandantes = dados.comandantes;
   estado.cartas = dados.cartas;
+  // Instantâneos gravados antes desta versão da tela não têm as duas
+  // chaves novas: `|| []` os aceita em vez de zerar o maybeboard com
+  // `undefined` na primeira vez que alguém apertar Ctrl+Z.
+  estado.maybe = dados.maybe || [];
+  estado.categorias = dados.categorias || [];
   estado.validacao = null;
   desenharTudo();
   agendarSalvar();
   toast("Desfeito.");
 }
 
-function adicionar(carta){
+/* Adicionar num tabuleiro. A categoria só é dita quando quem chama tem
+   opinião (o menu, ao criar categoria com a carta junto); no caminho normal
+   ela nasce vazia e o grupo sai do tipo da carta. */
+function adicionar(carta, tabuleiro, categoria){
+  tabuleiro = tabuleiro || "deck";
   guardarDesfazer();
-  const entrada = acharEntrada(carta.nome);
+  const entrada = acharEntrada(carta.nome, tabuleiro);
   if (entrada){
     entrada.quantidade += 1;
+    if (categoria !== undefined) entrada.categoria = categoria;
   } else {
-    estado.cartas.push({carta, quantidade: 1});
+    lista(tabuleiro).push({carta, quantidade: 1, categoria: categoria || ""});
   }
   estado.validacao = null;
   desenharTudo();
   agendarSalvar();
 }
 
-function mudarQuantidade(nome, delta){
-  const entrada = acharEntrada(nome);
+function mudarQuantidade(nome, delta, tabuleiro){
+  tabuleiro = tabuleiro || ondeEsta(nome) || "deck";
+  const entrada = acharEntrada(nome, tabuleiro);
   if (!entrada) return;
   guardarDesfazer();
   entrada.quantidade += delta;
   if (entrada.quantidade <= 0){
-    estado.cartas = estado.cartas.filter(e => e !== entrada);
+    const restante = lista(tabuleiro).filter(e => e !== entrada);
+    if (tabuleiro === "talvez") estado.maybe = restante;
+    else estado.cartas = restante;
   }
   estado.validacao = null;
   desenharTudo();
   agendarSalvar();
 }
 
-function tirar(nome){
+function tirar(nome, tabuleiro){
+  tabuleiro = tabuleiro || ondeEsta(nome) || "deck";
   guardarDesfazer();
-  estado.cartas = estado.cartas.filter(e => e.carta.nome !== nome);
+  if (tabuleiro === "talvez"){
+    estado.maybe = estado.maybe.filter(e => e.carta.nome !== nome);
+  } else {
+    estado.cartas = estado.cartas.filter(e => e.carta.nome !== nome);
+  }
   estado.validacao = null;
   desenharTudo();
   agendarSalvar();
-  toast(`${nome} saiu do deck. Ctrl+Z desfaz.`);
+  toast(`${nome} saiu do ${tabuleiro === "talvez" ? "maybeboard" : "deck"}. ` +
+        `Ctrl+Z desfaz.`);
+}
+
+/* -------------------------------------------------- mover entre tabuleiros
+
+   A carta atravessa INTEIRA, com quantidade e categoria: o maybeboard herda
+   as mesmas categorias do deck, então "sac outlet" continua sendo "sac
+   outlet" do outro lado, e voltar não faz a pessoa reclassificar nada.
+
+   Quando a carta já existe no destino (dá pra ter a mesma no deck e em
+   dúvida), as quantidades somam em vez de uma sobrescrever a outra. */
+function mover(nome, de, para){
+  if (de === para) return;
+  const entrada = acharEntrada(nome, de);
+  if (!entrada) return;
+  guardarDesfazer();
+  if (de === "talvez") estado.maybe = estado.maybe.filter(e => e !== entrada);
+  else estado.cartas = estado.cartas.filter(e => e !== entrada);
+
+  const destino = acharEntrada(nome, para);
+  if (destino){
+    destino.quantidade += entrada.quantidade;
+    if (!destino.categoria) destino.categoria = entrada.categoria;
+  } else {
+    lista(para).push(entrada);
+  }
+  estado.validacao = null;
+  desenharTudo();
+  agendarSalvar();
+  toast(para === "talvez"
+    ? `${nome} foi pro maybeboard — fora da conta e da cotação.`
+    : `${nome} entrou no deck.`);
+}
+
+/* --------------------------------------------------------------- categorias
+
+   Categoria é rótulo, não pasta: mudar a de uma carta não a move de lista
+   nem mexe em quantidade. A única exceção é o Sideboard, que muda a conta
+   das 100 — e por isso o toast diz isso em voz alta quando ela entra ou
+   sai de lá. */
+function definirCategoria(nome, tabuleiro, categoria){
+  const entrada = acharEntrada(nome, tabuleiro);
+  if (!entrada) return;
+  guardarDesfazer();
+  const antes = entrada.categoria || "";
+  entrada.categoria = categoria || "";
+  estado.validacao = null;
+  desenharTudo();
+  agendarSalvar();
+
+  const eraFora = CATEGORIAS_FORA_DA_CONTA.has(antes);
+  const viraFora = CATEGORIAS_FORA_DA_CONTA.has(entrada.categoria);
+  if (tabuleiro === "deck" && viraFora && !eraFora){
+    toast(`${nome} foi pro sideboard: sai das 100 e das análises, mas ` +
+          `continua na cotação.`);
+  } else if (tabuleiro === "deck" && eraFora && !viraFora){
+    toast(`${nome} voltou pras 100.`);
+  } else {
+    toast(entrada.categoria
+      ? `${nome} agora está em "${entrada.categoria}".`
+      : `${nome} voltou pro grupo do tipo dela.`);
+  }
+}
+
+/* Cria uma categoria. `carta` opcional: criar a partir do ⋯ de uma linha já
+   põe aquela carta dentro, senão o caminho seria criar, fechar, reabrir o
+   menu e escolher. */
+function criarCategoria(nome, carta, tabuleiro){
+  nome = (nome || "").trim().slice(0, 40);
+  if (!nome) return null;
+  const jaExiste = todasAsCategorias()
+    .find(c => c.toLowerCase() === nome.toLowerCase());
+  if (jaExiste && !ehPropria(jaExiste)){
+    toast(`"${jaExiste}" já é uma categoria da tela.`);
+    if (carta) definirCategoria(carta, tabuleiro, jaExiste);
+    return jaExiste;
+  }
+  if (jaExiste){
+    if (carta) definirCategoria(carta, tabuleiro, jaExiste);
+    return jaExiste;
+  }
+  if (estado.categorias.length >= 40){
+    toast("Já são 40 categorias — apague alguma antes de criar outra.");
+    return null;
+  }
+  guardarDesfazer();
+  estado.categorias.push(nome);
+  if (carta){
+    const entrada = acharEntrada(carta, tabuleiro);
+    if (entrada) entrada.categoria = nome;
+  }
+  desenharTudo();
+  agendarSalvar();
+  toast(`Categoria "${nome}" criada.`);
+  return nome;
+}
+
+function renomearCategoria(antiga, nova){
+  nova = (nova || "").trim().slice(0, 40);
+  if (!nova || nova === antiga) return;
+  if (todasAsCategorias().some(c => c.toLowerCase() === nova.toLowerCase())){
+    toast(`Já existe uma categoria "${nova}".`);
+    return;
+  }
+  guardarDesfazer();
+  estado.categorias = estado.categorias.map(c => c === antiga ? nova : c);
+  // As duas listas: o maybeboard herda as categorias do deck, então
+  // renomear no deck e não renomear lá deixaria um grupo órfão do outro
+  // lado, com o nome velho e sem dono.
+  for (const e of estado.cartas.concat(estado.maybe)){
+    if (e.categoria === antiga) e.categoria = nova;
+  }
+  desenharTudo();
+  agendarSalvar();
+}
+
+/* Apagar a categoria NÃO apaga carta: elas voltam pro grupo do tipo delas.
+   Uma categoria é uma forma de olhar a lista, e desfazer uma forma de olhar
+   não pode custar 12 cartas. */
+function apagarCategoria(cat){
+  guardarDesfazer();
+  estado.categorias = estado.categorias.filter(c => c !== cat);
+  let soltas = 0;
+  for (const e of estado.cartas.concat(estado.maybe)){
+    if (e.categoria === cat){ e.categoria = ""; soltas++; }
+  }
+  desenharTudo();
+  agendarSalvar();
+  toast(soltas
+    ? `Categoria "${cat}" apagada — ${soltas} carta(s) voltaram pro grupo do tipo.`
+    : `Categoria "${cat}" apagada.`);
+}
+
+function moverCategoria(cat, passo){
+  const i = estado.categorias.indexOf(cat);
+  const destino = i + passo;
+  if (i < 0 || destino < 0 || destino >= estado.categorias.length) return;
+  guardarDesfazer();
+  estado.categorias.splice(i, 1);
+  estado.categorias.splice(destino, 0, cat);
+  desenharTudo();
+  agendarSalvar();
 }
 
 function escolherComandante(carta){
@@ -1639,6 +2260,198 @@ function tirarComandante(indice){
   desenharTudo();
   buscar();
   agendarSalvar();
+}
+
+/* ----------------------------------------------------------------- menus
+
+   Um menu ancorado no botão que o abriu. Ele existe porque mover carta entre
+   categorias e tabuleiros precisa funcionar no TOQUE: arrastar é o gesto
+   natural no mouse e não existe no celular, então o arrastar é atalho e
+   este menu é o caminho.
+
+   Ele é montado a cada abertura em vez de ficar escondido no HTML: a lista
+   de categorias muda a cada carta, e um menu guardado teria que ser
+   sincronizado — que é o mesmo trabalho, feito duas vezes. */
+
+let menuAberto = null;
+
+function fecharMenu(){
+  if (!menuAberto) return;
+  menuAberto.remove();
+  menuAberto = null;
+}
+
+/* `itens` é uma lista de `{rotulo, marca, aoClicar, classe}` ou `"risco"`
+   pra uma linha divisória, ou `{titulo}` pra um cabeçalho. */
+function abrirMenu(ancora, itens){
+  fecharMenu();
+  const menu = document.createElement("div");
+  menu.className = "menu";
+  menu.setAttribute("role", "menu");
+  for (const item of itens){
+    if (item === "risco"){
+      menu.insertAdjacentHTML("beforeend", '<div class="risco"></div>');
+      continue;
+    }
+    if (item.titulo){
+      menu.insertAdjacentHTML("beforeend", `<h4>${escapar(item.titulo)}</h4>`);
+      continue;
+    }
+    const botao = document.createElement("button");
+    botao.type = "button";
+    botao.setAttribute("role", "menuitem");
+    botao.className = item.classe || "";
+    botao.innerHTML = `<span class="marca">${item.marca || ""}</span>
+      <span class="rot-menu">${escapar(item.rotulo)}</span>`;
+    botao.addEventListener("click", () => { fecharMenu(); item.aoClicar(); });
+    menu.appendChild(botao);
+  }
+  document.body.appendChild(menu);
+
+  // Posiciona depois de medir: um menu de 12 categorias perto do rodapé
+  // abriria pra fora da tela, e aí a metade de baixo dele é inalcançável.
+  const caixa = ancora.getBoundingClientRect();
+  const m = menu.getBoundingClientRect();
+  const x = Math.min(caixa.left, window.innerWidth - m.width - 8);
+  const y = caixa.bottom + m.height + 8 > window.innerHeight
+    ? Math.max(8, caixa.top - m.height - 4)
+    : caixa.bottom + 4;
+  menu.style.left = Math.max(8, x) + "px";
+  menu.style.top = y + "px";
+  menuAberto = menu;
+  menu.querySelector("button")?.focus();
+}
+
+/* O menu de uma carta: categoria, tabuleiro e sair. Nesta ordem porque é a
+   ordem da frequência — trocar de categoria é o que se faz o tempo todo,
+   tirar do deck é o que se faz uma vez. */
+function menuDaCarta(ancora, nome, tabuleiro){
+  const entrada = acharEntrada(nome, tabuleiro);
+  if (!entrada) return;
+  const atual = entrada.categoria || "";
+  const marca = (cat) => atual === cat ? "✓" : "";
+  const itens = [{titulo: `Categoria de ${nome}`}];
+
+  itens.push({rotulo: `Automática (${categoriaAutomatica(entrada.carta)})`,
+              marca: marca(""),
+              aoClicar: () => definirCategoria(nome, tabuleiro, "")});
+  for (const cat of estado.categorias){
+    itens.push({rotulo: cat, marca: marca(cat),
+                aoClicar: () => definirCategoria(nome, tabuleiro, cat)});
+  }
+  itens.push({rotulo: `${CATEGORIA_SIDEBOARD} — fora das 100`,
+              marca: marca(CATEGORIA_SIDEBOARD),
+              aoClicar: () => definirCategoria(nome, tabuleiro,
+                                               CATEGORIA_SIDEBOARD)});
+  itens.push({rotulo: "Nova categoria…", marca: "+", aoClicar: () => {
+    const escolhido = prompt("Nome da nova categoria:\n\n" +
+      "Ex.: Combo principal, Sac outlet, Proteção do comandante");
+    if (escolhido) criarCategoria(escolhido, nome, tabuleiro);
+  }});
+
+  itens.push("risco");
+  itens.push(tabuleiro === "talvez"
+    ? {rotulo: "Mover pro deck", marca: "→",
+       aoClicar: () => mover(nome, "talvez", "deck")}
+    : {rotulo: "Mover pro maybeboard", marca: "←",
+       aoClicar: () => mover(nome, "deck", "talvez")});
+  itens.push({rotulo: tabuleiro === "talvez" ? "Tirar do maybeboard" : "Tirar do deck",
+              marca: "✕", classe: "perigo",
+              aoClicar: () => tirar(nome, tabuleiro)});
+  abrirMenu(ancora, itens);
+}
+
+/* O menu de uma categoria própria. Só as próprias têm: renomear "Criaturas"
+   não faria sentido — ela não é um nome, é o tipo da carta. */
+function menuDoGrupo(ancora, cat){
+  const i = estado.categorias.indexOf(cat);
+  const itens = [
+    {titulo: cat},
+    {rotulo: "Renomear…", marca: "✎", aoClicar: () => {
+      const novo = prompt("Novo nome da categoria:", cat);
+      if (novo) renomearCategoria(cat, novo);
+    }},
+  ];
+  if (i > 0) itens.push({rotulo: "Subir", marca: "↑",
+                         aoClicar: () => moverCategoria(cat, -1)});
+  if (i >= 0 && i < estado.categorias.length - 1){
+    itens.push({rotulo: "Descer", marca: "↓",
+                aoClicar: () => moverCategoria(cat, +1)});
+  }
+  itens.push("risco");
+  itens.push({rotulo: "Apagar categoria", marca: "✕", classe: "perigo",
+              aoClicar: () => apagarCategoria(cat)});
+  abrirMenu(ancora, itens);
+}
+
+/* -------------------------------------------------------------- arrastar
+
+   Atalho de quem tem mouse, nunca o único caminho: no toque não existe
+   `dragstart`, e a mesma carta se move pelo ⋯ da linha. Solta em cima de um
+   grupo (muda a categoria, e o tabuleiro se for o outro) ou em cima da
+   coluna do maybeboard (que aceita a carta na categoria em que ela já
+   estava). */
+let arrastando = null;
+
+function ligarArrastar(){
+  document.addEventListener("dragstart", (e) => {
+    const linha = e.target.closest?.(".linha");
+    if (!linha){ return; }
+    arrastando = {nome: linha.dataset.nome, tabuleiro: linha.dataset.tabuleiro};
+    linha.classList.add("arrastando");
+    e.dataTransfer.effectAllowed = "move";
+    // Firefox só dispara `drop` quando alguma coisa foi escrita aqui.
+    e.dataTransfer.setData("text/plain", linha.dataset.nome);
+  });
+  document.addEventListener("dragend", () => {
+    document.querySelectorAll(".linha.arrastando")
+      .forEach(l => l.classList.remove("arrastando"));
+    document.querySelectorAll(".alvo-solta")
+      .forEach(a => a.classList.remove("alvo-solta"));
+    arrastando = null;
+  });
+
+  const alvoDe = (e) => e.target.closest?.("[data-categoria]") ||
+                        e.target.closest?.(".talvez-col");
+
+  document.addEventListener("dragover", (e) => {
+    if (!arrastando) return;
+    const alvo = alvoDe(e);
+    if (!alvo) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (!alvo.classList.contains("alvo-solta")){
+      document.querySelectorAll(".alvo-solta")
+        .forEach(a => a.classList.remove("alvo-solta"));
+      alvo.classList.add("alvo-solta");
+    }
+  });
+  document.addEventListener("drop", (e) => {
+    if (!arrastando) return;
+    const alvo = alvoDe(e);
+    if (!alvo) return;
+    e.preventDefault();
+    const {nome, tabuleiro} = arrastando;
+    const grupo = alvo.dataset.categoria !== undefined ? alvo : null;
+    const destino = grupo ? grupo.dataset.tabuleiro : "talvez";
+    // Move primeiro, categoriza depois: as duas coisas guardam desfazer, e
+    // o Ctrl+Z devolve o passo inteiro em dois toques em vez de um. Vale o
+    // preço — a alternativa seria uma terceira função que faz as duas.
+    if (destino !== tabuleiro) mover(nome, tabuleiro, destino);
+    if (grupo){
+      const cat = grupo.dataset.categoria;
+      // Grupo automático: a carta perde a categoria à mão e volta a ser
+      // agrupada pelo tipo. Só faz sentido se for o tipo DELA — soltar uma
+      // criatura em "Artefatos" não a transforma em artefato, então nesse
+      // caso não há o que fazer e o silêncio é a resposta certa.
+      const propria = ehPropria(cat) || CATEGORIAS_FORA_DA_CONTA.has(cat);
+      const entrada = acharEntrada(nome, destino);
+      if (propria) definirCategoria(nome, destino, cat);
+      else if (entrada && categoriaAutomatica(entrada.carta) === cat){
+        definirCategoria(nome, destino, "");
+      }
+    }
+  });
 }
 
 /* ------------------------------------------------------------------- buscar */
@@ -1692,8 +2505,14 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
       comandantes ? " Lembre: comandante é criatura lendária." : ""}</div>`;
     return;
   }
-  caixa.innerHTML = cartas.map((c, i) => `
-    <button class="achado ${acharEntrada(c.nome) ? "no-deck" : ""}" data-i="${i}"
+  // Três estados, não dois: uma carta que já está no maybeboard não é uma
+  // carta nova nem uma carta do deck, e mostrá-la como qualquer um dos dois
+  // faria a pessoa adicionar de novo o que ela mesma pôs em dúvida.
+  caixa.innerHTML = cartas.map((c, i) => {
+    const onde = ondeEsta(c.nome);
+    return `
+    <button class="achado ${onde === "deck" ? "no-deck" : ""} ${
+              onde === "talvez" ? "no-talvez" : ""}" data-i="${i}"
             data-arte="${escapar(c.imagem)}">
       <span class="nome">
         <b>${escapar(c.nome)}</b>
@@ -1701,7 +2520,8 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
       </span>
       ${manaHTML(c.mana_cost)}
       <span class="preco">${preco(c)}</span>
-    </button>`).join("");
+    </button>`;
+  }).join("");
 }
 
 /* ------------------------------------------------------- gaveta e filtros
@@ -1938,11 +2758,14 @@ function mostrarCotacao(resultado){
        ${Number(c.fontes[principal.id].preco).toFixed(2)}</span></div>`).join("");
 
   const excluidas = (resultado.excluidas || []).length;
-  $("orc-resultado").innerHTML = fontes +
-    (caras ? `<div class="caras"><h2 class="secao" style="margin-top:12px">Onde está o dinheiro</h2>${caras}</div>` : "") +
-    (excluidas ? `<p class="nota" style="margin-top:10px">${excluidas} carta(s)
-       fora do total: comandante e terrenos básicos, pelo critério do
-       Commander 500.</p>` : "");
+  const talvez = estado.maybe.reduce((n, e) => n + e.quantidade, 0);
+  $("orc-resultado").innerHTML =
+    `<div>${fontes}</div>` +
+    (caras ? `<div class="caras"><h2 class="secao">Onde está o dinheiro</h2>${caras}</div>` : "") +
+    `<div>${excluidas ? `<p class="nota">${excluidas} carta(s) fora do total:
+       comandante e terrenos básicos, pelo critério do Commander 500.</p>` : ""}
+     ${talvez ? `<p class="nota" style="margin-top:8px">${talvez} carta(s) no
+       maybeboard não foram cotadas — é pra isso que ele serve.</p>` : ""}</div>`;
 }
 
 /* ------------------------------------------------------------- sugestões
@@ -2148,7 +2971,7 @@ function adicionarQuantidade(carta, n){
   guardarDesfazer();
   const entrada = acharEntrada(carta.nome);
   if (entrada) entrada.quantidade += n;
-  else estado.cartas.push({carta, quantidade: n});
+  else estado.cartas.push({carta, quantidade: n, categoria: ""});
   estado.validacao = null;
   desenharTudo();
   agendarSalvar();
@@ -2250,10 +3073,13 @@ function desenharPoder(){
    serviço gratuito. Por isso a tela guarda a assinatura do deck de quando a
    busca rodou e, quando ela deixa de bater, avisa em vez de rebuscar. */
 
+/* O deck como o servidor o viu quando a busca rodou. Só o que conta: mexer
+   no maybeboard ou no sideboard não muda combo nem bracket, e avisar "o deck
+   mudou" por causa disso ensinaria a ignorar o aviso. */
 function assinaturaDoDeck(){
   return JSON.stringify([
     estado.comandantes.map(c => c.nome).sort(),
-    estado.cartas.map(e => [e.carta.nome, e.quantidade]).sort(),
+    cartasContadas().map(e => [e.carta.nome, e.quantidade]).sort(),
   ]);
 }
 
@@ -2551,7 +3377,9 @@ async function fazerImportar(){
   }
 
   const quantas = trazido.cartas_completas.reduce((n, e) => n + e.quantidade, 0)
-                + trazido.comandantes_completos.length;
+                + trazido.comandantes_completos.length
+                + (trazido.maybeboard_completo || [])
+                    .reduce((n, e) => n + e.quantidade, 0);
   if (estado.cartas.length || estado.comandantes.length){
     if (!confirm(`Trocar o deck atual pelas ${quantas} cartas importadas?\n\n` +
                  `O deck de agora continua salvo e na lista de Meus decks — ` +
@@ -2575,9 +3403,14 @@ function aplicarImportado(trazido){
   estado.id = null;
   estado.validacao = null;
   estado.comandantes = trazido.comandantes_completos;
-  estado.cartas = trazido.cartas_completas.map(e => ({
-    carta: e.carta, quantidade: e.quantidade,
-  }));
+  const entrada = (e) => ({carta: e.carta, quantidade: e.quantidade,
+                           categoria: e.categoria || ""});
+  estado.cartas = trazido.cartas_completas.map(entrada);
+  // O maybeboard do site de origem vem junto: é o mesmo rascunho, e trazer
+  // só as 100 obrigaria a copiar à mão a parte da lista que a pessoa ainda
+  // estava decidindo (ver `importar.py`).
+  estado.maybe = (trazido.maybeboard_completo || []).map(entrada);
+  estado.categorias = trazido.categorias || [];
   // As análises são do deck antigo e agora não valem mais nada. Deixá-las na
   // tela mostraria a curva de um deck e os combos de outro.
   estado.combos = estado.poder = estado.sugestoes = estado.manabase = null;
@@ -2602,11 +3435,27 @@ function aplicarImportado(trazido){
 function mostrarResultadoImportacao(trazido){
   const total = trazido.cartas_completas.reduce((n, e) => n + e.quantidade, 0)
               + trazido.comandantes_completos.length;
+  const talvez = (trazido.maybeboard_completo || [])
+    .reduce((n, e) => n + e.quantidade, 0);
+  const side = trazido.cartas_completas
+    .filter(e => e.categoria === CATEGORIA_SIDEBOARD)
+    .reduce((n, e) => n + e.quantidade, 0);
   const faltando = trazido.nao_encontradas || [];
   let html = `<div class="aponta ok"><span><b>${total} carta(s)</b> vieram do
     ${escapar(trazido.fonte)}${trazido.comandantes_completos.length
       ? ` — comandante: ${escapar(trazido.comandantes_completos.map(c => c.nome).join(" + "))}`
       : ""}.</span></div>`;
+  // O que foi pro maybeboard e pro sideboard precisa ser dito: são cartas
+  // que não vão aparecer na contagem das 100, e sem esse aviso a pessoa
+  // confere o contador e acha que a importação perdeu 20 cartas.
+  if (talvez || side){
+    const partes = [];
+    if (talvez) partes.push(`<b>${talvez}</b> no maybeboard`);
+    if (side) partes.push(`<b>${side}</b> no sideboard`);
+    html += `<div class="aponta aviso" style="margin-top:6px"><span>
+      ${partes.join(" e ")} — fora da contagem das 100. O maybeboard também
+      fica fora da cotação; o sideboard, não.</span></div>`;
+  }
 
   // Carta que a base local não conhece não pode sumir calada: quem importa
   // 100 cartas e recebe 97 precisa saber QUAIS três ficaram de fora, senão
@@ -2628,6 +3477,9 @@ function mostrarResultadoImportacao(trazido){
 
 /* --------------------------------------------------------------- exportar */
 
+/* O sideboard entra e o maybeboard não, pelo mesmo critério da cotação: esta
+   lista é o que vai pra impressão, e o que ainda está sendo decidido não vai
+   pra impressão. Igual ao `decks.lista_texto` do servidor. */
 function listaTexto(){
   const linhas = estado.comandantes.map(c => `1 ${c.nome}`);
   for (const e of estado.cartas) linhas.push(`${e.quantidade} ${e.carta.nome}`);
@@ -2678,6 +3530,13 @@ function ligarEventos(){
 
   document.addEventListener("keydown", (e) => {
     const digitando = ["INPUT","TEXTAREA"].includes(document.activeElement?.tagName);
+    // O menu fecha antes da gaveta: quando os dois estão abertos, o de cima
+    // é o menu, e Esc fechar a gaveta por baixo dele seria fechar o que a
+    // pessoa não está olhando.
+    if (e.key === "Escape" && menuAberto){
+      e.preventDefault();
+      return fecharMenu();
+    }
     if (e.key === "Escape" && gavetaAberta){
       e.preventDefault();
       return fecharGaveta();
@@ -2722,6 +3581,9 @@ function ligarEventos(){
 
   // Clique nos resultados (os dois painéis) e nos controles do deck.
   document.addEventListener("click", (e) => {
+    // Clique fora fecha o menu aberto — inclusive quando o clique é num
+    // botão que abre OUTRO menu, que o `abrirMenu` fecha de novo sozinho.
+    if (menuAberto && !menuAberto.contains(e.target)) fecharMenu();
     if (e.target.closest("[data-fecha-gaveta]")) return fecharGaveta();
     const tira = e.target.closest("[data-tira-filtro]");
     if (tira) return tirarFiltro(tira.dataset.tiraFiltro);
@@ -2774,12 +3636,23 @@ function ligarEventos(){
       if (carta && caixa.aoClicar) caixa.aoClicar(carta);
       return;
     }
+    // Os botões da linha herdam o tabuleiro dela: o mesmo "+" serve o deck e
+    // o maybeboard, e sem isto o "+" de uma carta em dúvida somaria cópia no
+    // deck — na lista errada, calado.
+    const doTabuleiro = (alvo) =>
+      alvo.closest("[data-tabuleiro]")?.dataset.tabuleiro || "deck";
     const mais = e.target.closest("[data-mais]");
-    if (mais) return mudarQuantidade(mais.dataset.mais, +1);
+    if (mais) return mudarQuantidade(mais.dataset.mais, +1, doTabuleiro(mais));
     const menos = e.target.closest("[data-menos]");
-    if (menos) return mudarQuantidade(menos.dataset.menos, -1);
+    if (menos) return mudarQuantidade(menos.dataset.menos, -1, doTabuleiro(menos));
     const sai = e.target.closest("[data-tirar]");
-    if (sai) return tirar(sai.dataset.tirar);
+    if (sai) return tirar(sai.dataset.tirar, doTabuleiro(sai));
+    const menuCarta = e.target.closest("[data-menu-carta]");
+    if (menuCarta) return menuDaCarta(menuCarta, menuCarta.dataset.menuCarta,
+                                      doTabuleiro(menuCarta));
+    const menuGrupo = e.target.closest("[data-menu-grupo]");
+    if (menuGrupo) return menuDoGrupo(menuGrupo, menuGrupo.dataset.menuGrupo);
+    if (e.target.closest("[data-abrir-manabase]")) return chamarManabase();
     const saiCmd = e.target.closest("[data-tirar-cmd]");
     if (saiCmd) return tirarComandante(Number(saiCmd.dataset.tirarCmd));
     const peca = e.target.closest("[data-add-peca]");
@@ -2824,11 +3697,29 @@ function ligarEventos(){
 
   $("btn-cotar").addEventListener("click", cotar);
   $("btn-exportar").addEventListener("click", exportar);
+
+  // A explicação do orçamento vive dobrada: ela é longa, é lida uma vez na
+  // vida, e a faixa existe justamente pra ser uma linha.
+  $("btn-orc-nota").addEventListener("click", () => {
+    const nota = $("orc-nota");
+    nota.hidden = !nota.hidden;
+    $("btn-orc-nota").setAttribute("aria-expanded", String(!nota.hidden));
+  });
+
+  $("btn-nova-categoria").addEventListener("click", () => {
+    const nome = prompt("Nome da nova categoria:\n\n" +
+      "Ex.: Combo principal, Sac outlet, Proteção do comandante");
+    if (nome) criarCategoria(nome);
+  });
+
+  $("btn-recolher-talvez").addEventListener("click", () => recolherTalvez());
   $("btn-combos").addEventListener("click", procurarCombos);
   $("btn-poder").addEventListener("click", estimarPoder);
   $("btn-sugestoes").addEventListener("click", () =>
     buscarSugestoes(estado.sugestoesTema));
   $("btn-manabase").addEventListener("click", analisarManabase);
+
+  ligarArrastar();
 
   $("abas").addEventListener("click", (e) => {
     const botao = e.target.closest("[data-aba]");
@@ -2839,6 +3730,42 @@ function ligarEventos(){
   });
 
   ligarPrevia();
+}
+
+/* ---------------------------------------------------- coluna do maybeboard
+
+   Recolher fica guardado no navegador: quem não usa maybeboard recolhe uma
+   vez e recupera a coluna pra sempre, e quem usa não recolhe nunca. Refazer
+   essa escolha a cada visita seria cobrar por uma decisão já tomada. */
+const CHAVE_TALVEZ = "forja.deck.talvez-aberto";
+
+function recolherTalvez(forcar){
+  const corpo = $("corpo");
+  const fechado = forcar !== undefined ? forcar
+    : !corpo.classList.contains("talvez-fechado");
+  corpo.classList.toggle("talvez-fechado", fechado);
+  // `talvez-aberto` não é o contrário de `talvez-fechado`: é o "abri de
+  // propósito" que vence o recolhimento automático das telas médias (ver o
+  // @media de 1200px). Sem ele, abrir a coluna entre 900 e 1200 não faria
+  // nada e o botão pareceria quebrado.
+  corpo.classList.toggle("talvez-aberto", !fechado);
+  const botao = $("btn-recolher-talvez");
+  botao.textContent = fechado ? "›" : "‹";
+  botao.title = fechado ? "Abrir o maybeboard" : "Recolher o maybeboard";
+  botao.setAttribute("aria-expanded", String(!fechado));
+  try { localStorage.setItem(CHAVE_TALVEZ, fechado ? "0" : "1"); } catch(e){}
+}
+
+/* O atalho no cabeçalho de Terrenos. Ele não abre painel nenhum: rola até o
+   que já existe embaixo do deck e o faz piscar, porque duas mana bases na
+   mesma tela seriam duas respostas pra mesma pergunta. */
+function chamarManabase(){
+  const painel = $("painel-manabase");
+  painel.scrollIntoView({behavior: "smooth", block: "center"});
+  painel.classList.remove("chamado");
+  void painel.offsetWidth;          // reinicia a animação se já tiver rodado
+  painel.classList.add("chamado");
+  if (!estado.manabase) analisarManabase();
 }
 
 /* Prévia da arte ao passar o mouse. Só no mouse: em toque ela roubaria o
@@ -2889,6 +3816,9 @@ async function abrir(){
   ligarEventos();
   atualizarBotaoMeus();
   conferirBase();
+  try {
+    if (localStorage.getItem(CHAVE_TALVEZ) === "0") recolherTalvez(true);
+  } catch(e){ /* navegador privado: a coluna abre, que é o padrão */ }
 
   const id = new URLSearchParams(location.search).get("deck");
   if (id){
@@ -2898,9 +3828,13 @@ async function abrir(){
       estado.nome = r.deck.nome;
       estado.validacao = r.validacao;
       estado.comandantes = (r.deck.comandantes_completos || []).filter(Boolean);
-      estado.cartas = (r.deck.cartas_completas || [])
-        .filter(e => e.carta)
-        .map(e => ({carta: e.carta, quantidade: e.quantidade}));
+      const entrada = (e) => ({carta: e.carta, quantidade: e.quantidade,
+                               categoria: e.categoria || ""});
+      estado.cartas = (r.deck.cartas_completas || []).filter(e => e.carta)
+        .map(entrada);
+      estado.maybe = (r.deck.maybeboard_completo || []).filter(e => e.carta)
+        .map(entrada);
+      estado.categorias = r.deck.categorias || [];
       $("nome-deck").value = estado.nome;
       $("btn-compartilhar").hidden = false;
       lembrarDeck();

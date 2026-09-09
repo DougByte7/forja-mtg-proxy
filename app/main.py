@@ -773,7 +773,8 @@ def criar_deck(corpo: dict = Body(default={})):
     """
     try:
         deck = decks.criar(corpo.get("nome", ""), corpo.get("comandantes"),
-                           corpo.get("cartas"))
+                           corpo.get("cartas"), corpo.get("maybeboard"),
+                           corpo.get("categorias"))
     except ValueError as e:
         raise HTTPException(400, str(e))
     log.evento("deck", "criou", deck=deck["id"])
@@ -801,7 +802,8 @@ def salvar_deck(deck_id: str, corpo: dict = Body(...)):
     _deck_ou_404(deck_id)
     try:
         deck = decks.salvar(deck_id, corpo.get("nome", ""),
-                            corpo.get("comandantes"), corpo.get("cartas"))
+                            corpo.get("comandantes"), corpo.get("cartas"),
+                            corpo.get("maybeboard"), corpo.get("categorias"))
     except ValueError as e:
         raise HTTPException(400, str(e))
     if not deck:
@@ -872,8 +874,10 @@ def combos_do_deck(deck_id: str):
     """
     deck = _deck_ou_404(deck_id)
     try:
+        # `cartas_contadas` e não `cartas`: combo fechado por uma peça que
+        # está no sideboard não é combo que o deck tem — ela não está nas 100.
         achado = spellbook.buscar(deck.get("comandantes") or [],
-                                  deck.get("cartas") or [])
+                                  decks.cartas_contadas(deck))
     except spellbook.SpellbookError as e:
         raise HTTPException(502, str(e))
     # O Spellbook manda só o nome de cada peça. A arte, o preço e o "existe
@@ -899,7 +903,7 @@ def poder_do_deck(deck_id: str):
     deck = _deck_ou_404(deck_id)
     try:
         estimativa = spellbook.estimar_bracket(deck.get("comandantes") or [],
-                                               deck.get("cartas") or [])
+                                               decks.cartas_contadas(deck))
     except spellbook.SpellbookError as e:
         raise HTTPException(502, str(e))
     return poder.ler(estimativa)
@@ -944,6 +948,13 @@ def manabase_do_deck(deck_id: str, teto: float | None = None):
     completo = decks.com_cartas(deck)
     identidade = decks.identidade_de(
         [c for c in completo["comandantes_completos"] if c])
+    # A conta de terrenos é sobre as 100 que vão pra mesa: sideboard e
+    # maybeboard fora. Um sideboard com quatro terrenos não muda quantos
+    # terrenos o deck precisa jogar.
+    fora = decks.CATEGORIAS_FORA_DA_CONTA
+    completo = {**completo, "cartas_completas": [
+        e for e in completo["cartas_completas"]
+        if (e.get("categoria") or "") not in fora]}
     return manabase.analisar(completo, identidade,
                              teto_usd=teto if teto is not None
                              else manabase.TETO_USD)

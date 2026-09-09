@@ -12,6 +12,25 @@ pedido chutado por sorte só pode ser cancelado (e isso fica no histórico);
 um deck chutado por sorte pode ser REESCRITO, e o estrago aí é o trabalho de
 montar o deck. 12 dígitos custam nada e tiram a força bruta da mesa.
 
+DOIS TABULEIROS E UMA GAVETA DE CATEGORIAS. O deck tem `cartas` (o que se
+joga) e `maybeboard` (o que ainda está em dúvida). São listas separadas no
+banco, e não uma marca dentro da mesma lista, porque a diferença entre elas é
+justamente NÃO participar: o maybeboard fica de fora da contagem das 100, da
+validação, de toda análise e — o que a pessoa mais nota — da cotação. Lista
+separada é a única forma de isso não depender de ninguém lembrar de filtrar.
+
+A categoria de cada carta é organização de quem monta ("combo principal",
+"sac outlet") e mora na própria entrada; quando está vazia, a tela cai na
+categoria que sai do tipo da carta. `categorias` guarda os nomes criados à
+mão, na ordem escolhida — inclusive os vazios, senão uma categoria recém
+criada sumiria antes de receber a primeira carta.
+
+`Sideboard` é a única categoria embutida que muda a conta: ela fica fora das
+100 (um deck com sideboard não pode viver acusando "5 cartas além das 100"),
+mas continua dentro da cotação e da lista de impressão — é carta que a pessoa
+quer ter. É o que separa o sideboard do maybeboard, e é a única regra a mais
+que as categorias trazem.
+
 A VALIDAÇÃO NÃO IMPEDE DE SALVAR. Deck pela metade é o estado normal de quem
 está montando: um deck de 40 cartas não é um erro, é terça-feira. Por isso
 `validar` DESCREVE o que está fora da regra, e é a tela que decide o tom —
@@ -35,6 +54,19 @@ MAX_ENTRADAS = 400
 MAX_COPIAS = 99
 TAMANHO_DECK = 100
 
+# Categorias feitas à mão. O teto existe pelo mesmo motivo do MAX_ENTRADAS:
+# impedir que alguém grave uma lista sem fim no banco, não policiar quem
+# organiza o próprio deck.
+MAX_CATEGORIAS = 40
+TAMANHO_CATEGORIA = 40
+
+# A categoria embutida que fica fora das 100. Está num conjunto, e não num
+# `== "Sideboard"` espalhado, porque quem for acrescentar outra (uma
+# "Considerando" que também não conte, por exemplo) precisa mexer num lugar
+# só — e porque a tela lê esta mesma regra do outro lado.
+CATEGORIA_SIDEBOARD = "Sideboard"
+CATEGORIAS_FORA_DA_CONTA = {CATEGORIA_SIDEBOARD}
+
 
 def _conn():
     pasta = os.path.dirname(DB_PATH)
@@ -54,10 +86,20 @@ def init_db():
                 nome TEXT,
                 comandantes TEXT,
                 cartas TEXT,
+                maybeboard TEXT,
+                categorias TEXT,
                 criado_em REAL,
                 atualizado_em REAL
             )
         """)
+        # Banco criado antes do maybeboard não tem as duas colunas novas, e
+        # `CREATE TABLE IF NOT EXISTS` não as acrescenta. Ler o PRAGMA e
+        # emendar o que falta é o que faz um deck salvo mês passado continuar
+        # abrindo — sem isso o deploy quebra em cima dos decks que já existem.
+        colunas = {l["name"] for l in conn.execute("PRAGMA table_info(decks)")}
+        for coluna in ("maybeboard", "categorias"):
+            if coluna not in colunas:
+                conn.execute(f"ALTER TABLE decks ADD COLUMN {coluna} TEXT")
         conn.commit()
     finally:
         conn.close()
@@ -68,12 +110,23 @@ def init_db():
 # ---------------------------------------------------------------------------
 
 
+def limpar_categoria(bruta) -> str:
+    """O nome de categoria como ele vai pro banco: aparado e com teto.
+
+    Vazio é um valor legítimo e o mais comum: quer dizer "sem categoria à
+    mão", e aí quem agrupa a carta é o tipo dela.
+    """
+    return str(bruta or "").strip()[:TAMANHO_CATEGORIA]
+
+
 def limpar_cartas(cartas) -> list[dict]:
     """Normaliza a lista que veio da tela e junta repetições.
 
     Levanta `ValueError` no que não dá pra consertar sozinho. Duas cartas com
     o mesmo nome viram uma linha com a soma — a tela não deveria mandar
-    assim, mas se mandar, o deck salvo continua fazendo sentido.
+    assim, mas se mandar, o deck salvo continua fazendo sentido. Quando as
+    duas trazem categoria, vale a da primeira: juntar "combo principal" com
+    "sac outlet" num nome só inventaria uma categoria que ninguém criou.
     """
     if not isinstance(cartas, list):
         raise ValueError("A lista de cartas precisa ser uma lista.")
@@ -104,12 +157,65 @@ def limpar_cartas(cartas) -> list[dict]:
         if quantidade > MAX_COPIAS:
             raise ValueError(f"{nome}: {quantidade} cópias é mais do que "
                              f"cabe num deck.")
+        categoria = limpar_categoria(item.get("categoria"))
         chave = base_cartas.normalizar(nome)
         if chave in juntas:
             juntas[chave]["quantidade"] += quantidade
+            if categoria and not juntas[chave]["categoria"]:
+                juntas[chave]["categoria"] = categoria
         else:
-            juntas[chave] = {"nome": nome, "quantidade": quantidade}
+            juntas[chave] = {"nome": nome, "quantidade": quantidade,
+                             "categoria": categoria}
     return list(juntas.values())
+
+
+def limpar_categorias(categorias, cartas=None, maybeboard=None) -> list[str]:
+    """Os nomes de categoria criados à mão, sem repetição e na ordem que vieram.
+
+    As categorias que as cartas usam entram mesmo que a tela tenha esquecido
+    de mandá-las na lista: uma categoria referida por uma carta e ausente
+    daqui viraria um grupo órfão na tela, com cartas dentro e sem jeito de
+    renomear ou apagar. Aqui isso se conserta calado, que é o único lugar
+    onde as duas informações se encontram.
+
+    `Sideboard` fica de fora: ela é embutida, aparece sozinha e não é da
+    pessoa pra renomear ou apagar.
+    """
+    if categorias is None:
+        categorias = []
+    if isinstance(categorias, str):
+        categorias = [categorias]
+    if not isinstance(categorias, list):
+        raise ValueError("As categorias precisam vir numa lista.")
+
+    usadas = [c.get("categoria") for lista in (cartas or [], maybeboard or [])
+              for c in lista if isinstance(c, dict)]
+    limpas: list[str] = []
+    vistas: set[str] = set()
+    for nome in list(categorias) + usadas:
+        nome = limpar_categoria(nome)
+        if not nome or nome in CATEGORIAS_FORA_DA_CONTA:
+            continue
+        chave = base_cartas.normalizar(nome)
+        if chave in vistas:
+            continue
+        vistas.add(chave)
+        limpas.append(nome)
+        if len(limpas) >= MAX_CATEGORIAS:
+            break
+    return limpas
+
+
+def cartas_contadas(deck: dict) -> list[dict]:
+    """As cartas do deck que valem pras 100 — sem o sideboard.
+
+    É o que toda análise consome (curva, mana base, bracket, combos): o
+    sideboard é carta que a pessoa quer ter, não carta que ela vai jogar, e
+    contá-la na curva descreveria um deck que não existe. Quem quer TUDO o
+    que se compra usa `deck["cartas"]` direto, como faz a cotação.
+    """
+    return [c for c in deck.get("cartas") or []
+            if (c.get("categoria") or "") not in CATEGORIAS_FORA_DA_CONTA]
 
 
 def limpar_comandantes(comandantes) -> list[str]:
@@ -135,27 +241,51 @@ def limpar_comandantes(comandantes) -> list[str]:
 
 
 def _linha_para_deck(linha: sqlite3.Row) -> dict:
+    # `linha.keys()` e não acesso direto: um banco que ainda não passou pela
+    # migração do `init_db` (um teste que chama `criar` antes dela, por
+    # exemplo) não tem as colunas novas, e um KeyError aqui derrubaria a
+    # leitura de decks que estão perfeitamente legíveis sem elas.
+    tem = set(linha.keys())
     return {
         "id": linha["id"],
         "nome": linha["nome"] or "Deck sem nome",
         "comandantes": json.loads(linha["comandantes"] or "[]"),
         "cartas": json.loads(linha["cartas"] or "[]"),
+        "maybeboard": json.loads(
+            (linha["maybeboard"] if "maybeboard" in tem else None) or "[]"),
+        "categorias": json.loads(
+            (linha["categorias"] if "categorias" in tem else None) or "[]"),
         "criado_em": linha["criado_em"],
         "atualizado_em": linha["atualizado_em"],
     }
 
 
-def criar(nome: str = "", comandantes=None, cartas=None) -> dict:
+def _guardaveis(cartas, maybeboard, categorias) -> tuple[list, list, list]:
+    """As três listas normalizadas juntas — sempre juntas.
+
+    `limpar_categorias` precisa ver as cartas já limpas pra recolher a
+    categoria que alguma delas use e a lista não traga; separar isso deixaria
+    o `criar` e o `salvar` com duas versões da mesma costura.
+    """
+    limpas = limpar_cartas(cartas or [])
+    talvez = limpar_cartas(maybeboard or [])
+    return limpas, talvez, limpar_categorias(categorias, limpas, talvez)
+
+
+def criar(nome: str = "", comandantes=None, cartas=None, maybeboard=None,
+          categorias=None) -> dict:
     deck_id = uuid.uuid4().hex[:12]
     agora = time.time()
+    limpas, talvez, cats = _guardaveis(cartas, maybeboard, categorias)
     conn = _conn()
     try:
         conn.execute(
-            "INSERT INTO decks (id, nome, comandantes, cartas, criado_em, "
-            "atualizado_em) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO decks (id, nome, comandantes, cartas, maybeboard, "
+            "categorias, criado_em, atualizado_em) VALUES (?,?,?,?,?,?,?,?)",
             (deck_id, (nome or "").strip() or "Deck sem nome",
              json.dumps(limpar_comandantes(comandantes)),
-             json.dumps(limpar_cartas(cartas or [])), agora, agora))
+             json.dumps(limpas), json.dumps(talvez), json.dumps(cats),
+             agora, agora))
         conn.commit()
     finally:
         conn.close()
@@ -172,17 +302,19 @@ def obter(deck_id: str) -> dict | None:
         conn.close()
 
 
-def salvar(deck_id: str, nome: str, comandantes, cartas) -> dict | None:
+def salvar(deck_id: str, nome: str, comandantes, cartas, maybeboard=None,
+           categorias=None) -> dict | None:
     """Grava o deck inteiro por cima do que estava. `None` se não existe."""
+    limpas, talvez, cats = _guardaveis(cartas, maybeboard, categorias)
     conn = _conn()
     try:
         mudou = conn.execute(
-            "UPDATE decks SET nome=?, comandantes=?, cartas=?, atualizado_em=? "
-            "WHERE id=?",
+            "UPDATE decks SET nome=?, comandantes=?, cartas=?, maybeboard=?, "
+            "categorias=?, atualizado_em=? WHERE id=?",
             ((nome or "").strip() or "Deck sem nome",
              json.dumps(limpar_comandantes(comandantes)),
-             json.dumps(limpar_cartas(cartas or [])), time.time(),
-             deck_id)).rowcount
+             json.dumps(limpas), json.dumps(talvez), json.dumps(cats),
+             time.time(), deck_id)).rowcount
         conn.commit()
     finally:
         conn.close()
@@ -196,7 +328,8 @@ def duplicar(deck_id: str) -> dict | None:
     if not original:
         return None
     return criar(f"{original['nome']} (cópia)", original["comandantes"],
-                 original["cartas"])
+                 original["cartas"], original.get("maybeboard"),
+                 original.get("categorias"))
 
 
 def apagar(deck_id: str) -> bool:
@@ -236,6 +369,10 @@ def validar(comandantes: list[str], cartas: list[dict]) -> dict:
     tem `nivel` — `"erro"` é o que torna o deck ilegal, `"aviso"` é o que
     merece atenção mas não impede (carta que a base local não conhece, por
     exemplo, que pode ser só uma base desatualizada).
+
+    O maybeboard não passa por aqui: ele é rascunho, e acusar identidade de
+    cor numa carta que a pessoa ainda está pensando se usa seria alarme sobre
+    decisão que ela nem tomou. O sideboard passa — só não conta pras 100.
 
     Nada aqui impede de salvar: ver o cabeçalho do módulo.
     """
@@ -282,7 +419,12 @@ def validar(comandantes: list[str], cartas: list[dict]) -> dict:
     identidade = identidade_de(cartas_comandantes)
 
     # --- tamanho ---
-    total = len(comandantes) + sum(c["quantidade"] for c in cartas)
+    # O sideboard sai da conta e SÓ da conta: singleton, identidade de cor e
+    # legalidade continuam valendo pra ele logo abaixo, porque uma carta
+    # guardada pra trocar depois precisa caber no deck em que vai entrar.
+    total = len(comandantes) + sum(
+        c["quantidade"] for c in cartas
+        if (c.get("categoria") or "") not in CATEGORIAS_FORA_DA_CONTA)
     if total < TAMANHO_DECK:
         apontar("erro", "faltam",
                 f"Faltam {TAMANHO_DECK - total} carta(s) pras 100 do formato.")
@@ -342,13 +484,18 @@ def com_cartas(deck: dict) -> dict:
     o que não envelhece quando a base de cartas é resincronizada.
     """
     nomes = list(deck.get("comandantes") or []) + \
-            [c["nome"] for c in deck.get("cartas") or []]
+            [c["nome"] for c in deck.get("cartas") or []] + \
+            [c["nome"] for c in deck.get("maybeboard") or []]
     conhecidas = base_cartas.por_nomes(nomes)
     return {
         **deck,
         "cartas_completas": [
             {**entrada, "carta": conhecidas.get(entrada["nome"])}
             for entrada in deck.get("cartas") or []
+        ],
+        "maybeboard_completo": [
+            {**entrada, "carta": conhecidas.get(entrada["nome"])}
+            for entrada in deck.get("maybeboard") or []
         ],
         "comandantes_completos": [
             conhecidas.get(nome) for nome in deck.get("comandantes") or []
@@ -362,6 +509,11 @@ def para_cotacao(deck: dict) -> list[dict]:
     O comandante entra na lista: quem decide tirá-lo do total é o
     `cotacao.filtrar_cotaveis`, pelo critério do Commander 500, e essa
     decisão fica lá, num lugar só.
+
+    O sideboard entra (é carta que a pessoa quer comprar) e o maybeboard
+    NÃO: cotar o que ainda está em dúvida inflaria o preço do deck com
+    cartas que talvez nunca entrem, que é justamente o oposto do que a
+    pessoa põe ali pra descobrir.
     """
     lista = [{"nome": nome, "quantidade": 1}
              for nome in deck.get("comandantes") or []]
@@ -392,6 +544,11 @@ def sugestoes_uteis(deck: dict, listas: list[dict],
     ja_tem = {base_cartas.normalizar(n) for n in deck.get("comandantes") or []}
     ja_tem |= {base_cartas.normalizar(c["nome"])
                for c in deck.get("cartas") or []}
+    # O maybeboard conta como "já tem" pra este filtro: a carta já está na
+    # tela, e sugerir o que a pessoa acabou de pôr em dúvida é a mesma
+    # burrice de sugerir o que ela acabou de adicionar.
+    ja_tem |= {base_cartas.normalizar(c["nome"])
+               for c in deck.get("maybeboard") or []}
 
     comandantes = base_cartas.por_nomes(deck.get("comandantes") or [])
     identidade = identidade_de([c for c in comandantes.values() if c])
@@ -496,14 +653,20 @@ def importado_para_deck(trazido: dict) -> dict:
     Comandante que não resolve é um caso à parte e mais grave: sem ele o deck
     não tem identidade de cor, e a tela abriria na pergunta "quem é o
     comandante?" como se nada tivesse sido importado.
+
+    O maybeboard do site de origem vem junto, no `maybeboard_completo` — é o
+    mesmo rascunho, e trazer só as 100 obrigaria a pessoa a copiar à mão a
+    parte da lista que ela ainda estava decidindo.
     """
     comandantes = list(trazido.get("comandantes") or [])
     cartas = limpar_cartas(trazido.get("cartas") or [])
-    conhecidas = base_cartas.por_nomes(comandantes +
-                                       [c["nome"] for c in cartas])
+    talvez = limpar_cartas(trazido.get("maybeboard") or [])
+    conhecidas = base_cartas.por_nomes(
+        comandantes + [c["nome"] for c in cartas] +
+        [c["nome"] for c in talvez])
 
     nao_encontradas = []
-    completas, comandantes_completos = [], []
+    completas, talvez_completas, comandantes_completos = [], [], []
     for nome in comandantes:
         carta = conhecidas.get(nome)
         if carta is None:
@@ -517,6 +680,12 @@ def importado_para_deck(trazido: dict) -> dict:
             nao_encontradas.append({**entrada, "comandante": False})
         else:
             completas.append({**entrada, "carta": carta})
+    for entrada in talvez:
+        carta = conhecidas.get(entrada["nome"])
+        if carta is None:
+            nao_encontradas.append({**entrada, "comandante": False})
+        else:
+            talvez_completas.append({**entrada, "carta": carta})
 
     return {
         "nome": (trazido.get("nome") or "").strip()[:80],
@@ -524,6 +693,9 @@ def importado_para_deck(trazido: dict) -> dict:
         "link": trazido.get("link") or "",
         "comandantes_completos": comandantes_completos,
         "cartas_completas": completas,
+        "maybeboard_completo": talvez_completas,
+        "categorias": limpar_categorias(trazido.get("categorias"),
+                                        cartas, talvez),
         "nao_encontradas": nao_encontradas,
     }
 
@@ -537,6 +709,10 @@ def lista_texto(deck: dict) -> str:
     de sempre. Este backend não tem biblioteca de arte nenhuma pra gerar esse
     XML sozinho (ver `pdf_generator.py`: cada carta é um id de arquivo no
     Drive).
+
+    O sideboard entra e o maybeboard não, pelo mesmo critério da cotação: a
+    lista é o que vai pra impressão, e o que a pessoa ainda está decidindo
+    não vai pra impressão.
     """
     linhas = [f"1 {nome}" for nome in deck.get("comandantes") or []]
     linhas += [f"{c['quantidade']} {c['nome']}"

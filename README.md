@@ -229,7 +229,8 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `app/static/admin.html` — a tela de pedidos do operador, em `/admin`. Ver
   *Tela de pedidos (admin)*.
 - `app/static/deckbuilder.html` — a tela de montar deck de Commander, em
-  `/deckbuilder`. Ver *Deckbuilder de Commander*.
+  `/deckbuilder`. Três colunas (maybeboard, deck, busca), categorias próprias
+  e as análises embaixo do deck. Ver *Deckbuilder de Commander*.
 - `app/cartas.py` — a cópia local do bulk data da Scryfall (busca instantânea
   sem tocar na API deles) e a sincronização diária que a mantém.
 - `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
@@ -321,7 +322,17 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   `python tests/test_cartas.py`.
 - `tests/test_decks.py` — as regras do formato, com atenção às exceções que
   dão falso positivo: terreno básico e "any number of cards named" repetem, e
-  dois comandantes valem com Partner: `python tests/test_decks.py`.
+  dois comandantes valem com Partner. E as duas promessas que só se quebram
+  em silêncio: o maybeboard fora da cotação e da contagem, o sideboard fora
+  das 100 mas dentro do preço: `python tests/test_decks.py`.
+- `tests/test_deckbuilder.py` — as mesmas regras do outro lado: as de
+  categoria, sideboard e maybeboard existem DUAS vezes, porque a tela responde
+  ao clique sem esperar a rede. Este teste extrai o JavaScript da página e o
+  roda num interpretador, sobre um DOM de mentira, pra que as duas
+  implementações não divirjam calado — e confere que nenhuma carta pode ficar
+  invisível na lista por causa de uma categoria que não foi desenhada. Precisa
+  do `dukpy` (`pip install dukpy`; ele não está no `requirements.txt` porque
+  não é dependência do serviço): `python tests/test_deckbuilder.py`.
 - `tests/test_spellbook.py` — o cliente do Commander Spellbook contra uma
   resposta sintética no formato real: o `GET` com corpo, a leitura do
   camelCase dentro de `results`, a conta de qual peça está faltando e o que
@@ -339,11 +350,12 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   com pisos e limites, e as sugestões: básico só da cor que falta e até a
   vaga, fixador só da identidade e nunca um que já está no deck:
   `python tests/test_manabase.py`.
-- `tests/test_importar.py` — a importação de deck: o que cada fonte chama de
-  "o deck" (maybeboard do Archidekt e sideboard do Moxfield ficam de fora),
-  onde mora o comandante em cada uma, e o parser da lista colada com os
-  enfeites que cada site exporta — edição, número de coleção, categoria,
-  `*CMDR*`, cabeçalho de seção. Roda sem rede: `python tests/test_importar.py`.
+- `tests/test_importar.py` — a importação de deck: pra ONDE vai o que cada
+  fonte não chama de "o deck" (o sideboard do Moxfield vira categoria, o
+  maybeboard do Archidekt vira maybeboard, token vira lixo), onde mora o
+  comandante em cada uma, e o parser da lista colada com os enfeites que cada
+  site exporta — edição, número de coleção, categoria, `*CMDR*`, cabeçalho de
+  seção. Roda sem rede: `python tests/test_importar.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -385,12 +397,12 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
 | `POST /admin/cartas/sync` | você (`X-Admin-Token`) | refaz a base de cartas na hora. Baixa 100+ MB da Scryfall, daí o token |
 | `POST /decks/importar` | botão **Importar** | traz um deck do Archidekt/Moxfield pelo link, ou de uma lista colada. Devolve as cartas resolvidas na base local + o que ela não conhece. Não grava nada |
-| `POST /decks` | deckbuilder | cria o deck e devolve o id (12 dígitos hex) |
+| `POST /decks` | deckbuilder | cria o deck e devolve o id (12 dígitos hex). O corpo aceita `cartas` (cada uma com `categoria` opcional), `maybeboard` e `categorias` |
 | `GET /decks/{id}` | deckbuilder | o deck com as cartas resolvidas e a validação junto |
-| `PUT /decks/{id}` | deckbuilder | grava o deck por cima. É o autosave — a validação vai na resposta mas não impede de gravar |
+| `PUT /decks/{id}` | deckbuilder | grava o deck por cima, com os mesmos campos do POST. É o autosave — a validação vai na resposta mas não impede de gravar |
 | `POST /decks/{id}/duplicar` | deckbuilder | cópia com id novo (o "salvar como" de um sistema sem login) |
 | `DELETE /decks/{id}` | deckbuilder | apaga o deck. Não tem volta |
-| `GET /decks/{id}/lista` | deckbuilder | a decklist em texto, comandante primeiro — é o que se cola no MPC Fill |
+| `GET /decks/{id}/lista` | deckbuilder | a decklist em texto, comandante primeiro — é o que se cola no MPC Fill. Leva o sideboard, não leva o maybeboard |
 | `POST /decks/{id}/cotacao` | botão **Cotar preços** | cota o deck montado, sem precisar de XML. O andamento sai no `GET /cotacao/{job_id}` de sempre |
 | `POST /decks/{id}/combos` | botão **Procurar combos** | pergunta ao Commander Spellbook os combos do deck e os que faltam uma carta. Uma consulta só, e só no clique |
 | `POST /decks/{id}/poder` | botão **Estimar nível** | classifica o deck nos brackets do Commander e devolve o que justifica a nota, carta por carta |
@@ -549,17 +561,21 @@ deckbuilder  ──(decklist em texto)──►  MPC Fill  ──(XML com as art
    e é ele que define a identidade de cor de tudo o que vem depois; quem já
    tem o deck em outro lugar usa o botão **Importar** (Archidekt, Moxfield ou
    lista colada).
-2. **Busque e clique.** A busca lateral já sai filtrada pela identidade do
+2. **Busque e clique.** A busca da direita já sai filtrada pela identidade do
    comandante: carta que o deck não poderia jogar não aparece. `/` põe o
    cursor na busca, Enter adiciona o primeiro resultado, `Ctrl+Z` desfaz. O
    botão **Filtros** abre a gaveta com busca por efeito, cor, custo e preço.
-3. **Acompanhe a análise.** Contagem pras 100, curva de mana, distribuição de
+3. **Organize.** Cada carta pode ir pra uma **categoria sua** ("combo
+   principal", "sac outlet") pelo `⋯` da linha ou arrastando; o que ainda
+   está em dúvida vai pro **maybeboard**, na coluna da esquerda. Ver
+   *Categorias, sideboard e maybeboard*.
+4. **Acompanhe a análise.** Contagem pras 100, curva de mana, distribuição de
    cores e tipos, os apontamentos de regra e o preço de cada carta — tudo
-   recalculado a cada clique.
-4. **Orce, se quiser.** A prévia do orçamento anda sozinha, pela base local; o
-   botão **Cotar preços** usa a mesma cotação da tela de impressão (LigaMagic
-   + Scryfall), com o mesmo critério do Commander 500.
-5. **Exporte.** **Exportar lista** copia a decklist pra colar no MPC Fill.
+   recalculado a cada clique, nos painéis embaixo do deck.
+5. **Orce, se quiser.** A faixa de orçamento, no alto, anda sozinha pela base
+   local; o botão **Cotar preços** usa a mesma cotação da tela de impressão
+   (LigaMagic + Scryfall), com o mesmo critério do Commander 500.
+6. **Exporte.** **Exportar lista** copia a decklist pra colar no MPC Fill.
 
 ### O que a análise acusa
 
@@ -575,6 +591,94 @@ deckbuilder  ──(decklist em texto)──►  MPC Fill  ──(XML com as art
 
 A validação **nunca impede de salvar**. Ela descreve; quem decide é quem está
 montando.
+
+### Categorias, sideboard e maybeboard
+
+A lista do deck começa agrupada pelo **tipo** da carta (Terrenos, Criaturas,
+Artefatos…), que é o que a carta *é*. Mas a pergunta de quem monta não é essa:
+é **o que esta carta faz no meu deck**. Nenhum `type_line` responde "sac
+outlet".
+
+Daí as **categorias próprias**. Você cria as suas — *Combo principal*, *Sac
+outlet*, *Proteção do comandante* — pelo `⋯` de qualquer linha, arrastando a
+carta pra cima do grupo, ou pelo botão **+ Nova categoria** no pé da lista.
+Elas aparecem **antes** dos grupos automáticos, na ordem que você escolher
+(`⋯` do cabeçalho: renomear, subir, descer, apagar).
+
+Três coisas que essa escolha implica, e que a tela mantém:
+
+* **Categoria é rótulo, não pasta.** A carta sai do grupo do tipo e vai pro
+  grupo escolhido — ela não aparece nos dois, senão a soma dos grupos passaria
+  de 100.
+* **Apagar a categoria não apaga carta.** As cartas dela voltam pro grupo do
+  tipo. Desfazer uma forma de olhar a lista não pode custar 12 cartas.
+* **Categoria vazia continua na tela.** Uma que some antes de receber a
+  primeira carta parece não ter sido criada — e é justamente nela que a
+  próxima carta vai.
+
+#### As duas áreas que não contam pras 100
+
+|  | Conta pras 100 | Entra na cotação e na impressão | Entra nas análises |
+|---|---|---|---|
+| **Deck** | sim | sim | sim |
+| **Sideboard** (categoria embutida) | **não** | **sim** | não |
+| **Maybeboard** (coluna da esquerda) | **não** | **não** | não |
+
+**Sideboard** é uma categoria como as outras, com uma regra a mais: ela sai da
+conta das 100. Sem isso o contador viveria acusando "5 cartas além das 100"
+num deck perfeitamente legal — e um alarme que está sempre ligado é um alarme
+que se aprende a ignorar, junto com os de verdade. Ela continua na cotação e
+na lista de impressão porque é carta que você **quer ter**.
+
+**Maybeboard** é o oposto: ele existe pra *não* participar de nada. É onde
+ficam as cartas que você ainda não decidiu se entram — fora da contagem, fora
+da curva, fora do bracket, fora dos combos e, principalmente, **fora da
+cotação**. Cotar o que está em dúvida infla o preço do deck com cartas que
+talvez nunca entrem, que é o oposto do que se põe ali pra descobrir.
+
+Ele fica na **coluna da esquerda**, do lado oposto à busca, com o deck no
+meio: o que talvez entre de um lado, o que se procura pra entrar do outro. É
+uma coluna só, de propósito — é a margem do caderno, não uma segunda lista de
+deck. Quem não usa recolhe no `‹` e recupera o espaço pro deck; a escolha fica
+guardada no navegador.
+
+O maybeboard **herda as mesmas categorias do deck**, próprias e automáticas,
+e mover uma carta entre os dois leva a categoria junto: ela volta pro lugar de
+onde saiu, sem reclassificar nada. Duas diferenças no desenho, e as duas
+seguem da regra de cima: ele não mostra preço por carta nem subtotal por grupo
+(um número ali diria que ele entra na conta), e **não acusa nada** — uma carta
+fora da identidade de cor no maybeboard não é erro, é uma decisão que ainda
+não foi tomada.
+
+#### Como mover uma carta
+
+| Gesto | Onde funciona |
+|---|---|
+| `⋯` na linha → escolher categoria, tabuleiro ou tirar | em tudo, inclusive no celular |
+| **arrastar** a linha pra cima de um grupo ou da coluna do maybeboard | só no mouse |
+
+O arrastar é atalho, nunca o único caminho: não existe `dragstart` em tela de
+toque, e a tela inteira é usável no celular (onde as áreas viram as abas
+**Deck / Talvez / Buscar / Análise**).
+
+#### Onde isso fica guardado
+
+`cartas` e `maybeboard` são **listas separadas** na tabela `decks`, e
+`categorias` guarda os nomes criados à mão na ordem escolhida. Listas
+separadas, e não uma marca dentro da mesma lista, porque a diferença entre
+elas é justamente não participar: é a única forma de isso não depender de
+alguém lembrar de filtrar em cada conta nova.
+
+As duas colunas nascem por `ALTER TABLE` no `init_db`, então **deck salvo
+antes desta mudança continua abrindo** — ele volta com maybeboard vazio e
+nenhuma categoria.
+
+A regra do sideboard mora num lugar só de cada lado
+(`decks.CATEGORIAS_FORA_DA_CONTA` no servidor, `CATEGORIAS_FORA_DA_CONTA` na
+tela) porque ela existe duas vezes: a tela responde ao clique sem esperar a
+rede, e o servidor valida de novo ao gravar. `tests/test_deckbuilder.py` roda
+o JavaScript da página num interpretador justamente pra que as duas não
+divirjam calado.
 
 ### Onde os decks ficam
 
@@ -642,18 +746,33 @@ precisa saber quais três, senão descobre na hora de imprimir.
 #### O que cada fonte chama de "o deck"
 
 Maybeboard, sideboard e lista de desejos chegam na mesma resposta que o deck,
-e somá-los daria um Commander de 120 cartas pra podar na mão. O critério de
-cada um:
+e somá-los às 100 daria um Commander de 120 cartas pra podar na mão. Eles
+**não são descartados** desde que a tela ganhou maybeboard — vão pro lugar
+certo, pelo rótulo que a fonte deu:
+
+| O que a fonte marcou | Onde cai aqui |
+|---|---|
+| o deck | as 100 |
+| *sideboard* | categoria **Sideboard** — fora das 100, dentro da cotação |
+| *maybeboard*, *considering*, *acquire*, *wishlist* | **maybeboard** — fora de tudo |
+| *tokens*, *emblems* | descartado: não é carta de deck |
 
 * **Archidekt** — cada categoria do deck traz `includedInDeck`. Quem decidiu
   o que conta foi o dono do deck, não a gente; carta em duas categorias, uma
-  delas fora, fica de fora.
-* **Moxfield** — a resposta vem por *tabuleiro*. Entram `mainboard` e
-  `companions`; `commanders` vira comandante; `sideboard`, `maybeboard`,
-  `tokens` e o resto ficam de fora.
-* **Texto colado** — um cabeçalho `Sideboard`/`Maybeboard` corta dali pra
-  frente, até o próximo cabeçalho. Linha em branco **não** volta pro deck:
-  se voltasse, a segunda metade de um sideboard entraria na lista.
+  delas fora, sai das 100. O nome da categoria decide se ela vira sideboard
+  ou maybeboard.
+* **Moxfield** — a resposta vem por *tabuleiro*. `mainboard` e `companions`
+  são as 100; `commanders` vira comandante; `sideboard` e `maybeboard` viram
+  o que o nome diz; `tokens` e o resto ficam de fora.
+* **Texto colado** — um cabeçalho `Sideboard` ou `Maybeboard` manda dali pra
+  frente pro destino dele, até o próximo cabeçalho. Linha em branco **não**
+  volta pro deck: se voltasse, a segunda metade de um sideboard entraria nas
+  100.
+
+**A categoria da carta não atravessa**, só o rótulo de tabuleiro. As
+categorias do Archidekt são quase sempre o *tipo* ("Creature", "Land"), e a
+tela já agrupa por tipo sozinha: trazê-las criaria uma categoria à mão em
+cima de cada grupo automático, duplicando a lista inteira em inglês.
 
 #### O comandante vem num lugar diferente em cada fonte
 
@@ -731,10 +850,57 @@ atrás do Solemn Simulacrum. E a chave de ordenação nunca chega crua no SQL:
 `ORDER BY` não aceita parâmetro, e concatenar texto de fora numa rota pública
 sem token seria injeção.
 
+### Onde cada coisa fica na tela
+
+Três colunas, e a divisão entre elas é uma frase: **a direita monta, o meio é
+o deck, a esquerda guarda a dúvida — e o que confere fica embaixo do deck.**
+
+```
+┌──────────── cabeçalho: nome, contador 100, importar, novo ────────────┐
+├───────── faixa de orçamento (atravessa as três colunas) ──────────────┤
+│  maybeboard  │            o deck              │       busca          │
+│  (recolhível)│   grupos por categoria         │       filtros        │
+│              │   [⚄ mana base] em Terrenos    │       sugestões      │
+│              ├────────────────────────────────┤                      │
+│              │  análise    │  nível de poder  │                      │
+│              │  mana base  │  combos          │                      │
+└──────────────┴────────────────────────────────┴──────────────────────┘
+```
+
+A coluna da direita tinha **sete painéis empilhados** — busca, sugestões,
+análise, mana base, nível de poder, combos e orçamento — e achar qualquer um
+deles custava rolar a coluna inteira, com o deck parado do lado. O conserto
+não foi encolher os painéis: foi notar que eles fazem **duas coisas
+diferentes**.
+
+* **Adicionar carta** é o que se faz com a mão na busca, olhando pro deck de
+  relance. Ficou na direita: só busca e sugestões, e a coluna agora cabe na
+  tela sem rolar.
+* **Conferir o deck** é o que se faz olhando pro deck. Desceu pra **baixo
+  dele**, em duas colunas — análise e nível de poder lado a lado, mana base e
+  combos embaixo. É onde a pergunta nasce.
+* **O orçamento é um número**, e um número não merece uma coluna: virou uma
+  **faixa** entre o cabeçalho e o deck, com o total à esquerda, os botões à
+  direita e a explicação atrás de um `?`. O resultado da cotação abre embaixo
+  dela, usando a largura das três colunas em vez de descer 400 px numa
+  coluna de 372.
+
+Duas travessias curtas que evitam procurar: o cabeçalho de **Terrenos** tem um
+botão **⚄ Mana base** que rola até o painel de baixo e o faz piscar (em vez de
+abrir uma segunda mana base ali, que seriam duas respostas pra mesma
+pergunta), e o maybeboard recolhe no `‹`.
+
+A largura útil passou de 1320 pra **1560 px**: a coluna do maybeboard tirou
+~306 px do deck, e no 1320 a lista dele voltaria a caber numa coluna só de
+cartas. Entre 900 e 1200 px o maybeboard recolhe sozinho — recolher uma coluna
+é melhor do que espremer as três até nenhuma servir. Abaixo de 900 não há
+colunas: há as abas **Deck / Talvez / Buscar / Análise**, cada uma uma tela
+inteira de uma coisa só.
+
 ### Preço na lista, e a prévia do orçamento
 
-Cada carta da lista mostra o preço, cada categoria mostra o subtotal, e o
-painel **Orçamento** mostra o total do deck — tudo recalculado a cada carta
+Cada carta da lista mostra o preço, cada categoria mostra o subtotal, e a
+**faixa de orçamento** mostra o total do deck — tudo recalculado a cada carta
 adicionada, sem rede.
 
 **Esse número não é a cotação, e a tela nunca finge que é.** Ele sai do
@@ -752,10 +918,15 @@ Três decisões que evitam mentira barata:
 * **O total usa o mesmo critério do Commander 500** que a cotação já usa
   (`cotacao.filtrar_cotaveis`): comandante e terreno básico fora. Duas contas
   diferentes pro mesmo deck na mesma tela seriam pior que número nenhum.
+* **O maybeboard fica de fora, e a faixa diz isso.** Quando há carta em
+  dúvida, a linha embaixo do total conta quantas não estão sendo somadas — um
+  total que exclui coisas sem avisar é a mesma mentira, mais educada.
 * **Abaixo de 480 px o preço da linha some.** Em tela de toque os controles de
   quantidade ficam sempre visíveis, e sem isso o nome da carta é que seria
   truncado. O subtotal do grupo e a prévia continuam na tela; nome cortado,
-  não.
+  não. Pelo mesmo motivo a linha do maybeboard, numa coluna de 288 px, larga o
+  preço e os botões de quantidade e fica com o `⋯` e o `✕` — que são as duas
+  coisas que se faz com uma carta em dúvida: decidir e desistir.
 
 ### Combos, pelo Commander Spellbook
 

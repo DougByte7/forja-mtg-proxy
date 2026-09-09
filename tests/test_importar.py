@@ -5,9 +5,14 @@ Motivo de existir. A importação é a única entrada da tela em que o usuário
 NÃO confere carta por carta — ele cola um link, vê "100 cartas" e confia.
 Isso torna dois erros especialmente caros, e os dois são silenciosos:
 
-1. **Trazer o que não é do deck.** Maybeboard do Archidekt e sideboard do
-   Moxfield entram na mesma resposta que o deck. Somar essas cartas dá um
-   deck de 120 que a pessoa vai ter que podar na mão sem saber o que sobra.
+1. **Misturar o que não é do deck com o deck.** Maybeboard do Archidekt e
+   sideboard do Moxfield entram na mesma resposta que o mainboard. Somar
+   essas cartas às 100 dá um deck de 120 que a pessoa vai ter que podar na
+   mão sem saber o que sobra. Desde que o deckbuilder ganhou maybeboard elas
+   não são mais descartadas — o que troca um erro por outro, mais sutil: uma
+   carta que era pra estar em dúvida entrando calada nas 100, ou uma carta
+   do deck caindo no maybeboard e sumindo da cotação. Por isso os testes
+   daqui conferem o DESTINO de cada uma, não só a contagem.
 2. **Perder o comandante.** Ele vem num lugar diferente em cada fonte (uma
    categoria no Archidekt, um tabuleiro no Moxfield, um cabeçalho ou um
    `*CMDR*` no texto). Perdê-lo não dá erro nenhum: dá um deck sem
@@ -74,7 +79,19 @@ def erro(nome, funcao, pedaco=""):
 
 
 def cartas_de(resultado):
-    return [(c["nome"], c["quantidade"]) for c in resultado["cartas"]]
+    """As cartas do deck, sem as que foram pro sideboard."""
+    return [(c["nome"], c["quantidade"]) for c in resultado["cartas"]
+            if not c.get("categoria")]
+
+
+def sideboard_de(resultado):
+    return [(c["nome"], c["quantidade"]) for c in resultado["cartas"]
+            if c.get("categoria") == "Sideboard"]
+
+
+def maybe_de(resultado):
+    return [(c["nome"], c["quantidade"])
+            for c in resultado.get("maybeboard") or []]
 
 
 # --------------------------------------------------------------------------
@@ -161,6 +178,8 @@ try:
         "categories": [
             {"name": "Maybeboard", "includedInDeck": False},
             {"name": "Considerando", "includedInDeck": False},
+            {"name": "Sideboard", "includedInDeck": False},
+            {"name": "Tokens", "includedInDeck": False},
             {"name": "Rampa", "includedInDeck": True},
         ],
         "cards": [
@@ -168,8 +187,10 @@ try:
             item_archidekt("Sol Ring", 1, ["Rampa"]),
             item_archidekt("Arcane Signet", 1, []),          # categoria de sistema
             item_archidekt("Forest", 10, ["Land"]),
-            item_archidekt("Blood Moon", 1, ["Maybeboard"]),  # fora
-            item_archidekt("Mana Crypt", 1, ["Rampa", "Considerando"]),  # fora
+            item_archidekt("Blood Moon", 1, ["Maybeboard"]),  # dúvida
+            item_archidekt("Mana Crypt", 1, ["Rampa", "Considerando"]),  # dúvida
+            item_archidekt("Swords to Plowshares", 1, ["Sideboard"]),
+            item_archidekt("Soldier", 1, ["Tokens"]),         # lixo
         ],
     }
     saida, sessao = com_sessao(RespostaFalsa(deck_archidekt),
@@ -182,10 +203,17 @@ try:
        saida["comandantes"], ["Atraxa, Praetors' Voice"])
     # O maybeboard é o erro caro: entra na mesma lista que o deck e só se
     # distingue pela categoria que o DONO marcou como fora.
-    eq("archidekt: maybeboard fica de fora", cartas_de(saida),
+    eq("archidekt: só o que conta pro deck entra nas 100", cartas_de(saida),
        [("Sol Ring", 1), ("Arcane Signet", 1), ("Forest", 10)])
-    check("archidekt: carta em duas categorias, uma fora, fica de fora",
+    check("archidekt: carta em duas categorias, uma fora, sai das 100",
           "Mana Crypt" not in [c[0] for c in cartas_de(saida)])
+    # E não some: vai pro maybeboard, que é onde ela estava lá.
+    eq("archidekt: o que o dono tirou da conta vira maybeboard",
+       sorted(maybe_de(saida)), [("Blood Moon", 1), ("Mana Crypt", 1)])
+    eq("archidekt: sideboard de lá vira a categoria Sideboard daqui",
+       sideboard_de(saida), [("Swords to Plowshares", 1)])
+    check("archidekt: token não vira carta de deck nem maybeboard",
+          "Soldier" not in [c[0] for c in maybe_de(saida) + cartas_de(saida)])
 
     erro("archidekt: resposta sem 'cards' acusa mudança de contrato",
          lambda: com_sessao(RespostaFalsa({"name": "x"}),
@@ -220,9 +248,16 @@ try:
        sessao.pedidos, ["https://api2.moxfield.com/v3/decks/all/abc123"])
     eq("moxfield: comandante sai do tabuleiro 'commanders'",
        saida["comandantes"], ["Winota, Joiner of Forces"])
-    eq("moxfield: mainboard e companion entram; o resto não",
+    eq("moxfield: mainboard e companion são as 100",
        sorted(cartas_de(saida)),
        [("Lurrus of the Dream-Den", 1), ("Plains", 12), ("Sol Ring", 1)])
+    eq("moxfield: o tabuleiro sideboard vira a categoria Sideboard",
+       sideboard_de(saida), [("Blood Moon", 1)])
+    eq("moxfield: o tabuleiro maybeboard vira o maybeboard",
+       maybe_de(saida), [("Mana Crypt", 1)])
+    check("moxfield: token continua fora de tudo",
+          "Soldier" not in [c[0] for c in
+                            cartas_de(saida) + sideboard_de(saida) + maybe_de(saida)])
 
     erro("moxfield: resposta sem 'boards' acusa mudança de contrato",
          lambda: com_sessao(RespostaFalsa({"name": "x"}),
@@ -268,11 +303,33 @@ try:
 
     saida = importar.de_texto("Deck\n1 Sol Ring\n\nSideboard\n1 Blood Moon\n"
                               "1 Pyroblast\n")
-    eq("texto: sideboard fica de fora", cartas_de(saida), [("Sol Ring", 1)])
+    eq("texto: sideboard fica fora das 100", cartas_de(saida), [("Sol Ring", 1)])
     # Linha em branco NÃO devolve pro deck: se devolvesse, o Pyroblast (que
-    # vem depois de uma quebra dentro do sideboard) entraria no deck.
-    check("texto: linha em branco não tira do sideboard",
-          "Pyroblast" not in [c[0] for c in cartas_de(saida)])
+    # vem depois de uma quebra dentro do sideboard) entraria nas 100.
+    eq("texto: linha em branco não tira do sideboard",
+       sideboard_de(saida), [("Blood Moon", 1), ("Pyroblast", 1)])
+
+    # Os três rótulos de "fora do deck" têm destinos diferentes, e é só o
+    # rótulo que os separa — errar aqui é pôr na cotação o que a pessoa
+    # ainda não decidiu, ou tirar dela o que ela já decidiu.
+    saida = importar.de_texto(
+        "1 Sol Ring\nSideboard\n1 Blood Moon\nMaybeboard\n1 Rhystic Study\n"
+        "Considering\n1 Mana Crypt\nTokens\n1 Soldier\n")
+    eq("texto: as 100 são só o que não tem rótulo", cartas_de(saida),
+       [("Sol Ring", 1)])
+    eq("texto: sideboard vira categoria", sideboard_de(saida),
+       [("Blood Moon", 1)])
+    eq("texto: maybeboard e 'considering' viram maybeboard",
+       maybe_de(saida), [("Rhystic Study", 1), ("Mana Crypt", 1)])
+    check("texto: seção de tokens continua sendo descartada",
+          "Soldier" not in [c[0] for c in
+                            cartas_de(saida) + sideboard_de(saida) + maybe_de(saida)])
+
+    # Só maybeboard não é lista vazia: é quem guarda a lista de compras num
+    # site e vem cotar aqui.
+    saida = importar.de_texto("Maybeboard\n1 Rhystic Study\n")
+    eq("texto: lista só com maybeboard não é erro",
+       maybe_de(saida), [("Rhystic Study", 1)])
 
     saida = importar.de_texto("Creatures (2)\n1 Llanowar Elves\n1 Birds of Paradise\n")
     eq("texto: 'Creatures (2)' é cabeçalho, não carta",
@@ -329,7 +386,8 @@ try:
     # recebe 97 precisa saber QUAIS três ficaram de fora.
     eq("o que a base não conhece volta na lista, com a quantidade",
        pronto["nao_encontradas"],
-       [{"nome": "Carta Que Não Existe", "quantidade": 2, "comandante": False}])
+       [{"nome": "Carta Que Não Existe", "quantidade": 2, "categoria": "",
+         "comandante": False}])
     check("o nome do deck é cortado no limite do campo",
           len(pronto["nome"]) <= 80)
 

@@ -13,6 +13,14 @@ que se aprende a ignorar — e aí o erro de verdade passa junto.
 As exceções do formato (terreno básico, "any number of cards named", dois
 comandantes com Partner) são o miolo do teste por isso.
 
+O MAYBEBOARD E O SIDEBOARD são o segundo miolo, e pelo mesmo motivo ao
+contrário: eles existem pra NÃO participar, e o jeito de essa promessa
+quebrar é silencioso. Maybeboard que entra na cotação cobra do jogador uma
+carta que ele estava só namorando; sideboard que entra na conta das 100
+deixa o contador acusando "5 cartas além das 100" pra sempre num deck legal.
+Nenhum dos dois erros aparece na tela como erro — aparecem como um número
+errado que parece certo.
+
 Não precisa de rede nem de pytest. Rode de dentro da raiz do projeto:
 
     python tests/test_decks.py
@@ -101,7 +109,7 @@ try:
     eq("duas linhas da mesma carta viram uma",
        decks.limpar_cartas([{"nome": "Sol Ring", "quantidade": 1},
                             {"nome": "sol ring", "quantidade": 2}]),
-       [{"nome": "Sol Ring", "quantidade": 3}])
+       [{"nome": "Sol Ring", "quantidade": 3, "categoria": ""}])
     eq("quantidade zero some",
        decks.limpar_cartas([{"nome": "Sol Ring", "quantidade": 0}]), [])
     eq("nome vazio some",
@@ -196,6 +204,93 @@ try:
               ["Atraxa"], [{"nome": "Forest", "quantidade": 99},
                            {"nome": "Sol Ring", "quantidade": 1}])))
 
+    # -------------------------------------------- categorias e maybeboard
+    print("\n--- categorias, sideboard e maybeboard ---")
+
+    eq("a categoria da carta sobrevive à limpeza",
+       decks.limpar_cartas([{"nome": "Sol Ring", "quantidade": 1,
+                             "categoria": "Combo principal"}]),
+       [{"nome": "Sol Ring", "quantidade": 1, "categoria": "Combo principal"}])
+    # Juntar duas linhas da mesma carta não pode inventar uma categoria:
+    # vale a primeira que tinha uma.
+    eq("ao juntar linhas repetidas vale a primeira categoria",
+       decks.limpar_cartas([{"nome": "Sol Ring", "quantidade": 1,
+                             "categoria": "Combo principal"},
+                            {"nome": "sol ring", "quantidade": 1,
+                             "categoria": "Rampa"}]),
+       [{"nome": "Sol Ring", "quantidade": 2, "categoria": "Combo principal"}])
+    eq("categoria em branco na primeira linha cede pra da segunda",
+       decks.limpar_cartas([{"nome": "Sol Ring", "quantidade": 1},
+                            {"nome": "sol ring", "quantidade": 1,
+                             "categoria": "Rampa"}]),
+       [{"nome": "Sol Ring", "quantidade": 2, "categoria": "Rampa"}])
+
+    eq("categoria repetida (mesmo com caixa diferente) entra uma vez só",
+       decks.limpar_categorias(["Sac outlet", "SAC OUTLET", " "]),
+       ["Sac outlet"])
+    # Categoria usada por uma carta e ausente da lista viraria grupo órfão na
+    # tela: com cartas dentro e sem jeito de renomear nem apagar.
+    eq("categoria que só as cartas conhecem é recolhida",
+       decks.limpar_categorias([], [{"nome": "x", "categoria": "Sac outlet"}]),
+       ["Sac outlet"])
+    eq("Sideboard não entra na lista das feitas à mão",
+       decks.limpar_categorias(["Sideboard", "Combo"]), ["Combo"])
+    eq("categoria vazia é guardada mesmo sem carta nenhuma",
+       decks.limpar_categorias(["Ainda vazia"]), ["Ainda vazia"])
+
+    # A regra que o sideboard traz, e a única: fora da conta das 100.
+    cem = [{"nome": "Forest", "quantidade": 99}]
+    eq("deck de 100 com sideboard continua completo",
+       decks.validar(["Atraxa"], cem + [
+           {"nome": "Sol Ring", "quantidade": 1, "categoria": "Sideboard"}]
+       )["total"], 100)
+    check("carta em categoria à mão continua contando pras 100",
+          decks.validar(["Atraxa"], cem + [
+              {"nome": "Sol Ring", "quantidade": 1,
+               "categoria": "Combo principal"}])["total"] == 101)
+    # Fora da CONTA, não fora das REGRAS: uma carta guardada pra trocar
+    # depois precisa caber no deck em que vai entrar.
+    check("sideboard fora da identidade continua sendo acusado",
+          "identidade" in tipos_de(decks.validar(["Atraxa"], [
+              {"nome": "Lightning Bolt", "quantidade": 1,
+               "categoria": "Sideboard"}])))
+
+    guardado = decks.criar("Com dúvida", ["Atraxa"],
+                           [{"nome": "Sol Ring", "quantidade": 1}],
+                           [{"nome": "Forest", "quantidade": 2}],
+                           ["Combo principal"])
+    relido = decks.obter(guardado["id"])
+    eq("o maybeboard volta do banco",
+       relido["maybeboard"],
+       [{"nome": "Forest", "quantidade": 2, "categoria": ""}])
+    eq("as categorias voltam do banco", relido["categorias"], ["Combo principal"])
+    # O que a pessoa mais nota se quebrar: o maybeboard entrando no preço.
+    eq("o maybeboard não entra na cotação",
+       [c["nome"] for c in decks.para_cotacao(relido)], ["Atraxa", "Sol Ring"])
+    eq("o maybeboard não entra na lista de impressão",
+       decks.lista_texto(relido), "1 Atraxa\n1 Sol Ring")
+    eq("o maybeboard não conta pras 100",
+       decks.validar(relido["comandantes"], relido["cartas"])["total"], 2)
+    eq("o maybeboard volta resolvido em carta",
+       [e["carta"]["nome"] for e in decks.com_cartas(relido)["maybeboard_completo"]],
+       ["Forest"])
+    copia = decks.duplicar(guardado["id"])
+    eq("a cópia leva o maybeboard", copia["maybeboard"], relido["maybeboard"])
+    eq("a cópia leva as categorias", copia["categorias"], relido["categorias"])
+    decks.apagar(guardado["id"])
+    decks.apagar(copia["id"])
+
+    # O sideboard é o oposto do maybeboard aqui: ele é carta que a pessoa
+    # quer ter, então entra no preço e na impressão.
+    com_side = {"nome": "x", "comandantes": ["Atraxa"], "cartas": [
+        {"nome": "Sol Ring", "quantidade": 1},
+        {"nome": "Forest", "quantidade": 1, "categoria": "Sideboard"}]}
+    eq("o sideboard entra na cotação",
+       [c["nome"] for c in decks.para_cotacao(com_side)],
+       ["Atraxa", "Sol Ring", "Forest"])
+    eq("cartas_contadas tira o sideboard e mais nada",
+       [c["nome"] for c in decks.cartas_contadas(com_side)], ["Sol Ring"])
+
     # ---------------------------------------------------------- persistência
     print("\n--- guardar, reler, duplicar ---")
 
@@ -205,14 +300,15 @@ try:
     relido = decks.obter(deck["id"])
     eq("o que salvou é o que volta",
        (relido["nome"], relido["comandantes"], relido["cartas"]),
-       ("Meu Atraxa", ["Atraxa"], [{"nome": "Sol Ring", "quantidade": 1}]))
+       ("Meu Atraxa", ["Atraxa"],
+        [{"nome": "Sol Ring", "quantidade": 1, "categoria": ""}]))
 
     decks.salvar(deck["id"], "Outro nome", ["Atraxa"],
                  [{"nome": "Forest", "quantidade": 9}])
     depois = decks.obter(deck["id"])
     eq("salvar troca o deck inteiro",
        (depois["nome"], depois["cartas"]),
-       ("Outro nome", [{"nome": "Forest", "quantidade": 9}]))
+       ("Outro nome", [{"nome": "Forest", "quantidade": 9, "categoria": ""}]))
     check("atualizado_em anda pra frente",
           depois["atualizado_em"] >= relido["atualizado_em"])
 
