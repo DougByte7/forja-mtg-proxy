@@ -696,9 +696,9 @@ def cartas_busca(q: str = "", identidade: str | None = None, tipo: str = "",
 def cartas_detalhe(nome: str):
     """A carta inteira pra modal do deckbuilder: o que a base local não guarda.
 
-    Raridade, edição, artista, ambientação, legalidade em cada formato e as
-    notas de regras (os rulings). Vem da API da Scryfall e fica em cache por
-    um dia — ver `detalhe_carta.py`.
+    Raridade, edição, artista, ambientação e as notas de regras (os rulings).
+    Vem da API da Scryfall e fica em cache por um dia — ver
+    `detalhe_carta.py`.
 
     Público como a busca, e pelo mesmo motivo: é catálogo de carta de Magic.
     Bater aqui em rajada não vira rajada na Scryfall — o `Freio` do

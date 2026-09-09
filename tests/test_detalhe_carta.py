@@ -55,7 +55,6 @@ CARD = {
     "color_identity": ["R", "U"], "set": "dmr", "set_name": "Dominaria Remastered",
     "collector_number": "215", "rarity": "uncommon", "released_at": "2023-01-13",
     "keywords": [], "reserved": False, "edhrec_rank": 13027,
-    "legalities": {"commander": "legal", "standard": "not_legal"},
     "prices": {"usd": "0.22", "usd_foil": None},
     "scryfall_uri": "https://scryfall.com/card/dmr/215/fire-ice",
     "related_uris": {"gatherer": "https://gatherer.wizards.com/x"},
@@ -105,8 +104,8 @@ try:
     eq("as notas de regras vêm no formato da tela", d["regras"],
        [{"data": "2022-12-08", "fonte": "wotc",
          "texto": "Escolha uma das metades pra conjurar."}])
-    eq("legalidade por formato passa inteira",
-       d["legalidades"]["commander"], "legal")
+    check("legalidade não vem: a modal não mostra formato",
+          "legalidades" not in d)
     check("link da Scryfall vem junto", d["scryfall"].startswith("https://scryfall"))
 
     antes = len(chamadas)

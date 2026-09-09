@@ -395,7 +395,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /deckbuilder` | você, no navegador | a tela de montar deck de Commander — ver *Deckbuilder de Commander* |
 | `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta |
 | `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
-| `GET /cartas/detalhe?nome=…` | deckbuilder | a carta inteira pra modal: edição, raridade, artista, ambientação, legalidade em cada formato e as **notas de regras** (rulings). Vem da API da Scryfall, com cache de um dia |
+| `GET /cartas/detalhe?nome=…` | deckbuilder | a carta inteira pra modal: edição, raridade, artista, ambientação e as **notas de regras** (rulings). Vem da API da Scryfall, com cache de um dia |
 | `POST /admin/cartas/sync` | você (`X-Admin-Token`) | refaz a base de cartas na hora. Baixa 100+ MB da Scryfall, daí o token |
 | `POST /decks/importar` | botão **Importar** | traz um deck do Archidekt/Moxfield pelo link, ou de uma lista colada. Devolve as cartas resolvidas na base local + o que ela não conhece. Não grava nada |
 | `POST /decks` | deckbuilder | cria o deck e devolve o id (12 dígitos hex). O corpo aceita `cartas` (cada uma com `categoria` opcional), `maybeboard` e `categorias` |
@@ -571,8 +571,8 @@ deckbuilder  ──(decklist em texto)──►  MPC Fill  ──(XML com as art
    está em dúvida vai pro **maybeboard**, na coluna da esquerda. Ver
    *Categorias, sideboard e maybeboard*.
 4. **Veja a carta inteira.** Clicar numa linha do deck ou do maybeboard — ou
-   no comandante, lá no alto — abre a carta em tela cheia: arte, oracle das duas faces, ambientação, edição,
-   ilustração, legalidade em cada formato e as **notas e regras** — os
+   no comandante, lá no alto — abre a carta em tela cheia: arte, oracle das
+   duas faces, ambientação, edição, ilustração e as **notas e regras** — os
    *rulings* da Scryfall, as respostas oficiais sobre como a carta funciona.
    A modal abre na hora com o que a base local sabe e completa o resto
    sozinha; `Esc` fecha. Sem mouse, o mesmo lugar sai no `⋯` da linha.

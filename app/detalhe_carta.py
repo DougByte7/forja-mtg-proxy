@@ -3,11 +3,11 @@ A carta inteira, do jeito que a tela de detalhe mostra.
 
 A base local do `cartas.py` guarda o que a BUSCA precisa: nome, custo, tipo,
 oracle, cor, preço e arte. A modal do deckbuilder pede o resto — raridade,
-edição, artista, texto de ambientação, poder/resistência, legalidade em cada
-formato e as **notas de regras** (o "Notes and Rules Information" da página da
-Scryfall, que são os rulings). Nada disso está no bulk data que a base local
-carrega: rulings vêm de outro endpoint, e guardar todos eles em disco seria
-multiplicar por vários o tamanho de uma base que já passa de 100 MB.
+edição, artista, texto de ambientação, poder/resistência e as **notas de
+regras** (o "Notes and Rules Information" da página da Scryfall, que são os
+rulings). Nada disso está no bulk data que a base local carrega: rulings vêm
+de outro endpoint, e guardar todos eles em disco seria multiplicar por vários
+o tamanho de uma base que já passa de 100 MB.
 
 Então isto vai à API da Scryfall na hora, carta a carta, e guarda a resposta
 em disco. É o mesmo desenho do `cache_precos`: por carta, não por deck, pra
@@ -120,7 +120,6 @@ def _formato(card: dict, rulings: list) -> dict:
         # Posição da carta no EDHREC. Vale como "quão jogada em Commander",
         # que é o formato do deckbuilder — quanto menor, mais jogada.
         "edhrec": card.get("edhrec_rank"),
-        "legalidades": card.get("legalities") or {},
         "precos": card.get("prices") or {},
         "scryfall": card.get("scryfall_uri") or "",
         "gatherer": (card.get("related_uris") or {}).get("gatherer") or "",

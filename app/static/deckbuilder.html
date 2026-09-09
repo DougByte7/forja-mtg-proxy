@@ -539,17 +539,7 @@
     font-size:11px;border:1px solid var(--border);border-radius:999px;
     padding:3px 9px;color:var(--text-muted);
   }
-  /* Legalidade por formato, com a cor dizendo o que a palavra já diz: quem
-     procura "posso jogar isto em Commander?" acha a resposta pelo verde antes
-     de ler o formato. */
-  .carta-chip.sim{border-color:rgba(76,154,107,.55);color:var(--green);}
-  .carta-chip.nao{opacity:.5;}
-  .carta-chip.banida{border-color:rgba(217,99,74,.55);color:var(--red);}
-  .carta-chip.restrita{border-color:var(--gold);color:var(--gold-light);}
   .carta-chip b{font-weight:600;color:var(--text);}
-  .carta-chip.sim b{color:var(--green);}
-  .carta-chip.banida b{color:var(--red);}
-  .carta-chip.restrita b{color:var(--gold-light);}
   .regra{
     border-left:2px solid var(--border);padding-left:11px;margin-bottom:11px;
     font-size:12.5px;line-height:1.65;
@@ -1702,7 +1692,7 @@
 
 <!-- A carta inteira. Abre no clique de uma linha do deck ou do maybeboard:
      a lista responde "o que está no deck", e uma hora a pergunta vira "o que
-     esta carta faz, mesmo?" — que é oracle, ambientação, legalidade e as
+     esta carta faz, mesmo?" — que é oracle, ambientação, ficha da edição e as
      notas de regras da Scryfall. -->
 <div class="carta-fundo" id="carta-fundo" hidden>
   <div class="carta-modal" role="dialog" aria-modal="true"
@@ -4820,7 +4810,7 @@ function chamarManabase(){
 
    Clique numa linha do deck ou do maybeboard. A lista responde "o que está no
    deck"; uma hora a pergunta vira "o que esta carta faz, mesmo?" — e aí é
-   oracle inteiro, ambientação, edição, legalidade e as notas de regras.
+   oracle inteiro, ambientação, edição e as notas de regras.
 
    A modal abre NA HORA com o que a base local já tem (a carta chega completa
    da busca, ver `cartas.py`) e completa depois com o que só a API da Scryfall
@@ -4832,23 +4822,6 @@ let cartaAberta = null;         // nome da carta na modal, ou null
 // conferir um ruling) e a segunda vez não pode custar rede de novo.
 const detalhesVistos = new Map();
 
-/* Os formatos que a legalidade mostra, nesta ordem. A Scryfall devolve mais
-   de vinte, e a lista inteira é uma parede de chips onde a resposta que
-   interessa (Commander) fica no meio. Formato que a Scryfall não conhecer
-   simplesmente não aparece. */
-const FORMATOS = [
-  ["commander", "Commander"], ["duel", "Duel Commander"],
-  ["paupercommander", "Pauper Commander"], ["oathbreaker", "Oathbreaker"],
-  ["brawl", "Brawl"], ["pauper", "Pauper"], ["modern", "Modern"],
-  ["legacy", "Legacy"], ["vintage", "Vintage"], ["standard", "Standard"],
-  ["pioneer", "Pioneer"],
-];
-const LEGALIDADE = {
-  legal: {classe: "sim", rotulo: "legal"},
-  not_legal: {classe: "nao", rotulo: "não existe"},
-  banned: {classe: "banida", rotulo: "banida"},
-  restricted: {classe: "restrita", rotulo: "restrita"},
-};
 const RARIDADE = {common: "Comum", uncommon: "Incomum", rare: "Rara",
                   mythic: "Mítica", special: "Especial", bonus: "Bônus"};
 
@@ -4947,9 +4920,8 @@ function dadosHTML(d){
        <span class="val">${escapar(val)}</span></div>`).join("")}</div>`;
 }
 
-/* Os preços da Scryfall são do mercado americano/europeu e NÃO são o preço de
-   comprar no Brasil — a mesma ressalva que o `scryfall.py` faz. Quem responde
-   "quanto custa" continua sendo o botão de cotar. */
+/* Preço de referência, e só: são os do mercado americano/europeu, não os de
+   comprar no Brasil. Quem responde "quanto custa" é o botão de cotar. */
 function precosHTML(d){
   const p = d.precos || {};
   const chips = [["usd", "US$", p.usd], ["usd_foil", "US$ foil", p.usd_foil],
@@ -4959,21 +4931,6 @@ function precosHTML(d){
        <b>${escapar(v)}</b></span>`);
   if (!chips.length) return "";
   return `<div><h2 class="secao">Preço de referência</h2>
-    <div class="carta-chips">${chips.join("")}</div>
-    <p class="carta-nota">Mercado americano e europeu. Não é o preço de
-      comprar no Brasil — quem responde isso é o botão de cotar.</p></div>`;
-}
-
-function legalidadesHTML(d){
-  const leg = d.legalidades || {};
-  const chips = FORMATOS.filter(([chave]) => leg[chave])
-    .map(([chave, rotulo]) => {
-      const e = LEGALIDADE[leg[chave]] || {classe: "nao", rotulo: leg[chave]};
-      return `<span class="carta-chip ${e.classe}">${escapar(rotulo)}
-        <b>${escapar(e.rotulo)}</b></span>`;
-    });
-  if (!chips.length) return "";
-  return `<div><h2 class="secao">Legalidade</h2>
     <div class="carta-chips">${chips.join("")}</div></div>`;
 }
 
@@ -5020,8 +4977,8 @@ function desenharCarta(local, d){
   if (d){
     // As notas de regras vêm logo depois do oracle porque são a continuação
     // dele — o que a carta faz, e o que ela faz nos casos em que ninguém
-    // concorda. Edição, legalidade e preço são ficha técnica e podem esperar.
-    partes.push(regrasHTML(d), dadosHTML(d), legalidadesHTML(d), precosHTML(d));
+    // concorda. Edição, ilustração e preço são ficha técnica e podem esperar.
+    partes.push(regrasHTML(d), dadosHTML(d), precosHTML(d));
     const links = [];
     if (d.scryfall || local.scryfall){
       links.push(`<a href="${escapar(d.scryfall || local.scryfall)}"
@@ -5033,7 +4990,7 @@ function desenharCarta(local, d){
     }
     if (links.length) partes.push(`<div class="carta-links">${links.join("")}</div>`);
   } else if (d === null){
-    partes.push(`<div class="carta-nota">Buscando edição, legalidade e
+    partes.push(`<div class="carta-nota">Buscando edição, ambientação e
       notas de regras na Scryfall…</div>`);
   } else {
     partes.push(`<div class="carta-nota">A Scryfall não respondeu agora —
