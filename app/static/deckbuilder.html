@@ -1448,8 +1448,6 @@
           reconhece entre as cartas que você já tem. Os que ficam a <b>uma
           carta</b> de fechar aparecem na aba <b>Combos</b> do painel de
           adicionar — lá eles viram carta pra pôr no deck.</p>
-        <button class="btn" id="btn-combos" style="width:100%;margin-top:10px;">
-          Procurar combos</button>
         <div id="combos-resultado" style="margin-top:12px;"></div>
       </div>
     </div>
@@ -1510,8 +1508,6 @@
         <p class="nota" id="sug-nota">Cartas que combinam com o comandante,
           segundo os decks registrados no EDHREC. A sinergia diz o quanto a
           carta aparece mais <b>com ele</b> do que com os outros comandantes.</p>
-        <button class="btn" id="btn-sugestoes" style="width:100%;margin-top:10px;">
-          Buscar sugestões</button>
         <div id="sug-resultado" style="margin-top:4px;"></div>
       </div>
 
@@ -1519,8 +1515,6 @@
         <p class="nota" id="combos-rail-nota">Combos que o deck fecha com
           <b>uma carta</b> a mais. Cada peça que falta tem um botão pra entrar
           direto no deck — é a lista de compras que o Spellbook enxerga.</p>
-        <button class="btn" id="btn-combos-rail" style="width:100%;margin-top:10px;">
-          Procurar combos</button>
         <div id="combos-rail-resultado" style="margin-top:4px;"></div>
       </div>
     </div>
@@ -3633,8 +3627,6 @@ async function buscarSugestoes(tema){
   if (!estado.id) await salvarAgora();
   if (!estado.id){ toast("Não consegui salvar o deck antes de sugerir."); return; }
 
-  const botao = $("btn-sugestoes");
-  botao.disabled = true;
   $("sug-resultado").innerHTML = `<div class="nota">Perguntando ao EDHREC…</div>`;
   try {
     estado.sugestoes = await api(`/decks/${estado.id}/sugestoes`, {
@@ -3647,8 +3639,6 @@ async function buscarSugestoes(tema){
     $("sug-resultado").innerHTML =
       `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
     return;
-  } finally {
-    botao.disabled = false;
   }
   desenharSugestoes();
 }
@@ -3974,10 +3964,8 @@ async function procurarCombos(){
   // e a outra em seguida): a segunda desiste em vez de repetir a chamada.
   if (combosRodando) return;
   combosRodando = true;
-  // Dois botões pedem a mesma coisa (o do deck e o da lista de compras), e a
-  // consulta é uma só: os dois esperam juntos.
-  const botoes = [$("btn-combos"), $("btn-combos-rail")];
-  botoes.forEach(b => b.disabled = true);
+  // A consulta é uma só e alimenta os dois lugares (o do deck e a lista de
+  // compras): os dois esperam juntos.
   const esperando = `<div class="nota">Perguntando ao Spellbook…</div>`;
   $("combos-resultado").innerHTML = esperando;
   $("combos-rail-resultado").innerHTML = esperando;
@@ -3993,7 +3981,6 @@ async function procurarCombos(){
     $("combos-rail-resultado").innerHTML = erro;
     return;
   } finally {
-    botoes.forEach(b => b.disabled = false);
     combosRodando = false;
   }
   desenharCombos();
@@ -4649,11 +4636,7 @@ function ligarEventos(){
   });
 
   $("btn-recolher-talvez").addEventListener("click", () => recolherTalvez());
-  $("btn-combos").addEventListener("click", procurarCombos);
-  $("btn-combos-rail").addEventListener("click", procurarCombos);
   $("btn-poder").addEventListener("click", estimarPoder);
-  $("btn-sugestoes").addEventListener("click", () =>
-    buscarSugestoes(estado.sugestoesTema));
   $("btn-ver-analise").addEventListener("click", () => {
     trocarAba("analise");
     $("painel-analise").scrollIntoView({behavior: "smooth", block: "nearest"});
