@@ -524,6 +524,13 @@
 
   /* ---------------- símbolos de mana ---------------- */
   .mana{display:inline-flex;gap:2px;align-items:center;flex:none;}
+  /* Só o SEGUNDO lado ganha respiro, e é ele que diz que ali começa outro
+     custo. A folga vai na margem, e não no `gap` do `.mana`, porque há
+     `.mana` desenhado com as bolinhas soltas dentro (identidade do
+     comandante, cores que um terreno produz) — subir o `gap` esparramaria
+     essas também. */
+  .mana .lado{display:inline-flex;gap:2px;align-items:center;}
+  .mana .lado + .lado{margin-left:7px;}
   .pip{
     width:13px;height:13px;border-radius:50%;display:inline-flex;
     align-items:center;justify-content:center;
@@ -842,6 +849,14 @@
   .fonte-edhrec a{color:var(--gold-light);}
 
   /* ---------------- mana base ---------------- */
+  /* Duas leituras independentes: à esquerda a conta do deck que já existe,
+     à direita a lista de terrenos pra comprar. Empilhadas, a lista de compra
+     ficava a uma rolagem inteira do número que a justifica. */
+  .mb-duo{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+    gap:14px 20px;align-items:start;
+  }
+  .mb-duo > div{min-width:0;}
   .mb-terrenos{
     display:flex;align-items:baseline;justify-content:space-between;gap:8px;
     margin-bottom:4px;font-size:12px;color:var(--text-muted);
@@ -995,12 +1010,28 @@
   }
 
   /* ---------------- prévia da arte (só no mouse) ---------------- */
+  /* Contêiner e não <img> porque carta de duas faces mostra as duas lado a
+     lado: ver só a frente de um transform é ver metade da carta. */
   .previa{
-    position:fixed;z-index:60;pointer-events:none;width:220px;border-radius:11px;
-    border:1px solid var(--border);box-shadow:0 22px 44px -14px rgba(0,0,0,.85);
-    opacity:0;transition:opacity .12s;background:var(--surface);
+    position:fixed;z-index:60;pointer-events:none;display:flex;gap:8px;
+    opacity:0;transition:opacity .12s;
   }
   .previa.mostra{opacity:1;}
+  .previa img{
+    display:block;width:250px;border-radius:11px;border:1px solid var(--border);
+    box-shadow:0 22px 44px -14px rgba(0,0,0,.85);background:var(--surface);
+  }
+  .previa img.vazia{display:none;}
+  /* Carta partida é impressa deitada: a Scryfall entrega a arte em pé, com o
+     texto de lado. Girar aqui é o que faz a carta ser lida sem torcer o
+     pescoço — e deitada ela cabe mais larga, que é o que deixa o texto das
+     duas metades legível. A largura da caixa é a ALTURA da imagem girada, e
+     vice-versa; os números saem de PREVIA_LARGA/PREVIA_ALTA no script. */
+  .previa.deitada{width:487px;height:349px;}
+  .previa.deitada img{
+    position:absolute;top:0;left:0;width:349px;
+    transform-origin:top left;transform:rotate(90deg) translateY(-100%);
+  }
 
   /* ---------------- orçamento ---------------- */
   .fonte{
@@ -1250,9 +1281,7 @@
         <h2 class="secao">Mana base</h2>
         <p class="nota" id="mb-nota">Quantos terrenos a curva pede, quantas
           fontes de cada cor o deck tem e quantas precisaria. Conta feita aqui,
-          sobre o seu deck — depois da primeira vez, acompanha cada mudança.</p>
-        <button class="btn" id="btn-manabase" style="width:100%;margin-top:10px;">
-          Analisar mana base</button>
+          sobre o seu deck — acompanha cada mudança.</p>
         <div id="mb-resultado" style="margin-top:12px;"></div>
       </div>
 
@@ -1518,7 +1547,10 @@
   <div id="orc-resultado" class="orc-resultado"></div>
 </div>
 
-<img class="previa" id="previa" alt="">
+<div class="previa" id="previa" aria-hidden="true">
+  <img id="previa-frente" alt="">
+  <img id="previa-verso" alt="">
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1723,12 +1755,23 @@ function lista(tabuleiro){
 
 /* Símbolos de mana: "{2}{G}{W}" vira bolinhas. Híbrido ("{G/W}") sai com as
    duas cores em gradiente, que é como o jogo desenha. */
+/* Carta partida guarda os dois custos numa string só ("{1}{R} // {1}{U}").
+   Varrer os símbolos direto colava as duas metades numa fileira contínua de
+   bolinhas, que lê como um custo só de cinco manas — caro e errado. Cada lado
+   vira um grupo, e o espaço entre eles é o que diz que são dois. */
 function manaHTML(custo){
   if (!custo) return "";
+  const lados = String(custo).split("//").map(pipsHTMLdoCusto).filter(Boolean);
+  if (!lados.length) return "";
+  return '<span class="mana">' +
+    lados.map(l => `<span class="lado">${l}</span>`).join("") + "</span>";
+}
+
+function pipsHTMLdoCusto(custo){
   const simbolos = custo.match(/\{[^}]+\}/g) || [];
   // `title` em cada bolinha porque cor sozinha não é informação acessível —
   // e num pip de 13px o daltônico não é o único que agradece.
-  return '<span class="mana">' + simbolos.map(s => {
+  return simbolos.map(s => {
     const bruto = s.slice(1, -1);
     const partes = bruto.split("/").filter(p => CORES.includes(p));
     if (partes.length === 2){
@@ -1740,7 +1783,7 @@ function manaHTML(custo){
     }
     const rotulo = bruto.replace(/[^0-9XYZC]/g, "") || "•";
     return `<span class="pip C" title="${rotulo} genérico">${rotulo}</span>`;
-  }).join("") + "</span>";
+  }).join("");
 }
 
 /* O `manaNeeded` do Spellbook não é um custo de mana: é uma frase COM custo
@@ -2299,7 +2342,7 @@ function linhaHTML(entrada, identidade, tabuleiro){
     data-tabuleiro="${tabuleiro}" draggable="true">
     ${estreita && entrada.quantidade === 1 ? ""
       : `<span class="qtd">${entrada.quantidade}</span>`}
-    <span class="nome" data-arte="${escapar(c.imagem)}">${nome}
+    <span class="nome"${ganchosDaPrevia(c)}>${nome}
       ${porque ? `<span class="porque">· ${porque}</span>` : ""}</span>
     ${manaHTML(c.mana_cost)}
     ${estreita ? "" : valorHTML(entrada)}
@@ -3075,7 +3118,7 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
     return `
     <button class="achado ${onde === "deck" ? "no-deck" : ""} ${
               onde === "talvez" ? "no-talvez" : ""}" data-i="${i}"
-            data-arte="${escapar(c.imagem)}">
+            ${ganchosDaPrevia(c)}>
       <span class="nome">
         <b>${escapar(c.nome)}</b>
         <small>${escapar(c.tipo)}</small>
@@ -3473,7 +3516,7 @@ function desenharSugestoes(){
       // Preço na mesma posição da linha da busca: as duas abas mostram carta
       // pra adicionar, e "quanto custa" é parte da escolha nas duas.
       return `
-        <button class="achado" data-sug="${i}" data-arte="${escapar(item.carta.imagem)}">
+        <button class="achado" data-sug="${i}"${ganchosDaPrevia(item.carta)}>
           <span class="nome">
             <b>${escapar(item.carta.nome)}</b>
             <small>${escapar(item.carta.tipo)}</small>
@@ -3503,18 +3546,21 @@ async function analisarManabase(){
   }
   if (!estado.id) await salvarAgora();
   if (!estado.id){ toast("Não consegui salvar o deck antes de analisar."); return; }
-  const botao = $("btn-manabase");
-  botao.disabled = true;
+  // Só avisa que está calculando quando ainda não há resposta na tela. Nos
+  // recálculos do autosave, apagar a conta anterior faria o painel piscar a
+  // cada carta digitada.
+  if (!estado.manabase){
+    $("mb-nota").hidden = false;
+    $("mb-resultado").innerHTML = `<div class="nota">Calculando…</div>`;
+  }
   try {
     const params = estado.manabaseTeto !== null ? `?teto=${estado.manabaseTeto}` : "";
     estado.manabase = await api(`/decks/${estado.id}/manabase${params}`);
   } catch (e){
+    $("mb-nota").hidden = false;
     $("mb-resultado").innerHTML =
       `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
     return;
-  } finally {
-    botao.disabled = false;
-    botao.textContent = "Atualizar";
   }
   desenharManabase();
 }
@@ -3522,10 +3568,16 @@ async function analisarManabase(){
 function desenharManabase(){
   const caixa = $("mb-resultado");
   const m = estado.manabase;
-  if (!m){ caixa.innerHTML = ""; return; }
+  if (!m){ $("mb-nota").hidden = false; caixa.innerHTML = ""; return; }
+  // A conta está na tela: a explicação do que o painel faz vira ruído acima
+  // dela.
+  $("mb-nota").hidden = true;
   const t = m.terrenos;
   const classe = t.diferenca === 0 ? "ok" : t.diferenca < 0 ? "falta" : "";
-  let html = `
+  // Coluna da esquerda: o retrato do deck que já existe — a conta de
+  // terrenos, a curva que a justifica, as fontes de cada cor e os básicos que
+  // fecham o buraco.
+  let html = `<div class="mb-duo"><div>
     <div class="mb-terrenos"><span>Terrenos</span>
       <span><b class="${classe}">${t.tem}</b> / ${t.recomendado} recomendados</span></div>
     <div class="nota">Curva média ${m.cmc_media.toFixed(2)} em ${m.magias} magia(s)${
@@ -3562,11 +3614,13 @@ function desenharManabase(){
       identidade serve.</div>`;
   }
 
+  html += `</div><div>`;
+
   if (!m.monocolor){
     const chips = [1, 3, 10, 999].map(v => `
       <button class="chip ${m.teto_usd === v || (v === 999 && m.teto_usd >= 999) ? "ativo" : ""}"
         data-teto="${v}">${v >= 999 ? "Sem teto" : "até US$ " + v}</button>`).join("");
-    html += `<h2 class="secao" style="margin-top:12px">Terrenos que fixam</h2>
+    html += `<h2 class="secao">Terrenos que fixam</h2>
       <div class="temas" style="margin-top:0">${chips}</div>`;
     // Uma lista só, do mais barato ao mais caro, cinco por vez. O teto de
     // preço acima já é o controle de orçamento; separar os caros numa segunda
@@ -3583,7 +3637,7 @@ function desenharManabase(){
       if (estado.mbPagina >= paginas) estado.mbPagina = 0;
       const inicio = estado.mbPagina * porPagina;
       html += fixadoresPlanos.slice(inicio, inicio + porPagina).map((terreno, k) => `
-        <button class="achado" data-fix="${inicio + k}" data-arte="${escapar(terreno.imagem)}">
+        <button class="achado" data-fix="${inicio + k}"${ganchosDaPrevia(terreno)}>
           <span class="nome"><b>${escapar(terreno.nome)}</b>
             <small>${escapar(terreno.tipo)}</small></span>
           <span class="mana">${terreno.produz.split("").map(c =>
@@ -3602,9 +3656,11 @@ function desenharManabase(){
       }
     }
   } else {
-    html += `<div class="nota" style="margin-top:10px">Deck de uma cor: básico
-      resolve, fixação não faz falta.</div>`;
+    html += `<h2 class="secao">Terrenos que fixam</h2>
+      <div class="nota">Deck de uma cor: básico resolve, fixação não faz
+      falta.</div>`;
   }
+  html += `</div></div>`;
   caixa.innerHTML = html;
 }
 
@@ -3848,11 +3904,11 @@ function desenharCombosFaltando(faltando, dados){
 }
 
 function comboHTML(combo, ehSugestao){
-  // `data-arte` é o mesmo gancho que a busca e a lista do deck já usam: a
-  // prévia de arte é uma função só pra tela inteira (ver `ligarPrevia`), e a
-  // peça do combo entra nela só por carregar o atributo.
+  // Os mesmos ganchos que a busca e a lista do deck já usam: a prévia de arte
+  // é uma função só pra tela inteira (ver `ligarPrevia`), e a peça do combo
+  // entra nela só por carregar os atributos.
   const pecas = combo.pecas.map(p => {
-    const arte = p.imagem ? ` data-arte="${escapar(p.imagem)}"` : "";
+    const arte = ganchosDaPrevia(p);
     const preco = p.preco_usd ? ` — ${moeda(p.preco_usd)}` : "";
     const titulo = p.tipo ? `${escapar(p.tipo)}${escapar(preco)}` : "";
     return `<span class="peca ${p.no_deck ? "tem" : "falta"} ${p.comandante ? "comandante" : ""}"
@@ -4401,7 +4457,6 @@ function ligarEventos(){
   $("btn-poder").addEventListener("click", estimarPoder);
   $("btn-sugestoes").addEventListener("click", () =>
     buscarSugestoes(estado.sugestoesTema));
-  $("btn-manabase").addEventListener("click", analisarManabase);
   $("btn-ver-analise").addEventListener("click", () => {
     trocarAba("analise");
     $("painel-analise").scrollIntoView({behavior: "smooth", block: "nearest"});
@@ -4555,24 +4610,67 @@ function chamarManabase(){
 }
 
 /* Prévia da arte ao passar o mouse. Só no mouse: em toque ela roubaria o
-   clique, e a lista já mostra tipo e custo. */
+   clique, e a lista já mostra tipo e custo.
+
+   Uma função só pra tela inteira — a lista do deck, a busca, as sugestões, os
+   terrenos que fixam e as peças de combo entram nela só por carregarem os
+   atributos que `ganchosDaPrevia` escreve. */
+const PREVIA_LARGA = 250;    // largura da carta em pé
+const PREVIA_ALTA = 349;     // altura dela, na proporção 488x680 da Scryfall
+const PREVIA_DEITADA = 487;  // largura da carta girada (a altura vira largura)
+const PREVIA_VAO = 8;        // o `gap` do CSS entre frente e verso
+
+/* Os atributos que ligam um elemento à prévia. Passar a carta inteira em vez
+   de só a URL é o que faz a carta de duas faces aparecer inteira: sem o
+   verso, hover num transform mostra metade da carta e cala sobre a outra. */
+function ganchosDaPrevia(c){
+  if (!c || !c.imagem) return "";
+  let attrs = ` data-arte="${escapar(c.imagem)}"`;
+  if (c.imagem_verso) attrs += ` data-arte-verso="${escapar(c.imagem_verso)}"`;
+  if (c.deitada) attrs += ' data-deitada="1"';
+  return attrs;
+}
+
 function ligarPrevia(){
   const previa = $("previa");
+  const frente = $("previa-frente");
+  const verso = $("previa-verso");
   // Arte que não carrega deixaria uma caixa vazia com borda seguindo o mouse,
-  // que parece defeito da página e não carta sem imagem.
-  previa.addEventListener("error", () => previa.classList.remove("mostra"));
+  // que parece defeito da página e não carta sem imagem. Se só o verso falha,
+  // a frente continua valendo.
+  frente.addEventListener("error", () => previa.classList.remove("mostra"));
+  verso.addEventListener("error", () => verso.classList.add("vazia"));
+
+  // Guardada porque o mousemove precisa dela a cada quadro e medir o elemento
+  // ali dentro forçaria um reflow por movimento do mouse.
+  let largura = PREVIA_LARGA;
+
   document.addEventListener("mouseover", (e) => {
     const alvo = e.target.closest("[data-arte]");
     const arte = alvo?.dataset.arte;
     if (!arte){ previa.classList.remove("mostra"); return; }
-    previa.src = arte;
+    // Carta partida tem uma face física só: o verso e o giro nunca convivem.
+    const deitada = alvo.dataset.deitada === "1";
+    const atras = deitada ? "" : (alvo.dataset.arteVerso || "");
+    frente.src = arte;
+    verso.classList.toggle("vazia", !atras);
+    if (atras) verso.src = atras;
+    previa.classList.toggle("deitada", deitada);
     previa.classList.add("mostra");
+    largura = deitada ? PREVIA_DEITADA
+            : atras ? PREVIA_LARGA * 2 + PREVIA_VAO
+            : PREVIA_LARGA;
   });
+
   document.addEventListener("mousemove", (e) => {
     if (!previa.classList.contains("mostra")) return;
-    const alturaPrevia = 310;
-    const y = Math.min(e.clientY + 14, window.innerHeight - alturaPrevia - 8);
-    const x = e.clientX > window.innerWidth - 250 ? e.clientX - 236 : e.clientX + 18;
+    // Cai pro outro lado do cursor quando não cabe à direita, e sobe quando
+    // não cabe embaixo: prévia cortada pela borda da janela não mostra a
+    // carta, que é a única coisa que ela existe pra fazer.
+    const y = Math.min(e.clientY + 14, window.innerHeight - PREVIA_ALTA - 8);
+    const x = e.clientX + 18 + largura > window.innerWidth - 8
+            ? e.clientX - 18 - largura
+            : e.clientX + 18;
     previa.style.left = Math.max(8, x) + "px";
     previa.style.top = Math.max(8, y) + "px";
   });

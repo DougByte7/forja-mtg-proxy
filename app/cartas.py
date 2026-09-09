@@ -141,7 +141,9 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     preco_usd REAL,
     imagem TEXT,
     layout TEXT,
-    scryfall TEXT
+    scryfall TEXT,
+    imagem_verso TEXT,
+    deitada INTEGER
 )
 """
 
@@ -172,10 +174,28 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+# Colunas que nasceram depois da primeira versão do banco. `init_db` só cria
+# a tabela QUANDO ELA NÃO EXISTE, então numa base já sincronizada elas nunca
+# apareceriam — e a primeira busca morreria com "no such column". Ficam vazias
+# até a próxima sincronização, o que a tela trata como "sem verso, não deita".
+_COLUNAS_NOVAS = (("imagem_verso", "TEXT"), ("deitada", "INTEGER"))
+
+
+def _completar_colunas(conn, tabela: str = "cartas") -> None:
+    tem = {linha["name"]
+           for linha in conn.execute(f"PRAGMA table_info({tabela})")}
+    if not tem:                      # tabela ainda não existe: o CREATE cuida
+        return
+    for nome, tipo in _COLUNAS_NOVAS:
+        if nome not in tem:
+            conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {nome} {tipo}")
+
+
 def init_db():
     conn = _conn()
     try:
         conn.execute(_ESQUEMA.format(tabela="cartas"))
+        _completar_colunas(conn)
         for sql in _INDICES:
             conn.execute(sql.format(tabela="cartas"))
         conn.execute("CREATE TABLE IF NOT EXISTS meta "
@@ -327,6 +347,34 @@ def _imagem(carta: dict) -> str:
     return urls.get("normal") or urls.get("small") or ""
 
 
+def _imagem_verso(carta: dict) -> str:
+    """URL da arte do VERSO, quando a carta tem duas faces de verdade.
+
+    Só `transform`/`modal_dfc` e afins têm arte por face — carta partida
+    (`split`) é uma face física só, com as duas metades na mesma imagem, e
+    aqui devolve vazio.
+    """
+    if carta.get("image_uris"):
+        return ""
+    faces = carta.get("card_faces") or []
+    if len(faces) < 2:
+        return ""
+    urls = faces[1].get("image_uris") or {}
+    return urls.get("normal") or urls.get("small") or ""
+
+
+def _deitada(carta: dict) -> int:
+    """1 quando a arte vem de lado e só se lê girando a carta.
+
+    Carta partida é impressa deitada — menos as de Aftermath, em que só a
+    metade de baixo gira. Girar a carta inteira deixaria a metade de cima
+    ilegível, que é trocar um problema por outro.
+    """
+    if carta.get("layout") != "split":
+        return 0
+    return 0 if "Aftermath" in (carta.get("keywords") or []) else 1
+
+
 def _das_faces(carta: dict, campo: str, junta: str) -> str:
     """Campo que, em carta de duas faces, existe por face e não no topo."""
     valor = carta.get(campo)
@@ -400,12 +448,15 @@ def _linha(carta: dict) -> tuple | None:
         _imagem(carta),
         carta.get("layout") or "",
         carta.get("scryfall_uri") or "",
+        _imagem_verso(carta),
+        _deitada(carta),
     )
 
 
 _COLUNAS = ("id, nome, busca, busca_frente, mana_cost, cmc, tipo, texto, "
             "cores, identidade, legal, comandante, parceiro, basico, "
-            "ilimitada, preco_usd, imagem, layout, scryfall")
+            "ilimitada, preco_usd, imagem, layout, scryfall, imagem_verso, "
+            "deitada")
 _INTERROGACOES = ",".join("?" * len(_COLUNAS.split(",")))
 
 

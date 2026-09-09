@@ -622,6 +622,10 @@ def _custear_combo(combo: dict, conhecidas: dict) -> None:
         # Só o que a tela usa. A carta inteira multiplicaria por quatro o
         # tamanho da resposta de combos com texto de oracle que ninguém lê ali.
         peca["imagem"] = (carta or {}).get("imagem") or ""
+        # O verso e o giro andam junto com a imagem: sem eles a prévia da peça
+        # de combo mostraria metade de um transform e deitaria nada.
+        peca["imagem_verso"] = (carta or {}).get("imagem_verso") or ""
+        peca["deitada"] = (carta or {}).get("deitada") or 0
         peca["mana_cost"] = (carta or {}).get("mana_cost") or ""
         peca["tipo"] = (carta or {}).get("tipo") or ""
         peca["preco_usd"] = (carta or {}).get("preco_usd")
