@@ -39,6 +39,7 @@ import unicodedata
 import requests
 
 from . import identidade as ident, log, ritmo
+from .cartas import face_da_frente
 
 BASE = os.environ.get("EDHREC_URL", "https://json.edhrec.com/pages")
 SITE = os.environ.get("EDHREC_SITE", "https://edhrec.com")
@@ -93,8 +94,14 @@ def slug(nome: str) -> str:
     Acento é achatado antes disso: o EDHREC escreve "Jötun Grunt" como
     "jotun-grunt", e sem essa passagem o "ö" viraria hífen e o slug sairia
     "j-tun-grunt".
+
+    Carta de duas faces entra pela FRENTE. O nome canônico que o deck guarda
+    é o inteiro ("Ojer Taq, Deepest Foundation // Temple of Civilization"),
+    mas a página do EDHREC é `ojer-taq-deepest-foundation` — juntar as duas
+    faces num slug só dá uma página que não existe, que é como o comandante
+    de face dupla virava erro na tela.
     """
-    texto = unicodedata.normalize("NFKD", (nome or "").strip())
+    texto = unicodedata.normalize("NFKD", face_da_frente(nome).strip())
     texto = "".join(c for c in texto if not unicodedata.combining(c))
     texto = texto.lower().replace("'", "").replace("’", "").replace(",", "")
     return re.sub(r"[^a-z0-9]+", "-", texto).strip("-")
@@ -104,9 +111,9 @@ def slug_do_deck(comandantes: list[str]) -> str:
     """O slug da página do deck: um comandante, ou os dois de uma parceria.
 
     Com dois comandantes o EDHREC junta os slugs em ordem alfabética. Se essa
-    convenção mudar, a página volta 404 — e o 404 daqui vira uma mensagem
-    dizendo que não existe página pra essa dupla, que é o que a pessoa
-    precisa saber.
+    convenção mudar, a página some — e isso vira uma mensagem dizendo que não
+    existe página pra essa dupla, que é o que a pessoa precisa saber. "Some"
+    ali é 403, não 404: ver o comentário no `_pedir`.
     """
     slugs = [s for s in (slug(n) for n in comandantes) if s]
     if not slugs:
@@ -175,9 +182,24 @@ def _pedir(caminho: str) -> dict:
             time.sleep(ritmo.backoff(tentativa, BACKOFF))
             continue
 
-        if resposta.status_code == 404:
-            # 404 aqui é informação, não falha de rede: a página não existe.
-            # Insistir não vai criá-la.
+        if resposta.status_code == 404 or (
+                resposta.status_code == 403
+                and "AccessDenied" in (resposta.text or "")):
+            # "A página não existe" é informação, não falha de rede: insistir
+            # não vai criá-la.
+            #
+            # O 404 é o que se espera, mas NÃO é o que o EDHREC responde.
+            # `json.edhrec.com` é um bucket S3 atrás do CloudFront, e bucket
+            # sem permissão de listagem devolve **403 com um
+            # `<Error><Code>AccessDenied</Code>` de S3** quando a chave não
+            # está lá — não dá pra distinguir "não existe" de "não pode ver"
+            # sem olhar o corpo. Tratar isso como status inesperado gastava
+            # as três tentativas e terminava num "não consegui ler o EDHREC
+            # (HTTP 403)", que manda procurar problema de rede que não existe.
+            #
+            # 403 que não traz esse XML é outra coisa — bloqueio de verdade,
+            # WAF, IP barrado — e continua caindo no caminho de tentar de
+            # novo logo abaixo.
             raise EDHRECError(
                 f"o EDHREC não tem página pra isso ({caminho}). Se for uma "
                 f"dupla de parceiros, pode ser que ninguém tenha registrado "

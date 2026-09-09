@@ -137,8 +137,15 @@ try:
        "shang-chi-master-of-kung-fu")
     eq("pontuação virando um hífen só",
        edhrec.slug("Kongming, \"Sleeping Dragon\""), "kongming-sleeping-dragon")
-    eq("nome com // usa tudo",
-       edhrec.slug("Fire // Ice"), "fire-ice")
+    # Carta de duas faces entra pela frente. O deck guarda o nome canônico
+    # inteiro; o EDHREC só conhece a página da frente, e o slug com as duas
+    # faces era exatamente o que fazia comandante de face dupla dar erro.
+    eq("nome com // entra pela frente",
+       edhrec.slug("Ojer Taq, Deepest Foundation // Temple of Civilization"),
+       "ojer-taq-deepest-foundation")
+    eq("e o slug do deck também",
+       edhrec.slug_do_deck(["Esika, God of the Tree // The Prismatic Bridge"]),
+       "esika-god-of-the-tree")
 
     eq("um comandante", edhrec.slug_do_deck(["Muldrotha, the Gravetide"]),
        "muldrotha-the-gravetide")
@@ -234,6 +241,30 @@ try:
     except edhrec.EDHRECError:
         pass
     eq("404 não é tentado de novo", len(sessao.chamadas), 1)
+
+    # O 403 de bucket vazio: `json.edhrec.com` é S3 atrás do CloudFront e
+    # responde AccessDenied, não 404, quando a página não está lá. Se isso
+    # virar "status inesperado", a pessoa recebe "não consegui ler o EDHREC
+    # (HTTP 403)" — que manda caçar problema de rede que não existe.
+    ACESSO_NEGADO = ('<?xml version="1.0" encoding="UTF-8"?>'
+                     "<Error><Code>AccessDenied</Code>"
+                     "<Message>Access Denied</Message></Error>")
+    sessao = com_sessao(RespostaFalsa(None, status=403, texto=ACESSO_NEGADO))
+    try:
+        edhrec.sugerir(["Pagina Que Nao Existe"])
+        check("403 de página inexistente levanta", False, "(não levantou)")
+    except edhrec.EDHRECError as e:
+        check("403 de página inexistente diz que não existe",
+              "não tem página" in str(e), f"({str(e)[:58]}…)")
+    eq("e não é tentado de novo", len(sessao.chamadas), 1)
+
+    # 403 SEM esse XML é outra coisa — bloqueio, WAF, IP barrado — e aí
+    # tentar de novo continua fazendo sentido.
+    sessao = com_sessao(RespostaFalsa(None, status=403, texto="<html>WAF</html>"),
+                        RespostaFalsa(PAGINA))
+    bloqueado = edhrec.sugerir(["Comandante Barrado"])
+    eq("403 que não é do S3 é tentado de novo",
+       (len(sessao.chamadas), len(bloqueado["listas"])), (2, 3))
 
     # 500 é transitório: tenta de novo.
     sessao = com_sessao(RespostaFalsa({}, status=500), RespostaFalsa(PAGINA))
