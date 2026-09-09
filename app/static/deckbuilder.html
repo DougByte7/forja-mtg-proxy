@@ -60,7 +60,7 @@
 
   /* ---------------- ícones ----------------
      Phosphor (MIT), colados como sprite no topo do <body> em vez de virem de
-     um CDN: são dezessete desenhos, e ícone que chega depois do resto pisca —
+     um CDN: são vinte desenhos, e ícone que chega depois do resto pisca —
      o ✕ de fechar precisa estar na tela junto com a modal que ele fecha. O
      traço é `currentColor`, então cada botão pinta o seu no hover sem
      precisar de regra nova. 1.15em porque o desenho não encosta na borda da
@@ -776,7 +776,11 @@
      diferentes fariam parecer que um deles é o principal. */
   .abas-painel.miuda button{
     flex:1 1 0;min-width:0;padding:6px 4px;font-size:12px;justify-content:center;
+    gap:5px;
   }
+  /* Fixo em pixel, e não no 1.15em de sempre: aqui o ícone divide a linha com
+     um rótulo de 12px, e proporcional a essa altura ele vira borrão. */
+  .abas-painel.miuda .ico{width:15px;height:15px;}
   /* Aberto por um atalho de outro canto da tela (o botão de mana base no
      cabeçalho de Terrenos), o painel pisca uma vez: sem isso a troca de aba
      acontece sem nada dizendo o que respondeu. */
@@ -1070,6 +1074,34 @@
     font-size:11px;color:var(--text-muted);margin-top:12px;line-height:1.5;
   }
   .fonte-edhrec a{color:var(--gold-light);}
+
+  /* De QUEM é esta lista. A aba serve a duas perguntas parecidas o bastante
+     pra se confundirem — "o que combina com o comandante" e "o que combina
+     com esta carta do deck" — e a diferença entre elas não aparece em nenhuma
+     das cartas listadas. Então ela é dita em cima, antes da primeira linha,
+     e não numa nota de rodapé que se lê depois de já ter clicado. */
+  .sug-alvo{
+    display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+    background:var(--inset);border:1px solid var(--border);
+    border-radius:9px;padding:7px 9px;font-size:11.5px;color:var(--text-muted);
+  }
+  .sug-alvo .ico{color:var(--gold-light);}
+  .sug-alvo b{
+    color:var(--text);font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
+  }
+  .sug-alvo .quem{flex:1;min-width:0;display:flex;align-items:baseline;gap:5px;}
+  /* Só existe quando a lista é de uma carta: voltar pro comandante é
+     desfazer, e não há o que desfazer na lista com que a aba começa. */
+  .sug-alvo .voltar{
+    flex:none;display:flex;align-items:center;gap:5px;
+    border:1px solid var(--border);border-radius:999px;
+    background:var(--surface);color:var(--text-muted);
+    font-family:'Inter',sans-serif;font-size:11px;
+    padding:3px 9px;cursor:pointer;
+  }
+  .sug-alvo .voltar:hover{border-color:var(--gold);color:var(--gold-light);}
+  .sug-alvo .voltar .ico{width:12px;height:12px;color:inherit;}
 
   /* ---------------- mana base ---------------- */
   /* Duas leituras independentes: à esquerda a conta do deck que já existe,
@@ -1422,6 +1454,10 @@
   <symbol id="i-cards" viewBox="0 0 256 256"><path d="M184,72H40A16,16,0,0,0,24,88V200a16,16,0,0,0,16,16H184a16,16,0,0,0,16-16V88A16,16,0,0,0,184,72Zm0,128H40V88H184V200ZM232,56V176a8,8,0,0,1-16,0V56H64a8,8,0,0,1,0-16H216A16,16,0,0,1,232,56Z"/></symbol>
   <symbol id="i-plus" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></symbol>
   <symbol id="i-minus" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128Z"/></symbol>
+  <symbol id="i-magnifying-glass" viewBox="0 0 256 256"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 256 256"><path d="M197.58,129.06,146,110l-19-51.62a15.92,15.92,0,0,0-29.88,0L78,110l-51.62,19a15.92,15.92,0,0,0,0,29.88L78,178l19,51.62a15.92,15.92,0,0,0,29.88,0L146,178l51.62-19a15.92,15.92,0,0,0,0-29.88ZM137,164.22a8,8,0,0,0-4.74,4.74L112,223.85,91.78,169A8,8,0,0,0,87,164.22L32.15,144,87,123.78A8,8,0,0,0,91.78,119L112,64.15,132.22,119a8,8,0,0,0,4.74,4.74L191.85,144ZM144,40a8,8,0,0,1,8-8h16V16a8,8,0,0,1,16,0V32h16a8,8,0,0,1,0,16H184V64a8,8,0,0,1-16,0V48H152A8,8,0,0,1,144,40ZM248,88a8,8,0,0,1-8,8h-8v8a8,8,0,0,1-16,0V96h-8a8,8,0,0,1,0-16h8V72a8,8,0,0,1,16,0v8h8A8,8,0,0,1,248,88Z"/></symbol>
+  <symbol id="i-lightning" viewBox="0 0 256 256"><path d="M215.79,118.17a8,8,0,0,0-5-5.66L153.18,90.9l14.66-73.33a8,8,0,0,0-13.69-7l-112,120a8,8,0,0,0,3,13l57.63,21.61L88.16,238.43a8,8,0,0,0,13.69,7l112-120A8,8,0,0,0,215.79,118.17ZM109.37,214l10.47-52.38a8,8,0,0,0-5-9.06L62,132.71l84.62-90.66L136.16,94.43a8,8,0,0,0,5,9.06l52.8,19.8Z"/></symbol>
+  <symbol id="i-arrow-counter-clockwise" viewBox="0 0 256 256"><path d="M224,128a96,96,0,0,1-94.71,96H128A95.38,95.38,0,0,1,62.1,197.8a8,8,0,0,1,11-11.63A80,80,0,1,0,71.43,71.39a3.07,3.07,0,0,1-.26.25L44.59,96H72a8,8,0,0,1,0,16H24a8,8,0,0,1-8-8V56a8,8,0,0,1,16,0V85.8L60.25,60A96,96,0,0,1,224,128Z"/></symbol>
 </svg>
 
 <header class="topo">
@@ -1584,10 +1620,21 @@
     <span class="puxador" id="puxador"></span>
     <div class="painel" id="painel-adicionar">
 
+      <!-- Cada aba leva um ícone porque um deles precisa existir SOZINHO em
+           outro canto da tela: a estrela é o botão de sugestão que aparece no
+           hover de cada carta do deck, e chegar aqui por ele só se lê como
+           "cheguei onde cliquei" se o desenho for o mesmo. Os outros dois
+           ganham ícone pela mesma razão de sempre — três abas com marca
+           própria se distinguem antes da leitura. -->
       <div class="abas-painel miuda" id="abas-rail" role="tablist">
-        <button role="tab" data-rail="buscar" class="ativa" aria-selected="true">Adicionar</button>
-        <button role="tab" data-rail="sugestoes" aria-selected="false">Sugestões</button>
+        <button role="tab" data-rail="buscar" class="ativa" aria-selected="true">
+          <svg class="ico" aria-hidden="true"><use href="#i-magnifying-glass"/></svg>
+          Adicionar</button>
+        <button role="tab" data-rail="sugestoes" aria-selected="false">
+          <svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg>
+          Sugestões</button>
         <button role="tab" data-rail="combos" aria-selected="false">
+          <svg class="ico" aria-hidden="true"><use href="#i-lightning"/></svg>
           Combos <span class="n" id="rail-combos-n"></span></button>
       </div>
 
@@ -1628,9 +1675,11 @@
       </div>
 
       <div class="rail-conteudo" data-rail="sugestoes" hidden>
-        <p class="nota" id="sug-nota">Cartas que combinam com o comandante,
-          segundo os decks registrados no EDHREC. A sinergia diz o quanto a
-          carta aparece mais <b>com ele</b> do que com os outros comandantes.</p>
+        <p class="nota" id="sug-nota">Cartas que combinam, segundo os decks
+          registrados no EDHREC; a sinergia diz o quanto cada uma aparece mais
+          junto do alvo da lista do que num deck qualquer. A lista começa no
+          <b>comandante</b> — a estrela no hover de qualquer carta do deck
+          troca pra <b>ela</b>.</p>
         <div id="sug-resultado" style="margin-top:4px;"></div>
       </div>
 
@@ -1918,6 +1967,11 @@ const estado = {
   poderAssinatura: null,
   sugestoes: null,          // a última resposta do EDHREC
   sugestoesTema: null,
+  // Um pedido de sugestão em voo. Existe porque a aba se abre sozinha de dois
+  // lugares (o clique na aba e a estrela de uma carta) e sem isto os dois
+  // caminhos juntos pediriam duas páginas ao EDHREC no mesmo gesto — a do
+  // comandante, por reflexo, e a da carta, que é a que foi pedida.
+  sugestoesRodando: false,
   manabase: null,           // a última análise de mana base
   manabaseTeto: null,       // teto de preço escolhido (null = o padrão)
   mbPagina: 0,              // página da lista de terrenos que fixam
@@ -2442,8 +2496,8 @@ function rodarAoAbrir(nome){
   // As sugestões dependem do comandante, não da lista: refazê-las a cada
   // carta adicionada seria uma consulta por clique pra receber quase a mesma
   // resposta. Busca uma vez; o botão do painel refaz quando a pessoa quiser.
-  if (nome === "sugestoes" && !estado.sugestoes){
-    return buscarSugestoes(estado.sugestoesTema);
+  if (nome === "sugestoes" && !estado.sugestoes && !estado.sugestoesRodando){
+    return buscarSugestoes({tema: estado.sugestoesTema});
   }
   const assinatura = assinaturaDoDeck();
   if (nome === "analise" && estado.poderAssinatura !== assinatura){
@@ -2632,9 +2686,11 @@ function linhaHTML(entrada, identidade, tabuleiro){
   const nome = escapar(c.nome);
   // A coluna do maybeboard tem 288px, e a linha do deck não cabe nela
   // inteira: sai o preço (ele não entra na cotação — mostrá-lo diria o
-  // contrário) e saem os botões de quantidade (o formato é singleton, e a
-  // dúvida é sobre a carta, não sobre quantas). Sobram o ⋯ e o ✕, que são
-  // as duas coisas que se faz com uma carta em dúvida: decidir e desistir.
+  // contrário), saem os botões de quantidade (o formato é singleton, e a
+  // dúvida é sobre a carta, não sobre quantas) e sai a estrela de sugerir
+  // (pedir o que combina com uma carta que talvez nem fique é sugestão pra
+  // um deck que não existe). Sobram o ⋯ e o ✕, que são as duas coisas que se
+  // faz com uma carta em dúvida: decidir e desistir.
   const estreita = tabuleiro === "talvez";
   return `<div class="linha ${problema ? "problema" : ""}" data-nome="${nome}"
     data-tabuleiro="${tabuleiro}" draggable="true">
@@ -2647,7 +2703,10 @@ function linhaHTML(entrada, identidade, tabuleiro){
     <span class="ctrl">
       ${estreita ? "" : `
       <button class="mini" data-mais="${nome}" title="Mais uma">${ico("plus")}</button>
-      <button class="mini" data-menos="${nome}" title="Menos uma">${ico("minus")}</button>`}
+      <button class="mini" data-menos="${nome}" title="Menos uma">${ico("minus")}</button>
+      <button class="mini" data-sug-carta="${nome}"
+              title="O que o EDHREC vê jogando junto de ${nome}"
+              aria-label="Sugestões a partir de ${nome}">${ico("sparkle")}</button>`}
       <button class="mini" data-menu-carta="${nome}"
               title="${estreita ? "Categoria, voltar pro deck e mais"
                                 : "Categoria, maybeboard e mais"}"
@@ -3762,30 +3821,63 @@ function desenharCotacao(){
    As cartas vêm do EDHREC já filtradas pelo servidor (sem o que o deck tem,
    sem o que a base local não conhece, sem o que não cabe na identidade), e
    com a carta completa junto — então adicionar é o mesmo clique da busca,
-   sem uma segunda consulta. */
+   sem uma segunda consulta.
 
-async function buscarSugestoes(tema){
+   A aba responde a DUAS perguntas com a mesma lista. A padrão é a do
+   comandante ("o que combina com ele?"); a estrela no hover de cada linha do
+   deck troca pra outra ("já que o deck tem esta carta, o que mais entra?"),
+   que é a pergunta que aparece quando o comandante já foi esgotado e o deck
+   está meio montado. São listas parecidas o bastante pra se confundirem, e
+   nenhuma carta listada denuncia de qual das duas veio — por isso a resposta
+   traz `alvo` e o cabeçalho o diz por extenso. */
+
+async function buscarSugestoes({tema = null, carta = null} = {}){
   if (!estado.comandantes.length){
     toast("Escolha o comandante primeiro: é ele que define o que combina.");
     return;
   }
-  if (!estado.id) await salvarAgora();
-  if (!estado.id){ toast("Não consegui salvar o deck antes de sugerir."); return; }
-
-  $("sug-resultado").innerHTML = `<div class="nota">Perguntando ao EDHREC…</div>`;
+  // Antes do primeiro `await`: quem chama daqui de dentro da tela troca de aba
+  // na linha seguinte, e um deck ainda sem id (que passa pelo salvamento
+  // abaixo) abriria a janela em que `rodarAoAbrir` não veria pedido nenhum em
+  // voo e pediria a página do comandante por cima desta.
+  estado.sugestoesRodando = true;
+  $("sug-resultado").innerHTML = `<div class="nota">Perguntando ao EDHREC sobre
+    ${escapar(carta || estado.comandantes.map(c => c.nome).join(" e "))}…</div>`;
   try {
+    if (!estado.id) await salvarAgora();
+    if (!estado.id){
+      $("sug-resultado").innerHTML = `<div class="aponta erro"><span>Não
+        consegui salvar o deck antes de sugerir.</span></div>`;
+      return;
+    }
     estado.sugestoes = await api(`/decks/${estado.id}/sugestoes`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({tema: tema || null}),
+      body: JSON.stringify({tema: carta ? null : (tema || null),
+                            carta: carta || null}),
     });
-    estado.sugestoesTema = tema || null;
+    // O tema é do comandante: a página de uma carta não tem nenhum, e deixar
+    // o anterior guardado faria o "voltar ao comandante" cair num tema que a
+    // pessoa escolheu duas listas atrás.
+    estado.sugestoesTema = carta ? null : (tema || null);
   } catch (e){
     $("sug-resultado").innerHTML =
       `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
     return;
+  } finally {
+    estado.sugestoesRodando = false;
   }
   desenharSugestoes();
+}
+
+/* A estrela de uma linha do deck. Pede a lista ANTES de trocar de aba, e não
+   depois, porque `trocarRail` também busca sugestão quando a aba chega vazia:
+   com o pedido já em voo ele vê a bandeira e não pergunta a mesma coisa duas
+   vezes pra dois alvos diferentes. */
+function sugerirPelaCarta(nome){
+  buscarSugestoes({carta: nome});
+  trocarRail("sugestoes");
+  if (window.innerWidth <= 900 && !folhaAberta()) abrirFolha();
 }
 
 function desenharSugestoes(){
@@ -3794,6 +3886,28 @@ function desenharSugestoes(){
   if (!s){ caixa.innerHTML = ""; return; }
 
   let html = "";
+
+  // Quem respondeu, dito antes da primeira sugestão. Vale pros dois alvos e
+  // não só pra carta: "para o comandante Atraxa" é o que faz a pessoa
+  // entender, ao ver a linha mudar depois de clicar numa estrela, que existem
+  // dois modos — e o botão de voltar só faz sentido pra quem sabe de onde
+  // veio.
+  const daCarta = s.alvo?.tipo === "carta";
+  // O nome do comandante sai daqui, e não do `alvo` que veio junto: com uma
+  // dupla de parceiros o servidor manda os dois separados por vírgula, e
+  // "Muldrotha, the Gravetide" já tem vírgula dentro — a lista de dois viraria
+  // uma lista de quatro. A tela junta com "e", que é como ela escreve dupla em
+  // todo o resto.
+  const alvo = daCarta ? (s.alvo.nome || "")
+                       : estado.comandantes.map(c => c.nome).join(" e ");
+  html += `<div class="sug-alvo">
+    ${ico("sparkle")}
+    <span class="quem">${daCarta ? "A partir da carta" : "Para o comandante"}
+      <b>${escapar(alvo)}</b></span>
+    ${daCarta ? `<button class="voltar" data-sug-comandante
+      title="Voltar a sugerir a partir do comandante">${
+        ico("arrow-counter-clockwise")}Comandante</button>` : ""}
+  </div>`;
 
   if (s.temas && s.temas.length){
     html += `<div class="temas">
@@ -3808,8 +3922,17 @@ function desenharSugestoes(){
 
   if (!s.listas.length){
     html += `<div class="vazio">O EDHREC não trouxe nada que este deck ainda
-      não tenha. Se ele está quase completo, isso é bom sinal.</div>`;
+      não tenha${daCarta ? " e que caiba na identidade de cor dele" : ""}. Se
+      ele está quase completo, isso é bom sinal.</div>`;
   }
+
+  // A partir de quanto a sinergia é notável — e não é o mesmo número nas duas
+  // listas. O comandante compara contra os OUTROS comandantes, um universo
+  // estreito, e 25 pontos ali já é muito: o topo de uma página de comandante
+  // fica na casa dos 50. A carta compara contra o formato inteiro, e ali
+  // aparecer três vezes mais que a média é rotina — pintar de verde tudo que
+  // passa de 25 seria pintar metade da lista e não destacar ninguém.
+  const alta = daCarta ? 100 : 25;
 
   // As sugestões guardam a carta completa; `sugestoesPlanas` é o que o clique
   // usa pra adicionar, do mesmo jeito que `ultimosResultados` na busca.
@@ -3820,9 +3943,12 @@ function desenharSugestoes(){
       const i = sugestoesPlanas.push(item.carta) - 1;
       const sin = item.sinergia;
       const chip = sin === null || sin === undefined ? "" :
-        `<span class="sinergia ${sin >= 25 ? "alta" : ""}"
-          title="Aparece ${sin > 0 ? sin + " pontos a mais" : Math.abs(sin) + " pontos a menos"} com este comandante do que com os outros${
-            item.porcento ? " · está em " + item.porcento + "% dos decks dele" : ""}"
+        `<span class="sinergia ${sin >= alta ? "alta" : ""}"
+          title="Aparece ${sin > 0 ? sin + " pontos a mais" : Math.abs(sin) + " pontos a menos"} ${
+            daCarta ? "junto de " + escapar(alvo) + " do que num deck qualquer"
+                    : "com este comandante do que com os outros"}${
+            item.porcento ? " · está em " + item.porcento + "% "
+                            + (daCarta ? "dos decks que a jogam" : "dos decks dele") : ""}"
          >${sin > 0 ? "+" : ""}${sin}%</span>`;
       // Preço na mesma posição da linha da busca: as duas abas mostram carta
       // pra adicionar, e "quanto custa" é parte da escolha nas duas.
@@ -3840,8 +3966,9 @@ function desenharSugestoes(){
     html += `</div>`;
   }
 
-  html += `<div class="fonte-edhrec">Dados do
-    <a href="${escapar(s.link)}" target="_blank" rel="noopener">EDHREC</a>${
+  html += `<div class="fonte-edhrec">Dados da
+    <a href="${escapar(s.link)}" target="_blank" rel="noopener">página ${
+      daCarta ? "de " + escapar(alvo) : "do comandante"} no EDHREC</a>${
       s.cache ? ", de uma consulta recente" : ""}. São números de decks
     registrados lá — não são regra, são o que a maioria faz.</div>`;
 
@@ -4821,7 +4948,11 @@ function ligarEventos(){
       return;
     }
     const tema = e.target.closest("[data-tema]");
-    if (tema) return buscarSugestoes(tema.dataset.tema);
+    if (tema) return buscarSugestoes({tema: tema.dataset.tema});
+    // Voltar ao comandante é refazer a pergunta padrão, não desfazer a lista
+    // atual: sem tema, porque o tema que existia antes da carta é escolha de
+    // outro momento (ver `buscarSugestoes`).
+    if (e.target.closest("[data-sug-comandante]")) return buscarSugestoes();
 
     // Mana base: básicos em lote, fixadores um a um, e o teto de preço.
     const basico = e.target.closest("[data-basico]");
@@ -4869,6 +5000,8 @@ function ligarEventos(){
     if (menos) return mudarQuantidade(menos.dataset.menos, -1, doTabuleiro(menos));
     const sai = e.target.closest("[data-tirar]");
     if (sai) return tirar(sai.dataset.tirar, doTabuleiro(sai));
+    const sugCarta = e.target.closest("[data-sug-carta]");
+    if (sugCarta) return sugerirPelaCarta(sugCarta.dataset.sugCarta);
     const menuCarta = e.target.closest("[data-menu-carta]");
     if (menuCarta) return menuDaCarta(menuCarta, menuCarta.dataset.menuCarta,
                                       doTabuleiro(menuCarta));

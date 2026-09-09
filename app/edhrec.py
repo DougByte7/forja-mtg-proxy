@@ -77,11 +77,24 @@ CATEGORIAS = [
     ("enchantments", "Encantamentos"),
     ("utilityartifacts", "Artefatos"),
     ("planeswalkers", "Planeswalkers"),
+    ("battles", "Batalhas"),
     ("manaartifacts", "Rampa de artefato"),
     ("utilitylands", "Terrenos utilitários"),
     ("lands", "Terrenos"),
 ]
 NOME_DA_CATEGORIA = dict(CATEGORIAS)
+
+# A página de uma CARTA traz duas listas que a de comandante não tem: os
+# comandantes mais jogados com ela e os recém-saídos. São resposta pra outra
+# pergunta ("que deck eu monto com isso?"), e aqui a pergunta é "que carta
+# entra agora?" — um comandante na lista de sugestões só teria como destino
+# virar carta comum do deck, que não é o que quem clicou pediu.
+LISTAS_DE_COMANDANTE = {"topcommanders", "newcommanders"}
+
+# "Mais jogadas com ele" fala do comandante. Na página de uma carta a mesma
+# etiqueta quer dizer outra coisa — "mais jogadas junto DESTA carta" — e o
+# título tem que dizer qual das duas está na tela.
+TITULO_NA_PAGINA_DE_CARTA = {"topcards": "Mais jogadas junto"}
 
 
 def slug(nome: str) -> str:
@@ -259,7 +272,15 @@ def _carta(bruta: dict) -> dict | None:
     # `synergy` vem como fração (0.42 = 42 pontos acima da média do formato).
     # Pode ser negativa: carta muito jogada em geral, mas menos com ESSE
     # comandante do que com os outros.
+    #
+    # A página de uma carta não manda `synergy`: manda `lift`, que é a mesma
+    # comparação escrita como razão em vez de diferença — 1.09 quer dizer "9%
+    # mais provável junto desta carta do que num deck qualquer". Menos 1 põe
+    # os dois na mesma escala, e a tela mostra um número só.
     sinergia = bruta.get("synergy")
+    if not isinstance(sinergia, (int, float)):
+        lift = bruta.get("lift")
+        sinergia = lift - 1 if isinstance(lift, (int, float)) else None
     inclusao = bruta.get("inclusion")
     potencial = bruta.get("potential_decks") or bruta.get("num_decks")
     return {
@@ -296,6 +317,38 @@ def temas_de(dados: dict) -> list[dict]:
     return achados
 
 
+def _listas_de(dados: dict, pular: set[str] = frozenset(),
+               titulos: dict | None = None) -> list[dict]:
+    """As listas de carta da página, traduzidas e na ordem de `CATEGORIAS`.
+
+    `pular` tira etiquetas que a página traz e não respondem à pergunta desta
+    tela — ver `LISTAS_DE_COMANDANTE`. `titulos` troca o nome de uma etiqueta
+    que quer dizer coisas diferentes em cada página.
+    """
+    listas = []
+    for lista in _cardlists(dados):
+        etiqueta = (lista.get("tag") or "").strip()
+        if etiqueta in pular:
+            continue
+        cartas = [c for c in (_carta(x) for x in lista.get("cardviews") or [])
+                  if c]
+        if not cartas:
+            continue
+        listas.append({
+            "tag": etiqueta,
+            # O título do EDHREC vem em inglês ("High Synergy Cards"); quando
+            # a categoria é conhecida, usa o nome em português.
+            "titulo": (titulos or {}).get(etiqueta)
+                      or NOME_DA_CATEGORIA.get(etiqueta)
+                      or (lista.get("header") or "Cartas").strip(),
+            "cartas": cartas,
+        })
+
+    ordem = {tag: i for i, (tag, _) in enumerate(CATEGORIAS)}
+    listas.sort(key=lambda l: ordem.get(l["tag"], len(ordem)))
+    return listas
+
+
 def sugerir(comandantes: list[str], tema: str | None = None) -> dict:
     """As sugestões do EDHREC pro comandante (e tema) pedidos.
 
@@ -314,25 +367,7 @@ def sugerir(comandantes: list[str], tema: str | None = None) -> dict:
 
     inicio = time.time()
     dados = _pedir(caminho)
-
-    listas = []
-    for lista in _cardlists(dados):
-        etiqueta = (lista.get("tag") or "").strip()
-        cartas = [c for c in (_carta(x) for x in lista.get("cardviews") or [])
-                  if c]
-        if not cartas:
-            continue
-        listas.append({
-            "tag": etiqueta,
-            # O título do EDHREC vem em inglês ("High Synergy Cards"); quando
-            # a categoria é conhecida, usa o nome em português.
-            "titulo": NOME_DA_CATEGORIA.get(etiqueta)
-                      or (lista.get("header") or "Cartas").strip(),
-            "cartas": cartas,
-        })
-
-    ordem = {tag: i for i, (tag, _) in enumerate(CATEGORIAS)}
-    listas.sort(key=lambda l: ordem.get(l["tag"], len(ordem)))
+    listas = _listas_de(dados)
 
     log.evento("edhrec", "sugeriu", caminho=caminho, listas=len(listas),
                cartas=sum(len(l["cartas"]) for l in listas),
@@ -340,11 +375,55 @@ def sugerir(comandantes: list[str], tema: str | None = None) -> dict:
                ms=int((time.time() - inicio) * 1000))
 
     return {
+        "alvo": {"tipo": "comandante", "nome": ", ".join(comandantes)},
         "comandantes": comandantes,
         "tema": tema,
         "temas": temas_de(dados),
         "listas": listas,
         "link": f"{SITE}/commanders/{slug_do_deck(comandantes)}",
+        "cache": bool(dados.get("_cache")),
+        "quando": time.time(),
+    }
+
+
+def sugerir_por_carta(nome: str) -> dict:
+    """O que o EDHREC vê aparecendo junto de UMA carta.
+
+    Mesma forma de resposta de `sugerir`, e de propósito: quem chama e quem
+    desenha tratam as duas do mesmo jeito, e o que muda é só o `alvo`.
+
+    A diferença de fonte importa pra ler o número. A página do comandante
+    compara "com ele" contra "com os outros comandantes"; a página da carta
+    compara "junto desta carta" contra "num deck qualquer do formato" — daí a
+    sinergia sair de `lift` e não de `synergy` (ver `_carta`).
+
+    Sem tema: a página de carta não tem `taglinks`. Por isso `temas` volta
+    vazio, e a tela não desenha seletor nenhum.
+    """
+    if not LIGADO:
+        raise EDHRECError("as sugestões estão desligadas no .env (EDHREC=0).")
+
+    alvo = slug(nome)
+    if not alvo:
+        raise EDHRECError("preciso do nome de uma carta pra pedir sugestão.")
+
+    caminho = f"cards/{alvo}"
+    inicio = time.time()
+    dados = _pedir(caminho)
+    listas = _listas_de(dados, LISTAS_DE_COMANDANTE, TITULO_NA_PAGINA_DE_CARTA)
+
+    log.evento("edhrec", "sugeriu-carta", caminho=caminho, listas=len(listas),
+               cartas=sum(len(l["cartas"]) for l in listas),
+               cache=dados.get("_cache"),
+               ms=int((time.time() - inicio) * 1000))
+
+    return {
+        "alvo": {"tipo": "carta", "nome": nome},
+        "comandantes": [],
+        "tema": None,
+        "temas": [],
+        "listas": listas,
+        "link": f"{SITE}/cards/{alvo}",
         "cache": bool(dados.get("_cache")),
         "quando": time.time(),
     }

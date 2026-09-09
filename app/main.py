@@ -934,24 +934,35 @@ def poder_do_deck(deck_id: str):
 
 @app.post("/decks/{deck_id}/sugestoes")
 def sugestoes_do_deck(deck_id: str, corpo: dict = Body(default={})):
-    """Cartas que combinam com o comandante, pelo EDHREC.
+    """Cartas que combinam com o comandante — ou com uma carta — pelo EDHREC.
 
-    `tema` no corpo é opcional e restringe a página consultada ("aristocrats",
-    "superfriends"). Os temas disponíveis voltam na resposta pra tela montar
-    o seletor.
+    O corpo escolhe de quem é a pergunta, e são duas perguntas diferentes:
 
-    As sugestões voltam já filtradas: sem o que o deck tem, sem o que a base
-    local não conhece e sem o que não cabe na identidade de cor (ver
-    `decks.sugestoes_uteis`).
+    * **sem nada** (o padrão): o que combina com o COMANDANTE. `tema` é
+      opcional e restringe a página consultada ("aristocrats",
+      "superfriends"); os temas disponíveis voltam na resposta pra tela
+      montar o seletor.
+    * **`carta`**: o que o EDHREC vê aparecendo junto DAQUELA carta. É o que
+      responde "já que este deck tem Ashnod's Altar, o que mais entra?", que
+      a página do comandante não sabe responder. Aqui `tema` não existe — a
+      página de carta não tem temas.
+
+    Os dois caminhos voltam com a mesma forma, `alvo` dizendo qual foi, e as
+    sugestões já filtradas: sem o que o deck tem, sem o que a base local não
+    conhece e sem o que não cabe na identidade de cor (ver
+    `decks.sugestoes_uteis`). O filtro de identidade importa bem mais no
+    caminho da carta: a página de Sol Ring sugere as cinco cores.
 
     Isto lê um endpoint NÃO OFICIAL do EDHREC e pode quebrar sem aviso — daí
     o 502 com a mensagem em vez de uma lista vazia, que a tela leria como
     "esse comandante não tem sinergia com nada".
     """
     deck = _deck_ou_404(deck_id)
+    carta = (corpo.get("carta") or "").strip() or None
     tema = (corpo.get("tema") or "").strip() or None
     try:
-        achado = edhrec.sugerir(deck.get("comandantes") or [], tema)
+        achado = (edhrec.sugerir_por_carta(carta) if carta
+                  else edhrec.sugerir(deck.get("comandantes") or [], tema))
     except edhrec.EDHRECError as e:
         raise HTTPException(502, str(e))
     return {**achado,

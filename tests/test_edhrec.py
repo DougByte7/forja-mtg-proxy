@@ -198,6 +198,55 @@ try:
     eq("tema entra no caminho da URL", sessao.chamadas[0],
        f"{edhrec.BASE}/commanders/muldrotha-the-gravetide/aristocratas.json")
 
+    # ------------------------------------------------- a página de uma carta
+    print("\n--- a página de uma carta ---")
+
+    # A página de uma CARTA fala outra língua: `lift` (razão) no lugar de
+    # `synergy` (diferença), e mais duas listas de COMANDANTE que não são
+    # resposta pra "que carta entra agora?".
+    pagina_carta = pagina(listas=[
+        ("topcommanders", "Top Commanders", [cardview("Muldrotha, the Gravetide")]),
+        ("newcommanders", "New Commanders", [cardview("Comandante Novo")]),
+        ("topcards", "Top Cards", [{"name": "Deadly Rollick", "lift": 1.42,
+                                    "num_decks": 400, "potential_decks": 1000}]),
+        ("creatures", "Creatures", [{"name": "Eternal Witness", "lift": 0.9,
+                                     "num_decks": 100, "potential_decks": 1000}]),
+    ])
+
+    sessao = com_sessao(RespostaFalsa(pagina_carta))
+    daCarta = edhrec.sugerir_por_carta("Ashnod's Altar")
+    eq("bate na URL da carta", sessao.chamadas[0],
+       f"{edhrec.BASE}/cards/ashnods-altar.json")
+    eq("as listas de comandante ficam de fora",
+       [l["tag"] for l in daCarta["listas"]], ["topcards", "creatures"])
+    # 1.42 é "42% mais provável junto dela"; menos 1 põe na mesma escala que
+    # a `synergy` da página de comandante, e a tela mostra um número só.
+    eq("lift vira a mesma sinergia em pontos",
+       daCarta["listas"][0]["cartas"][0]["sinergia"], 42)
+    eq("lift abaixo de 1 vira sinergia negativa",
+       daCarta["listas"][1]["cartas"][0]["sinergia"], -10)
+    eq("o título que falava do comandante muda",
+       daCarta["listas"][0]["titulo"], "Mais jogadas junto")
+    eq("o alvo diz que a lista é de uma carta",
+       daCarta["alvo"], {"tipo": "carta", "nome": "Ashnod's Altar"})
+    eq("e a página de carta não tem tema", (daCarta["tema"], daCarta["temas"]),
+       (None, []))
+    eq("o link aponta pra página da carta no site",
+       daCarta["link"], f"{edhrec.SITE}/cards/ashnods-altar")
+
+    sessao = com_sessao(RespostaFalsa(PAGINA))
+    doCmd = edhrec.sugerir(["Muldrotha, the Gravetide"])
+    eq("o alvo do comandante também vem dito",
+       doCmd["alvo"], {"tipo": "comandante", "nome": "Muldrotha, the Gravetide"})
+
+    espera = "carta sem nome não vira pedido"
+    try:
+        com_sessao()   # se pedir, explode
+        edhrec.sugerir_por_carta("   ")
+        check(espera, False, "(não levantou)")
+    except edhrec.EDHRECError:
+        check(espera, True)
+
     # ------------------------------------------------------------------ cache
     print("\n--- cache ---")
 
