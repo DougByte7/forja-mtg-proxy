@@ -15,8 +15,15 @@
     --border:#382F5C;
     --text:#EDE6D6;
     --text-muted:#A79BC7;
-    --gold:#C9A227;
-    --gold-light:#E4C767;
+    /* Fundo dos controles embutidos dentro de um painel (trilho do
+       segmentado, caixa do seletor). Mais claro que o fundo da página: um
+       controle sobre --bg dentro de um painel --surface-2 lê como buraco. */
+    --inset:#16112A;
+    --gold:#E9C765;
+    --gold-light:#F5DC92;
+    /* Texto sobre o dourado. Escuro e levemente arroxeado, pra ficar na
+       mesma família do fundo em vez de virar preto puro. */
+    --sobre-gold:#1A1024;
     --purple:#8B6BFF;
     --green:#4C9A6B;
     --red:#D9634A;
@@ -33,7 +40,7 @@
   body{
     background:
       radial-gradient(circle at 12% 0%, rgba(139,107,255,0.12), transparent 42%),
-      radial-gradient(circle at 88% 100%, rgba(201,162,39,0.10), transparent 42%),
+      radial-gradient(circle at 88% 100%, rgba(233,199,101,0.10), transparent 42%),
       var(--bg);
     color:var(--text);
     font-family:'Inter',sans-serif;
@@ -84,7 +91,9 @@
     transform:rotate(45deg);
   }
   .rune span{transform:rotate(-45deg);}
-  .titulo-deck{flex:1;min-width:160px;display:flex;flex-direction:column;gap:1px;}
+  .titulo-deck{flex:0 1 auto;min-width:140px;max-width:420px;
+    display:flex;flex-direction:column;gap:1px;}
+  .espaco{flex:1;min-width:0;}
   .titulo-deck input{
     background:transparent;border:1px solid transparent;border-radius:7px;
     color:var(--text);font-family:'Cinzel',serif;font-weight:700;font-size:17px;
@@ -101,13 +110,13 @@
 
   .btn{
     background:transparent;border:1px solid var(--border);color:var(--text-muted);
-    border-radius:8px;padding:8px 11px;font-size:12px;cursor:pointer;
+    border-radius:999px;padding:8px 14px;font-size:12px;cursor:pointer;
     transition:border-color .15s,color .15s,background .15s;white-space:nowrap;
   }
   .btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
   .btn:disabled{opacity:.4;cursor:not-allowed;}
-  .btn.ouro{background:var(--gold);border-color:var(--gold);color:#1A1408;font-weight:700;}
-  .btn.ouro:hover:not(:disabled){filter:brightness(1.08);color:#1A1408;}
+  .btn.ouro{background:var(--gold);border-color:var(--gold);color:var(--sobre-gold);font-weight:700;}
+  .btn.ouro:hover:not(:disabled){background:var(--gold-light);border-color:var(--gold-light);color:var(--sobre-gold);}
   .btn.verde{border-color:var(--green);color:var(--green);}
   .btn.verde:hover:not(:disabled){background:rgba(76,154,107,.10);border-color:var(--green);color:var(--green);}
   .acoes{display:flex;gap:7px;flex-wrap:wrap;}
@@ -163,10 +172,9 @@
      SERVEM ao deck — a da esquerda guarda o que ainda não entrou, a da
      direita procura o que vai entrar.
 
-     1560 e não os 1320 de antes: a coluna do maybeboard tirou 306px do
-     deck, e no 1320 a lista dele voltaria a caber numa coluna só de cartas.
-     Em 1560, num monitor de 1440 real, o deck ainda fecha as duas colunas de
-     352px que a lista precisa pra não truncar nome. */
+     1560px é a largura mínima em que, descontadas as duas colunas de apoio,
+     sobra pro deck espaço pras duas colunas de 352px que a lista precisa pra
+     não truncar nome. Abaixo disso a lista cai pra uma coluna só. */
   .corpo{
     max-width:var(--largura);margin:0 auto;padding:18px 16px 40px;
     display:grid;
@@ -243,11 +251,23 @@
      com a curva sozinha no trilho, e a escolha fica guardada no navegador
      pra não ser refeita a cada visita. Recolhe só o maybeboard, não o
      trilho inteiro — a curva não tem por que pagar por isso. */
-  .corpo.talvez-fechado .talvez-lista,
-  .corpo.talvez-fechado .talvez-nota,
-  .corpo.talvez-fechado .talvez-vazio{display:none;}
-  .corpo.talvez-fechado .painel-talvez{flex:none;padding-bottom:12px;}
-  .corpo.talvez-fechado .talvez-topo{margin-bottom:0;}
+  .trilho-conteudo{
+    display:flex;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;
+  }
+  .trilho-recolher{align-self:flex-end;flex:none;}
+  .trilho-vertical{
+    display:none;writing-mode:vertical-rl;font-family:'IBM Plex Mono',monospace;
+    font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--gold-light);white-space:nowrap;
+  }
+  /* Recolhida, a coluna vira uma fita de 44px com o nome de pé: quem não usa
+     nem a curva nem o maybeboard devolve a largura toda pro deck, e a escolha
+     fica guardada no navegador. */
+  .corpo.talvez-fechado{grid-template-columns:372px minmax(0,1fr) 44px;}
+  .corpo.talvez-fechado .trilho{align-items:center;gap:10px;}
+  .corpo.talvez-fechado .trilho-recolher{align-self:center;}
+  .corpo.talvez-fechado .trilho-conteudo{display:none;}
+  .corpo.talvez-fechado .trilho-vertical{display:block;}
   .talvez-vazio{
     color:var(--text-muted);font-size:11.5px;line-height:1.55;
     border:1px dashed var(--border);border-radius:10px;padding:12px 10px;
@@ -256,16 +276,14 @@
   /* O alvo de soltar precisa ficar visível ANTES de a carta chegar nele,
      senão ninguém descobre que dá pra arrastar. */
   .alvo-solta{outline:2px dashed var(--gold);outline-offset:3px;
-    background:rgba(201,162,39,.07);border-radius:10px;}
+    background:rgba(233,199,101,.07);border-radius:10px;}
   .linha.arrastando{opacity:.4;}
 
   /* ---------------- destino da carta que está entrando ----------------
-     A busca sempre soube achar carta e sempre jogou o resultado no mesmo
-     lugar: o deck. Mas quem procura já sabe pra onde a carta vai — pro
-     sideboard, pro maybeboard, pra "combo principal" — e antes disto essa
-     decisão só podia ser tomada DEPOIS, carta por carta, no ⋯ de cada linha.
-     Dizer o destino uma vez e adicionar vinte cartas seguidas é a mesma
-     decisão, tomada uma vez em vez de vinte. */
+     Quem procura já sabe pra onde a carta vai — pro sideboard, pro
+     maybeboard, pra "combo principal". Dizer isso uma vez e adicionar vinte
+     cartas seguidas é uma decisão só, em vez de vinte visitas ao ⋯ de cada
+     linha depois de adicionada. */
   .destino{
     display:flex;flex-direction:column;gap:7px;margin:9px 0 2px;
     padding:9px 10px;background:var(--surface-2);
@@ -277,7 +295,7 @@
     text-transform:uppercase;color:var(--text-muted);flex:none;width:62px;
   }
   .segmento{
-    display:flex;gap:3px;flex:1;min-width:0;background:var(--bg);
+    display:flex;gap:3px;flex:1;min-width:0;background:var(--inset);
     border:1px solid var(--border);border-radius:999px;padding:3px;
   }
   .segmento button{
@@ -287,11 +305,21 @@
     overflow:hidden;text-overflow:ellipsis;
   }
   .segmento button:hover{color:var(--text);}
-  .segmento button.ativa{background:var(--gold);color:#1A1408;}
+  .segmento button.ativa{background:var(--gold);color:var(--sobre-gold);}
   .destino select.campo{
-    flex:1;min-width:0;padding:6px 30px 6px 10px;font-size:12px;
-    border-radius:999px;background-color:var(--bg);
+    flex:1;min-width:0;padding:6px 30px 6px 12px;font-size:12px;
+    border-radius:999px;background-color:var(--inset);
   }
+  /* O "+" fica ao lado do seletor, e não como última opção dele: uma opção
+     que não seleciona nada e abre um prompt se comporta diferente de todas as
+     outras da lista. */
+  .btn-nova-cat{
+    width:28px;height:28px;flex:none;border-radius:50%;padding:0;
+    border:1px solid var(--border);background:var(--inset);color:var(--text-muted);
+    font-size:15px;line-height:0;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .btn-nova-cat:hover{border-color:var(--gold);color:var(--gold-light);}
   .destino select.campo:disabled{opacity:.45;cursor:not-allowed;}
 
   /* ---------------- folha de baixo (só no celular) ----------------
@@ -342,16 +370,16 @@
     transition:border-color .15s,color .15s,background .15s;
   }
   .chip:hover{border-color:var(--gold);color:var(--gold-light);}
-  .chip.ativo{border-color:var(--gold);background:rgba(201,162,39,.12);color:var(--gold-light);}
+  .chip.ativo{border-color:var(--gold);background:rgba(233,199,101,.12);color:var(--gold-light);}
 
   .resultados{
     margin-top:10px;overflow-y:auto;flex:1;min-height:120px;
     display:flex;flex-direction:column;gap:3px;padding-right:2px;
   }
-  /* Cinco resultados e nada de rolagem: a lista era de quarenta e a pessoa
-     rolava uma coluna inteira pra escolher entre nomes quase iguais. Quem não
-     achou nos cinco primeiros não vai achar no vigésimo — vai refinar a busca,
-     que é o que os filtros ao lado servem pra fazer. */
+  /* Cinco resultados e nada de rolagem. Quem não achou nos cinco primeiros
+     não vai achar no vigésimo: vai escrever mais uma letra ou usar os
+     filtros, que é o que eles servem pra fazer. Rolagem aqui seria uma
+     segunda superfície rolável dentro de uma coluna que já rola. */
   .lateral .resultados{max-height:none;overflow:visible;}
   .resultados .demais{
     font-size:11px;color:var(--text-muted);padding:5px 8px 0;line-height:1.5;
@@ -372,6 +400,12 @@
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
   .achado .preco{
     font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);flex:none;
+  }
+  /* O item que as setas alcançaram. Fica igual ao hover mais uma marca de
+     ouro à esquerda, pra que teclado e mouse não pareçam dois sistemas. */
+  .achado.destacado{
+    background:var(--surface-2);border-color:var(--gold);
+    box-shadow:inset 3px 0 0 var(--gold);
   }
   .achado.no-deck{opacity:.45;}
   .achado.no-deck .nome b::after{content:" ✓";color:var(--green);}
@@ -449,26 +483,23 @@
   .cor-btn.ativo{border-color:var(--gold-light);transform:scale(1.06);}
   .cor-btn:hover{border-color:var(--gold);}
 
-  /* Busca e filtros na mesma linha: eram duas linhas empilhadas pra dizer
-     uma coisa só ("o que eu quero achar"), e a segunda delas roubava do
-     resultado a altura que ele precisa. */
+  /* Busca e filtros na mesma linha: os dois dizem uma coisa só ("o que eu
+     quero achar"), e cada linha gasta aqui é altura que sai dos resultados. */
   .linha-busca{display:flex;gap:7px;align-items:stretch;}
-  .linha-busca .campo{flex:1;min-width:0;}
+  .linha-busca .campo{flex:1;min-width:0;border-radius:999px;padding-left:14px;}
   /* A fita de filtros ligados: mostra fora da gaveta o que está ligado
      dentro dela, senão a busca filtrada pareceria uma busca quebrada. */
   .ligados:not(:empty){margin:8px 0 0;}
-  .btn-filtros{
-    display:flex;align-items:center;gap:6px;flex:none;border-radius:9px;
-  }
+  .btn-filtros{display:flex;align-items:center;gap:6px;flex:none;}
   .btn-filtros .conta{
     font-family:'IBM Plex Mono',monospace;font-size:10px;
-    background:var(--gold);color:#1A1408;border-radius:999px;
+    background:var(--gold);color:var(--sobre-gold);border-radius:999px;
     padding:0 5px;min-width:16px;text-align:center;font-weight:700;
   }
   .ligados{display:flex;gap:4px;flex-wrap:wrap;min-width:0;}
   .ligado{
     display:inline-flex;align-items:center;gap:4px;
-    border:1px solid var(--gold);background:rgba(201,162,39,.12);
+    border:1px solid var(--gold);background:rgba(233,199,101,.12);
     color:var(--gold-light);border-radius:999px;padding:2px 4px 2px 9px;
     font-size:11px;max-width:100%;
   }
@@ -503,13 +534,18 @@
   .pip.B{background:var(--mana-B);} .pip.R{background:var(--mana-R);}
   .pip.G{background:var(--mana-G);} .pip.C{background:var(--mana-C);}
 
-  .btn.redondo{width:31px;height:31px;padding:0;border-radius:50%;flex:none;}
+  /* O ⌄ e o ··· são glifos que não se apoiam na linha de base como letra:
+     centrar é alinhar a caixa do botão, com line-height zerado pra que a
+     métrica da fonte não empurre o desenho pra cima. */
+  .btn.redondo{
+    width:31px;height:31px;padding:0;border-radius:50%;flex:none;
+    display:inline-flex;align-items:center;justify-content:center;line-height:0;
+  }
   /* ---------------- detalhe da cotação ----------------
-     A cotação virou automática: o número dela mora no cabeçalho e ninguém
-     mais aperta um botão pra vê-lo. O que sobrou de conteúdo alto — as duas
-     fontes, as cartas caras, o que ficou de fora — não cabe num tooltip e
-     não merece uma coluna, então abre num painel ancorado embaixo do próprio
-     número. Fica onde a pergunta nasceu, e some quando não interessa mais. */
+     O total da cotação mora no cabeçalho; o detalhe dela — as duas fontes,
+     as cartas caras, o que ficou de fora — não cabe num tooltip e não merece
+     uma coluna. Abre num painel ancorado embaixo do próprio número, onde a
+     pergunta nasce, e some quando não interessa mais. */
   .cotacao-caixa{
     position:fixed;z-index:75;width:min(460px,calc(100vw - 24px));
     background:var(--surface);border:1px solid var(--border);border-radius:13px;
@@ -527,11 +563,10 @@
   .cotacao-topo h2{flex:1;margin:0;}
 
   /* ---------------- abas ----------------
-     Deck, análise, mana base, poder e combos eram cinco painéis empilhados
-     na mesma rolagem: quem queria a curva de mana rolava por 99 cartas, e
-     quem queria a lista rolava de volta. São cinco RESPOSTAS sobre o mesmo
-     deck, não cinco coisas ao mesmo tempo — então é uma superfície só, com
-     um seletor em cima.
+     Deck, análise, mana base, poder e combos são cinco RESPOSTAS sobre o
+     mesmo deck, e só uma está sendo perguntada de cada vez. Uma superfície
+     só, com um seletor em cima: empilhados na mesma rolagem, quem quer a
+     curva de mana atravessa 99 cartas pra chegar nela.
 
      A fita rola de lado em vez de quebrar em duas linhas: no celular ela é a
      única navegação da tela, e uma navegação que muda de altura empurra o
@@ -549,13 +584,17 @@
     font-family:'Inter',sans-serif;transition:color .12s,background .12s;
   }
   .abas-painel button:hover{color:var(--text);}
-  .abas-painel button.ativa{background:var(--gold);color:#1A1408;}
+  .abas-painel button.ativa{background:var(--gold);color:var(--sobre-gold);}
   .abas-painel button .n{
     font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.62;
   }
   /* Variante estreita, pra fita de abas dentro de uma coluna de 372px. */
-  .abas-painel.miuda{margin-bottom:11px;padding:4px;}
-  .abas-painel.miuda button{padding:6px 11px;font-size:12px;}
+  .abas-painel.miuda{margin-bottom:11px;padding:4px;overflow:visible;}
+  /* Um terço da largura pra cada: são três destinos irmãos, e larguras
+     diferentes fariam parecer que um deles é o principal. */
+  .abas-painel.miuda button{
+    flex:1 1 0;min-width:0;padding:6px 4px;font-size:12px;justify-content:center;
+  }
   /* Aberto por um atalho de outro canto da tela (o botão de mana base no
      cabeçalho de Terrenos), o painel pisca uma vez: sem isso a troca de aba
      acontece sem nada dizendo o que respondeu. */
@@ -573,9 +612,9 @@
     font-size:12px;font-weight:600;color:var(--text-muted);
     text-transform:uppercase;letter-spacing:.05em;
   }
-  /* O tracejado era um `::after` e virou um elemento: ele precisa ficar
-     ENTRE o nome do grupo e as ações dele, e um pseudoelemento só sabe ficar
-     no fim. */
+  /* O tracejado é um elemento e não um `::after` porque precisa ficar ENTRE
+     o nome do grupo e as ações dele — um pseudoelemento só sabe ficar no
+     fim. */
   .grupo h3 .traco{flex:1;border-top:1px dashed var(--border);min-width:10px;}
   .grupo h3 .n{font-family:'IBM Plex Mono',monospace;color:var(--gold-light);}
   /* A categoria feita à mão se distingue da que sai do tipo da carta: uma é
@@ -648,10 +687,10 @@
     text-overflow:ellipsis;white-space:nowrap;}
   .menu button.perigo:hover{border-color:var(--red);color:var(--red);}
   .menu .risco{height:1px;background:var(--border);margin:5px 4px;}
-  /* 352px e não os 288px de antes: a coluna de preço tomou ~46px de cada
-     linha, e no 288 o nome passou a ser cortado em quase um terço das cartas
-     nas larguras de tablet. Medido — abaixo de 352 o corte volta; acima,
-     não melhora nada e só some com uma coluna inteira. */
+  /* 352px é o mínimo em que o nome da carta não trunca com a coluna de preço
+     (~46px) ao lado. Medido: abaixo disso o corte pega quase um terço das
+     cartas nas larguras de tablet; acima, não melhora nada e só custa uma
+     coluna inteira. */
   .colunas{
     display:grid;grid-template-columns:repeat(auto-fill,minmax(352px,1fr));
     gap:2px 16px;
@@ -691,8 +730,8 @@
   /* comandante em destaque */
   .comandante{
     display:flex;gap:12px;align-items:center;padding:10px;border-radius:11px;
-    background:linear-gradient(120deg,rgba(201,162,39,.10),transparent 70%);
-    border:1px solid rgba(201,162,39,.4);margin-bottom:14px;
+    background:linear-gradient(120deg,rgba(233,199,101,.10),transparent 70%);
+    border:1px solid rgba(233,199,101,.4);margin-bottom:14px;
   }
   .comandante img{width:52px;height:52px;object-fit:cover;object-position:center 18%;
     border-radius:8px;flex:none;background:var(--surface-2);}
@@ -710,6 +749,12 @@
   .barra .cmc{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-muted);}
   .barra .qt{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gold-light);height:11px;}
 
+  /* Cores e tipos lado a lado: são duas leituras independentes do mesmo
+     deck, e empilhadas a segunda ficava abaixo da dobra do painel. */
+  .distrib-duo{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:14px 20px;align-items:start;
+  }
   .distrib{display:flex;flex-direction:column;gap:5px;margin-top:4px;}
   .distrib .item{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-muted);}
   .distrib .trilho{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;}
@@ -723,7 +768,7 @@
     padding:8px 10px;border-radius:8px;margin-bottom:5px;
   }
   .aponta.erro{background:rgba(217,99,74,.12);border:1px solid rgba(217,99,74,.5);color:#F2AFA1;}
-  .aponta.aviso{background:rgba(201,162,39,.10);border:1px dashed var(--gold);color:var(--gold-light);}
+  .aponta.aviso{background:rgba(233,199,101,.10);border:1px dashed var(--gold);color:var(--gold-light);}
   .aponta.ok{background:rgba(76,154,107,.10);border:1px solid rgba(76,154,107,.45);color:#A8D8BC;}
   /* Deck incompleto NÃO é erro: é o estado normal de quem está montando.
      Vermelho aqui gritaria durante as duas horas inteiras da montagem, e
@@ -791,6 +836,12 @@
     margin-top:5px;font-size:12px;
   }
   .mb-basico .add-peca{margin-left:0;}
+  .paginador{
+    display:flex;align-items:center;justify-content:flex-end;gap:8px;
+    margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;
+    color:var(--text-muted);
+  }
+  .paginador .mini:disabled{opacity:.3;cursor:not-allowed;}
 
   /* ---------------- nível de poder (brackets) ---------------- */
   .escala{display:flex;gap:5px;margin:4px 0 12px;}
@@ -804,7 +855,7 @@
   }
   .degrau .rot{display:block;font-size:9px;color:#6F6490;margin-top:2px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .degrau.aqui{border-color:var(--gold);background:rgba(201,162,39,.14);}
+  .degrau.aqui{border-color:var(--gold);background:rgba(233,199,101,.14);}
   .degrau.aqui .n{color:var(--gold-light);font-size:19px;}
   .degrau.aqui .rot{color:var(--gold-light);}
   /* O 5 nasce tracejado e apagado: cEDH é definido pelo metagame, não pela
@@ -871,9 +922,9 @@
   .bracket.E{border-color:var(--border);color:#6F6490;}
   .combo .rodape a{color:var(--text-muted);font-size:11px;text-decoration:none;}
   .combo .rodape a:hover{color:var(--gold-light);text-decoration:underline;}
-  /* A peça agora é `<span>` com prévia de arte no hover: sublinhado pontilhado
-     é a convenção de "passe o mouse aqui" sem parecer link, que levaria pra
-     fora da página. */
+  /* A peça é `<span>` com prévia de arte no hover. Sublinhado pontilhado é a
+     convenção de "passe o mouse aqui" sem parecer link — link prometeria
+     levar pra fora da página. */
   .peca[data-arte]{cursor:help;text-decoration:underline dotted rgba(167,155,199,.5);
     text-underline-offset:2px;}
   .peca[data-arte]:hover{text-decoration-color:var(--gold-light);}
@@ -898,14 +949,14 @@
     padding:7px 10px;margin-bottom:8px;line-height:1.5;
   }
   .add-peca{
-    margin-left:auto;border:1px solid var(--gold);background:rgba(201,162,39,.10);
-    color:var(--gold-light);border-radius:7px;padding:4px 9px;font-size:11px;
+    margin-left:auto;border:1px solid var(--gold);background:rgba(233,199,101,.10);
+    color:var(--gold-light);border-radius:999px;padding:4px 11px;font-size:11px;
     cursor:pointer;flex:none;
   }
-  .add-peca:hover{background:rgba(201,162,39,.2);}
+  .add-peca:hover{background:rgba(233,199,101,.2);}
   .add-peca:disabled{opacity:.45;cursor:not-allowed;}
   .combo-desatualizado{
-    font-size:11.5px;color:var(--gold-light);background:rgba(201,162,39,.10);
+    font-size:11.5px;color:var(--gold-light);background:rgba(233,199,101,.10);
     border:1px dashed var(--gold);border-radius:8px;padding:7px 10px;margin-bottom:8px;
   }
 
@@ -937,7 +988,7 @@
   .vazio{color:var(--text-muted);font-size:12.5px;line-height:1.6;text-align:center;padding:22px 8px;}
 
   .aviso-base{
-    background:rgba(201,162,39,.10);border:1px dashed var(--gold);border-radius:10px;
+    background:rgba(233,199,101,.10);border:1px dashed var(--gold);border-radius:10px;
     padding:11px 13px;margin-bottom:14px;font-size:12.5px;line-height:1.55;color:var(--gold-light);
   }
 
@@ -974,6 +1025,7 @@
      coluna é melhor do que espremer as três até nenhuma servir. */
   @media (max-width:1200px){
     .corpo{grid-template-columns:330px minmax(0,1fr) 250px;gap:14px;}
+    .corpo.talvez-fechado{grid-template-columns:330px minmax(0,1fr) 44px;}
   }
 
   /* ---------------- o celular ----------------
@@ -984,9 +1036,9 @@
      (curva e maybeboard) desce pro fim da página, que é onde se confere
      depois de montar.
 
-     A barra de quatro abas de região que existia aqui sumiu porque ela
-     dividia a tela em quatro telas de uma coisa só, e três delas eram apoio:
-     a pessoa passava a sessão trocando de aba pra pôr uma carta e voltar. */
+     Não há barra de abas de região: dividir o telefone em quatro telas de
+     uma coisa só, três delas de apoio, faria a sessão inteira ser trocar de
+     aba pra pôr uma carta e voltar. */
   @media (max-width:900px){
     .corpo{
       grid-template-columns:minmax(0,1fr);gap:14px;
@@ -999,11 +1051,12 @@
     .trilho{position:static;max-height:none;}
     .painel-talvez{flex:none;}
     .talvez-lista{max-height:none;}
-    /* No telefone o maybeboard nunca nasce recolhido: aqui ele é uma seção
-       no fim da página, e não uma coluna que rouba largura de ninguém. */
-    .corpo.talvez-fechado .talvez-lista,
-    .corpo.talvez-fechado .talvez-nota,
-    .corpo.talvez-fechado .talvez-vazio{display:block;}
+    /* No telefone a coluna nunca nasce recolhida: aqui ela é uma seção no fim
+       da página, e não uma coluna que rouba largura de ninguém. */
+    .corpo.talvez-fechado{grid-template-columns:minmax(0,1fr);}
+    .corpo.talvez-fechado .trilho-conteudo{display:flex;}
+    .corpo.talvez-fechado .trilho-vertical{display:none;}
+    .trilho-conteudo{overflow-y:visible;}
     #btn-recolher-talvez{display:none;}
 
     /* A coluna da busca vira folha de baixo. */
@@ -1048,10 +1101,8 @@
       <div class="estado-salvo" id="estado-salvo"></div>
     </div>
 
-    <!-- Os dois números da tela inteira, como texto ao lado do nome do deck.
-         Eram uma pílula (a contagem) e um painel de coluna inteira (o
-         dinheiro); virar dois números no cabeçalho é o que eles sempre
-         foram. O traço separa "que deck é este" de "como ele está". -->
+    <!-- O traço separa a identidade do deck (nome, estado do autosave) do
+         estado dele (quantas cartas, quanto custa). -->
     <div class="divisor"></div>
     <div class="medidores">
       <span class="medidor" id="contador"
@@ -1059,10 +1110,9 @@
         <span class="ponto" id="contador-ponto"></span>
         <b id="contador-n">0</b><span class="de">/100</span>
       </span>
-      <!-- O total é botão porque copiar a lista é a ação que se faz olhando
-           pra ele: era um "Exportar lista" a uma coluna de distância do
-           número que ele exporta. O detalhe da cotação (as duas fontes, as
-           cartas caras) abre no ⌄ ao lado — não cabe num tooltip. -->
+      <!-- Clicar no total copia a lista do deck: a ação mora no número que
+           ela exporta. O ⌄ ao lado abre o detalhe da cotação, que é alto
+           demais pra caber num tooltip. -->
       <button class="medidor" id="btn-total" type="button" hidden
               title="Clique pra copiar a lista do deck">
         <b id="total-n">—</b><span class="de" id="total-de">USD</span>
@@ -1071,6 +1121,11 @@
               aria-expanded="false" aria-controls="cotacao-caixa"
               title="Detalhe da cotação" aria-label="Detalhe da cotação">⌄</button>
     </div>
+
+    <!-- O vão que empurra as ações pro canto direito. Sem ele, o traço e os
+         medidores seriam afastados do nome do deck pelo crescimento do
+         título, e os três blocos flutuariam no meio da barra. -->
+    <div class="espaco"></div>
 
     <div class="acoes">
       <button class="btn ouro" id="btn-compartilhar" hidden>Compartilhar</button>
@@ -1105,9 +1160,9 @@
     </div>
 
     <!-- ---------------- as cinco respostas sobre o deck ----------------
-         Deck, análise, mana base, poder e combos eram cinco painéis na mesma
-         rolagem. São cinco perguntas sobre a MESMA lista, e só uma delas está
-         sendo feita de cada vez — então é uma superfície só, com abas. -->
+         Deck, análise, mana base, poder e combos são cinco perguntas sobre a
+         MESMA lista, e só uma está sendo feita de cada vez: uma superfície
+         só, com abas. Abrir a aba já dispara a conta dela. -->
     <div id="area-deck" hidden>
       <div class="abas-painel" id="abas-deck" role="tablist">
         <button role="tab" data-painel="deck" class="ativa" aria-selected="true">
@@ -1142,9 +1197,15 @@
       <div class="painel" id="painel-analise" data-painel="analise" hidden>
         <h2 class="secao">Como o deck está</h2>
         <div id="apontamentos"></div>
-        <div style="margin-top:14px;">
-          <h2 class="secao">Cores e tipos</h2>
-          <div class="distrib" id="distrib"></div>
+        <div class="distrib-duo" style="margin-top:14px;">
+          <div>
+            <h2 class="secao">Cores</h2>
+            <div class="distrib" id="distrib-cores"></div>
+          </div>
+          <div>
+            <h2 class="secao">Tipos</h2>
+            <div class="distrib" id="distrib-tipos"></div>
+          </div>
         </div>
       </div>
 
@@ -1188,11 +1249,11 @@
   <!-- ================= esquerda: pôr carta no deck =================
        Um painel só, com abas. Busca, sugestão do EDHREC e combo a uma carta
        de fechar são três formas de responder a MESMA pergunta ("que carta
-       entra agora?"), e eram três cartões empilhados: trocar de forma custava
-       rolar a coluna. -->
+       entra agora?"), e trocar de forma tem que ser um clique. -->
   <aside class="lateral" id="lateral">
     <span class="puxador" id="puxador"></span>
     <div class="painel" id="painel-adicionar">
+
       <div class="abas-painel miuda" id="abas-rail" role="tablist">
         <button role="tab" data-rail="buscar" class="ativa" aria-selected="true">Adicionar</button>
         <button role="tab" data-rail="sugestoes" aria-selected="false">Sugestões</button>
@@ -1226,6 +1287,9 @@
             <span class="destino-rot">Categoria</span>
             <select class="campo" id="sel-categoria"
                     aria-label="Categoria da carta que entra"></select>
+            <button type="button" class="btn-nova-cat" id="btn-nova-cat"
+                    title="Criar uma categoria sua — &quot;combo principal&quot;, &quot;sac outlet&quot; — e já mandar as próximas cartas pra ela"
+                    aria-label="Criar nova categoria">+</button>
           </div>
         </div>
 
@@ -1254,29 +1318,35 @@
   </aside>
 
   <!-- ================= direita: o que se olha enquanto monta ================= -->
-  <aside class="trilho">
-    <div class="painel cartao-curva">
-      <h2 class="secao">Curva de mana</h2>
-      <div class="barras" id="curva"></div>
-      <button class="btn" id="btn-ver-analise" style="width:100%;margin-top:11px;">
-        Ver análise</button>
-    </div>
+  <aside class="trilho" id="trilho">
+    <!-- Fora dos painéis, porque recolhe a coluna inteira e não um deles. -->
+    <button class="mini trilho-recolher" id="btn-recolher-talvez"
+            aria-expanded="true" aria-controls="trilho-conteudo"
+            title="Recolher a coluna">›</button>
+    <span class="trilho-vertical">Curva e maybeboard</span>
 
-    <!-- O maybeboard: do lado oposto à busca, com o deck no meio. O que
-         talvez entre de um lado, o que se procura pra entrar do outro. -->
-    <div class="painel painel-talvez">
-      <div class="talvez-topo">
-        <h2 class="secao">Maybeboard</h2>
-        <span class="talvez-n" id="talvez-n" hidden></span>
-        <button class="mini" id="btn-recolher-talvez" aria-expanded="true"
-                title="Recolher o maybeboard">−</button>
+    <div class="trilho-conteudo" id="trilho-conteudo">
+      <div class="painel cartao-curva">
+        <h2 class="secao">Curva de mana</h2>
+        <div class="barras" id="curva"></div>
+        <button class="btn" id="btn-ver-analise" style="width:100%;margin-top:11px;">
+          Ver análise</button>
       </div>
-      <p class="nota talvez-nota">Cartas em dúvida. Não contam pras 100, não
-        entram na cotação e não aparecem em análise nenhuma — ficam aqui até
-        você decidir.</p>
-      <div class="talvez-lista" id="talvez-lista"></div>
-      <div class="talvez-vazio" id="talvez-vazio">Arraste uma carta do deck pra
-        cá — ou mande direto, pelo <b>Vai para</b> da busca.</div>
+
+      <!-- Do lado oposto à busca, com o deck no meio: o que talvez entre de um
+           lado, o que se procura pra entrar do outro. -->
+      <div class="painel painel-talvez">
+        <div class="talvez-topo">
+          <h2 class="secao">Maybeboard</h2>
+          <span class="talvez-n" id="talvez-n" hidden></span>
+        </div>
+        <p class="nota talvez-nota">Cartas em dúvida. Não contam pras 100, não
+          entram na cotação e não aparecem em análise nenhuma — ficam aqui até
+          você decidir.</p>
+        <div class="talvez-lista" id="talvez-lista"></div>
+        <div class="talvez-vazio" id="talvez-vazio">Arraste uma carta do deck pra
+          cá — ou mande direto, pelo <b>Vai para</b> da busca.</div>
+      </div>
     </div>
   </aside>
 </main>
@@ -1469,10 +1539,9 @@ const CATEGORIAS = [
   ["Feitiços",      (t) => t.includes("sorcery")],
   ["Batalhas",      (t) => t.includes("battle")],
 ];
-/* Os tipos, agora dentro da gaveta de filtros. Eram sete chips numa fita
-   acima dos resultados; viraram um seletor porque a gaveta trouxe mais seis
-   filtros junto, e treze controles soltos na lateral de 372px comeriam a
-   lista de resultados que eles existem pra filtrar. */
+/* Os tipos, como seletor dentro da gaveta de filtros. São treze opções, e
+   treze controles soltos na coluna de 372px comeriam a lista de resultados
+   que eles existem pra filtrar. */
 const TIPOS = [
   ["", "Qualquer tipo"],
   ["creature","Criatura"], ["instant","Instantâneo"], ["sorcery","Feitiço"],
@@ -1508,6 +1577,7 @@ const estado = {
   sugestoesTema: null,
   manabase: null,           // a última análise de mana base
   manabaseTeto: null,       // teto de preço escolhido (null = o padrão)
+  mbPagina: 0,              // página da lista de terrenos que fixam
   combosMexidos: 0,         // combos fechados aqui na tela desde a busca
 
   // Pra onde vai a próxima carta escolhida na busca. Fica no estado, e não
@@ -1724,9 +1794,9 @@ function orcamentoLocal(){
    aparecem juntos — duas contas diferentes pro mesmo deck lado a lado seriam
    pior do que número nenhum.
 
-   Tudo o mais que a antiga faixa dizia por extenso (quantas contam, quantas
-   ficam de fora, quantas não têm preço) virou o título: é conferência de uma
-   vez na vida, e ocupava uma linha permanente do cabeçalho pra isso. */
+   O detalhamento (quantas cartas contam, quantas ficam de fora, quantas não
+   têm preço) fica no título: é conferência de uma vez na vida, e não vale uma
+   linha permanente do cabeçalho. */
 function desenharPreviaOrcamento(){
   const botao = $("btn-total");
   const caret = $("btn-cotacao");
@@ -1767,9 +1837,8 @@ function desenharPreviaOrcamento(){
 
 /* ------------------------------------------------------- cotação automática
 
-   A cotação era um botão: a pessoa montava o deck, lembrava de apertar, e o
-   número ficava velho no instante seguinte. Agora ela roda sozinha — mas
-   sozinha de um jeito que não vira uma raspagem por carta adicionada:
+   A cotação persegue o deck sozinha, sem ninguém apertar nada — e sozinha de
+   um jeito que não vira uma raspagem por carta adicionada:
 
    * espera o deck ficar QUIETO (quem adiciona trinta florestas faz trinta
      mudanças em vinte segundos, e isso é uma cotação, não trinta);
@@ -1957,9 +2026,9 @@ function lembrarDeck(){
   atualizarBotaoMeus();
 }
 
-/* "Meus decks" virou item do menu do cabeçalho, e o menu se monta na hora do
-   clique — então não há mais botão pra manter atualizado. A função fica como
-   ponto único caso o cabeçalho volte a mostrar a contagem. */
+/* "Meus decks" é item do menu do cabeçalho, e o menu se monta no clique: não
+   há botão com contagem pra manter em dia. A função continua existindo como
+   ponto único caso o cabeçalho volte a mostrar esse número. */
 function atualizarBotaoMeus(){ /* nada a fazer: o menu se monta ao abrir */ }
 
 /* ------------------------------------------------------------------- desenhar */
@@ -1988,6 +2057,22 @@ function desenharTudo(){
    os cinco painéis do centro são desenhados a cada mudança do deck, estejam
    à vista ou não, senão abrir "Análise" mostraria o deck de dois minutos
    atrás por um quadro. */
+/* Abrir a aba é o pedido: quem clica em "Nível de poder" quer o nível, não um
+   botão que promete o nível. A conta só sai se ainda não houver resposta ou se
+   o deck tiver mudado desde a última — trocar de aba ida e volta não repete
+   consulta. O botão de cada painel continua existindo pra forçar de novo. */
+function rodarAoAbrir(nome){
+  if (!estado.comandantes.length) return;
+  if (nome === "manabase" && !estado.manabase) return analisarManabase();
+  const assinatura = assinaturaDoDeck();
+  if (nome === "poder" && estado.poderAssinatura !== assinatura){
+    return estimarPoder();
+  }
+  if (nome === "combos" && estado.combosAssinatura !== assinatura){
+    return procurarCombos();
+  }
+}
+
 function trocarAba(nome){
   estado.aba = nome;
   const fita = $("abas-deck");
@@ -1999,6 +2084,7 @@ function trocarAba(nome){
   for (const painel of document.querySelectorAll("#area-deck > [data-painel]")){
     painel.hidden = painel.dataset.painel !== nome;
   }
+  rodarAoAbrir(nome);
 }
 
 function trocarRail(nome){
@@ -2016,6 +2102,7 @@ function trocarRail(nome){
   // aba é o que se espera. No celular ela é uma folha: quem abre a folha é
   // `abrirFolha`, e é ele quem foca — depois da animação.
   if (nome === "buscar" && window.innerWidth > 900) $("busca").focus();
+  if (nome === "combos") rodarAoAbrir("combos");
 }
 
 /* Os dois medidores do cabeçalho. O ponto colorido carrega a validação
@@ -2343,9 +2430,9 @@ function desenharDistribuicao(){
       <span class="num">${n}</span>
     </div>`).join("");
 
-  $("distrib").innerHTML = (cores || "") +
-    (cores && tipos ? '<div style="height:6px"></div>' : "") + (tipos || "") ||
-    '<div class="vazio" style="padding:8px 0;">Sem cartas ainda.</div>';
+  const vazio = '<div class="vazio" style="padding:8px 0;">Sem cartas ainda.</div>';
+  $("distrib-cores").innerHTML = cores || vazio;
+  $("distrib-tipos").innerHTML = tipos || vazio;
 }
 
 function atualizarNotaIdentidade(){
@@ -2812,6 +2899,67 @@ function ligarArrastar(){
 
 let buscaTimer = null;
 
+/* ------------------------------------------- teclado sobre os resultados
+
+   A busca é usada de mão no teclado: digita, olha os cinco resultados,
+   escolhe. A seta pra baixo entra na lista, as setas andam por ela, Enter
+   manda a destacada pro destino escolhido e devolve o foco à caixa — que é
+   onde a próxima carta vai ser digitada. Enter sem nada destacado manda a
+   primeira, que é o caminho de quem já sabe o nome inteiro. */
+let destaque = -1;
+
+function itensDe(caixa){
+  return [...caixa.querySelectorAll(".achado")];
+}
+
+function pintarDestaque(caixa){
+  const itens = itensDe(caixa);
+  itens.forEach((el, i) => el.classList.toggle("destacado", i === destaque));
+  if (destaque >= 0) itens[destaque]?.scrollIntoView({block: "nearest"});
+}
+
+function limparDestaque(){
+  destaque = -1;
+  document.querySelectorAll(".achado.destacado")
+    .forEach(e => e.classList.remove("destacado"));
+}
+
+function moverDestaque(caixa, passo){
+  const itens = itensDe(caixa);
+  if (!itens.length) return;
+  // Da caixa de texto, a primeira seta pra baixo pega o primeiro item e a
+  // primeira seta pra cima pega o último — as duas entram na lista pela
+  // ponta mais próxima.
+  destaque = destaque < 0
+    ? (passo > 0 ? 0 : itens.length - 1)
+    : (destaque + passo + itens.length) % itens.length;
+  pintarDestaque(caixa);
+}
+
+function ligarTecladoDaBusca(input, caixa){
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+      if (!itensDe(caixa).length) return;
+      e.preventDefault();
+      return moverDestaque(caixa, e.key === "ArrowDown" ? 1 : -1);
+    }
+    if (e.key === "Escape" && destaque >= 0){
+      e.preventDefault();
+      return limparDestaque();
+    }
+    if (e.key === "Enter"){
+      if (!ultimosResultados.length) return;
+      e.preventDefault();
+      const carta = ultimosResultados[destaque >= 0 ? destaque : 0];
+      limparDestaque();
+      if (carta && caixa.aoClicar) caixa.aoClicar(carta);
+      // A caixa do comandante sai da tela assim que um é escolhido: só
+      // devolve o foco quem continua visível.
+      if (input.offsetParent){ input.focus(); input.select(); }
+    }
+  });
+}
+
 function agendarBusca(){
   clearTimeout(buscaTimer);
   buscaTimer = setTimeout(buscar, 220);
@@ -2853,17 +3001,18 @@ let ultimosResultados = [];
 
 /* Cinco resultados, e o resto vira uma frase.
 
-   A lista era de quarenta numa caixa com rolagem própria, dentro de uma
-   coluna que já rolava: escolher entre "Llanowar Elves" e "Llanowar Tribe"
-   custava rolar duas superfícies aninhadas. Quem não achou nos cinco
-   primeiros não vai achar no vigésimo — vai escrever mais uma letra, ou usar
-   os filtros. A frase no fim existe pra dizer isso em vez de deixar a pessoa
-   achando que o acervo acabou. */
+   Quem não achou nos cinco primeiros não vai achar no vigésimo: vai escrever
+   mais uma letra, ou usar os filtros. Uma caixa com rolagem própria dentro de
+   uma coluna que já rola faz escolher entre "Llanowar Elves" e "Llanowar
+   Tribe" custar duas superfícies aninhadas. A frase no fim diz quantas
+   sobraram, pra que a lista curta não pareça acervo acabado. */
 const TETO_RESULTADOS = 5;
 
 function mostrarResultados(caixa, cartas, aoClicar, comandantes){
   ultimosResultados = cartas;
   caixa.aoClicar = aoClicar;
+  // A lista trocou: o índice destacado apontava pra outra carta.
+  destaque = -1;
   if (!cartas.length){
     caixa.innerHTML = `<div class="vazio">Nada com esse nome.${
       comandantes ? " Lembre: comandante é criatura lendária." : ""}</div>`;
@@ -2896,10 +3045,9 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
 
 /* ------------------------------------------------------- destino da carta
 
-   Antes desta escolha existir, toda carta escolhida na busca caía no deck, e
-   pôr uma no sideboard ou no maybeboard era uma segunda operação no ⋯ da
-   linha, depois de adicionada. Quem monta o sideboard põe dez cartas
-   seguidas nele: a decisão é a mesma pras dez, e agora se diz uma vez.
+   Quem monta o sideboard põe dez cartas seguidas nele: a decisão é a mesma
+   pras dez, e se diz uma vez aqui em vez de dez visitas ao ⋯ de cada linha
+   depois de adicionada.
 
    "Sideboard" é categoria e não tabuleiro (é o que o servidor entende em
    `decks.CATEGORIAS_FORA_DA_CONTA`), então escolhê-lo aqui ocupa a vaga da
@@ -2938,8 +3086,7 @@ function atualizarCategoriasDoDestino(){
   sel.innerHTML =
     `<option value="">Pelo tipo da carta</option>` +
     opcoes.map(c => `<option value="${escapar(c)}"${
-      c === atual ? " selected" : ""}>${escapar(c)}</option>`).join("") +
-    `<option value="__nova__">+ Nova categoria…</option>`;
+      c === atual ? " selected" : ""}>${escapar(c)}</option>`).join("");
   // A categoria escolhida pode ter sido apagada por baixo: sem isto o seletor
   // voltaria pro topo calado e as próximas cartas iriam pro lugar errado.
   if (atual && !opcoes.includes(atual)){
@@ -3375,27 +3522,38 @@ function desenharManabase(){
         data-teto="${v}">${v >= 999 ? "Sem teto" : "até US$ " + v}</button>`).join("");
     html += `<h2 class="secao" style="margin-top:12px">Terrenos que fixam</h2>
       <div class="temas" style="margin-top:0">${chips}</div>`;
-    const lista = (m.fixadores.baratos || []);
-    const caros = (m.fixadores.caros || []);
-    if (!lista.length && !caros.length){
+    // Uma lista só, do mais barato ao mais caro, cinco por vez. O teto de
+    // preço acima já é o controle de orçamento; separar os caros numa segunda
+    // seção dizia a mesma coisa duas vezes e dobrava a altura do painel.
+    fixadoresPlanos = (m.fixadores.baratos || []).concat(m.fixadores.caros || []);
+    if (!fixadoresPlanos.length){
       html += `<div class="nota">Nenhum terreno de duas ou mais cores da
         identidade que o deck ainda não tenha.</div>`;
-    }
-    fixadoresPlanos = [];
-    const linha = (terreno) => {
-      const i = fixadoresPlanos.push(terreno) - 1;
-      return `<button class="achado" data-fix="${i}" data-arte="${escapar(terreno.imagem)}">
-        <span class="nome"><b>${escapar(terreno.nome)}</b>
-          <small>${escapar(terreno.tipo)}</small></span>
-        <span class="mana">${terreno.produz.split("").map(c =>
-          `<span class="pip ${c}" title="${NOME_COR[c]}"></span>`).join("")}</span>
-        <span class="preco">${preco(terreno)}</span>
-      </button>`;
-    };
-    if (lista.length) html += lista.map(linha).join("");
-    if (caros.length && m.teto_usd < 999){
-      html += `<div class="nota" style="margin:8px 0 2px">Se o orçamento deixar:</div>`;
-      html += caros.map(linha).join("");
+    } else {
+      const porPagina = 5;
+      const paginas = Math.ceil(fixadoresPlanos.length / porPagina);
+      // O teto de preço encurta a lista, e a página em que se estava pode não
+      // existir mais.
+      if (estado.mbPagina >= paginas) estado.mbPagina = 0;
+      const inicio = estado.mbPagina * porPagina;
+      html += fixadoresPlanos.slice(inicio, inicio + porPagina).map((terreno, k) => `
+        <button class="achado" data-fix="${inicio + k}" data-arte="${escapar(terreno.imagem)}">
+          <span class="nome"><b>${escapar(terreno.nome)}</b>
+            <small>${escapar(terreno.tipo)}</small></span>
+          <span class="mana">${terreno.produz.split("").map(c =>
+            `<span class="pip ${c}" title="${NOME_COR[c]}"></span>`).join("")}</span>
+          <span class="preco">${preco(terreno)}</span>
+        </button>`).join("");
+      if (paginas > 1){
+        html += `<div class="paginador">
+          <button class="mini" data-mb-pag="-1" title="Página anterior"
+            aria-label="Página anterior"${estado.mbPagina === 0 ? " disabled" : ""}>‹</button>
+          <span>${estado.mbPagina + 1} / ${paginas}</span>
+          <button class="mini" data-mb-pag="1" title="Próxima página"
+            aria-label="Próxima página"${
+              estado.mbPagina >= paginas - 1 ? " disabled" : ""}>›</button>
+        </div>`;
+      }
     }
   } else {
     html += `<div class="nota" style="margin-top:10px">Deck de uma cor: básico
@@ -3517,6 +3675,8 @@ function desenharPoder(){
 /* O deck como o servidor o viu quando a busca rodou. Só o que conta: mexer
    no maybeboard ou no sideboard não muda combo nem bracket, e avisar "o deck
    mudou" por causa disso ensinaria a ignorar o aviso. */
+let combosRodando = false;
+
 function assinaturaDoDeck(){
   return JSON.stringify([
     estado.comandantes.map(c => c.nome).sort(),
@@ -3532,6 +3692,10 @@ async function procurarCombos(){
   if (!estado.id) await salvarAgora();
   if (!estado.id){ toast("Não consegui salvar o deck antes de buscar."); return; }
 
+  // As duas abas de combo podem pedir a mesma consulta quase junto (abrir uma
+  // e a outra em seguida): a segunda desiste em vez de repetir a chamada.
+  if (combosRodando) return;
+  combosRodando = true;
   // Dois botões pedem a mesma coisa (o do deck e o da lista de compras), e a
   // consulta é uma só: os dois esperam juntos.
   const botoes = [$("btn-combos"), $("btn-combos-rail")];
@@ -3552,6 +3716,7 @@ async function procurarCombos(){
     return;
   } finally {
     botoes.forEach(b => b.disabled = false);
+    combosRodando = false;
   }
   desenharCombos();
 }
@@ -3765,10 +3930,9 @@ async function adicionarPeca(nome, botao){
 
 /* A carta entrou no deck: os combos que a esperavam passam pra "no deck".
 
-   Antes disso a lista continuava dizendo que a peça faltava, e a única saída
-   era clicar em "procurar combos" de novo — uma requisição a um serviço
-   gratuito pra confirmar a coisa que a própria tela acabou de fazer. A conta
-   é local e exata: sabemos qual carta entrou e quais combos a citam.
+   A conta é local e exata — sabemos qual carta entrou e quais combos a citam
+   — e evita gastar uma requisição num serviço gratuito só pra confirmar o que
+   a própria tela acabou de fazer.
 
    O que NÃO dá pra saber daqui é o contrário — que combos NOVOS essa carta
    deixou a uma peça de fechar. Por isso a assinatura é atualizada (o aviso de
@@ -3890,7 +4054,7 @@ function aplicarImportado(trazido){
   // estava decidindo (ver `importar.py`).
   estado.maybe = (trazido.maybeboard_completo || []).map(entrada);
   estado.categorias = trazido.categorias || [];
-  // As análises são do deck antigo e agora não valem mais nada. Deixá-las na
+  // As análises são do deck que acabou de ser substituído. Deixá-las na
   // tela mostraria a curva de um deck e os combos de outro.
   estado.combos = estado.poder = estado.sugestoes = estado.manabase = null;
   estado.combosMexidos = 0;
@@ -3993,19 +4157,8 @@ function ligarEventos(){
     buscaTimer = setTimeout(buscarComandante, 220);
   });
 
-  // Enter na busca adiciona o primeiro resultado: quem sabe o nome da carta
-  // digita e aperta Enter, sem tirar a mão do teclado.
-  $("busca").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && ultimosResultados.length){
-      adicionarPeloDestino(ultimosResultados[0]);
-      $("busca").select();
-    }
-  });
-  $("busca-cmd").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && ultimosResultados.length){
-      escolherComandante(ultimosResultados[0]);
-    }
-  });
+  ligarTecladoDaBusca($("busca"), $("res"));
+  ligarTecladoDaBusca($("busca-cmd"), $("res-cmd"));
 
   document.addEventListener("keydown", (e) => {
     const digitando = ["INPUT","TEXTAREA"].includes(document.activeElement?.tagName);
@@ -4118,7 +4271,13 @@ function ligarEventos(){
     const teto = e.target.closest("[data-teto]");
     if (teto){
       estado.manabaseTeto = Number(teto.dataset.teto);
+      estado.mbPagina = 0;
       return analisarManabase();
+    }
+    const pag = e.target.closest("[data-mb-pag]");
+    if (pag){
+      estado.mbPagina += Number(pag.dataset.mbPag);
+      return desenharManabase();
     }
 
     const achado = e.target.closest(".achado");
@@ -4144,6 +4303,13 @@ function ligarEventos(){
                                       doTabuleiro(menuCarta));
     const menuGrupo = e.target.closest("[data-menu-grupo]");
     if (menuGrupo) return menuDoGrupo(menuGrupo, menuGrupo.dataset.menuGrupo);
+    // O "···" do cabeçalho abre daqui, e não de um listener próprio no botão:
+    // a linha lá em cima que fecha o menu ao clicar fora roda na bolha, isto
+    // é, DEPOIS de um listener do próprio botão — o menu abriria e sumiria no
+    // mesmo clique. Aberto daqui, o fechar-e-abrir acontece em ordem.
+    if (e.target.closest("#btn-mais")){
+      return abrirMenu($("btn-mais"), menuDoCabecalho());
+    }
     if (e.target.closest("[data-abrir-manabase]")) return chamarManabase();
     const saiCmd = e.target.closest("[data-tirar-cmd]");
     if (saiCmd) return tirarComandante(Number(saiCmd.dataset.tirarCmd));
@@ -4171,16 +4337,11 @@ function ligarEventos(){
     } catch(e){ prompt("Link do deck:", url); }
   });
 
-  // O total copia a lista. Era um "Exportar lista" morando a uma coluna de
-  // distância do número que ele exporta; aqui a ação está no objeto.
+  // Copiar a lista é a ação que se faz olhando pro total, então ela mora no
+  // próprio número em vez de num botão separado.
   $("btn-total").addEventListener("click", exportar);
   $("btn-cotacao").addEventListener("click", alternarCotacao);
   $("btn-fechar-cotacao").addEventListener("click", fecharCotacao);
-
-  // Um botão de ouro (compartilhar) e um "···" com o resto. Eram cinco botões
-  // de mesmo peso no cabeçalho, e quatro deles são coisas que se faz uma vez
-  // por deck — enquanto compartilhar é o fim de todo deck montado.
-  $("btn-mais").addEventListener("click", () => abrirMenu($("btn-mais"), menuDoCabecalho()));
 
   $("btn-nova-categoria").addEventListener("click", () => {
     const nome = prompt("Nome da nova categoria:\n\n" +
@@ -4218,17 +4379,16 @@ function ligarEventos(){
     if (b) escolherDestino(b.dataset.destino);
   });
   $("sel-categoria").addEventListener("change", (e) => {
-    if (e.target.value === "__nova__"){
-      // Criar daqui não mexe em carta nenhuma: cria a categoria vazia e já a
-      // deixa escolhida, que é o que quem veio por este caminho quer.
-      const nome = prompt("Nome da nova categoria:\n\n" +
-        "Ex.: Combo principal, Sac outlet, Proteção do comandante");
-      const criada = nome ? criarCategoria(nome) : null;
-      estado.destinoCategoria = criada || "";
-      atualizarCategoriasDoDestino();
-      return;
-    }
     estado.destinoCategoria = e.target.value;
+  });
+  // Criar daqui não mexe em carta nenhuma: cria a categoria vazia e já a deixa
+  // escolhida, pra que as próximas cartas da busca caiam nela.
+  $("btn-nova-cat").addEventListener("click", () => {
+    const nome = prompt("Nome da nova categoria:\n\n" +
+      "Ex.: Combo principal, Sac outlet, Proteção do comandante");
+    if (!nome) return;
+    estado.destinoCategoria = criarCategoria(nome) || "";
+    atualizarCategoriasDoDestino();
   });
 
   // ---- a folha de baixo do celular ----
@@ -4325,12 +4485,12 @@ function recolherTalvez(forcar){
   const corpo = $("corpo");
   const fechado = forcar !== undefined ? forcar
     : !corpo.classList.contains("talvez-fechado");
-  // Recolhe só o maybeboard, não o trilho inteiro: a curva de mana mora na
-  // mesma coluna e não tem por que sumir junto.
+  // Recolhe a coluna inteira — curva e maybeboard — pra devolver a largura
+  // pro deck.
   corpo.classList.toggle("talvez-fechado", fechado);
   const botao = $("btn-recolher-talvez");
-  botao.textContent = fechado ? "+" : "−";
-  botao.title = fechado ? "Abrir o maybeboard" : "Recolher o maybeboard";
+  botao.textContent = fechado ? "‹" : "›";
+  botao.title = fechado ? "Abrir a coluna" : "Recolher a coluna";
   botao.setAttribute("aria-expanded", String(!fechado));
   try { localStorage.setItem(CHAVE_TALVEZ, fechado ? "0" : "1"); } catch(e){}
 }
