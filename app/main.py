@@ -11,8 +11,8 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
 from fastapi.staticfiles import StaticFiles
 
 from . import (calc, cartas, cleanup, cotacao_job, decks, edhrec, fulfillment,
-               log, manabase, notify, pix, poder, printer, spellbook, storage,
-               tinta, visitas)
+               importar, log, manabase, notify, pix, poder, printer, spellbook,
+               storage, tinta, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -669,16 +669,27 @@ def cartas_estado():
 
 @app.get("/cartas/busca")
 def cartas_busca(q: str = "", identidade: str | None = None, tipo: str = "",
-                 comandante: bool = False, limite: int = 40):
+                 comandante: bool = False, limite: int = 40, texto: str = "",
+                 cmc_min: float | None = None, cmc_max: float | None = None,
+                 cores: str | None = None, preco_max: float | None = None,
+                 ordem: str = ""):
     """Busca na base local. Sem token: é catálogo público de carta de Magic.
 
     `identidade` é a do comandante já escolhido — quando vem, some da lista
     toda carta que aquele deck não poderia jogar. Vir vazio (`?identidade=`)
     não é o mesmo que não vir: vazio é deck incolor, e aí só carta sem cor
     aparece.
+
+    `texto` é a busca por efeito: cada palavra tem que aparecer no oracle da
+    carta (em inglês, que é como o bulk data vem). O resto — `cmc_min`,
+    `cmc_max`, `cores`, `preco_max`, `ordem` — são os filtros avançados da
+    gaveta da tela; todos opcionais, e todos combinam entre si e com o nome.
     """
     return {"cartas": cartas.buscar(termo=q, identidade=identidade, tipo=tipo,
-                                    comandante=comandante, limite=limite)}
+                                    comandante=comandante, limite=limite,
+                                    texto=texto, cmc_min=cmc_min,
+                                    cmc_max=cmc_max, cores=cores,
+                                    preco_max=preco_max, ordem=ordem)}
 
 
 @app.post("/admin/cartas/sync")
@@ -711,6 +722,45 @@ def _deck_ou_404(deck_id: str) -> dict:
     if not deck:
         raise HTTPException(404, "Deck não encontrado.")
     return deck
+
+
+@app.post("/decks/importar")
+def importar_deck(corpo: dict = Body(default={})):
+    """Traz um deck de fora: um link do Archidekt/Moxfield, ou a lista colada.
+
+    NÃO cria deck nenhum. Devolve as cartas já resolvidas na base local e a
+    tela decide o que fazer com elas — quem grava é o autosave de sempre,
+    depois que a pessoa viu o que veio. Importar direto pra um id novo
+    encheria o banco de deck que alguém importou pra olhar e fechar.
+
+    O que a base local não conhece volta em `nao_encontradas` em vez de
+    sumir: carta nova com a base atrasada é o caso comum, e a pessoa precisa
+    saber quantas ficaram de fora antes de mandar imprimir.
+
+    Falha vira 502 com a mensagem inteira, e a mensagem diz o que FAZER, não
+    só o que deu errado: deck privado ou site recusando a consulta viram um
+    recado que manda exportar a lista e colar no campo de texto, que é a
+    saída que esta mesma janela oferece (ver `importar.py`).
+    """
+    url = (corpo.get("url") or "").strip()
+    texto = (corpo.get("texto") or "").strip()
+    if not url and not texto:
+        raise HTTPException(400, "Mande o link do deck ou a lista em texto.")
+    try:
+        trazido = importar.de_url(url) if url else importar.de_texto(
+            texto, corpo.get("nome") or "")
+    except importar.ImportarError as e:
+        raise HTTPException(502, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    try:
+        pronto = decks.importado_para_deck(trazido)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log.evento("deck", "importou", fonte=pronto["fonte"],
+               cartas=len(pronto["cartas_completas"]),
+               faltando=len(pronto["nao_encontradas"]))
+    return pronto
 
 
 @app.post("/decks")
@@ -822,10 +872,14 @@ def combos_do_deck(deck_id: str):
     """
     deck = _deck_ou_404(deck_id)
     try:
-        return spellbook.buscar(deck.get("comandantes") or [],
-                                deck.get("cartas") or [])
+        achado = spellbook.buscar(deck.get("comandantes") or [],
+                                  deck.get("cartas") or [])
     except spellbook.SpellbookError as e:
         raise HTTPException(502, str(e))
+    # O Spellbook manda só o nome de cada peça. A arte, o preço e o "existe
+    # na base local" saem daqui mesmo, numa consulta só — ver
+    # `decks.combos_com_cartas`.
+    return decks.combos_com_cartas(achado)
 
 
 @app.post("/decks/{deck_id}/poder")

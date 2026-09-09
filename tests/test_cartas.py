@@ -326,6 +326,102 @@ try:
     check("sem identidade não filtra nada",
           len(cartas.buscar()) == 7, "(7 legais de 8)")
 
+
+    # ------------------------------------------------- filtros avançados
+    print("\n--- filtros avançados (a gaveta da tela) ---")
+
+    # Busca por EFEITO. Ela varre a coluna de texto, que não tem índice — e é
+    # justamente por isso que o teste existe: se um dia alguém "otimizar" isso
+    # trocando o LIKE por casamento exato, a busca por efeito passa a não
+    # achar nada e ninguém percebe, porque lista vazia não é erro.
+    conn = cartas._conn()
+    conn.executemany(
+        f"INSERT OR REPLACE INTO cartas ({cartas._COLUNAS}) "
+        f"VALUES ({cartas._INTERROGACOES})",
+        [cartas._linha(c) for c in [
+            carta("Rhystic Study", tipo="Enchantment", custo="{2}{U}",
+                  cores="U", ident="U", cmc=3, preco="45.00",
+                  texto="Whenever an opponent casts a spell, that player may "
+                        "pay {1}. If the player doesn't, you may draw a card."),
+            carta("Sylvan Library", tipo="Enchantment", custo="{1}{G}",
+                  cmc=2, preco="30.00",
+                  texto="You may draw two additional cards. If you do, choose "
+                        "two of them and pay 4 life for each one not put back."),
+            carta("Dockside Chef", tipo="Creature — Goblin", custo="{1}{R}",
+                  cores="R", ident="R", cmc=2, preco="0.30",
+                  texto="Sacrifice another creature or artifact: Draw a card."),
+        ]])
+    conn.commit()
+    conn.close()
+
+    eq("efeito: uma palavra",
+       sorted(c["nome"] for c in cartas.buscar(texto="draw")),
+       ["Dockside Chef", "Rhystic Study", "Sylvan Library"])
+    # AND entre as palavras, não frase exata: ninguém lembra a redação do
+    # oracle, e "sacrifice creature" tem duas palavras no meio na carta real.
+    eq("efeito: as palavras valem em qualquer ordem e com texto no meio",
+       [c["nome"] for c in cartas.buscar(texto="sacrifice creature draw")],
+       ["Dockside Chef"])
+    eq("efeito: palavra que não existe não acha nada",
+       cartas.buscar(texto="proliferate"), [])
+    eq("efeito: combina com os outros filtros",
+       [c["nome"] for c in cartas.buscar(texto="draw", tipo="enchantment",
+                                         cmc_max=2)],
+       ["Sylvan Library"])
+
+    # Cor da CARTA, que não é a identidade dela: o Breeding Pool é incolor de
+    # cor e GU de identidade. Confundir os dois faria o filtro "verde" trazer
+    # terreno, que é o contrário do que se procura ao pedir "minhas cartas
+    # verdes".
+    eq("cor: uma cor",
+       sorted(c["nome"] for c in cartas.buscar(cores="R")),
+       ["Dockside Chef", "Fire // Ice", "Lightning Bolt"])
+    eq("cor: várias cores é OU, não E",
+       "Cultivate" in [c["nome"] for c in cartas.buscar(cores="RG")], True)
+    eq("cor: incolor pega o que não tem cor nenhuma",
+       sorted(c["nome"] for c in cartas.buscar(cores="C")),
+       ["Breeding Pool", "Sol Ring", "Solemn Simulacrum"])
+    check("cor: o terreno de identidade GU não conta como carta verde",
+          "Breeding Pool" not in [c["nome"] for c in cartas.buscar(cores="G")])
+
+    eq("cmc: faixa fechada",
+       sorted(c["nome"] for c in cartas.buscar(cmc_min=2, cmc_max=3)),
+       ["Cultivate", "Dockside Chef", "Fire // Ice", "Rhystic Study",
+        "Sylvan Library"])
+    eq("cmc: só o teto",
+       "Atraxa" in [c["nome"] for c in cartas.buscar(cmc_max=3)], False)
+
+    # Carta sem preço PASSA no teto, de propósito: preço ausente é o caso de
+    # carta nova e de carta que ninguém vende, e sumir com ela num filtro de
+    # orçamento esconderia carta barata sem dizer por quê.
+    conn = cartas._conn()
+    conn.execute("UPDATE cartas SET preco_usd = NULL WHERE nome = 'Cultivate'")
+    conn.commit()
+    conn.close()
+    baratas = [c["nome"] for c in cartas.buscar(preco_max=1)]
+    check("preço: o caro fica de fora", "Rhystic Study" not in baratas)
+    check("preço: o barato entra", "Dockside Chef" in baratas)
+    check("preço: carta sem preço conhecido passa no teto",
+          "Cultivate" in baratas, f"({baratas})")
+
+    # Ordenação. A chave nunca chega crua no SQL — se chegasse, `ordem` seria
+    # uma porta de injeção aberta numa rota pública sem token.
+    precos = [c["preco_usd"] for c in cartas.buscar(ordem="preco_desc")]
+    check("ordem: mais cara primeiro", precos[0] == 45.0, f"({precos[:3]})")
+    # Sem preço vai pro FIM das duas ordens: no "mais barata primeiro" ela
+    # iria pro topo como se fosse de graça.
+    precos = [c["preco_usd"] for c in cartas.buscar(ordem="preco")]
+    check("ordem: sem preço vai pro fim, não pro topo dos baratos",
+          precos[-1] is None, f"({precos})")
+    eq("ordem: chave inventada cai no padrão em vez de ir pro SQL",
+       [c["nome"] for c in cartas.buscar(ordem="'; DROP TABLE cartas; --")],
+       [c["nome"] for c in cartas.buscar(ordem="nome")])
+    # Com nome digitado, relevância ganha: "sol" ordenado por preço não pode
+    # esconder o Sol Ring atrás do Solemn Simulacrum.
+    eq("ordem: o nome digitado ganha da ordenação escolhida",
+       [c["nome"] for c in cartas.buscar("sol ring", ordem="preco_desc")][0],
+       "Sol Ring")
+
     # ------------------------------------------------------------- por_nomes
     print("\n--- resolver nomes ---")
 

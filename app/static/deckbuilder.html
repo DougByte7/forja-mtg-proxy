@@ -42,6 +42,28 @@
   }
   [hidden]{display:none !important;}
 
+  /* ---------------- barra de rolagem ----------------
+     A tela tem quatro áreas que rolam por dentro (a lateral inteira, os dois
+     painéis de resultado, a lista do deck) e o padrão do navegador desenha
+     uma barra clara e larga no meio de um fundo escuro — o único pedaço da
+     página que não é desta casa.
+
+     São duas gramáticas diferentes e as duas precisam existir: o Firefox só
+     entende `scrollbar-width`/`scrollbar-color`, e o Chromium/WebKit só
+     entende os pseudoelementos. Nenhum navegador lê as duas, então isto não
+     é redundância. */
+  *{scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  /* A borda transparente com `background-clip` afina o polegar sem afinar a
+     área de clique: o alvo continua com os 10px inteiros. */
+  ::-webkit-scrollbar-thumb{
+    background:var(--border);border-radius:999px;
+    border:2px solid transparent;background-clip:padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover{background:#4B3F79;background-clip:padding-box;}
+  ::-webkit-scrollbar-corner{background:transparent;}
+
   /* ---------------- cabeçalho ---------------- */
   .topo{
     position:sticky;top:0;z-index:40;
@@ -170,6 +192,123 @@
   .achado.no-deck{opacity:.45;}
   .achado.no-deck .nome b::after{content:" ✓";color:var(--green);}
 
+  /* ---------------- gaveta (filtros avançados e importação) ----------------
+     Sete filtros não cabem como chip na lateral de 372px, e mesmo que
+     coubessem seriam sete linhas de controle acima da lista de resultados —
+     roubando do resultado o espaço que ele precisa. A gaveta guarda tudo
+     isso fora da tela e devolve à busca a coluna inteira. */
+  .gaveta-fundo{
+    position:fixed;inset:0;z-index:80;background:rgba(10,8,18,.6);
+    backdrop-filter:blur(2px);opacity:0;pointer-events:none;
+    transition:opacity .18s;
+  }
+  .gaveta-fundo.aberta{opacity:1;pointer-events:auto;}
+  .gaveta{
+    position:fixed;top:0;right:0;bottom:0;z-index:81;width:min(420px,100vw);
+    background:var(--surface);border-left:1px solid var(--border);
+    box-shadow:-24px 0 48px -24px rgba(0,0,0,.9);
+    display:flex;flex-direction:column;
+    transform:translateX(100%);transition:transform .2s ease-out;
+  }
+  .gaveta.aberta{transform:translateX(0);}
+  .gaveta-topo{
+    display:flex;align-items:center;gap:10px;padding:14px 16px;
+    border-bottom:1px solid var(--border);flex:none;
+  }
+  .gaveta-topo h2{
+    flex:1;margin:0;font-family:'Cinzel',serif;font-size:16px;font-weight:700;
+  }
+  .gaveta-corpo{flex:1;overflow-y:auto;padding:14px 16px;}
+  .gaveta-rodape{
+    display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);
+    flex:none;
+  }
+  .gaveta-rodape .btn{flex:1;}
+  .campo-grupo{margin-bottom:14px;}
+  .campo-grupo > label{
+    display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;
+    letter-spacing:.09em;text-transform:uppercase;color:var(--gold-light);
+    margin-bottom:5px;font-weight:600;
+  }
+  .campo-grupo .ajuda{
+    font-size:11px;color:var(--text-muted);line-height:1.5;margin:4px 0 0;
+  }
+  .campo-grupo textarea.campo{
+    min-height:150px;resize:vertical;font-family:'IBM Plex Mono',monospace;
+    font-size:12px;line-height:1.6;
+  }
+  select.campo{appearance:none;cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,var(--text-muted) 50%),
+                     linear-gradient(135deg,var(--text-muted) 50%,transparent 50%);
+    background-position:calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+    background-size:5px 5px, 5px 5px;background-repeat:no-repeat;
+    padding-right:30px;}
+  select.campo option{background:var(--surface-2);color:var(--text);}
+  .par{display:flex;gap:8px;align-items:center;}
+  .par .campo{min-width:0;}
+  .par span{color:var(--text-muted);font-size:12px;flex:none;}
+  /* As cinco cores viram botão de pip: um "W U B R G" escrito seria mais
+     largo e menos reconhecível do que os símbolos que a pessoa já lê no
+     resto da tela. */
+  .cores-btn{display:flex;gap:6px;flex-wrap:wrap;}
+  .cor-btn{
+    width:32px;height:32px;border-radius:50%;border:2px solid var(--border);
+    background:var(--surface-2);cursor:pointer;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    transition:border-color .15s,transform .1s;
+  }
+  .cor-btn .pip{width:20px;height:20px;font-size:10px;}
+  .cor-btn.ativo{border-color:var(--gold-light);transform:scale(1.06);}
+  .cor-btn:hover{border-color:var(--gold);}
+
+  /* A fita de filtros ligados: mostra fora da gaveta o que está ligado
+     dentro dela, senão a busca filtrada pareceria uma busca quebrada. */
+  .barra-filtros{display:flex;gap:6px;align-items:center;margin:9px 0 2px;flex-wrap:wrap;}
+  .btn-filtros{
+    display:flex;align-items:center;gap:6px;flex:none;
+  }
+  .btn-filtros .conta{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;
+    background:var(--gold);color:#1A1408;border-radius:999px;
+    padding:0 5px;min-width:16px;text-align:center;font-weight:700;
+  }
+  .ligados{display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:0;}
+  .ligado{
+    display:inline-flex;align-items:center;gap:4px;
+    border:1px solid var(--gold);background:rgba(201,162,39,.12);
+    color:var(--gold-light);border-radius:999px;padding:2px 4px 2px 9px;
+    font-size:11px;max-width:100%;
+  }
+  .ligado b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ligado button{
+    border:none;background:transparent;color:inherit;cursor:pointer;
+    font-size:13px;line-height:1;padding:0 3px;opacity:.7;
+  }
+  .ligado button:hover{opacity:1;}
+
+  /* ---------------- preço na lista e prévia do orçamento ---------------- */
+  .linha .valor{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    color:var(--text-muted);flex:none;width:46px;text-align:right;
+  }
+  .linha .valor.caro{color:var(--gold-light);}
+  .linha .valor.desconhecido{color:#6F6490;}
+  .grupo h3 .valor-grupo{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    color:var(--text-muted);font-weight:400;
+  }
+  .previa-orc{
+    display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+    padding:9px 11px;border:1px solid var(--border);border-radius:9px;
+    background:var(--surface-2);margin-top:10px;
+  }
+  .previa-orc .rot{font-size:11.5px;color:var(--text-muted);line-height:1.4;}
+  .previa-orc .tot{
+    font-family:'IBM Plex Mono',monospace;font-size:20px;color:var(--gold-light);
+    flex:none;
+  }
+  .previa-orc .tot small{font-size:11px;color:var(--text-muted);}
+
   /* ---------------- símbolos de mana ---------------- */
   .mana{display:inline-flex;gap:2px;align-items:center;flex:none;}
   .pip{
@@ -192,8 +331,12 @@
   }
   .grupo h3::after{content:"";flex:1;border-top:1px dashed var(--border);}
   .grupo h3 .n{font-family:'IBM Plex Mono',monospace;color:var(--gold-light);}
+  /* 352px e não os 288px de antes: a coluna de preço tomou ~46px de cada
+     linha, e no 288 o nome passou a ser cortado em quase um terço das cartas
+     nas larguras de tablet. Medido — abaixo de 352 o corte volta; acima,
+     não melhora nada e só some com uma coluna inteira. */
   .colunas{
-    display:grid;grid-template-columns:repeat(auto-fill,minmax(288px,1fr));
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(352px,1fr));
     gap:2px 16px;
   }
 
@@ -385,6 +528,11 @@
      separador entre as peças já é um "+", e um segundo "+" colado nele lia
      como erro de digitação ("... + + Sylvan Library"). */
   .peca.falta{color:var(--gold-light);font-weight:600;}
+  /* Peça GENÉRICA ("um terreno-criatura que entra desvirado") descreve um
+     critério, não uma carta que falta. Pintá-la de dourado como as que
+     faltam fazia um combo já fechado parecer incompleto — coisa que só
+     aparecia quando o combo passava pra "no deck" na frente da pessoa. */
+  .peca.generica{color:var(--text-muted);font-style:italic;font-weight:400;}
   .peca.comandante::after{content:" (no comando)";color:var(--text-muted);
     font-size:11px;font-weight:400;}
   .combo .mais{color:var(--text-muted);}
@@ -406,6 +554,32 @@
   .bracket.E{border-color:var(--border);color:#6F6490;}
   .combo .rodape a{color:var(--text-muted);font-size:11px;text-decoration:none;}
   .combo .rodape a:hover{color:var(--gold-light);text-decoration:underline;}
+  /* A peça agora é `<span>` com prévia de arte no hover: sublinhado pontilhado
+     é a convenção de "passe o mouse aqui" sem parecer link, que levaria pra
+     fora da página. */
+  .peca[data-arte]{cursor:help;text-decoration:underline dotted rgba(167,155,199,.5);
+    text-underline-offset:2px;}
+  .peca[data-arte]:hover{text-decoration-color:var(--gold-light);}
+  /* O que o combo pede ANTES de funcionar (`notablePrerequisites`): estado de
+     jogo, não carta. Fica visualmente separado do "resulta em" porque um é
+     condição e o outro é consequência, e trocar os dois é ler o combo ao
+     contrário. */
+  .combo .precisa{
+    font-size:11.5px;color:var(--text-muted);margin-top:5px;line-height:1.5;
+    padding-left:9px;border-left:2px solid var(--border);
+  }
+  .combo .precisa b{color:var(--text);font-weight:600;}
+  .combo .custo{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;
+    border:1px solid var(--border);border-radius:999px;padding:2px 8px;
+    color:var(--text-muted);flex:none;cursor:help;
+  }
+  .combo .custo.fechar{border-color:var(--gold);color:var(--gold-light);}
+  .combo-mexido{
+    font-size:11.5px;color:#A8D8BC;background:rgba(76,154,107,.10);
+    border:1px solid rgba(76,154,107,.45);border-radius:8px;
+    padding:7px 10px;margin-bottom:8px;line-height:1.5;
+  }
   .add-peca{
     margin-left:auto;border:1px solid var(--gold);background:rgba(201,162,39,.10);
     color:var(--gold-light);border-radius:7px;padding:4px 9px;font-size:11px;
@@ -482,6 +656,16 @@
     .topo-in{padding:8px 12px;gap:9px;}
   }
 
+  /* Em tela estreita a linha do deck não cabe inteira, e aí é preciso
+     escolher o que sai. Sai o preço: em toque os controles de quantidade
+     ficam sempre visíveis (não há hover pra escondê-los), e sem esta regra
+     um "Badgermole Cub" vira "Badgermol…" pra caber num número que o
+     subtotal do grupo e a prévia do orçamento já dizem — os dois continuam
+     na tela. Nome truncado, não. */
+  @media (max-width:480px){
+    .linha .valor{display:none;}
+  }
+
   @media (max-width:900px){
     .corpo{grid-template-columns:minmax(0,1fr);padding-bottom:76px;}
     .lateral{position:static;max-height:none;}
@@ -519,6 +703,7 @@
     <div class="acoes">
       <button class="btn" id="btn-meus" hidden>Meus decks <span id="meus-n"></span></button>
       <button class="btn" id="btn-compartilhar" hidden>Compartilhar</button>
+      <button class="btn" id="btn-importar">Importar</button>
       <button class="btn" id="btn-novo">Novo</button>
       <a class="btn" href="/" style="text-decoration:none;display:inline-block;">Imprimir proxies</a>
     </div>
@@ -563,7 +748,13 @@
       <h2 class="secao">Adicionar cartas</h2>
       <input class="campo" id="busca" autocomplete="off" spellcheck="false"
              placeholder="Buscar carta…  (tecle /)">
-      <div class="filtros" id="filtros"></div>
+      <div class="barra-filtros">
+        <button class="btn btn-filtros" id="btn-gaveta-filtros"
+                aria-haspopup="dialog" aria-controls="gaveta-filtros">
+          <span>Filtros</span><span class="conta" id="conta-filtros" hidden></span>
+        </button>
+        <div class="ligados" id="ligados"></div>
+      </div>
       <div class="nota" id="nota-identidade" hidden></div>
       <div class="resultados" id="res"></div>
     </div>
@@ -629,6 +820,11 @@
       <p class="nota" id="orc-nota">Cota o preço de comprar as cartas de
         verdade, nas mesmas duas fontes da tela de impressão. O comandante e os
         terrenos básicos ficam de fora do total — é o critério do Commander 500.</p>
+      <!-- A prévia é conta local, sobre o preço que a base de cartas já
+           guarda: aparece sozinha e acompanha cada carta adicionada. Ela NÃO
+           substitui a cotação — diz a ordem de grandeza enquanto se monta,
+           que é a pergunta de quem monta com teto de preço na cabeça. -->
+      <div id="orc-previa"></div>
       <div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap;">
         <button class="btn verde" id="btn-cotar" style="flex:1;">Cotar preços</button>
         <button class="btn" id="btn-exportar">Exportar lista</button>
@@ -644,6 +840,118 @@
   <button data-aba="buscar">Buscar</button>
   <button data-aba="analise">Análise</button>
 </nav>
+
+<!-- ------------------ gavetas ------------------ -->
+<div class="gaveta-fundo" id="gaveta-fundo"></div>
+
+<aside class="gaveta" id="gaveta-filtros" role="dialog" aria-modal="true"
+       aria-label="Filtros avançados" hidden>
+  <div class="gaveta-topo">
+    <h2>Filtros</h2>
+    <button class="mini sai" data-fecha-gaveta title="Fechar">✕</button>
+  </div>
+  <div class="gaveta-corpo">
+
+    <div class="campo-grupo">
+      <label for="f-texto">Efeito da carta</label>
+      <input class="campo" id="f-texto" autocomplete="off" spellcheck="false"
+             placeholder="ex.: draw a card, sacrifice a creature">
+      <p class="ajuda">Cada palavra tem que aparecer no texto da carta, em
+        qualquer ordem. O texto é o <b>oracle em inglês</b> — é assim que a
+        base da Scryfall vem, então "voar" não acha <i>Flying</i>.</p>
+    </div>
+
+    <div class="campo-grupo">
+      <label for="f-tipo">Tipo</label>
+      <select class="campo" id="f-tipo"></select>
+    </div>
+
+    <div class="campo-grupo">
+      <label>Cor da carta</label>
+      <div class="cores-btn" id="f-cores"></div>
+      <p class="ajuda">Mostra o que tem <b>alguma</b> das cores marcadas. É
+        diferente da identidade do comandante, que já filtra tudo o tempo
+        todo — esta aqui é pra achar "o que eu tenho de verde".</p>
+    </div>
+
+    <div class="campo-grupo">
+      <label>Custo de mana convertido</label>
+      <div class="par">
+        <input class="campo" id="f-cmc-min" type="number" min="0" max="20"
+               step="1" placeholder="de" inputmode="numeric">
+        <span>até</span>
+        <input class="campo" id="f-cmc-max" type="number" min="0" max="20"
+               step="1" placeholder="até" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="campo-grupo">
+      <label for="f-preco">Preço máximo (US$)</label>
+      <input class="campo" id="f-preco" type="number" min="0" step="0.5"
+             placeholder="sem teto" inputmode="decimal">
+      <p class="ajuda">Preço da base local, do dia da última sincronização —
+        serve pra dar ordem de grandeza. Quem responde "quanto custa comprar"
+        continua sendo o botão de cotar. Carta sem preço conhecido
+        <b>passa</b> no teto em vez de sumir.</p>
+    </div>
+
+    <div class="campo-grupo">
+      <label for="f-ordem">Ordenar por</label>
+      <select class="campo" id="f-ordem">
+        <option value="nome">Nome</option>
+        <option value="cmc">Custo — menor primeiro</option>
+        <option value="cmc_desc">Custo — maior primeiro</option>
+        <option value="preco">Preço — mais barata primeiro</option>
+        <option value="preco_desc">Preço — mais cara primeiro</option>
+      </select>
+      <p class="ajuda">Vale quando a caixa de busca está vazia. Com nome
+        digitado, quem manda é a relevância — senão "sol" ordenado por preço
+        não mostraria o Sol Ring.</p>
+    </div>
+
+  </div>
+  <div class="gaveta-rodape">
+    <button class="btn" id="btn-limpar-filtros">Limpar tudo</button>
+    <button class="btn ouro" data-fecha-gaveta>Ver resultados</button>
+  </div>
+</aside>
+
+<aside class="gaveta" id="gaveta-importar" role="dialog" aria-modal="true"
+       aria-label="Importar deck" hidden>
+  <div class="gaveta-topo">
+    <h2>Importar deck</h2>
+    <button class="mini sai" data-fecha-gaveta title="Fechar">✕</button>
+  </div>
+  <div class="gaveta-corpo">
+
+    <div class="campo-grupo">
+      <label for="i-url">Link do deck</label>
+      <input class="campo" id="i-url" autocomplete="off" spellcheck="false"
+             placeholder="archidekt.com/decks/…  ou  moxfield.com/decks/…">
+      <p class="ajuda">Funciona com <b>Archidekt</b> e <b>Moxfield</b>. Deck
+        privado não abre de fora — nesse caso, e em qualquer outro site, use
+        o <b>Export</b> de lá e cole a lista aqui embaixo.</p>
+    </div>
+
+    <div class="campo-grupo">
+      <label for="i-texto">…ou a lista em texto</label>
+      <textarea class="campo" id="i-texto" spellcheck="false"
+        placeholder="1 Atraxa, Praetors' Voice&#10;1 Sol Ring&#10;1 Arcane Signet&#10;10 Forest"></textarea>
+      <p class="ajuda">Uma carta por linha. Engole o que os sites exportam:
+        com ou sem quantidade, com edição entre parênteses, com cabeçalho de
+        seção. O que estiver depois de <b>Sideboard</b> ou <b>Maybeboard</b>
+        fica de fora, e um cabeçalho <b>Commander</b> (ou um <b>*CMDR*</b> na
+        linha) diz quem é o comandante.</p>
+    </div>
+
+    <div id="i-resultado"></div>
+
+  </div>
+  <div class="gaveta-rodape">
+    <button class="btn" data-fecha-gaveta>Cancelar</button>
+    <button class="btn ouro" id="btn-fazer-importar">Importar</button>
+  </div>
+</aside>
 
 <img class="previa" id="previa" alt="">
 <div class="toast" id="toast"></div>
@@ -680,11 +988,26 @@ const CATEGORIAS = [
   ["Feitiços",      (t) => t.includes("sorcery")],
   ["Batalhas",      (t) => t.includes("battle")],
 ];
-const FILTROS = [
-  ["Criatura","creature"], ["Instantâneo","instant"], ["Feitiço","sorcery"],
-  ["Artefato","artifact"], ["Encantamento","enchantment"],
-  ["Planeswalker","planeswalker"], ["Terreno","land"],
+/* Os tipos, agora dentro da gaveta de filtros. Eram sete chips numa fita
+   acima dos resultados; viraram um seletor porque a gaveta trouxe mais seis
+   filtros junto, e treze controles soltos na lateral de 372px comeriam a
+   lista de resultados que eles existem pra filtrar. */
+const TIPOS = [
+  ["", "Qualquer tipo"],
+  ["creature","Criatura"], ["instant","Instantâneo"], ["sorcery","Feitiço"],
+  ["artifact","Artefato"], ["enchantment","Encantamento"],
+  ["planeswalker","Planeswalker"], ["land","Terreno"], ["battle","Batalha"],
+  ["legendary","Lendária"], ["equipment","Equipamento"], ["aura","Aura"],
 ];
+const NOME_DO_TIPO = Object.fromEntries(TIPOS);
+
+/* O estado neutro da gaveta. Serve pra duas coisas: começar, e comparar —
+   `filtrosLigados` conta o que difere daqui, e é essa conta que vira o
+   número na bolinha do botão. */
+const FILTROS_VAZIOS = {
+  tipo: "", texto: "", cores: "", cmcMin: "", cmcMax: "", precoMax: "",
+  ordem: "nome",
+};
 
 const estado = {
   id: null,
@@ -692,7 +1015,7 @@ const estado = {
   comandantes: [],   // cartas completas
   cartas: [],        // [{quantidade, carta}]
   validacao: null,   // a do servidor, quando chega
-  filtro: "",
+  filtros: {...FILTROS_VAZIOS},
   desfazer: [],
   combos: null,             // a última resposta do Spellbook
   combosAssinatura: null,   // como o deck estava quando ela foi buscada
@@ -702,6 +1025,7 @@ const estado = {
   sugestoesTema: null,
   manabase: null,           // a última análise de mana base
   manabaseTeto: null,       // teto de preço escolhido (null = o padrão)
+  combosMexidos: 0,         // combos fechados aqui na tela desde a busca
 };
 
 // As cartas das sugestões, achatadas numa lista só — é o que o clique usa
@@ -757,6 +1081,18 @@ function manaHTML(custo){
   }).join("") + "</span>";
 }
 
+/* O `manaNeeded` do Spellbook não é um custo de mana: é uma frase COM custo
+   de mana dentro ("{2}{G} plus enough mana to animate the land"). Passá-la
+   direto pela `manaHTML` desenhava as bolinhas e jogava fora a frase — que
+   é a metade que diz o que a mana é PRA quê. Aqui os símbolos viram pip e o
+   resto do texto continua texto. */
+function manaEmTexto(txt){
+  return String(txt == null ? "" : txt)
+    .split(/((?:\{[^}]+\})+)/)
+    .map(parte => parte.startsWith("{") ? manaHTML(parte) : escapar(parte))
+    .join("");
+}
+
 function escapar(txt){
   return String(txt == null ? "" : txt)
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
@@ -765,6 +1101,79 @@ function escapar(txt){
 
 function preco(carta){
   return carta.preco_usd ? "$" + Number(carta.preco_usd).toFixed(2) : "";
+}
+
+/* ------------------------------------------------------------------- preço
+
+   O `preco_usd` que a base local guarda é o do dia da última sincronização e
+   serve pra ORDEM DE GRANDEZA — "essa carta é cara?". Quem responde "quanto
+   custa comprar" continua sendo o botão de cotar, que vai à LigaMagic e à
+   Scryfall na hora (ver `cartas.py`, "O QUE ISTO NÃO É").
+
+   Por isso tudo aqui é conta local, instantânea e sem rede: acompanha cada
+   carta adicionada, do mesmo jeito que a curva de mana. E por isso a prévia
+   se chama prévia na tela, com o "cotar" logo abaixo dela. */
+
+function moeda(valor){
+  return "$" + Number(valor || 0).toFixed(2);
+}
+
+function precoDaEntrada(entrada){
+  return (entrada.carta?.preco_usd || 0) * entrada.quantidade;
+}
+
+function valorHTML(entrada){
+  const c = entrada.carta;
+  // Carta sem preço na base não vira "$0.00": zero é um preço, e este é o
+  // caso de não saber. O travessão diz isso em um caractere.
+  if (!c || !c.preco_usd){
+    return `<span class="valor desconhecido" title="Preço desconhecido na base local">—</span>`;
+  }
+  const total = precoDaEntrada(entrada);
+  const unitario = c.preco_usd;
+  const titulo = entrada.quantidade > 1
+    ? `${entrada.quantidade} × ${moeda(unitario)} na última sincronização da base`
+    : `${moeda(unitario)} na última sincronização da base`;
+  return `<span class="valor ${unitario >= 20 ? "caro" : ""}"
+    title="${titulo}">${moeda(total)}</span>`;
+}
+
+/* O total do deck, pelo mesmo critério do Commander 500 que a cotação usa
+   (`cotacao.filtrar_cotaveis`): comandante e terreno básico ficam de fora.
+   Duas contas diferentes pro mesmo deck na mesma tela seriam pior do que
+   número nenhum. */
+function orcamentoLocal(){
+  let total = 0, semPreco = 0, fora = 0, cartas = 0;
+  for (const entrada of estado.cartas){
+    const c = entrada.carta;
+    if (!c) continue;
+    if (c.basico){ fora += entrada.quantidade; continue; }
+    cartas += entrada.quantidade;
+    if (!c.preco_usd){ semPreco += entrada.quantidade; continue; }
+    total += precoDaEntrada(entrada);
+  }
+  fora += estado.comandantes.length;
+  return {total, semPreco, fora, cartas};
+}
+
+function desenharPreviaOrcamento(){
+  const caixa = $("orc-previa");
+  if (!caixa) return;
+  const o = orcamentoLocal();
+  if (!o.cartas){
+    caixa.innerHTML = "";
+    return;
+  }
+  const incompleto = o.semPreco
+    ? `<br>${o.semPreco} sem preço na base — o total é menor que o real.` : "";
+  caixa.innerHTML = `
+    <div class="previa-orc" title="Soma do preço da base local, que é o do dia
+da última sincronização. Não é cotação.">
+      <span class="rot">Prévia pela base local<br>
+        <span style="font-size:11px">${o.cartas} carta(s) contadas,
+        ${o.fora} fora do total${incompleto}</span></span>
+      <span class="tot">${moeda(o.total)} <small>USD</small></span>
+    </div>`;
 }
 
 /* ------------------------------------------------------- validação instantânea
@@ -921,6 +1330,7 @@ function desenharTudo(){
   desenharDeck();
   desenharAnalise();
   desenharContador();
+  desenharPreviaOrcamento();
   atualizarNotaIdentidade();
   // Redesenha os combos pra o aviso de "o deck mudou desde esta busca"
   // aparecer no mesmo instante em que ele passa a ser verdade.
@@ -974,7 +1384,9 @@ function desenharDeck(){
     itens.sort((a, b) => (a.carta.cmc - b.carta.cmc) ||
                           a.carta.nome.localeCompare(b.carta.nome));
     const n = itens.reduce((s, e) => s + e.quantidade, 0);
-    html += `<div class="grupo"><h3>${cat} <span class="n">${n}</span></h3>
+    const subtotal = itens.reduce((s, e) => s + precoDaEntrada(e), 0);
+    html += `<div class="grupo"><h3>${cat} <span class="n">${n}</span>
+      ${subtotal ? `<span class="valor-grupo">${moeda(subtotal)}</span>` : ""}</h3>
       <div class="colunas">` +
       itens.map(e => linhaHTML(e, identidade)).join("") + `</div></div>`;
   }
@@ -997,6 +1409,7 @@ function linhaHTML(entrada, identidade){
     <span class="nome" data-arte="${escapar(c.imagem)}">${escapar(c.nome)}
       ${porque ? `<span class="porque">· ${porque}</span>` : ""}</span>
     ${manaHTML(c.mana_cost)}
+    ${valorHTML(entrada)}
     <span class="ctrl">
       <button class="mini" data-mais="${escapar(c.nome)}" title="Mais uma">+</button>
       <button class="mini" data-menos="${escapar(c.nome)}" title="Menos uma">−</button>
@@ -1242,7 +1655,14 @@ async function buscar(){
   const identidade = estado.comandantes.length ? identidadeDoDeck() : null;
   const params = new URLSearchParams({q: termo, limite: "40"});
   if (identidade !== null) params.set("identidade", identidade);
-  if (estado.filtro) params.set("tipo", estado.filtro);
+  const f = estado.filtros;
+  if (f.tipo) params.set("tipo", f.tipo);
+  if (f.texto) params.set("texto", f.texto);
+  if (f.cores) params.set("cores", f.cores);
+  if (f.cmcMin !== "") params.set("cmc_min", f.cmcMin);
+  if (f.cmcMax !== "") params.set("cmc_max", f.cmcMax);
+  if (f.precoMax !== "") params.set("preco_max", f.precoMax);
+  if (f.ordem && f.ordem !== "nome") params.set("ordem", f.ordem);
   try {
     const r = await api("/cartas/busca?" + params);
     mostrarResultados($("res"), r.cartas, adicionar);
@@ -1282,6 +1702,155 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
       ${manaHTML(c.mana_cost)}
       <span class="preco">${preco(c)}</span>
     </button>`).join("");
+}
+
+/* ------------------------------------------------------- gaveta e filtros
+
+   Uma gaveta por vez, e o fundo escuro é o mesmo pras duas. Fechar por Esc e
+   por clique no fundo existe porque uma gaveta modal que só fecha no ✕ é uma
+   armadilha em tela de toque, onde o ✕ fica longe do polegar. */
+
+let gavetaAberta = null;
+
+function abrirGaveta(id){
+  fecharGaveta();
+  const g = $(id);
+  g.hidden = false;
+  // Um quadro de espera antes da classe: `hidden` some e a transição de
+  // `transform` precisa de um estado inicial pintado pra ter de onde sair —
+  // sem isso a gaveta aparece pronta, sem deslizar.
+  requestAnimationFrame(() => {
+    g.classList.add("aberta");
+    $("gaveta-fundo").classList.add("aberta");
+  });
+  gavetaAberta = id;
+  const primeiro = g.querySelector("input,textarea,select");
+  if (primeiro) setTimeout(() => primeiro.focus(), 180);
+}
+
+function fecharGaveta(){
+  $("gaveta-fundo").classList.remove("aberta");
+  if (!gavetaAberta) return;
+  const g = $(gavetaAberta);
+  g.classList.remove("aberta");
+  // `hidden` só depois da animação: pôr na hora tiraria a gaveta da tela
+  // antes de ela ter deslizado pra fora.
+  setTimeout(() => { if (!g.classList.contains("aberta")) g.hidden = true; }, 220);
+  gavetaAberta = null;
+}
+
+/* Quais filtros estão ligados, no formato que a fita desenha: `{chave,
+   rotulo}`. Também é o que conta o número na bolinha do botão. */
+function filtrosLigados(){
+  const f = estado.filtros;
+  const ligados = [];
+  if (f.tipo) ligados.push({chave:"tipo", rotulo: NOME_DO_TIPO[f.tipo] || f.tipo});
+  if (f.texto) ligados.push({chave:"texto", rotulo: `“${f.texto}”`});
+  if (f.cores) ligados.push({chave:"cores", rotulo: f.cores.split("").join("")});
+  if (f.cmcMin !== "" || f.cmcMax !== ""){
+    const de = f.cmcMin === "" ? "0" : f.cmcMin;
+    const ate = f.cmcMax === "" ? "∞" : f.cmcMax;
+    ligados.push({chave:"cmc", rotulo: `custo ${de}–${ate}`});
+  }
+  if (f.precoMax !== "") ligados.push({chave:"precoMax", rotulo: `até $${f.precoMax}`});
+  if (f.ordem && f.ordem !== "nome"){
+    ligados.push({chave:"ordem", rotulo: {
+      cmc:"custo ↑", cmc_desc:"custo ↓", preco:"preço ↑", preco_desc:"preço ↓",
+    }[f.ordem] || f.ordem});
+  }
+  return ligados;
+}
+
+function desenharBarraFiltros(){
+  const ligados = filtrosLigados();
+  const conta = $("conta-filtros");
+  conta.hidden = ligados.length === 0;
+  conta.textContent = ligados.length;
+  // A cor mostra a mesma coisa que o número, pra quem não repara em bolinha.
+  $("btn-gaveta-filtros").classList.toggle("ouro", ligados.length > 0);
+  $("ligados").innerHTML = ligados.map(l => `
+    <span class="ligado"><b>${escapar(l.rotulo)}</b>
+      <button data-tira-filtro="${l.chave}" title="Tirar este filtro"
+              aria-label="Tirar o filtro ${escapar(l.rotulo)}">✕</button></span>
+  `).join("");
+}
+
+/* A cor no filtro é a cor DA CARTA, não a identidade dela: um Deathrite
+   Shaman é preto-e-verde nos dois, mas um Ancestral Vision é azul de cor e
+   azul de identidade enquanto um terreno que produz azul é INCOLOR de cor e
+   azul de identidade. Quem procura "minhas cartas azuis" quer a primeira. */
+const CORES_FILTRO = [["W","Branco"],["U","Azul"],["B","Preto"],
+                      ["R","Vermelho"],["G","Verde"],["C","Incolor"]];
+
+function montarGavetaFiltros(){
+  $("f-tipo").innerHTML = TIPOS.map(([valor, rotulo]) =>
+    `<option value="${valor}">${rotulo}</option>`).join("");
+  $("f-cores").innerHTML = CORES_FILTRO.map(([c, nome]) => `
+    <button class="cor-btn" data-cor="${c}" title="${nome}"
+            aria-label="${nome}" aria-pressed="false">
+      <span class="pip ${c}"></span></button>`).join("");
+}
+
+/* Escreve o estado nos controles. Roda ao abrir a gaveta e ao limpar, pra a
+   gaveta nunca discordar da fita que está do lado de fora dela. */
+function preencherGavetaFiltros(){
+  const f = estado.filtros;
+  $("f-tipo").value = f.tipo;
+  $("f-texto").value = f.texto;
+  $("f-cmc-min").value = f.cmcMin;
+  $("f-cmc-max").value = f.cmcMax;
+  $("f-preco").value = f.precoMax;
+  $("f-ordem").value = f.ordem;
+  [...$("f-cores").children].forEach(b => {
+    const ligada = f.cores.includes(b.dataset.cor);
+    b.classList.toggle("ativo", ligada);
+    b.setAttribute("aria-pressed", ligada ? "true" : "false");
+  });
+}
+
+/* Lê os controles de volta pro estado e rebusca. Passa pela busca com atraso
+   (`agendarBusca`) porque o campo de efeito dispara a cada tecla. */
+function lerGavetaFiltros(){
+  const numero = (id) => {
+    const v = $(id).value.trim();
+    if (v === "") return "";
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? String(n) : "";
+  };
+  estado.filtros = {
+    tipo: $("f-tipo").value,
+    texto: $("f-texto").value.trim(),
+    cores: [...$("f-cores").children]
+      .filter(b => b.classList.contains("ativo"))
+      .map(b => b.dataset.cor).join(""),
+    cmcMin: numero("f-cmc-min"),
+    cmcMax: numero("f-cmc-max"),
+    precoMax: numero("f-preco"),
+    ordem: $("f-ordem").value,
+  };
+  desenharBarraFiltros();
+  agendarBusca();
+}
+
+function tirarFiltro(chave){
+  if (chave === "cmc"){
+    estado.filtros.cmcMin = "";
+    estado.filtros.cmcMax = "";
+  } else if (chave === "ordem"){
+    estado.filtros.ordem = "nome";
+  } else {
+    estado.filtros[chave] = "";
+  }
+  preencherGavetaFiltros();
+  desenharBarraFiltros();
+  buscar();
+}
+
+function limparFiltros(){
+  estado.filtros = {...FILTROS_VAZIOS};
+  preencherGavetaFiltros();
+  desenharBarraFiltros();
+  buscar();
 }
 
 /* --------------------------------------------------------------- orçamento */
@@ -1702,6 +2271,7 @@ async function procurarCombos(){
   try {
     estado.combos = await api(`/decks/${estado.id}/combos`, {method: "POST"});
     estado.combosAssinatura = assinaturaDoDeck();
+    estado.combosMexidos = 0;   // a resposta nova já sabe de tudo
   } catch (e){
     // "Não sei" nunca pode virar "não tem combo": são opostos que parecem
     // iguais numa lista vazia.
@@ -1723,6 +2293,16 @@ function desenharCombos(){
   let html = mudou
     ? `<div class="combo-desatualizado">O deck mudou desde esta busca —
        procure de novo pra atualizar.</div>` : "";
+
+  // O que a tela fechou sozinha, e o que ela não tem como saber: a carta que
+  // entrou pode ter deixado OUTROS combos a uma peça de fechar, e isso só o
+  // Spellbook responde.
+  if (estado.combosMexidos && !mudou){
+    html += `<div class="combo-mexido">✓ ${estado.combosMexidos} combo(s)
+      fecharam aqui na tela com as cartas que você adicionou. Procure de novo
+      pra ver os combos <b>novos</b> que essas cartas abriram — essa parte só
+      o Spellbook sabe.</div>`;
+  }
 
   const noDeck = dados.no_deck || [];
   const faltando = dados.faltando_uma || [];
@@ -1752,24 +2332,50 @@ function desenharCombos(){
 }
 
 function comboHTML(combo, ehSugestao){
-  const pecas = combo.pecas.map(p =>
-    `<span class="peca ${p.no_deck ? "tem" : "falta"} ${p.comandante ? "comandante" : ""}"
-     >${escapar(p.nome)}</span>`).join('<span class="mais"> + </span>');
+  // `data-arte` é o mesmo gancho que a busca e a lista do deck já usam: a
+  // prévia de arte é uma função só pra tela inteira (ver `ligarPrevia`), e a
+  // peça do combo entra nela só por carregar o atributo.
+  const pecas = combo.pecas.map(p => {
+    const arte = p.imagem ? ` data-arte="${escapar(p.imagem)}"` : "";
+    const preco = p.preco_usd ? ` — ${moeda(p.preco_usd)}` : "";
+    const titulo = p.tipo ? `${escapar(p.tipo)}${escapar(preco)}` : "";
+    return `<span class="peca ${p.no_deck ? "tem" : "falta"} ${p.comandante ? "comandante" : ""}"
+      ${arte}${titulo ? ` title="${titulo}"` : ""}>${escapar(p.nome)}</span>`;
+  }).join('<span class="mais"> + </span>');
 
   const genericas = combo.requer.length
     ? `<span class="mais"> + </span>` + combo.requer.map(r =>
-        `<span class="peca falta">${escapar(r)}</span>`).join('<span class="mais"> + </span>')
+        `<span class="peca generica"
+          title="Critério, não carta: qualquer carta do deck que se encaixe serve."
+         >${escapar(r)}</span>`).join('<span class="mais"> + </span>')
     : "";
 
   const produz = combo.produz.length
     ? `<div class="produz"><b>Resulta em:</b> ${escapar(combo.produz.join(", "))}</div>`
     : "";
 
+  // O que o combo pede antes de funcionar — mana disponível, permanente já
+  // desvirado, oponente com criatura em jogo. Sem isto a lista dizia o que o
+  // combo FAZ e escondia o que ele CUSTA pra acontecer, que é metade da
+  // decisão de colocá-lo no deck.
+  const precisa = [];
+  if (combo.mana) precisa.push(`<b>Mana:</b> ${manaEmTexto(combo.mana)}`);
+  if (combo.prerequisitos) precisa.push(escapar(combo.prerequisitos));
+  const prereq = precisa.length
+    ? `<div class="precisa">${precisa.join("<br>")}</div>` : "";
+
   // O botão só aparece pra peça que é CARTA. Peça genérica ("uma criatura com
   // vigilância") não tem o que adicionar com um clique — é critério, não carta.
-  const botao = (ehSugestao && combo.faltam.length === 1)
-    ? `<button class="add-peca" data-add-peca="${escapar(combo.faltam[0])}"
-        >+ ${escapar(combo.faltam[0])}</button>`
+  const faltante = combo.pecas.find(p => !p.no_deck);
+  const podeAdicionar = ehSugestao && combo.faltam.length === 1 && faltante;
+  const botao = podeAdicionar
+    ? (faltante.na_base === false
+        ? `<button class="add-peca" disabled
+            title="A base local não conhece esta carta — ela pode ser nova demais.
+Sincronize a base e tente de novo.">+ ${escapar(faltante.nome)}</button>`
+        : `<button class="add-peca" data-add-peca="${escapar(faltante.nome)}"
+            >+ ${escapar(faltante.nome)}${faltante.preco_usd
+              ? ` · ${moeda(faltante.preco_usd)}` : ""}</button>`)
     : "";
 
   const bracket = combo.bracket_rotulo
@@ -1780,12 +2386,50 @@ function comboHTML(combo, ehSugestao){
   return `<div class="combo ${ehSugestao ? "falta" : ""}">
     <div class="topo-combo"><div class="pecas">${pecas}${genericas}</div></div>
     ${produz}
+    ${prereq}
     <div class="rodape">
       ${bracket}
+      ${custoHTML(combo, ehSugestao)}
       <a href="${escapar(combo.link)}" target="_blank" rel="noopener">ver no Spellbook ↗</a>
       ${botao}
     </div>
   </div>`;
+}
+
+/* Quanto custa o combo, em dólar da base local.
+
+   São dois números diferentes e a tela mostra o que responde a pergunta de
+   cada lista. Num combo que o deck JÁ tem, a pergunta é "quanto desse deck é
+   este combo" — o total das peças. Num que falta uma carta, é "quanto me
+   custa fechar" — só o que ainda não está lá, que costuma ser bem menos e é
+   o número que decide o clique.
+
+   Peça sem preço conhecido faz o total virar "a partir de": um combo que
+   depende de uma carta cujo preço a base não tem não custa menos por isso. */
+function custoHTML(combo, ehSugestao){
+  const fechar = ehSugestao && combo.faltam.length >= 1;
+  const valor = fechar ? combo.custo_faltando_usd : combo.custo_usd;
+  const semPreco = fechar ? combo.pecas_faltando_sem_preco : combo.pecas_sem_preco;
+  if (!valor && !semPreco) return "";
+
+  const titulo = fechar
+    ? "Preço das peças que faltam, pela base local."
+    : `Preço das ${combo.pecas.length} peças, pela base local.`;
+
+  // Soma zero COM peça sem preço não é "de graça", é "não sei": todas as
+  // peças que entrariam na conta são justamente as desconhecidas. Mostrar
+  // "US$ 0,00" aí seria a mentira mais cara que esta tela saberia contar.
+  if (!valor){
+    return `<span class="custo" title="${escapar(titulo + " A base local não tem " +
+      "preço de nenhuma delas — costuma ser carta nova, com a base atrasada.")}"
+      >preço ?</span>`;
+  }
+  const rotulo = (semPreco ? "a partir de " : "") + moeda(valor);
+  const ressalva = semPreco
+    ? ` ${semPreco} peça(s) sem preço conhecido ficam de fora da soma.`
+    : " Não é cotação: é o preço do dia da última sincronização.";
+  return `<span class="custo ${fechar ? "fechar" : ""}"
+    title="${escapar(titulo + ressalva)}">${fechar ? "fechar por " : ""}${rotulo}</span>`;
 }
 
 /* Adiciona a carta que falta pra fechar um combo. O nome vem do Spellbook,
@@ -1803,12 +2447,183 @@ async function adicionarPeca(nome, botao){
       return;
     }
     adicionar(alvo);
-    toast(`${alvo.nome} entrou no deck.`);
-    desenharCombos();   // redesenha com o aviso de "o deck mudou"
+    const fechados = fecharCombosCom(alvo.nome);
+    toast(fechados
+      ? `${alvo.nome} entrou no deck e fechou ${fechados} combo(s).`
+      : `${alvo.nome} entrou no deck.`);
+    desenharCombos();
   } catch (e){
     toast("Não consegui adicionar: " + e.message);
     botao.disabled = false;
   }
+}
+
+/* A carta entrou no deck: os combos que a esperavam passam pra "no deck".
+
+   Antes disso a lista continuava dizendo que a peça faltava, e a única saída
+   era clicar em "procurar combos" de novo — uma requisição a um serviço
+   gratuito pra confirmar a coisa que a própria tela acabou de fazer. A conta
+   é local e exata: sabemos qual carta entrou e quais combos a citam.
+
+   O que NÃO dá pra saber daqui é o contrário — que combos NOVOS essa carta
+   deixou a uma peça de fechar. Por isso a assinatura é atualizada (o aviso de
+   "o deck mudou" seria mentira, já que a lista está em dia com o deck) e no
+   lugar dele fica um recado dizendo o que ainda vale rebuscar.
+
+   Devolve quantos combos fecharam, pra quem chamou saber o que dizer. */
+function fecharCombosCom(nome){
+  const dados = estado.combos;
+  if (!dados) return 0;
+  const alvo = nome.toLowerCase();
+  const fecharam = [];
+
+  // Marca a peça em TODOS os combos das duas listas: a mesma carta pode ser
+  // peça de vários, e marcar só no combo clicado deixaria os outros mentindo.
+  for (const lista of [dados.no_deck || [], dados.faltando_uma || []]){
+    for (const combo of lista){
+      for (const peca of combo.pecas || []){
+        if (peca.nome.toLowerCase() === alvo) peca.no_deck = true;
+      }
+      const faltantes = (combo.pecas || []).filter(p => !p.no_deck);
+      combo.faltam = faltantes.map(p => p.nome);
+      combo.custo_faltando_usd = Number(faltantes
+        .reduce((soma, p) => soma + (p.preco_usd || 0), 0).toFixed(2));
+      combo.pecas_faltando_sem_preco = faltantes.filter(p => !p.preco_usd).length;
+    }
+  }
+
+  // Combo sem peça faltando muda de lista. `requer` (peça genérica: "uma
+  // criatura com vigilância") NÃO impede: o Spellbook já contava o combo como
+  // "a uma carta" com esse requisito em aberto, então quem decide se ele está
+  // fechado é a lista de cartas, do mesmo jeito que lá.
+  dados.faltando_uma = (dados.faltando_uma || []).filter(combo => {
+    if (combo.faltam.length) return true;
+    fecharam.push(combo);
+    return false;
+  });
+  dados.no_deck = fecharam.concat(dados.no_deck || []);
+
+  if (fecharam.length){
+    estado.combosMexidos += fecharam.length;
+    // A lista voltou a bater com o deck: o aviso de "procure de novo" seria
+    // falso agora. O recado do `combosMexidos` toma o lugar dele.
+    estado.combosAssinatura = assinaturaDoDeck();
+  }
+  return fecharam.length;
+}
+
+/* --------------------------------------------------------------- importar
+
+   Quem chega aqui quase nunca chega do zero: chega com um deck que já mantém
+   em outro lugar. O servidor traz a lista e resolve os nomes na base local
+   (ver `importar.py` e `decks.importado_para_deck`); esta parte só põe o
+   resultado na tela.
+
+   O deck importado NÃO substitui o atual em silêncio. Se já há carta na
+   mesa, pergunta — perder duas horas de montagem por um clique errado num
+   botão de importar seria o pior estrago que esta tela sabe fazer. */
+
+async function fazerImportar(){
+  const url = $("i-url").value.trim();
+  const texto = $("i-texto").value.trim();
+  if (!url && !texto){
+    $("i-resultado").innerHTML = `<div class="aponta aviso"><span>Cole o link
+      do deck ou a lista em texto.</span></div>`;
+    return;
+  }
+
+  const botao = $("btn-fazer-importar");
+  botao.disabled = true;
+  $("i-resultado").innerHTML = `<div class="nota">Trazendo a lista…</div>`;
+  let trazido;
+  try {
+    trazido = await api("/decks/importar", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(url ? {url} : {texto, nome: estado.nome}),
+    });
+  } catch (e){
+    $("i-resultado").innerHTML =
+      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    return;
+  } finally {
+    botao.disabled = false;
+  }
+
+  const quantas = trazido.cartas_completas.reduce((n, e) => n + e.quantidade, 0)
+                + trazido.comandantes_completos.length;
+  if (estado.cartas.length || estado.comandantes.length){
+    if (!confirm(`Trocar o deck atual pelas ${quantas} cartas importadas?\n\n` +
+                 `O deck de agora continua salvo e na lista de Meus decks — ` +
+                 `mas esta janela passa a mostrar o importado.`)){
+      $("i-resultado").innerHTML = `<div class="nota">Importação cancelada.</div>`;
+      return;
+    }
+  }
+
+  aplicarImportado(trazido);
+  mostrarResultadoImportacao(trazido);
+}
+
+/* O deck importado vira um deck NOVO, com id novo.
+
+   Escrever por cima do deck aberto apagaria do servidor o que alguém pode ter
+   compartilhado por link. Um id novo custa uma linha no banco e não destrói
+   nada — é a mesma escolha do botão "duplicar". */
+function aplicarImportado(trazido){
+  guardarDesfazer();
+  estado.id = null;
+  estado.validacao = null;
+  estado.comandantes = trazido.comandantes_completos;
+  estado.cartas = trazido.cartas_completas.map(e => ({
+    carta: e.carta, quantidade: e.quantidade,
+  }));
+  // As análises são do deck antigo e agora não valem mais nada. Deixá-las na
+  // tela mostraria a curva de um deck e os combos de outro.
+  estado.combos = estado.poder = estado.sugestoes = estado.manabase = null;
+  estado.combosMexidos = 0;
+  $("combos-resultado").innerHTML = "";
+  $("poder-resultado").innerHTML = "";
+  $("sug-resultado").innerHTML = "";
+  $("mb-resultado").innerHTML = "";
+  $("orc-resultado").innerHTML = "";
+
+  if (trazido.nome){
+    estado.nome = trazido.nome;
+    $("nome-deck").value = estado.nome;
+  }
+  history.replaceState(null, "", location.pathname);
+  $("btn-compartilhar").hidden = true;
+  desenharTudo();
+  buscar();
+  agendarSalvar();
+}
+
+function mostrarResultadoImportacao(trazido){
+  const total = trazido.cartas_completas.reduce((n, e) => n + e.quantidade, 0)
+              + trazido.comandantes_completos.length;
+  const faltando = trazido.nao_encontradas || [];
+  let html = `<div class="aponta ok"><span><b>${total} carta(s)</b> vieram do
+    ${escapar(trazido.fonte)}${trazido.comandantes_completos.length
+      ? ` — comandante: ${escapar(trazido.comandantes_completos.map(c => c.nome).join(" + "))}`
+      : ""}.</span></div>`;
+
+  // Carta que a base local não conhece não pode sumir calada: quem importa
+  // 100 cartas e recebe 97 precisa saber QUAIS três ficaram de fora, senão
+  // descobre na hora de imprimir.
+  if (faltando.length){
+    const nomes = faltando.map(c => escapar(c.nome)).join(", ");
+    html += `<div class="aponta aviso" style="margin-top:6px"><span>
+      <b>${faltando.length} não estão na base local</b> e ficaram de fora:
+      ${nomes}.<br>Costuma ser carta nova com a base atrasada — dá pra
+      adicionar na mão pela busca depois que ela sincronizar.</span></div>`;
+  }
+  if (!trazido.comandantes_completos.length){
+    html += `<div class="aponta aviso" style="margin-top:6px"><span>A lista não
+      dizia quem é o comandante. Escolha ele na tela — é ele que define a
+      identidade de cor de tudo.</span></div>`;
+  }
+  $("i-resultado").innerHTML = html;
 }
 
 /* --------------------------------------------------------------- exportar */
@@ -1863,6 +2678,11 @@ function ligarEventos(){
 
   document.addEventListener("keydown", (e) => {
     const digitando = ["INPUT","TEXTAREA"].includes(document.activeElement?.tagName);
+    if (e.key === "Escape" && gavetaAberta){
+      e.preventDefault();
+      return fecharGaveta();
+    }
+    if (gavetaAberta) return;   // dentro da gaveta, o teclado é dela
     if (e.key === "/" && !digitando){
       e.preventDefault();
       (estado.comandantes.length ? $("busca") : $("busca-cmd")).focus();
@@ -1873,20 +2693,38 @@ function ligarEventos(){
     }
   });
 
-  $("filtros").innerHTML = FILTROS.map(([rotulo, valor]) =>
-    `<button class="chip" data-filtro="${valor}">${rotulo}</button>`).join("");
-  $("filtros").addEventListener("click", (e) => {
-    const botao = e.target.closest("[data-filtro]");
+  montarGavetaFiltros();
+  preencherGavetaFiltros();
+  desenharBarraFiltros();
+
+  $("btn-gaveta-filtros").addEventListener("click", () => {
+    preencherGavetaFiltros();
+    abrirGaveta("gaveta-filtros");
+  });
+  $("btn-importar").addEventListener("click", () => abrirGaveta("gaveta-importar"));
+  $("btn-fazer-importar").addEventListener("click", fazerImportar);
+  $("btn-limpar-filtros").addEventListener("click", limparFiltros);
+  $("gaveta-fundo").addEventListener("click", fecharGaveta);
+
+  // Os controles da gaveta buscam sozinhos ao mudar: obrigar a apertar
+  // "aplicar" pra ver o efeito de marcar "verde" transformaria uma
+  // exploração de dois segundos em três cliques.
+  $("gaveta-filtros").addEventListener("input", lerGavetaFiltros);
+  $("gaveta-filtros").addEventListener("change", lerGavetaFiltros);
+  $("f-cores").addEventListener("click", (e) => {
+    const botao = e.target.closest("[data-cor]");
     if (!botao) return;
-    const valor = botao.dataset.filtro;
-    estado.filtro = estado.filtro === valor ? "" : valor;
-    [...$("filtros").children].forEach(c =>
-      c.classList.toggle("ativo", c.dataset.filtro === estado.filtro));
-    buscar();
+    const ligada = !botao.classList.contains("ativo");
+    botao.classList.toggle("ativo", ligada);
+    botao.setAttribute("aria-pressed", ligada ? "true" : "false");
+    lerGavetaFiltros();
   });
 
   // Clique nos resultados (os dois painéis) e nos controles do deck.
   document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-fecha-gaveta]")) return fecharGaveta();
+    const tira = e.target.closest("[data-tira-filtro]");
+    if (tira) return tirarFiltro(tira.dataset.tiraFiltro);
     // Sugestão do EDHREC: a carta completa já veio junto, então adicionar é
     // o mesmo clique da busca — sem consulta nenhuma.
     const sugerida = e.target.closest("[data-sug]");

@@ -268,6 +268,73 @@ try:
        [c["nome"] for c in completo["comandantes_completos"]],
        ["Tymna the Weaver", "Thrasios"])
 
+
+    # ------------------------------------------------------- custo do combo
+    print("\n--- peças e custo dos combos ---")
+
+    # O Spellbook manda só o NOME de cada peça. A tela precisa de mais três
+    # coisas, e todas saem da base local: a arte (pra prévia no hover), o
+    # preço (pra dizer quanto custa fechar) e se a carta sequer existe aqui —
+    # sem isso o botão "+ Fulano" some pra carta que não dá pra adicionar.
+    conn = cartas._conn()
+    conn.execute("UPDATE cartas SET preco_usd = 5.5 WHERE nome = 'Sol Ring'")
+    conn.execute("UPDATE cartas SET preco_usd = 2.0 WHERE nome = 'Llanowar Elves'")
+    conn.execute("UPDATE cartas SET preco_usd = NULL WHERE nome = 'Krenko'")
+    conn.commit()
+    conn.close()
+
+    def peca(nome, no_deck):
+        return {"nome": nome, "quantidade": 1, "comandante": False,
+                "no_deck": no_deck}
+
+    achado = decks.combos_com_cartas({
+        "no_deck": [{"pecas": [peca("Sol Ring", True),
+                               peca("Llanowar Elves", True)]}],
+        "faltando_uma": [
+            {"pecas": [peca("Sol Ring", True), peca("Llanowar Elves", False)]},
+            # A que falta é a que a base não conhece: o custo pra fechar é
+            # zero E desconhecido ao mesmo tempo, e são coisas diferentes.
+            {"pecas": [peca("Sol Ring", True), peca("Krenko", False)]},
+            {"pecas": [peca("Sol Ring", True), peca("Carta Fantasma", False)]},
+        ],
+    })
+
+    fechado = achado["no_deck"][0]
+    eq("a peça ganha a arte da base local",
+       fechado["pecas"][0]["imagem"], "http://exemplo/arte.jpg")
+    eq("a peça ganha o tipo", fechado["pecas"][1]["tipo"], "Creature — Elf")
+    eq("custo do combo fechado é a soma das peças", fechado["custo_usd"], 7.5)
+    eq("combo fechado não tem nada a pagar", fechado["custo_faltando_usd"], 0.0)
+
+    falta_uma = achado["faltando_uma"][0]
+    eq("custo total conta as duas peças", falta_uma["custo_usd"], 7.5)
+    # É este o número que decide o clique: não interessa quanto o combo
+    # inteiro vale, interessa quanto falta gastar.
+    eq("custo pra fechar conta só o que falta",
+       falta_uma["custo_faltando_usd"], 2.0)
+
+    sem_preco = achado["faltando_uma"][1]
+    check("peça que existe na base é marcada como tal",
+          sem_preco["pecas"][0]["na_base"] is True)
+    eq("peça sem preço na base não vira zero", sem_preco["pecas"][1]["preco_usd"], None)
+    # As duas contagens existem separadas por isto: o total do combo é
+    # confiável (só a peça que falta é desconhecida), o custo pra fechar não.
+    # Uma contagem só não distinguiria os dois, e a tela mostraria
+    # "fechar por US$ 0,00" — a mentira mais cara que ela saberia contar.
+    eq("conta as peças sem preço no combo inteiro",
+       sem_preco["pecas_sem_preco"], 1)
+    eq("e conta separado as que faltam e não têm preço",
+       sem_preco["pecas_faltando_sem_preco"], 1)
+    eq("custo pra fechar fica zero quando o que falta não tem preço",
+       sem_preco["custo_faltando_usd"], 0.0)
+
+    fantasma = achado["faltando_uma"][2]
+    # Carta que a base não conhece é o caso do botão desabilitado: sem a
+    # carta local não há o que adicionar num clique.
+    check("peça que a base não conhece é marcada",
+          fantasma["pecas"][1]["na_base"] is False)
+    eq("peça desconhecida não tem arte", fantasma["pecas"][1]["imagem"], "")
+
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

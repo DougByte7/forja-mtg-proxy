@@ -420,6 +420,114 @@ def sugestoes_uteis(deck: dict, listas: list[dict],
     return saida
 
 
+def combos_com_cartas(achado: dict) -> dict:
+    """Os combos do Spellbook com a carta local grudada em cada peça.
+
+    O Spellbook devolve o NOME de cada peça e mais nada — o que basta pra
+    listar, e não basta pra tela fazer as três coisas que a lista de combos
+    pedia: mostrar a arte ao passar o mouse, somar quanto custa fechar o
+    combo, e dizer se a peça que falta sequer existe na base local (se não
+    existe, o botão de adicionar não teria o que adicionar).
+
+    Uma consulta ao banco pra TODAS as peças de TODOS os combos: um deck
+    montado volta com dezenas de combos de duas a quatro peças, e resolver
+    nome a nome seriam centenas de idas ao SQLite por clique.
+
+    O `custo_usd` é a soma do que o combo pede, e o `custo_faltando` é a
+    parte dela que ainda não está no deck — que é o número que responde
+    "quanto me custa fechar isto". Preço de carta que a base não conhece
+    entra como zero e é contado em `sem_preco`, pra tela poder dizer que o
+    total está incompleto em vez de mentir um número baixo.
+    """
+    listas = [achado.get("no_deck") or [], achado.get("faltando_uma") or []]
+    nomes = [peca["nome"] for lista in listas for combo in lista
+             for peca in combo.get("pecas") or []]
+    conhecidas = base_cartas.por_nomes(nomes)
+
+    for lista in listas:
+        for combo in lista:
+            _custear_combo(combo, conhecidas)
+    return achado
+
+
+def _custear_combo(combo: dict, conhecidas: dict) -> None:
+    """Anexa carta e preço às peças de um combo, e soma os totais. No lugar.
+
+    As peças sem preço são contadas DUAS vezes, uma pra cada total: um combo
+    de três peças onde só a que falta é desconhecida tem total confiável e
+    custo-pra-fechar que não se sabe. Uma contagem só não distinguiria os
+    dois casos, e "fechar por US$ 0,00" leria como carta de graça.
+    """
+    custo = custo_faltando = 0.0
+    sem_preco = sem_preco_faltando = 0
+    for peca in combo.get("pecas") or []:
+        carta = conhecidas.get(peca["nome"])
+        # Só o que a tela usa. A carta inteira multiplicaria por quatro o
+        # tamanho da resposta de combos com texto de oracle que ninguém lê ali.
+        peca["imagem"] = (carta or {}).get("imagem") or ""
+        peca["mana_cost"] = (carta or {}).get("mana_cost") or ""
+        peca["tipo"] = (carta or {}).get("tipo") or ""
+        peca["preco_usd"] = (carta or {}).get("preco_usd")
+        peca["na_base"] = carta is not None
+        preco = peca["preco_usd"] or 0.0
+        falta = not peca.get("no_deck")
+        if not preco:
+            sem_preco += 1
+            if falta:
+                sem_preco_faltando += 1
+        custo += preco
+        if falta:
+            custo_faltando += preco
+    combo["custo_usd"] = round(custo, 2)
+    combo["custo_faltando_usd"] = round(custo_faltando, 2)
+    combo["pecas_sem_preco"] = sem_preco
+    combo["pecas_faltando_sem_preco"] = sem_preco_faltando
+
+
+def importado_para_deck(trazido: dict) -> dict:
+    """A lista importada virando o que a tela monta, com o que não resolveu.
+
+    Nome que a base local não conhece NÃO é descartado calado: ele volta em
+    `nao_encontradas` pra tela poder dizer quantas cartas ficaram de fora e
+    quais. Costuma ser carta nova com a base atrasada, ou carta caseira num
+    deck de cube — e as duas coisas a pessoa precisa saber antes de mandar
+    imprimir.
+
+    Comandante que não resolve é um caso à parte e mais grave: sem ele o deck
+    não tem identidade de cor, e a tela abriria na pergunta "quem é o
+    comandante?" como se nada tivesse sido importado.
+    """
+    comandantes = list(trazido.get("comandantes") or [])
+    cartas = limpar_cartas(trazido.get("cartas") or [])
+    conhecidas = base_cartas.por_nomes(comandantes +
+                                       [c["nome"] for c in cartas])
+
+    nao_encontradas = []
+    completas, comandantes_completos = [], []
+    for nome in comandantes:
+        carta = conhecidas.get(nome)
+        if carta is None:
+            nao_encontradas.append({"nome": nome, "quantidade": 1,
+                                    "comandante": True})
+        else:
+            comandantes_completos.append(carta)
+    for entrada in cartas:
+        carta = conhecidas.get(entrada["nome"])
+        if carta is None:
+            nao_encontradas.append({**entrada, "comandante": False})
+        else:
+            completas.append({**entrada, "carta": carta})
+
+    return {
+        "nome": (trazido.get("nome") or "").strip()[:80],
+        "fonte": trazido.get("fonte") or "",
+        "link": trazido.get("link") or "",
+        "comandantes_completos": comandantes_completos,
+        "cartas_completas": completas,
+        "nao_encontradas": nao_encontradas,
+    }
+
+
 def lista_texto(deck: dict) -> str:
     """A decklist em texto, uma carta por linha, comandante primeiro.
 

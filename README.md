@@ -244,6 +244,10 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   sem contrato** — leia o aviso no topo do arquivo antes de mexer.
 - `app/manabase.py` — terrenos, fontes por cor e fixadores. A única análise
   feita aqui dentro; a heurística está no cabeçalho, em duas regras.
+- `app/importar.py` — trazer deck pronto de fora: link do Archidekt, link do
+  Moxfield ou lista colada, tudo saindo no mesmo formato. **O cabeçalho
+  explica por que o User-Agent honesto passa no Moxfield e o de navegador
+  leva 403** — leia antes de "consertar" um bloqueio ali.
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
@@ -335,6 +339,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   com pisos e limites, e as sugestões: básico só da cor que falta e até a
   vaga, fixador só da identidade e nunca um que já está no deck:
   `python tests/test_manabase.py`.
+- `tests/test_importar.py` — a importação de deck: o que cada fonte chama de
+  "o deck" (maybeboard do Archidekt e sideboard do Moxfield ficam de fora),
+  onde mora o comandante em cada uma, e o parser da lista colada com os
+  enfeites que cada site exporta — edição, número de coleção, categoria,
+  `*CMDR*`, cabeçalho de seção. Roda sem rede: `python tests/test_importar.py`.
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
@@ -372,9 +381,10 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
 | `GET /deckbuilder` | você, no navegador | a tela de montar deck de Commander — ver *Deckbuilder de Commander* |
-| `GET /cartas/busca` | deckbuilder | busca na base local. `q`, `identidade`, `tipo`, `comandante`, `limite`. Não toca na Scryfall |
+| `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta |
 | `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
 | `POST /admin/cartas/sync` | você (`X-Admin-Token`) | refaz a base de cartas na hora. Baixa 100+ MB da Scryfall, daí o token |
+| `POST /decks/importar` | botão **Importar** | traz um deck do Archidekt/Moxfield pelo link, ou de uma lista colada. Devolve as cartas resolvidas na base local + o que ela não conhece. Não grava nada |
 | `POST /decks` | deckbuilder | cria o deck e devolve o id (12 dígitos hex) |
 | `GET /decks/{id}` | deckbuilder | o deck com as cartas resolvidas e a validação junto |
 | `PUT /decks/{id}` | deckbuilder | grava o deck por cima. É o autosave — a validação vai na resposta mas não impede de gravar |
@@ -518,11 +528,15 @@ apagar é reversível, porque o combo continua no banco e a folha se remonta.
 da que orça a impressão. Ela responde à pergunta que vem antes do XML: "que
 cartas vão nesse deck?".
 
-As duas telas se encontram no fim. O deckbuilder não gera XML do MPC Fill e
-não vai gerar: **cada carta lá é um id de arquivo no Google Drive** (ver
-`pdf_generator.py`), e a biblioteca de artes é do MPC Fill, não nossa. O que
-ele entrega é a **decklist em texto**, que se cola na caixa do MPC Fill pra
-escolher as artes; o XML que sai de lá é o que sobe no orçamento de sempre.
+As duas telas se encontram no fim. O deckbuilder não gera XML do MPC Fill:
+**cada carta lá é um id de arquivo no Google Drive** (ver `pdf_generator.py`),
+e a biblioteca de artes é do MPC Fill, não nossa. O que ele entrega é a
+**decklist em texto**, que se cola na caixa do MPC Fill pra escolher as artes;
+o XML que sai de lá é o que sobe no orçamento de sempre.
+
+Isso *poderia* mudar — eles publicam a API que devolve esses ids, e o custo de
+trazer a escolha de arte pra cá está medido em
+[Escolher as artes pelo MPC Fill](#escolher-as-artes-pelo-mpc-fill-dá-e-o-que-custaria).
 
 ```
 deckbuilder  ──(decklist em texto)──►  MPC Fill  ──(XML com as artes)──►  /orders
@@ -530,16 +544,21 @@ deckbuilder  ──(decklist em texto)──►  MPC Fill  ──(XML com as art
 
 ### Como funciona
 
-1. **Escolha o comandante.** A tela nasce nessa única pergunta, porque sem
-   comandante não existe deck de Commander — e é ele que define a identidade
-   de cor de tudo o que vem depois.
+1. **Escolha o comandante** — ou **importe** um deck pronto. A tela nasce
+   naquela única pergunta, porque sem comandante não existe deck de Commander
+   e é ele que define a identidade de cor de tudo o que vem depois; quem já
+   tem o deck em outro lugar usa o botão **Importar** (Archidekt, Moxfield ou
+   lista colada).
 2. **Busque e clique.** A busca lateral já sai filtrada pela identidade do
    comandante: carta que o deck não poderia jogar não aparece. `/` põe o
-   cursor na busca, Enter adiciona o primeiro resultado, `Ctrl+Z` desfaz.
+   cursor na busca, Enter adiciona o primeiro resultado, `Ctrl+Z` desfaz. O
+   botão **Filtros** abre a gaveta com busca por efeito, cor, custo e preço.
 3. **Acompanhe a análise.** Contagem pras 100, curva de mana, distribuição de
-   cores e tipos, e os apontamentos de regra — tudo recalculado a cada clique.
-4. **Orce, se quiser.** O botão **Cotar preços** usa a mesma cotação da tela
-   de impressão (LigaMagic + Scryfall), com o mesmo critério do Commander 500.
+   cores e tipos, os apontamentos de regra e o preço de cada carta — tudo
+   recalculado a cada clique.
+4. **Orce, se quiser.** A prévia do orçamento anda sozinha, pela base local; o
+   botão **Cotar preços** usa a mesma cotação da tela de impressão (LigaMagic
+   + Scryfall), com o mesmo critério do Commander 500.
 5. **Exporte.** **Exportar lista** copia a decklist pra colar no MPC Fill.
 
 ### O que a análise acusa
@@ -600,6 +619,144 @@ O `preco_usd` guardado nessa base é o do dia da sincronização e serve só pra
 ordenar e dar ordem de grandeza na tela. **Quem responde "quanto custa
 comprar" continua sendo a cotação**, que consulta na hora.
 
+### Importar um deck de fora
+
+Quem chega no deckbuilder quase nunca chega do zero: chega com um deck que já
+mantém em outro lugar. O botão **Importar** aceita três coisas:
+
+| De onde | Como |
+|---|---|
+| **Archidekt** | cola o link do deck. `GET /api/decks/{id}/`, sem chave e sem cadastro |
+| **Moxfield** | cola o link do deck. `GET api2.moxfield.com/v3/decks/all/{publicId}` |
+| **Qualquer outro site** | exporta a decklist lá e cola no campo de texto |
+
+O deck importado vira um deck **novo**, com id novo — escrever por cima do
+que está aberto apagaria do servidor uma lista que alguém pode ter
+compartilhado por link. E se já houver carta na mesa, a tela pergunta antes.
+
+**O que a base local não conhece não some calado.** Ele volta numa lista com
+nome e quantidade, e a tela diz quantas cartas ficaram de fora e quais.
+Costuma ser carta nova com a base atrasada — quem importa 100 e recebe 97
+precisa saber quais três, senão descobre na hora de imprimir.
+
+#### O que cada fonte chama de "o deck"
+
+Maybeboard, sideboard e lista de desejos chegam na mesma resposta que o deck,
+e somá-los daria um Commander de 120 cartas pra podar na mão. O critério de
+cada um:
+
+* **Archidekt** — cada categoria do deck traz `includedInDeck`. Quem decidiu
+  o que conta foi o dono do deck, não a gente; carta em duas categorias, uma
+  delas fora, fica de fora.
+* **Moxfield** — a resposta vem por *tabuleiro*. Entram `mainboard` e
+  `companions`; `commanders` vira comandante; `sideboard`, `maybeboard`,
+  `tokens` e o resto ficam de fora.
+* **Texto colado** — um cabeçalho `Sideboard`/`Maybeboard` corta dali pra
+  frente, até o próximo cabeçalho. Linha em branco **não** volta pro deck:
+  se voltasse, a segunda metade de um sideboard entraria na lista.
+
+#### O comandante vem num lugar diferente em cada fonte
+
+Perdê-lo não dá erro nenhum — dá um deck sem identidade de cor, e a tela abre
+perguntando "quem é o comandante?" como se nada tivesse sido importado. Onde
+ele está: categoria `Commander` no Archidekt, tabuleiro `commanders` no
+Moxfield, e no texto um cabeçalho `Commander`, um `*CMDR*` na linha
+(TappedOut) ou um `[Commander{top}]` (exportação em texto do Archidekt).
+
+#### A lista colada engole o que os sites exportam
+
+Todos exportam o mesmo formato com um enfeite diferente, e o parser tira o
+enfeite: quantidade com ou sem `x`, edição entre parênteses e número de
+coleção (`1x Sol Ring (LTC) 285`), categoria entre colchetes, marcadores de
+foil. O `//` de carta de duas faces **sobrevive**, porque é parte do nome —
+sem ele a base local não acha a carta. E `Creatures (23)` é lido como
+cabeçalho enquanto `1 Creature Guildpact` é lido como carta: a diferença é a
+quantidade na frente.
+
+#### O que surpreende no Moxfield (e a lição que ele ensina)
+
+O primeiro teste contra a API do Moxfield levou **403**. O segundo, na mesma
+URL, respondeu **200**. A diferença foi o `User-Agent`: o 403 veio com
+`Mozilla/5.0`, e o 200 veio com o nosso, o do `identidade.py`, que diz quem
+somos e traz e-mail de contato.
+
+Faz sentido: um servidor mandando `Mozilla/5.0` é exatamente o padrão que o
+bot-fight da Cloudflare existe pra derrubar. **Passar por navegador é o que
+causa o bloqueio.** A regra do `identidade.py` — se eles quiserem falar com a
+gente, ou bloquear, que seja pelo caminho fácil — aqui cobra o preço dela ao
+contrário do esperado, e é bom lembrar disso no dia em que alguém for
+"resolver" um bloqueio trocando o User-Agent por um de navegador.
+
+Se um dia eles pedirem um identificador combinado, ele entra em
+`MOXFIELD_USER_AGENT` no `.env`. E a lista colada continua cobrindo os dois
+casos que nenhuma API cobre: deck privado, e o dia em que um dos sites mudar
+de ideia sobre robôs.
+
+### Filtros avançados: a gaveta
+
+Os sete chips de tipo (Criatura, Instantâneo, Feitiço…) viraram um botão
+**Filtros** que abre uma gaveta. O motivo é aritmético: os filtros passaram
+de sete pra treze controles, e treze controles soltos numa lateral de 372 px
+comeriam a lista de resultados que eles existem pra filtrar.
+
+| Filtro | O que faz |
+|---|---|
+| **Efeito da carta** | cada palavra tem que aparecer no texto da carta, em qualquer ordem |
+| **Tipo** | o que os chips faziam, mais Lendária, Equipamento e Aura |
+| **Cor da carta** | a cor **da carta**, que não é a identidade dela (veja abaixo) |
+| **Custo (de/até)** | faixa de custo de mana convertido |
+| **Preço máximo** | teto em dólar, pela base local |
+| **Ordenar por** | nome, custo ou preço — só vale com a caixa de busca vazia |
+
+O que está ligado aparece **fora** da gaveta, numa fita de etiquetas com ✕ em
+cada uma; sem isso, uma busca filtrada pareceria uma busca quebrada. A gaveta
+busca a cada mudança em vez de esperar um botão "aplicar": marcar "verde" e
+ver o efeito é uma exploração de dois segundos, não três cliques.
+
+**Cor da carta não é identidade de cor.** Um Breeding Pool é *incolor* de cor
+e *GU* de identidade. O filtro de cor pega a primeira, porque quem marca
+"verde" quer ver as cartas verdes do deck, não os terrenos que produzem
+verde. A identidade continua filtrando tudo o tempo todo, por conta do
+comandante, e as duas coisas convivem.
+
+**A busca por efeito lê o oracle em inglês**, que é como o bulk data da
+Scryfall vem — "voar" não acha *Flying*, e a gaveta diz isso na própria
+caixa. Ela é o único filtro que varre coluna sem índice: são ~35 mil linhas
+curtas, poucos milissegundos de SQLite, e um índice de texto completo custaria
+manutenção a cada sincronização pra ganhar tempo que ninguém percebe.
+
+**A ordenação só vale com a caixa de nome vazia.** Com nome digitado quem
+manda é a relevância — senão "sol" ordenado por preço esconderia o Sol Ring
+atrás do Solemn Simulacrum. E a chave de ordenação nunca chega crua no SQL:
+`ORDER BY` não aceita parâmetro, e concatenar texto de fora numa rota pública
+sem token seria injeção.
+
+### Preço na lista, e a prévia do orçamento
+
+Cada carta da lista mostra o preço, cada categoria mostra o subtotal, e o
+painel **Orçamento** mostra o total do deck — tudo recalculado a cada carta
+adicionada, sem rede.
+
+**Esse número não é a cotação, e a tela nunca finge que é.** Ele sai do
+`preco_usd` da base local, que é o preço do dia da última sincronização e
+serve pra ordem de grandeza ("essa carta é cara?"). Quem responde "quanto
+custa comprar" continua sendo o botão **Cotar preços**, que vai à LigaMagic e
+à Scryfall na hora. Por isso a prévia se chama prévia, em dólar, com o botão
+de cotar logo abaixo dela.
+
+Três decisões que evitam mentira barata:
+
+* **Carta sem preço na base mostra `—`, não `$0.00`.** Zero é um preço; este
+  é o caso de não saber. E o total avisa quantas cartas ficaram de fora, pra
+  quem lê saber que ele está por baixo.
+* **O total usa o mesmo critério do Commander 500** que a cotação já usa
+  (`cotacao.filtrar_cotaveis`): comandante e terreno básico fora. Duas contas
+  diferentes pro mesmo deck na mesma tela seriam pior que número nenhum.
+* **Abaixo de 480 px o preço da linha some.** Em tela de toque os controles de
+  quantidade ficam sempre visíveis, e sem isso o nome da carta é que seria
+  truncado. O subtotal do grupo e a prévia continuam na tela; nome cortado,
+  não.
+
 ### Combos, pelo Commander Spellbook
 
 O painel **Combos** responde duas coisas: que combos o deck **já tem**, e
@@ -636,6 +793,54 @@ afogaria as que dão pra usar.
 Cada combo vem com o **bracket** dele na escala do Spellbook (de *Exibição*,
 que é mais graça que ameaça, até *Impiedoso*, que ganha o jogo na hora), pra
 dar o peso do combo sem precisar abrir o link.
+
+#### O que cada combo mostra
+
+O Spellbook manda o **nome** de cada peça e mais nada. A arte, o preço e o
+"essa carta existe na base local?" saem daqui, numa consulta só ao SQLite pra
+todas as peças de todos os combos — um deck montado volta com dezenas de
+combos, e resolver nome a nome seriam centenas de idas ao banco por clique.
+
+* **Prévia da arte** ao passar o mouse no nome da peça, o mesmo gancho que a
+  busca e a lista do deck já usam.
+* **Pré-requisitos** (`notablePrerequisites`): o que o combo pede **antes** de
+  funcionar — mana disponível, permanente já desvirado, oponente com criatura
+  em jogo. Sem isso a lista dizia o que o combo *faz* e escondia o que ele
+  *custa* pra acontecer, que é metade da decisão de colocá-lo no deck.
+* **Custo**, em dólar da base local, e são **dois números diferentes**: num
+  combo que o deck já tem, o total das peças ("quanto desse deck é este
+  combo"); num que falta uma carta, só o que ainda não está lá ("quanto me
+  custa fechar"), que costuma ser bem menos e é o número que decide o clique.
+
+Soma zero **com** peça sem preço conhecido não vira `US$ 0,00`: vira
+`preço ?`. Todas as peças que entrariam na conta são justamente as
+desconhecidas, e "fechar por US$ 0,00" seria a mentira mais cara que esta
+tela saberia contar.
+
+#### Fechar o combo move ele de lista, na hora
+
+Clicar em **+ Fulano** num combo que falta uma carta põe a carta no deck **e
+move o combo pra "No deck"**, sem nova consulta. Antes disso a lista continuava
+dizendo que a peça faltava, e a única saída era clicar em "procurar combos" de
+novo — uma requisição a um serviço gratuito pra confirmar o que a própria tela
+acabou de fazer.
+
+A conta é local e exata: sabemos qual carta entrou e quais combos a citam. A
+peça é marcada em **todos** os combos das duas listas, porque a mesma carta é
+peça de vários — marcar só no combo clicado deixaria os outros mentindo.
+
+**O que não dá pra saber daqui é o contrário:** que combos *novos* essa carta
+deixou a uma peça de fechar. Isso só o Spellbook responde. Por isso o aviso de
+"o deck mudou desde esta busca" **não** aparece (seria falso — a lista está em
+dia com o deck), e no lugar dele fica um recado dizendo exatamente o que ainda
+vale rebuscar.
+
+Um detalhe que só apareceu por causa disso: peça **genérica** (`requires` —
+"um terreno-criatura que entra desvirado") era desenhada com a mesma cor de
+peça que falta. Enquanto o combo estava só na lista de "a uma carta" ninguém
+reparava; quando ele passou a mudar de lista na frente da pessoa, um combo já
+fechado passou a parecer incompleto. Agora ela é texto apagado e itálico —
+critério, não carta.
 
 `SPELLBOOK=0` no `.env` desliga o painel.
 
@@ -750,10 +955,119 @@ subtipo ("Forest Island") ou do texto, **só do que vem depois de "Add"** —
 O preço que separa "barato" de "se o orçamento deixar" (`MANABASE_TETO_USD`)
 é o da Scryfall no dia da sincronização, em dólar, só pra ordem de grandeza.
 
+### Escolher as artes pelo MPC Fill: dá, e o que custaria
+
+**Isto é uma avaliação, não um recurso.** Nada disso está implementado; o que
+segue é o resultado de sondar a API do MPC Fill de verdade, com o número de
+requisições e os tempos medidos, pra a decisão de construir (ou não) ser
+tomada com o custo na mão.
+
+O README dizia, até aqui, que o deckbuilder *não gera XML do MPC Fill e não
+vai gerar*, porque "cada carta lá é um id de arquivo no Google Drive e a
+biblioteca de artes é do MPC Fill, não nossa". A segunda metade continua
+verdadeira. A primeira, não: **eles publicam a API que devolve esses ids.**
+
+#### O que existe do lado deles
+
+O MPC Fill é código aberto (`chilli-axe/mpc-autofill`) e o site publica o
+mesmo backend Django que o front-end deles consome:
+
+| Rota | O que devolve |
+|---|---|
+| `GET /2/sources/` | as bibliotecas de arte e a ordem delas |
+| `POST /2/editorSearch/` | **os ids de todas as artes** de cada nome pedido, numa requisição só pro deck inteiro |
+| `POST /2/cards/` | metadados dos ids escolhidos: nome, DPI, tamanho, fonte e **URL da miniatura** |
+| `GET /2/DFCPairs/` | 508 pares frente→verso, pra carta de duas faces |
+| `GET /2/importSiteDecklist/` | decklist a partir do link de outro site |
+
+Medido em 8 de setembro de 2026, com o nosso User-Agent honesto:
+
+```
+1 requisição de busca para 3 cartas: 3,3 s
+   Sol Ring: 713 artes | Arcane Signet: 489 | Delver of Secrets: 24
+metadados das escolhidas em 1 requisição (3,7 s no total)
+```
+
+Duas requisições cobrem um deck inteiro — a busca aceita a lista toda de uma
+vez. As miniaturas são URLs do Drive (`drive.google.com/thumbnail?sz=w400...`)
+que o navegador carrega direto, sem passar por aqui.
+
+#### O XML gerado passa pelo backend que já existe
+
+Este foi o outro teste, e é o que fecha a viabilidade. Montando o XML na mão
+a partir dos ids do MPC Fill e jogando no código de sempre:
+
+```
+calc.parse_order:     6 cartas, 0 versos
+calc.parse_card_list: [sol ring ×3, arcane signet ×1, delver of secrets ×2]
+calc.compute_cost:    1 página, 3 slots em branco, R$ 2,50
+```
+
+Ou seja: `calc.py`, `pdf_generator.py`, a cobrança e a impressão **não
+precisariam mudar**. O formato é modesto — `<fronts><card><id>DRIVE</id>
+<slots>0,1,2</slots><query>nome</query><name>arquivo.png</name></card>` —, os
+`slots` são a quantidade, e `<backs>` recebe o verso das cartas de duas faces.
+
+#### O que faltaria construir
+
+O trabalho não está na integração; está na **tela**. Escolher arte é olhar
+imagem, e é aí que mora o custo:
+
+1. **Um seletor visual por carta.** Sol Ring tem 713 artes. Uma grade de
+   miniaturas com fonte, DPI e filtro, ×100 cartas, é a maior tela do
+   projeto — maior que o admin.
+2. **Guardar a escolha.** O deck hoje guarda nome e quantidade, e isso é
+   proposital: o nome não envelhece quando a base de cartas é resincronizada.
+   Um id do Drive envelhece — arquivo removido da biblioteca vira carta que
+   não baixa, e o `pdf_generator` desenha o retângulo vermelho de falha.
+   Seria preciso guardar o id **e** o nome, e ter um caminho de volta.
+3. **Cartas de duas faces.** O `/2/DFCPairs/` resolve (chaveado pelo nome
+   exato, que a base local já tem), mas é uma escolha a mais por carta.
+4. **Verso e opções do pedido.** `cardback`, stock e bracket saem hoje do
+   próprio MPC Fill; teriam que virar controle nosso.
+
+#### A recomendação
+
+**Vale, mas não como próximo passo.** O caminho de hoje — exportar a
+decklist, colar no MPC Fill, subir o XML — custa dois cliques e entrega a
+tela deles, que faz isso melhor do que a nossa faria no primeiro ano. O ganho
+real de trazer pra cá é fechar o ciclo numa aba só; o custo é a maior tela do
+projeto e um id que envelhece dentro do nosso banco.
+
+Se for pra fazer, o pedaço com melhor relação custo/benefício é o **primeiro
+terço**: um botão "escolher arte" por carta que abre a grade de miniaturas e
+guarda a escolha, deixando o resto (verso, stock, DFC) no padrão. Isso já
+elimina a ida ao site de fora pra quem só quer a arte bonita de três ou
+quatro cartas do deck, que é o caso comum.
+
+Se um dia for construído, o oposto também merece nota: o
+`GET /2/importSiteDecklist/` deles importa de dez sites (Aetherhub,
+CubeCobra, Deckstats, MTGGoldfish, TappedOut…). Como o nosso importador já
+cobre Archidekt, Moxfield e texto colado, ele só valeria a pena se a lista de
+sites pedida crescer — e ele nos poria dependendo do serviço deles pra uma
+coisa que hoje funciona sem eles.
+
+### Barra de rolagem
+
+Quatro áreas desta tela rolam por dentro (a lateral inteira, os dois painéis
+de resultado e a lista do deck), e o padrão do navegador desenha uma barra
+clara e larga no meio de um fundo escuro — o único pedaço da página que não é
+desta casa. Agora ela é fina, com o polegar na cor da borda do sistema.
+
+São **duas gramáticas e as duas precisam existir**: o Firefox só entende
+`scrollbar-width`/`scrollbar-color`, e o Chromium/WebKit só entende os
+pseudoelementos `::-webkit-scrollbar`. Nenhum navegador lê as duas, então
+isso não é redundância — é cobertura. No polegar, a borda transparente com
+`background-clip: padding-box` afina o desenho sem afinar a área de clique.
+
 ### As cinco fases
 
 Estão todas no ar: montar (fase 1), combos (2), nível de poder (3),
-sugestões (4) e mana base (5). O que fica pra frente é o que o uso pedir.
+sugestões (4) e mana base (5). Depois delas entraram a importação de deck, os
+filtros avançados, o preço na lista e o acabamento dos combos (custo,
+pré-requisito, prévia de arte e o combo que fecha sozinho na tela). O que fica
+pra frente é o que o uso pedir — e a escolha de arte pelo MPC Fill, se for
+pedida, tem o custo levantado na seção acima.
 
 ## Cotação de preços das cartas
 

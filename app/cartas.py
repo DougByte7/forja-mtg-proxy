@@ -687,18 +687,82 @@ def _filtro_identidade(identidade: str | None, onde: list, params: list):
             params.append(f"%{cor}%")
 
 
+# Como a lista sai ordenada quando ninguém digitou nome. A chave nunca vem
+# do usuário direto pra dentro do SQL — é este dicionário que decide, porque
+# `ORDER BY` não aceita parâmetro e concatenar texto de fora aqui seria
+# injeção.
+ORDENS = {
+    "nome": "nome",
+    "cmc": "cmc, nome",
+    "cmc_desc": "cmc DESC, nome",
+    # Carta sem preço na base (promo, carta velha sem oferta) iria pro topo
+    # do "mais barata" como se fosse de graça: `IS NULL` primeiro joga ela
+    # pro fim das duas ordens, que é onde "não sei o preço" pertence.
+    "preco": "preco_usd IS NULL, preco_usd, nome",
+    "preco_desc": "preco_usd IS NULL, preco_usd DESC, nome",
+}
+
+
+def _filtro_texto(texto: str, onde: list, params: list):
+    """Busca por EFEITO: cada palavra tem que aparecer no texto da carta.
+
+    É `AND` entre as palavras e não frase exata porque ninguém lembra a
+    redação do oracle: quem procura "criatura entra sacrifica" está atrás de
+    "When ~ enters, sacrifice ...", com palavras no meio e em outra ordem.
+
+    O texto guardado é o oracle EM INGLÊS — é o que o bulk data traz. A tela
+    diz isso na caixa; aqui só vale lembrar que "voar" não acha "Flying".
+    """
+    for palavra in (texto or "").lower().split():
+        onde.append("LOWER(texto) LIKE ?")
+        params.append(f"%{palavra}%")
+
+
+def _filtro_cores(cores: str | None, onde: list, params: list):
+    """Só cartas que TÊM alguma das cores marcadas.
+
+    Diferente do filtro de identidade, que é de subconjunto e existe pra
+    proibir: aqui é o filtro solto de quem está montando ("me mostra o que eu
+    tenho de verde"), então é `OR` entre as cores marcadas. `C` marca a carta
+    sem cor nenhuma — que não é o mesmo que "qualquer cor".
+    """
+    if not cores:
+        return
+    pedidas = {c for c in cores.upper() if c in CORES or c == "C"}
+    if not pedidas:
+        return
+    grupo, locais = [], []
+    for cor in sorted(pedidas - {"C"}):
+        grupo.append("cores LIKE ?")
+        locais.append(f"%{cor}%")
+    if "C" in pedidas:
+        grupo.append("(cores IS NULL OR cores = '')")
+    onde.append("(" + " OR ".join(grupo) + ")")
+    params.extend(locais)
+
+
 def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
            comandante: bool = False, so_legais: bool = True,
-           limite: int = 40) -> list[dict]:
+           limite: int = 40, texto: str = "", cmc_min: float | None = None,
+           cmc_max: float | None = None, cores: str | None = None,
+           preco_max: float | None = None, ordem: str = "") -> list[dict]:
     """Busca por nome, com os filtros da tela.
 
     `identidade` é a do comandante já escolhido: passando `"WG"`, some da
     lista toda carta que o deck não poderia jogar. Passar `None` não filtra —
     é o estado de antes de escolher comandante.
 
+    `texto` é a busca por EFEITO — ver `_filtro_texto`. Ela é o único filtro
+    daqui que varre coluna sem índice; o custo é uma varredura de ~35 mil
+    linhas curtas, que o SQLite faz em poucos milissegundos, e por isso não
+    vale um índice de texto completo com a manutenção que ele pediria a cada
+    sincronização.
+
     A ordenação põe primeiro quem casa o nome inteiro, depois quem começa com
     o termo, depois o resto: quem digita "sol ring" quer o Sol Ring na
-    primeira linha, não o "Solemn Simulacrum".
+    primeira linha, não o "Solemn Simulacrum". `ordem` só é obedecida quando
+    NÃO há nome digitado — com termo na caixa, relevância ganha de qualquer
+    outra ordenação, senão "sol" ordenado por preço não mostraria o Sol Ring.
     """
     alvo = normalizar(termo)
     onde, params = [], []
@@ -713,6 +777,22 @@ def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
     if alvo:
         onde.append("busca LIKE ?")
         params.append(f"%{alvo}%")
+    _filtro_texto(texto, onde, params)
+    _filtro_cores(cores, onde, params)
+    if cmc_min is not None:
+        onde.append("cmc >= ?")
+        params.append(float(cmc_min))
+    if cmc_max is not None:
+        onde.append("cmc <= ?")
+        params.append(float(cmc_max))
+    if preco_max is not None:
+        # Carta sem preço PASSA no teto. O `preco_usd` é o do dia da
+        # sincronização e falta em carta nova e em carta que ninguém vende;
+        # sumir com ela num filtro de orçamento esconderia carta barata sem
+        # dizer por quê. É o mesmo critério do `manabase.py`, que trata preço
+        # ausente como zero.
+        onde.append("(preco_usd IS NULL OR preco_usd <= ?)")
+        params.append(float(preco_max))
     _filtro_identidade(identidade, onde, params)
 
     sql = f"SELECT {_COLUNAS} FROM cartas"
@@ -723,9 +803,9 @@ def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
         params += [alvo, f"{alvo}%"]
     else:
         # Sem termo digitado a lista é só uma vitrine (o estado inicial da
-        # busca): as mais baratas primeiro seria arbitrário, então vai por
+        # busca): vai pela ordem que os filtros pedirem e, sem pedido, por
         # nome, que ao menos é estável entre chamadas.
-        sql += " ORDER BY nome"
+        sql += " ORDER BY " + ORDENS.get(ordem, ORDENS["nome"])
     sql += " LIMIT ?"
     params.append(max(1, min(int(limite), 200)))
 
