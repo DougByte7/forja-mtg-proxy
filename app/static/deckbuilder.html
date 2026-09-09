@@ -29,11 +29,17 @@
     --red:#D9634A;
     /* Cores de mana. Tons pastéis do próprio jogo, que só precisam ser
        distinguíveis a 12px de diâmetro. */
-    --mana-W:#F5F0D8; --mana-U:#9FC7E8; --mana-B:#9A8FA8;
+    --mana-W:#F5F0D8; --mana-U:#9FC7E8; --mana-B:#3b3540;
     --mana-R:#E4907A; --mana-G:#89B894; --mana-C:#B9B4C8;
     /* A largura útil da tela, num lugar só: o cabeçalho e o corpo têm que
        ter a mesma, senão o nome do deck não fica em cima do deck. */
     --largura:1560px;
+    /* Dois ícones do sprite viram marca de pseudoelemento (o "já está no
+       deck" da busca, a peça que o combo já tem). Pseudoelemento não recebe
+       <use>, então esses dois moram aqui como máscara — o desenho é o mesmo,
+       e a cor continua vindo do CSS de quem usa. */
+    --ico-check:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z'/%3E%3C/svg%3E");
+    --ico-diamond:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M235.33,116.72,139.28,20.66a16,16,0,0,0-22.56,0l-96,96.06a16,16,0,0,0,0,22.56l96.05,96.06h0a16,16,0,0,0,22.56,0l96.05-96.06a16,16,0,0,0,0-22.56ZM128,224h0L32,128,128,32,224,128Z'/%3E%3C/svg%3E");
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -51,6 +57,19 @@
     outline:2px solid var(--gold);outline-offset:1px;
   }
   [hidden]{display:none !important;}
+
+  /* ---------------- ícones ----------------
+     Phosphor (MIT), colados como sprite no topo do <body> em vez de virem de
+     um CDN: são dezessete desenhos, e ícone que chega depois do resto pisca —
+     o ✕ de fechar precisa estar na tela junto com a modal que ele fecha. O
+     traço é `currentColor`, então cada botão pinta o seu no hover sem
+     precisar de regra nova. 1.15em porque o desenho não encosta na borda da
+     caixa dele: a essa altura o ✕ ocupa a mesma mancha que a letra ao lado. */
+  .ico{
+    width:1.15em;height:1.15em;fill:currentColor;flex:none;
+    pointer-events:none;vertical-align:-.22em;
+  }
+  .sprite{display:none;}
 
   /* ---------------- barra de rolagem ----------------
      A tela tem quatro áreas que rolam por dentro (a lateral inteira, os dois
@@ -411,11 +430,21 @@
     box-shadow:inset 3px 0 0 var(--gold);
   }
   .achado.no-deck{opacity:.45;}
-  .achado.no-deck .nome b::after{content:" ✓";color:var(--green);}
+  .achado.no-deck .nome b::after{
+    content:"";display:inline-block;width:11px;height:11px;
+    margin-left:4px;vertical-align:-1px;background:var(--green);
+    -webkit-mask:var(--ico-check) center/contain no-repeat;
+            mask:var(--ico-check) center/contain no-repeat;
+  }
   /* No maybeboard não é "já tem": é "você já olhou pra ela". Some menos que
      a do deck (ainda é uma carta que pode entrar) e a marca é outra. */
   .achado.no-talvez{opacity:.62;}
-  .achado.no-talvez .nome b::after{content:" ◇";color:var(--gold-light);}
+  .achado.no-talvez .nome b::after{
+    content:"";display:inline-block;width:11px;height:11px;
+    margin-left:4px;vertical-align:-1px;background:var(--gold-light);
+    -webkit-mask:var(--ico-diamond) center/contain no-repeat;
+            mask:var(--ico-diamond) center/contain no-repeat;
+  }
 
   /* ---------------- gaveta (filtros avançados e importação) ----------------
      Sete filtros não cabem como chip na lateral de 372px, e mesmo que
@@ -642,7 +671,8 @@
   .ligado b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .ligado button{
     border:none;background:transparent;color:inherit;cursor:pointer;
-    font-size:13px;line-height:1;padding:0 3px;opacity:.7;
+    font-size:11px;line-height:1;padding:0 3px;opacity:.7;
+    display:inline-flex;align-items:center;
   }
   .ligado button:hover{opacity:1;}
 
@@ -677,9 +707,9 @@
   .pip.B{background:var(--mana-B);} .pip.R{background:var(--mana-R);}
   .pip.G{background:var(--mana-G);} .pip.C{background:var(--mana-C);}
 
-  /* O ⌄ e o ··· são glifos que não se apoiam na linha de base como letra:
-     centrar é alinhar a caixa do botão, com line-height zerado pra que a
-     métrica da fonte não empurre o desenho pra cima. */
+  /* O botão redondo guarda um ícone e nada mais: o `inline-flex` centra o
+     desenho nos dois eixos, e o line-height zerado tira da conta a linha de
+     texto que sobraria embaixo dele. */
   .btn.redondo{
     width:31px;height:31px;padding:0;border-radius:50%;flex:none;
     display:inline-flex;align-items:center;justify-content:center;line-height:0;
@@ -834,7 +864,10 @@
   .menu button:hover,.menu button:focus-visible{
     background:var(--surface);border-color:var(--border);
   }
-  .menu button .marca{width:12px;flex:none;color:var(--gold-light);}
+  .menu button .marca{
+    width:13px;flex:none;color:var(--gold-light);
+    display:inline-flex;align-items:center;justify-content:center;
+  }
   .menu button .rot-menu{flex:1;min-width:0;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;}
   .menu button.perigo:hover{border-color:var(--red);color:var(--red);}
@@ -1137,7 +1170,12 @@
   .combo .topo-combo{display:flex;align-items:baseline;gap:7px;margin-bottom:6px;}
   .combo .pecas{flex:1;min-width:0;font-size:12.5px;line-height:1.5;}
   .peca{display:inline;}
-  .peca.tem::before{content:"✓ ";color:var(--green);}
+  .peca.tem::before{
+    content:"";display:inline-block;width:11px;height:11px;
+    margin-right:4px;vertical-align:-1px;background:var(--green);
+    -webkit-mask:var(--ico-check) center/contain no-repeat;
+            mask:var(--ico-check) center/contain no-repeat;
+  }
   /* A peça que falta se distingue por cor e peso, sem marcador próprio: o
      separador entre as peças já é um "+", e um segundo "+" colado nele lia
      como erro de digitação ("... + + Sylvan Library"). */
@@ -1365,6 +1403,27 @@
 </head>
 <body>
 
+<!-- Os ícones da página, uma vez só. Cada botão aponta pra cá com um <use>,
+     então a mesma seta repetida em cinquenta linhas do deck custa um <path>. -->
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-x" viewBox="0 0 256 256"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></symbol>
+  <symbol id="i-dots-three" viewBox="0 0 256 256"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 256 256"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></symbol>
+  <symbol id="i-caret-down" viewBox="0 0 256 256"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></symbol>
+  <symbol id="i-caret-left" viewBox="0 0 256 256"><path d="M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z"/></symbol>
+  <symbol id="i-caret-right" viewBox="0 0 256 256"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 256 256"><path d="M205.66,117.66a8,8,0,0,1-11.32,0L136,59.31V216a8,8,0,0,1-16,0V59.31L61.66,117.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0l72,72A8,8,0,0,1,205.66,117.66Z"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 256 256"><path d="M205.66,149.66l-72,72a8,8,0,0,1-11.32,0l-72-72a8,8,0,0,1,11.32-11.32L120,196.69V40a8,8,0,0,1,16,0V196.69l58.34-58.35a8,8,0,0,1,11.32,11.32Z"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 256 256"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></symbol>
+  <symbol id="i-arrow-square-out" viewBox="0 0 256 256"><path d="M224,104a8,8,0,0,1-16,0V59.32l-66.33,66.34a8,8,0,0,1-11.32-11.32L196.68,48H152a8,8,0,0,1,0-16h64a8,8,0,0,1,8,8Zm-40,24a8,8,0,0,0-8,8v72H48V80h72a8,8,0,0,0,0-16H48A16,16,0,0,0,32,80V208a16,16,0,0,0,16,16H176a16,16,0,0,0,16-16V136A8,8,0,0,0,184,128Z"/></symbol>
+  <symbol id="i-pencil-simple" viewBox="0 0 256 256"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z"/></symbol>
+  <symbol id="i-dice-five" viewBox="0 0 256 256"><path d="M192,32H64A32,32,0,0,0,32,64V192a32,32,0,0,0,32,32H192a32,32,0,0,0,32-32V64A32,32,0,0,0,192,32Zm16,160a16,16,0,0,1-16,16H64a16,16,0,0,1-16-16V64A16,16,0,0,1,64,48H192a16,16,0,0,1,16,16ZM104,92A12,12,0,1,1,92,80,12,12,0,0,1,104,92Zm72,0a12,12,0,1,1-12-12A12,12,0,0,1,176,92Zm-72,72a12,12,0,1,1-12-12A12,12,0,0,1,104,164Zm36-36a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm36,36a12,12,0,1,1-12-12A12,12,0,0,1,176,164Z"/></symbol>
+  <symbol id="i-cards" viewBox="0 0 256 256"><path d="M184,72H40A16,16,0,0,0,24,88V200a16,16,0,0,0,16,16H184a16,16,0,0,0,16-16V88A16,16,0,0,0,184,72Zm0,128H40V88H184V200ZM232,56V176a8,8,0,0,1-16,0V56H64a8,8,0,0,1,0-16H216A16,16,0,0,1,232,56Z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128Z"/></symbol>
+</svg>
+
 <header class="topo">
   <div class="topo-in">
     <div class="rune"><span>⌘</span></div>
@@ -1392,7 +1451,7 @@
       </button>
       <button class="btn redondo" id="btn-cotacao" type="button" hidden
               aria-expanded="false" aria-controls="cotacao-caixa"
-              title="Detalhe da cotação" aria-label="Detalhe da cotação">⌄</button>
+              title="Detalhe da cotação" aria-label="Detalhe da cotação"><svg class="ico" aria-hidden="true"><use href="#i-caret-down"/></svg></button>
     </div>
 
     <!-- O vão que empurra as ações pro canto direito. Sem ele, o traço e os
@@ -1404,7 +1463,7 @@
       <button class="btn ouro" id="btn-compartilhar" hidden>Compartilhar</button>
       <button class="btn redondo" id="btn-mais" type="button"
               aria-haspopup="menu" aria-expanded="false"
-              title="Mais ações" aria-label="Mais ações">···</button>
+              title="Mais ações" aria-label="Mais ações"><svg class="ico" aria-hidden="true"><use href="#i-dots-three"/></svg></button>
     </div>
   </div>
 </header>
@@ -1459,7 +1518,7 @@
           a curva ao lado e a aba de análise acompanham enquanto você monta.
         </div>
         <div class="rodape-deck">
-          <button class="btn" id="btn-nova-categoria">+ Nova categoria</button>
+          <button class="btn" id="btn-nova-categoria"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg> Nova categoria</button>
           <span class="nota" style="flex:1;min-width:160px;">Categoria é sua:
             "combo principal", "sac outlet". A carta sem categoria fica no grupo
             do tipo dela.</span>
@@ -1560,7 +1619,7 @@
                     aria-label="Categoria da carta que entra"></select>
             <button type="button" class="btn-nova-cat" id="btn-nova-cat"
                     title="Criar uma categoria sua — &quot;combo principal&quot;, &quot;sac outlet&quot; — e já mandar as próximas cartas pra ela"
-                    aria-label="Criar nova categoria">+</button>
+                    aria-label="Criar nova categoria"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
           </div>
         </div>
 
@@ -1589,7 +1648,7 @@
     <!-- Fora dos painéis, porque recolhe a coluna inteira e não um deles. -->
     <button class="mini trilho-recolher" id="btn-recolher-talvez"
             aria-expanded="true" aria-controls="trilho-conteudo"
-            title="Recolher a coluna">›</button>
+            title="Recolher a coluna"><svg class="ico" aria-hidden="true"><use href="#i-caret-right"/></svg></button>
     <span class="trilho-vertical">Curva e maybeboard</span>
 
     <div class="trilho-conteudo" id="trilho-conteudo">
@@ -1622,9 +1681,9 @@
      carta entrou. -->
 <div class="folha-fundo" id="folha-fundo"></div>
 <nav class="barra-mobile">
-  <button class="btn ouro" id="btn-abrir-busca">+ Adicionar carta</button>
+  <button class="btn ouro" id="btn-abrir-busca"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg> Adicionar carta</button>
   <button class="btn redondo" id="btn-subir" title="Voltar ao topo"
-          aria-label="Voltar ao topo">↑</button>
+          aria-label="Voltar ao topo"><svg class="ico" aria-hidden="true"><use href="#i-arrow-up"/></svg></button>
 </nav>
 
 <!-- ------------------ gavetas ------------------ -->
@@ -1634,7 +1693,7 @@
        aria-label="Filtros avançados" hidden>
   <div class="gaveta-topo">
     <h2>Filtros</h2>
-    <button class="mini sai" data-fecha-gaveta title="Fechar">✕</button>
+    <button class="mini sai" data-fecha-gaveta title="Fechar"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
   </div>
   <div class="gaveta-corpo">
 
@@ -1706,7 +1765,7 @@
        aria-label="Importar deck" hidden>
   <div class="gaveta-topo">
     <h2>Importar deck</h2>
-    <button class="mini sai" data-fecha-gaveta title="Fechar">✕</button>
+    <button class="mini sai" data-fecha-gaveta title="Fechar"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
   </div>
   <div class="gaveta-corpo">
 
@@ -1743,7 +1802,7 @@
 <div class="cotacao-caixa" id="cotacao-caixa" hidden>
   <div class="cotacao-topo">
     <h2 class="secao">Cotação</h2>
-    <button class="mini sai" id="btn-fechar-cotacao" title="Fechar">✕</button>
+    <button class="mini sai" id="btn-fechar-cotacao" title="Fechar"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
   </div>
   <div id="orc-resultado" class="orc-resultado"></div>
 </div>
@@ -1756,7 +1815,7 @@
   <div class="carta-modal" role="dialog" aria-modal="true"
        aria-labelledby="carta-titulo">
     <button class="mini sai carta-x" id="btn-fechar-carta"
-            aria-label="Fechar" title="Fechar (Esc)">✕</button>
+            aria-label="Fechar" title="Fechar (Esc)"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
     <div class="carta-arte" id="carta-arte"></div>
     <div class="carta-corpo" id="carta-corpo"></div>
   </div>
@@ -2027,6 +2086,17 @@ function escapar(txt){
   return String(txt == null ? "" : txt)
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .replace(/"/g,"&quot;");
+}
+
+/* Um ícone do sprite. Sai `aria-hidden` porque quase todo botão daqui já se
+   nomeia pelo `title` ou pelo `aria-label` — e um desenho que se anuncia
+   sozinho faria o leitor de tela dizer o nome do botão duas vezes. Quando o
+   ícone é a ÚNICA informação (a seta que diz a direção da ordenação), passe
+   `rotulo` e ele vira imagem com nome. */
+function ico(nome, rotulo){
+  return `<svg class="ico" ${rotulo
+    ? `role="img" aria-label="${escapar(rotulo)}"` : `aria-hidden="true"`
+  }><use href="#i-${nome}"/></svg>`;
 }
 
 function preco(carta){
@@ -2460,14 +2530,14 @@ function desenharDeck(){
       </span>
     </button>
     <div class="mana">${manaHTML(c.mana_cost)}</div>
-    <button class="mini sai" data-tirar-cmd="${i}" title="Trocar comandante">✕</button>
+    <button class="mini sai" data-tirar-cmd="${i}" title="Trocar comandante">${ico("x")}</button>
   `).join('<div style="width:100%;height:1px;background:var(--border)"></div>');
 
   // Segundo comandante só faz sentido quando o primeiro tem parceria.
   if (estado.comandantes.length === 1 && estado.comandantes[0].parceiro){
     $("cmd-box").insertAdjacentHTML("beforeend",
       `<button class="btn" id="btn-parceiro" style="width:100%;margin-top:8px;">
-         + Adicionar parceiro</button>`);
+         ${ico("plus")} Adicionar parceiro</button>`);
   }
 
   $("lista-deck").innerHTML = gruposHTML(estado.cartas, identidade, "deck");
@@ -2523,7 +2593,7 @@ function gruposHTML(entradas, identidade, tabuleiro){
       ? `<div class="colunas">${itens.map(e =>
             linhaHTML(e, identidade, tabuleiro)).join("")}</div>`
       : `<div class="grupo-vazio">Categoria vazia. Arraste uma carta pra cá,
-           ou escolha esta categoria no <b>⋯</b> da linha dela.</div>`;
+           ou escolha esta categoria no ${ico("dots-three")} da linha dela.</div>`;
     return `<div class="grupo ${propria ? "propria" : ""} ${fora ? "fora-da-conta" : ""}"
       data-categoria="${escapar(cat)}" data-tabuleiro="${tabuleiro}">
       <h3>
@@ -2536,11 +2606,11 @@ que você quer ter.">fora das 100</span>` : ""}
         <span class="traco"></span>
         ${cat === "Terrenos" && tabuleiro === "deck"
           ? `<button class="btn-atalho" data-abrir-manabase
-               title="A conta de terrenos deste deck, no painel de baixo">⚄ Mana base</button>` : ""}
+               title="A conta de terrenos deste deck, no painel de baixo">${ico("dice-five")} Mana base</button>` : ""}
         <span class="acoes-grupo">
           ${propria ? `<button class="mini" data-menu-grupo="${escapar(cat)}"
              title="Renomear, mover ou apagar a categoria"
-             aria-label="Ações da categoria ${escapar(cat)}">⋯</button>` : ""}
+             aria-label="Ações da categoria ${escapar(cat)}">${ico("dots-three")}</button>` : ""}
         </span>
       </h3>${corpo}</div>`;
   }).join("");
@@ -2576,14 +2646,14 @@ function linhaHTML(entrada, identidade, tabuleiro){
     ${estreita ? "" : valorHTML(entrada)}
     <span class="ctrl">
       ${estreita ? "" : `
-      <button class="mini" data-mais="${nome}" title="Mais uma">+</button>
-      <button class="mini" data-menos="${nome}" title="Menos uma">−</button>`}
+      <button class="mini" data-mais="${nome}" title="Mais uma">${ico("plus")}</button>
+      <button class="mini" data-menos="${nome}" title="Menos uma">${ico("minus")}</button>`}
       <button class="mini" data-menu-carta="${nome}"
               title="${estreita ? "Categoria, voltar pro deck e mais"
                                 : "Categoria, maybeboard e mais"}"
-              aria-label="Opções de ${nome}">⋯</button>
+              aria-label="Opções de ${nome}">${ico("dots-three")}</button>
       <button class="mini sai" data-tirar="${nome}"
-              title="${estreita ? "Tirar do maybeboard" : "Tirar do deck"}">✕</button>
+              title="${estreita ? "Tirar do maybeboard" : "Tirar do deck"}">${ico("x")}</button>
     </span>
   </div>`;
 }
@@ -2629,7 +2699,7 @@ function desenharAnalise(){
     caixa.innerHTML = `<div class="vazio" style="padding:8px 0;">Escolha o
       comandante pra análise começar.</div>`;
   } else if (v.ok){
-    caixa.innerHTML = `<div class="aponta ok">✓ Deck legal: 100 cartas,
+    caixa.innerHTML = `<div class="aponta ok">${ico("check")} Deck legal: 100 cartas,
       singleton respeitado e tudo dentro da identidade
       ${v.identidade ? pipsHTML(v.identidade) : "incolor"}.</div>`;
   } else {
@@ -3085,11 +3155,11 @@ function menuDaCarta(ancora, nome, tabuleiro){
   const entrada = acharEntrada(nome, tabuleiro);
   if (!entrada) return;
   const atual = entrada.categoria || "";
-  const marca = (cat) => atual === cat ? "✓" : "";
+  const marca = (cat) => atual === cat ? ico("check") : "";
   // Primeiro item, e o único que não muda nada no deck: é o caminho de
   // teclado pra mesma modal que o clique na linha abre — sem ele, ver a carta
   // inteira seria coisa só de quem usa mouse.
-  const itens = [{rotulo: "Ver a carta", marca: "◱",
+  const itens = [{rotulo: "Ver a carta", marca: ico("cards"),
                   aoClicar: () => abrirCarta(entrada.carta)},
                  "risco",
                  {titulo: `Categoria de ${nome}`}];
@@ -3105,7 +3175,7 @@ function menuDaCarta(ancora, nome, tabuleiro){
               marca: marca(CATEGORIA_SIDEBOARD),
               aoClicar: () => definirCategoria(nome, tabuleiro,
                                                CATEGORIA_SIDEBOARD)});
-  itens.push({rotulo: "Nova categoria…", marca: "+", aoClicar: () => {
+  itens.push({rotulo: "Nova categoria…", marca: ico("plus"), aoClicar: () => {
     const escolhido = prompt("Nome da nova categoria:\n\n" +
       "Ex.: Combo principal, Sac outlet, Proteção do comandante");
     if (escolhido) criarCategoria(escolhido, nome, tabuleiro);
@@ -3113,12 +3183,12 @@ function menuDaCarta(ancora, nome, tabuleiro){
 
   itens.push("risco");
   itens.push(tabuleiro === "talvez"
-    ? {rotulo: "Mover pro deck", marca: "→",
+    ? {rotulo: "Mover pro deck", marca: ico("arrow-right"),
        aoClicar: () => mover(nome, "talvez", "deck")}
-    : {rotulo: "Mover pro maybeboard", marca: "←",
+    : {rotulo: "Mover pro maybeboard", marca: ico("arrow-left"),
        aoClicar: () => mover(nome, "deck", "talvez")});
   itens.push({rotulo: tabuleiro === "talvez" ? "Tirar do maybeboard" : "Tirar do deck",
-              marca: "✕", classe: "perigo",
+              marca: ico("x"), classe: "perigo",
               aoClicar: () => tirar(nome, tabuleiro)});
   abrirMenu(ancora, itens);
 }
@@ -3129,19 +3199,19 @@ function menuDoGrupo(ancora, cat){
   const i = estado.categorias.indexOf(cat);
   const itens = [
     {titulo: cat},
-    {rotulo: "Renomear…", marca: "✎", aoClicar: () => {
+    {rotulo: "Renomear…", marca: ico("pencil-simple"), aoClicar: () => {
       const novo = prompt("Novo nome da categoria:", cat);
       if (novo) renomearCategoria(cat, novo);
     }},
   ];
-  if (i > 0) itens.push({rotulo: "Subir", marca: "↑",
+  if (i > 0) itens.push({rotulo: "Subir", marca: ico("arrow-up"),
                          aoClicar: () => moverCategoria(cat, -1)});
   if (i >= 0 && i < estado.categorias.length - 1){
-    itens.push({rotulo: "Descer", marca: "↓",
+    itens.push({rotulo: "Descer", marca: ico("arrow-down"),
                 aoClicar: () => moverCategoria(cat, +1)});
   }
   itens.push("risco");
-  itens.push({rotulo: "Apagar categoria", marca: "✕", classe: "perigo",
+  itens.push({rotulo: "Apagar categoria", marca: ico("x"), classe: "perigo",
               aoClicar: () => apagarCategoria(cat)});
   abrirMenu(ancora, itens);
 }
@@ -3468,9 +3538,17 @@ function filtrosLigados(){
   }
   if (f.precoMax !== "") ligados.push({chave:"precoMax", rotulo: `até $${f.precoMax}`});
   if (f.ordem && f.ordem !== "nome"){
-    ligados.push({chave:"ordem", rotulo: {
-      cmc:"custo ↑", cmc_desc:"custo ↓", preco:"preço ↑", preco_desc:"preço ↓",
-    }[f.ordem] || f.ordem});
+    // O chip da ordenação é a única coisa da barra em que a seta É o
+    // conteúdo: "preço" sozinho não diz se a mais cara vem antes. Por isso
+    // ela sai como ícone com nome, e não escondida do leitor de tela.
+    const campo = {cmc:"custo", cmc_desc:"custo",
+                   preco:"preço", preco_desc:"preço"}[f.ordem];
+    const desc = f.ordem.endsWith("_desc");
+    ligados.push(campo
+      ? {chave:"ordem", rotulo: campo,
+         icone: desc ? "arrow-down" : "arrow-up",
+         sentido: desc ? "maior primeiro" : "menor primeiro"}
+      : {chave:"ordem", rotulo: f.ordem});
   }
   return ligados;
 }
@@ -3483,9 +3561,11 @@ function desenharBarraFiltros(){
   // A cor mostra a mesma coisa que o número, pra quem não repara em bolinha.
   $("btn-gaveta-filtros").classList.toggle("ouro", ligados.length > 0);
   $("ligados").innerHTML = ligados.map(l => `
-    <span class="ligado"><b>${escapar(l.rotulo)}</b>
+    <span class="ligado"><b>${escapar(l.rotulo)}</b>${
+      l.icone ? ico(l.icone, l.sentido) : ""}
       <button data-tira-filtro="${l.chave}" title="Tirar este filtro"
-              aria-label="Tirar o filtro ${escapar(l.rotulo)}">✕</button></span>
+              aria-label="Tirar o filtro ${escapar(l.rotulo)}${
+                l.sentido ? ", " + l.sentido : ""}">${ico("x")}</button></span>
   `).join("");
 }
 
@@ -3972,7 +4052,7 @@ function desenharManabase(){
     html += m.basicos.map((b, i) => `
       <div class="mb-basico"><span><span class="pip ${b.cor}"></span>
         &nbsp;${b.quantidade}× ${escapar(b.nome)}</span>
-        ${b.carta ? `<button class="add-peca" data-basico="${i}">+ ${b.quantidade}</button>`
+        ${b.carta ? `<button class="add-peca" data-basico="${i}">${ico("plus")} ${b.quantidade}</button>`
                   : `<span class="nota">não está na base local</span>`}
       </div>`).join("");
   } else if (t.diferenca < 0){
@@ -4014,11 +4094,12 @@ function desenharManabase(){
       if (paginas > 1){
         html += `<div class="paginador">
           <button class="mini" data-mb-pag="-1" title="Página anterior"
-            aria-label="Página anterior"${estado.mbPagina === 0 ? " disabled" : ""}>‹</button>
+            aria-label="Página anterior"${
+              estado.mbPagina === 0 ? " disabled" : ""}>${ico("caret-left")}</button>
           <span>${estado.mbPagina + 1} / ${paginas}</span>
           <button class="mini" data-mb-pag="1" title="Próxima página"
             aria-label="Próxima página"${
-              estado.mbPagina >= paginas - 1 ? " disabled" : ""}>›</button>
+              estado.mbPagina >= paginas - 1 ? " disabled" : ""}>${ico("caret-right")}</button>
         </div>`;
       }
     }
@@ -4240,7 +4321,7 @@ function desenharCombosNoDeck(noDeck, dados){
   // Spellbook responde. Não vale a pena dizer isso quando a resposta inteira
   // já está marcada como velha — seriam dois avisos sobre a mesma coisa.
   if (estado.combosMexidos && !velho){
-    html += `<div class="combo-mexido">✓ ${estado.combosMexidos} combo(s)
+    html += `<div class="combo-mexido">${ico("check")} ${estado.combosMexidos} combo(s)
       fecharam aqui na tela com as cartas que você adicionou. Procure de novo
       pra ver os combos <b>novos</b> que essas cartas abriram — essa parte só
       o Spellbook sabe.</div>`;
@@ -4319,9 +4400,9 @@ function comboHTML(combo, ehSugestao){
     ? (faltante.na_base === false
         ? `<button class="add-peca" disabled
             title="A base local não conhece esta carta — ela pode ser nova demais.
-Sincronize a base e tente de novo.">+ ${escapar(faltante.nome)}</button>`
+Sincronize a base e tente de novo.">${ico("plus")} ${escapar(faltante.nome)}</button>`
         : `<button class="add-peca" data-add-peca="${escapar(faltante.nome)}"
-            >+ ${escapar(faltante.nome)}${faltante.preco_usd
+            >${ico("plus")} ${escapar(faltante.nome)}${faltante.preco_usd
               ? ` · ${moeda(faltante.preco_usd)}` : ""}</button>`)
     : "";
 
@@ -4337,7 +4418,7 @@ Sincronize a base e tente de novo.">+ ${escapar(faltante.nome)}</button>`
     <div class="rodape">
       ${bracket}
       ${custoHTML(combo, ehSugestao)}
-      <a href="${escapar(combo.link)}" target="_blank" rel="noopener">ver no Spellbook ↗</a>
+      <a href="${escapar(combo.link)}" target="_blank" rel="noopener">ver no Spellbook ${ico("arrow-square-out")}</a>
       ${botao}
     </div>
   </div>`;
@@ -4981,7 +5062,7 @@ function recolherTalvez(forcar){
   // pro deck.
   corpo.classList.toggle("talvez-fechado", fechado);
   const botao = $("btn-recolher-talvez");
-  botao.textContent = fechado ? "‹" : "›";
+  botao.innerHTML = ico(fechado ? "caret-left" : "caret-right");
   botao.title = fechado ? "Abrir a coluna" : "Recolher a coluna";
   botao.setAttribute("aria-expanded", String(!fechado));
   try { localStorage.setItem(CHAVE_TALVEZ, fechado ? "0" : "1"); } catch(e){}
@@ -5176,11 +5257,11 @@ function desenharCarta(local, d){
     const links = [];
     if (d.scryfall || local.scryfall){
       links.push(`<a href="${escapar(d.scryfall || local.scryfall)}"
-        target="_blank" rel="noopener">Ver na Scryfall ↗</a>`);
+        target="_blank" rel="noopener">Ver na Scryfall ${ico("arrow-square-out")}</a>`);
     }
     if (d.gatherer){
       links.push(`<a href="${escapar(d.gatherer)}" target="_blank"
-        rel="noopener">Gatherer ↗</a>`);
+        rel="noopener">Gatherer ${ico("arrow-square-out")}</a>`);
     }
     if (links.length) partes.push(`<div class="carta-links">${links.join("")}</div>`);
   } else if (d === null){
