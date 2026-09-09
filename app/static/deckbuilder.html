@@ -1282,7 +1282,8 @@
      levar pra mesa. O título de cada bloco é a CARTA QUE CRIA, e não a ficha:
      sem ele, uma tela com seis "Token Creature — Soldier" de artes parecidas
      não diz de onde saiu nenhuma, nem o que acontece se a carta sair do deck. */
-  .token-grupo{margin-bottom:18px;}
+  #tokens-resultado{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;}
+  .token-grupo{border:1px var(--border) dashed;border-radius:8px;padding:8px;}
   .token-grupo:last-child{margin-bottom:0;}
   .token-grupo h3{
     display:flex;align-items:center;gap:8px;margin:0 0 8px;
@@ -1299,7 +1300,7 @@
      mesmos 160px. Com `1fr` a mesma ficha ficaria maior ou menor conforme a
      largura da janela. */
   .token-grade{
-    display:grid;grid-template-columns:repeat(auto-fill,160px);gap:10px;
+    display:flex;flex-wrap:wrap;gap:8px;justify-content:center;
   }
   .token{
     display:block;width:160px;aspect-ratio:488/680;border-radius:8px;
