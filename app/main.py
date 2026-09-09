@@ -10,9 +10,9 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (calc, cartas, cleanup, cotacao_job, decks, edhrec, fulfillment,
-               importar, log, manabase, notify, pix, poder, printer, spellbook,
-               storage, tinta, visitas)
+from . import (calc, cartas, cleanup, cotacao_job, decks, detalhe_carta,
+               edhrec, fulfillment, importar, log, manabase, notify, pix,
+               poder, printer, spellbook, storage, tinta, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -690,6 +690,29 @@ def cartas_busca(q: str = "", identidade: str | None = None, tipo: str = "",
                                     texto=texto, cmc_min=cmc_min,
                                     cmc_max=cmc_max, cores=cores,
                                     preco_max=preco_max, ordem=ordem)}
+
+
+@app.get("/cartas/detalhe")
+def cartas_detalhe(nome: str):
+    """A carta inteira pra modal do deckbuilder: o que a base local não guarda.
+
+    Raridade, edição, artista, ambientação, legalidade em cada formato e as
+    notas de regras (os rulings). Vem da API da Scryfall e fica em cache por
+    um dia — ver `detalhe_carta.py`.
+
+    Público como a busca, e pelo mesmo motivo: é catálogo de carta de Magic.
+    Bater aqui em rajada não vira rajada na Scryfall — o `Freio` do
+    `scryfall.py` serializa as chamadas, então o excesso fica lento aqui em
+    vez de virar 429 lá.
+
+    404 quer dizer que a Scryfall não conhece o nome OU que ela não respondeu.
+    A tela trata os dois igual: a modal já está aberta com o que a base local
+    sabe, e só deixa de ganhar as seções extras.
+    """
+    dados = detalhe_carta.detalhe(nome)
+    if dados is None:
+        raise HTTPException(404, "Não consegui os detalhes desta carta agora.")
+    return dados
 
 
 @app.post("/admin/cartas/sync")

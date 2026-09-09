@@ -138,6 +138,32 @@ def _requisicao(sessao, metodo, url, params=None, corpo=None, carta: str = ""):
     raise ScryfallError(f"não consegui falar com a Scryfall ({url}): {erro}")
 
 
+# As duas portas de entrada pra quem consulta a API da Scryfall fora da
+# cotação — hoje o `detalhe_carta`, que busca a carta inteira e os rulings.
+# Existem pra ninguém abrir um segundo cliente HTTP sem freio: o `Freio` é por
+# processo, e duas rotas batendo no mesmo IP sem se falar é o caminho mais
+# curto pro 429.
+
+def nova_sessao() -> requests.Session:
+    """Sessão HTTP com o `User-Agent` que a Scryfall pede.
+
+    Quem faz duas chamadas seguidas passa a mesma sessão pras duas e poupa um
+    handshake TLS; quem faz uma só pode nem pedir sessão nenhuma.
+    """
+    return _sessao()
+
+
+def json_da_api(url: str, params: dict | None = None, carta: str = "",
+                sessao=None) -> dict | None:
+    """GET numa rota da API, com o ritmo, o retry e o log daqui.
+
+    `None` quer dizer 404 — na Scryfall isso é "essa carta não existe", que é
+    resposta legítima. Falha de verdade sobe como `ScryfallError`.
+    """
+    return _get(sessao if sessao is not None else _sessao(), url, params,
+                carta=carta)
+
+
 def _preco(card: dict) -> float | None:
     bruto = (card.get("prices") or {}).get("usd")
     if bruto in (None, ""):
