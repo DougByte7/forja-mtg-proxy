@@ -27,9 +27,15 @@ DIR = os.environ.get("CARTA_DETALHE_CACHE_DIR", "/tmp/forja-carta-detalhe")
 TTL = float(os.environ.get("CARTA_DETALHE_TTL", str(24 * 3600)))
 
 
-def _caminho(nome: str) -> str:
+# As impressões têm prazo próprio, bem mais longo: o detalhe carrega preço e
+# rulings, que mudam; a lista de edições em que uma carta saiu não muda depois
+# que a coleção foi lançada.
+TTL_IMPRESSOES = float(os.environ.get("CARTA_IMPRESSOES_TTL", str(7 * 24 * 3600)))
+
+
+def _caminho(nome: str, sufixo: str = "") -> str:
     limpo = re.sub(r"[^a-z0-9]+", "-", nome.lower()).strip("-") or "sem-nome"
-    return os.path.join(DIR, limpo[:120] + ".json")
+    return os.path.join(DIR, limpo[:120] + sufixo + ".json")
 
 
 def _do_cache(nome: str) -> dict | None:
@@ -182,3 +188,87 @@ def detalhe(nome: str) -> dict | None:
     if dados is not None:
         _pro_cache(nome, dados)
     return dados
+
+
+# ---------------------------------------------------------------------------
+# Impressões (a vitrine da escolha de arte)
+# ---------------------------------------------------------------------------
+
+def _impressao(card: dict) -> dict:
+    """Uma impressão no formato que a tira da escolha de arte desenha."""
+    return {
+        "edicao": card.get("set_name") or "",
+        "sigla": (card.get("set") or "").upper(),
+        "numero": card.get("collector_number") or "",
+        "lancamento": card.get("released_at") or "",
+        "artista": card.get("artist") or "",
+        "raridade": card.get("rarity") or "",
+        "imagem": _arte(card),
+        "scryfall": card.get("scryfall_uri") or "",
+    }
+
+
+def impressoes(nome: str) -> list[dict] | None:
+    """Todas as impressões oficiais de uma carta. `None` = não deu pra buscar.
+
+    POR QUE ISTO NÃO SAI DA BASE LOCAL. O bulk que a base guarda é o
+    `oracle_cards`: UMA entrada por carta, não por impressão (ver `cartas.py`).
+    É de propósito — a base existe pra responder "que carta é essa", e guardar
+    as 713 impressões de Sol Ring multiplicaria por muito um arquivo que já
+    passa de 100 MB, pra responder uma pergunta que aparece uma vez por deck.
+
+    ISTO NÃO É O QUE VAI PRO PAPEL. Quem imprime é o arquivo do MPC Fill
+    (`mpcfill.py`); aqui é a vitrine — edição, ano, artista e a arte em tamanho
+    de olhar, pra a pessoa saber QUAL arte quer antes de procurar o arquivo
+    dela. As duas coisas moram em módulos separados porque são duas perguntas
+    separadas: "o que existe" e "o que imprime".
+
+    Ordenado do mais novo pro mais antigo, que é a ordem em que as pessoas
+    reconhecem uma arte ("a nova do Secret Lair", "a original de Alpha").
+    """
+    nome = (nome or "").strip()
+    if not nome:
+        return None
+
+    caminho = _caminho(nome, "-prints")
+    try:
+        if time.time() - os.path.getmtime(caminho) <= TTL_IMPRESSOES:
+            with open(caminho, encoding="utf-8") as f:
+                return json.load(f)
+    except (OSError, ValueError):
+        pass   # cache ausente ou estragado nunca derruba a busca
+
+    # `!"Nome"` é a busca por nome EXATO da Scryfall; `unique=prints` é o que
+    # faz cada impressão vir como uma linha em vez de uma carta só.
+    params = {"q": f'!"{nome}"', "unique": "prints",
+              "order": "released", "dir": "desc"}
+    saida: list[dict] = []
+    try:
+        url = f"{scryfall.BASE}/cards/search"
+        for _ in range(scryfall.MAX_PAGINAS):
+            pagina = scryfall.json_da_api(url, params, carta=nome)
+            if pagina is None:
+                break
+            saida += [_impressao(c) for c in (pagina.get("data") or [])]
+            if not pagina.get("has_more"):
+                break
+            # A próxima página vem com a query embutida na URL; zerar os
+            # params evita mandá-los duas vezes.
+            url, params = pagina.get("next_page") or "", None
+            if not url:
+                break
+    except scryfall.ScryfallError as e:
+        log.aviso("detalhe", "impressoes-sem-resposta", carta=nome, motivo=str(e))
+        return None
+
+    if not saida:
+        return []
+
+    try:
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        with open(caminho, "w", encoding="utf-8") as f:
+            json.dump(saida, f, ensure_ascii=False)
+    except OSError:
+        pass   # sem cache a tela funciona igual, só mais devagar
+
+    return saida

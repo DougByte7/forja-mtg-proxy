@@ -145,6 +145,66 @@ try:
        (e["faces"][0]["poder"], e["faces"][0]["resistencia"]), ("1", "1"))
     eq("carta sem ruling nenhum não é erro", e["regras"], [])
 
+    # --------------------------------------------------------------
+    # Impressões: a vitrine da escolha de arte.
+    #
+    # Elas NÃO saem da base local de propósito — o bulk `oracle_cards` tem uma
+    # entrada por carta, não por impressão. E o que se trava aqui é a
+    # paginação: a Scryfall devolve 175 por página, e uma carta como Sol Ring
+    # tem centenas. Parar na primeira página mostraria um terço das artes sem
+    # nada na tela dizendo que faltou.
+    # --------------------------------------------------------------
+    print("\n--- impressões ---")
+
+    paginas = [
+        {"data": [{"set_name": "Kaladesh", "set": "kld", "collector_number": "231",
+                   "released_at": "2016-09-30", "artist": "Mike Sass",
+                   "rarity": "uncommon", "image_uris": {"normal": "http://arte/kld.jpg"},
+                   "scryfall_uri": "https://scryfall.com/a"}],
+         "has_more": True, "next_page": "https://api.scryfall.com/pagina2"},
+        {"data": [{"set_name": "Revised", "set": "3ed", "collector_number": "270",
+                   "released_at": "1994-04-11", "artist": "Mark Tedin",
+                   "rarity": "uncommon", "image_uris": {"normal": "http://arte/3ed.jpg"},
+                   "scryfall_uri": "https://scryfall.com/b"}],
+         "has_more": False},
+    ]
+    pedidas = []
+
+    def api_de_prints(url, params=None, **k):
+        pedidas.append((url, params))
+        return paginas[len(pedidas) - 1] if len(pedidas) <= len(paginas) else None
+
+    scryfall.json_da_api = api_de_prints
+    lista = detalhe_carta.impressoes("Sol Ring")
+    eq("junta as páginas", [i["sigla"] for i in lista], ["KLD", "3ED"])
+    eq("pede o nome exato e prints únicos",
+       (pedidas[0][1]["q"], pedidas[0][1]["unique"]), ('!"Sol Ring"', "prints"))
+    # A segunda página vem com a query embutida na URL: mandar os params de
+    # novo duplicaria a busca.
+    eq("a segunda página vai pela URL que eles deram",
+       (pedidas[1][0], pedidas[1][1]), ("https://api.scryfall.com/pagina2", None))
+    eq("traz edição, ano e artista", 
+       (lista[0]["edicao"], lista[0]["lancamento"], lista[0]["artista"]),
+       ("Kaladesh", "2016-09-30", "Mike Sass"))
+
+    antes = len(pedidas)
+    detalhe_carta.impressoes("Sol Ring")
+    eq("a segunda chamada sai do cache", len(pedidas), antes)
+
+    # Zero impressões é `[]`; falha de rede é `None`. A tela diz coisas
+    # diferentes pros dois — "essa carta só existe numa edição" e "não
+    # consegui perguntar" são respostas opostas.
+    scryfall.json_da_api = lambda *a, **k: {"data": [], "has_more": False}
+    eq("carta sem impressão devolve lista vazia",
+       detalhe_carta.impressoes("Carta Nova Qualquer"), [])
+
+    def explode(*a, **k):
+        raise scryfall.ScryfallError("sem rede")
+    scryfall.json_da_api = explode
+    eq("falha de rede devolve None, não lista vazia",
+       detalhe_carta.impressoes("Outra Carta Ainda"), None)
+    eq("nome vazio nem tenta", detalhe_carta.impressoes("  "), None)
+
     # Gravar num lugar impossível avisa no log e segue a vida.
     salvo = detalhe_carta.DIR
     try:

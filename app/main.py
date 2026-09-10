@@ -11,9 +11,9 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (calc, cambio, cartas, cleanup, cotacao_job, decks,
+from . import (artes, calc, cambio, cartas, cleanup, cotacao_job, decks,
                detalhe_carta, edhrec, fulfillment, importar, log, manabase,
-               notify, pix, poder, printer, spellbook, storage, tinta,
+               mpcfill, notify, pix, poder, printer, spellbook, storage, tinta,
                usuarios, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
@@ -215,6 +215,7 @@ def startup():
     decks.init_db()
     cartas.init_db()
     usuarios.init_db()
+    artes.init_db()
     # Só faz alguma coisa se não existir conta nenhuma — ver `semear_admin`.
     usuarios.semear_admin()
     cleanup.start_background()
@@ -969,6 +970,41 @@ def cartas_detalhe(nome: str):
     return dados
 
 
+@app.get("/cartas/impressoes")
+def cartas_impressoes(nome: str):
+    """As impressões oficiais de uma carta, pra vitrine da escolha de arte.
+
+    Pública pelo mesmo motivo do `/cartas/detalhe`: é catálogo de carta de
+    Magic, não dado de ninguém.
+
+    ISTO NÃO É O QUE VAI PRO PAPEL. Quem imprime é o arquivo do MPC Fill; a
+    Scryfall aqui responde "que artes existem", pra a pessoa saber qual quer
+    antes de procurar o arquivo dela.
+    """
+    lista = detalhe_carta.impressoes(nome)
+    if lista is None:
+        raise HTTPException(502, "Não consegui falar com a Scryfall agora. "
+                                 "Tente de novo em alguns segundos.")
+    return {"impressoes": lista}
+
+
+@app.post("/artes/metadados")
+def artes_metadados(corpo: dict = Body(default={})):
+    """Os metadados de um punhado de ids de arte do MPC Fill.
+
+    Fora de `/decks/{id}` de propósito: é consulta pura sobre ids, sem deck
+    nenhum envolvido — a grade de miniaturas a chama enquanto a pessoa
+    pagina, e a modal de carta também pode abrir sem deck salvo.
+    """
+    ids = corpo.get("ids")
+    if not isinstance(ids, list):
+        raise HTTPException(400, "Manda a lista de ids em `ids`.")
+    try:
+        return {"artes": mpcfill.metadados(ids)}
+    except mpcfill.MPCFillError as e:
+        raise HTTPException(502, str(e))
+
+
 @app.post("/admin/cartas/sync")
 def cartas_sync(x_admin_token: str | None = Header(default=None),
                 quem: dict | None = Depends(quem_e)):
@@ -1134,6 +1170,90 @@ def reclamar_deck(deck_id: str, quem: dict = Depends(exige_login)):
     if deck is None:
         raise HTTPException(404, "Deck não encontrado.")
     return _deck_completo(deck)
+
+
+@app.get("/decks/{deck_id}/artes")
+def artes_do_deck(deck_id: str):
+    """O que já foi escolhido neste deck, e o que continua no padrão."""
+    return artes.para_deck(_deck_ou_404(deck_id))
+
+
+@app.put("/decks/{deck_id}/artes")
+def escolher_arte(deck_id: str, corpo: dict = Body(default={}),
+                  quem: dict | None = Depends(quem_e)):
+    """Grava a arte de uma carta deste deck.
+
+    Passa pela mesma regra de dono do autosave: deck órfão qualquer um mexe,
+    deck com dono só o dono e o admin. Escolher arte é editar o deck.
+    """
+    _deck_ou_404(deck_id)
+    existe, dono = decks.dono_de(deck_id)
+    if not _pode_mexer(dono, quem):
+        raise _proibido()
+    try:
+        escolha = artes.escolher(
+            deck_id, corpo.get("nome", ""), corpo.get("drive_id", ""),
+            face=corpo.get("face", "frente"), arquivo=corpo.get("arquivo", ""),
+            fonte=corpo.get("fonte", ""), dpi=corpo.get("dpi", 0))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log.evento("artes", "escolheu", deck=deck_id, carta=escolha["nome"])
+    return {"escolha": escolha}
+
+
+@app.delete("/decks/{deck_id}/artes")
+def limpar_arte(deck_id: str, nome: str, face: str = "frente",
+                quem: dict | None = Depends(quem_e)):
+    """Volta uma carta pra arte padrão."""
+    _deck_ou_404(deck_id)
+    existe, dono = decks.dono_de(deck_id)
+    if not _pode_mexer(dono, quem):
+        raise _proibido()
+    return {"ok": artes.limpar(deck_id, nome, face)}
+
+
+@app.post("/decks/{deck_id}/artes/buscar")
+def buscar_artes(deck_id: str, corpo: dict = Body(default={})):
+    """Os ids de arte de cada carta — a consulta CARA, e só no clique.
+
+    Uma requisição cobre o deck inteiro (ver `mpcfill.buscar`), e é por isso
+    que ela existe como rota própria em vez de rodar junto do autosave: o deck
+    muda a cada carta adicionada, e buscar automático viraria uma requisição
+    por clique do usuário em cima de um serviço gratuito de outra pessoa.
+
+    Sem `nomes` no corpo, busca o deck inteiro — que é o caso comum, o botão
+    "escolher artes" do painel.
+    """
+    deck = _deck_ou_404(deck_id)
+    nomes = corpo.get("nomes")
+    if not isinstance(nomes, list) or not nomes:
+        nomes = list(deck.get("comandantes") or []) + \
+            [c["nome"] for c in deck.get("cartas") or []]
+    try:
+        por_nome = mpcfill.buscar(nomes)
+        fontes = mpcfill.fontes()
+    except mpcfill.MPCFillError as e:
+        # 502 e nunca dicionário vazio: "não consegui perguntar" e "essa carta
+        # não tem arte" são respostas opostas, e a segunda faria a pessoa
+        # desistir de uma carta que tem quinhentas.
+        raise HTTPException(502, str(e))
+    return {"por_nome": por_nome, "fontes": fontes}
+
+
+@app.post("/decks/{deck_id}/artes/revalidar")
+def revalidar_artes(deck_id: str):
+    """Confere se os ids guardados ainda existem na biblioteca do MPC Fill.
+
+    O caminho de volta de um id que envelheceu: arquivo removido de lá vira,
+    no PDF, o retângulo vermelho de "FALHA NO DOWNLOAD", e descobrir isso
+    depois de a pessoa ter pago é o pior resultado que este sistema sabe
+    produzir.
+    """
+    _deck_ou_404(deck_id)
+    try:
+        return artes.revalidar(deck_id)
+    except mpcfill.MPCFillError as e:
+        raise HTTPException(502, str(e))
 
 
 @app.get("/decks/{deck_id}")

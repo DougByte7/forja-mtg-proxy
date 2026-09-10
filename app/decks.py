@@ -349,13 +349,22 @@ def salvar(deck_id: str, nome: str, comandantes, cartas, maybeboard=None,
 
 def duplicar(deck_id: str) -> dict | None:
     """Cópia com id novo — é o "fork" de quem quer variar um deck sem perder
-    o original, e o único jeito de "salvar como" num sistema sem login."""
+    o original, e o único jeito de "salvar como" num sistema sem login.
+
+    As artes escolhidas vão junto: escolher arte é o trabalho mais chato de um
+    deck, e quem duplica quer a cópia igual — inclusive nisso.
+    """
     original = obter(deck_id)
     if not original:
         return None
-    return criar(f"{original['nome']} (cópia)", original["comandantes"],
-                 original["cartas"], original.get("maybeboard"),
-                 original.get("categorias"))
+    copia = criar(f"{original['nome']} (cópia)", original["comandantes"],
+                  original["cartas"], original.get("maybeboard"),
+                  original.get("categorias"))
+    # Import local: `decks` é o módulo de baixo, e `artes` já importa `cartas`
+    # como ele. No topo, os dois se enxergariam num ciclo.
+    from . import artes
+    artes.copiar(deck_id, copia["id"])
+    return obter(copia["id"])
 
 
 def apagar(deck_id: str) -> bool:
@@ -364,9 +373,14 @@ def apagar(deck_id: str) -> bool:
         apagados = conn.execute("DELETE FROM decks WHERE id=?",
                                 (deck_id,)).rowcount
         conn.commit()
-        return bool(apagados)
     finally:
         conn.close()
+    if apagados:
+        # Senão a tabela de artes cresce pra sempre com linhas de decks que
+        # ninguém consegue mais abrir.
+        from . import artes
+        artes.apagar_do_deck(deck_id)
+    return bool(apagados)
 
 
 # ---------------------------------------------------------------------------

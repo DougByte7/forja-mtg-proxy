@@ -394,6 +394,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
 | `GET /deckbuilder` | você, no navegador | a tela de montar deck de Commander — ver *Deckbuilder de Commander* |
 | `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta |
+| `GET /cartas/impressoes?nome=` | escolha de arte | as impressões oficiais da Scryfall (edição, ano, artista) — a vitrine. **Não** é o que vai pro papel |
+| `POST /artes/metadados` | escolha de arte | nome do arquivo, DPI e fonte de um punhado de ids do MPC Fill — só da página à vista |
+| `GET/PUT/DELETE /decks/{id}/artes` | escolha de arte | o que já foi escolhido; grava; volta ao padrão |
+| `POST /decks/{id}/artes/buscar` | escolha de arte | os ids de arte de cada carta. **Uma requisição cobre o deck inteiro**, e só no clique |
+| `POST /decks/{id}/artes/revalidar` | antes de imprimir | pergunta se os ids guardados ainda existem na biblioteca |
 | `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
 | `GET /conta` | todas as telas | quem está logado, ou `{usuario: null}`. **200 pra anônimo**, não 401 |
 | `POST /conta/entrar` | /entrar | confere a senha e devolve o cookie de sessão |
@@ -1465,30 +1470,24 @@ Se a busca em lote falhar, a sincronização **não** cai junto — a base de
 cartas já está trocada e no lugar, e o que se perde é a aba ficar incompleta
 até a carga seguinte.
 
-### Escolher as artes pelo MPC Fill: dá, e o que custaria
+### Escolher a arte de cada carta
 
-**Isto é uma avaliação, não um recurso.** Nada disso está implementado; o que
-segue é o resultado de sondar a API do MPC Fill de verdade, com o número de
-requisições e os tempos medidos, pra a decisão de construir (ou não) ser
-tomada com o custo na mão.
+**Isto era uma avaliação e virou recurso.** A seção que ficava aqui media o
+custo de trazer a escolha de arte pra dentro; os números continuam abaixo,
+porque foram eles que decidiram a forma da tela.
 
-O README dizia, até aqui, que o deckbuilder *não gera XML do MPC Fill e não
-vai gerar*, porque "cada carta lá é um id de arquivo no Google Drive e a
-biblioteca de artes é do MPC Fill, não nossa". A segunda metade continua
-verdadeira. A primeira, não: **eles publicam a API que devolve esses ids.**
+A frase que sustenta o desenho: **Scryfall é o catálogo do que existe; MPC
+Fill é o arquivo que imprime.** Um botão em cada linha do deck abre a modal
+com duas listas — em cima, a tira das impressões oficiais (edição, ano,
+artista), que serve pra RECONHECER a arte que se quer e **não escolhe nada**;
+embaixo, a grade dos arquivos do MPC Fill, que é o que de fato vira papel.
+Clicar numa impressão semeia o filtro da grade, que é como se acha "a de
+Kaladesh" entre setecentas.
 
-#### O que existe do lado deles
+O `pdf_generator.py` **não mudou uma linha**: ele recebe um id do Drive e não
+sabe que este recurso existe.
 
-O MPC Fill é código aberto (`chilli-axe/mpc-autofill`) e o site publica o
-mesmo backend Django que o front-end deles consome:
-
-| Rota | O que devolve |
-|---|---|
-| `GET /2/sources/` | as bibliotecas de arte e a ordem delas |
-| `POST /2/editorSearch/` | **os ids de todas as artes** de cada nome pedido, numa requisição só pro deck inteiro |
-| `POST /2/cards/` | metadados dos ids escolhidos: nome, DPI, tamanho, fonte e **URL da miniatura** |
-| `GET /2/DFCPairs/` | 508 pares frente→verso, pra carta de duas faces |
-| `GET /2/importSiteDecklist/` | decklist a partir do link de outro site |
+#### As duas requisições, e por que a tela tem a forma que tem
 
 Medido em 8 de setembro de 2026, com o nosso User-Agent honesto:
 
@@ -1498,64 +1497,75 @@ Medido em 8 de setembro de 2026, com o nosso User-Agent honesto:
 metadados das escolhidas em 1 requisição (3,7 s no total)
 ```
 
-Duas requisições cobrem um deck inteiro — a busca aceita a lista toda de uma
-vez. As miniaturas são URLs do Drive (`drive.google.com/thumbnail?sz=w400...`)
-que o navegador carrega direto, sem passar por aqui.
+Daí sai tudo:
 
-#### O XML gerado passa pelo backend que já existe
+* **A busca cobre o deck inteiro, uma vez.** `POST /2/editorSearch/` aceita a
+  lista toda e devolve **só ids**. Abrir a primeira carta paga a busca do
+  deck; abrir a segunda não custa requisição nenhuma. Buscar por carta seria
+  uma ida ao servidor deles por clique.
+* **Os metadados vêm por página de 24.** Nome do arquivo, DPI e fonte só do
+  que está à vista — pedir os de 713 artes seria buscar o que ninguém vai
+  olhar. A paginação sai da forma da API deles, não de uma escolha de tela.
+* **As miniaturas vêm do Drive direto pro navegador**, sem passar por este
+  servidor. Com `loading="lazy"` e 24 por vez: uma grade que dispara 700
+  imagens de uma vez toma 429 e deixa de mostrar qualquer coisa.
 
-Este foi o outro teste, e é o que fecha a viabilidade. Montando o XML na mão
-a partir dos ids do MPC Fill e jogando no código de sempre:
+`mpcfill.com` é serviço gratuito de outra pessoa. O freio de um pedido por
+segundo, o cache de **uma semana** (biblioteca de arte muda devagar, ao
+contrário de combo) e a regra de só buscar no clique são a etiqueta inteira
+deste módulo. `MPCFILL=0` desliga, e o botão diz que está desligado — em vez
+de mostrar grade vazia, que se leria como "essa carta não tem arte".
 
-```
-calc.parse_order:     6 cartas, 0 versos
-calc.parse_card_list: [sol ring ×3, arcane signet ×1, delver of secrets ×2]
-calc.compute_cost:    1 página, 3 slots em branco, R$ 2,50
-```
+#### Onde a escolha mora, e por que não no deck
 
-Ou seja: `calc.py`, `pdf_generator.py`, a cobrança e a impressão **não
-precisariam mudar**. O formato é modesto — `<fronts><card><id>DRIVE</id>
-<slots>0,1,2</slots><query>nome</query><name>arquivo.png</name></card>` —, os
-`slots` são a quantidade, e `<backs>` recebe o verso das cartas de duas faces.
+Tabela própria (`artes_escolhidas`), chaveada por **deck + nome achatado +
+face**. Duas razões, e a primeira decide:
 
-#### O que faltaria construir
+1. **A linha do deck é reescrita inteira pelo autosave, a cada tecla.** Uma
+   arte gravada nela correria com um autosave em voo e sumiria — sem erro
+   nenhum pra ver. Tabela separada, e as duas escritas nunca disputam a mesma
+   linha. É o teste que grava a arte, salva o deck por cima e confere que ela
+   continua lá.
+2. **A chave é o nome, não a posição.** A escolha sobrevive a reordenar o
+   deck, mudar a carta de categoria, mudar a quantidade, e tirar e recolocar a
+   carta — que é o que as pessoas fazem enquanto montam.
 
-O trabalho não está na integração; está na **tela**. Escolher arte é olhar
-imagem, e é aí que mora o custo:
+Duplicar um deck leva as artes junto (é o trabalho mais chato; quem duplica
+quer a cópia igual); apagar um deck leva as artes embora (senão a tabela
+cresce pra sempre com linhas que ninguém consegue mais ver).
 
-1. **Um seletor visual por carta.** Sol Ring tem 713 artes. Uma grade de
-   miniaturas com fonte, DPI e filtro, ×100 cartas, é a maior tela do
-   projeto — maior que o admin.
-2. **Guardar a escolha.** O deck hoje guarda nome e quantidade, e isso é
-   proposital: o nome não envelhece quando a base de cartas é resincronizada.
-   Um id do Drive envelhece — arquivo removido da biblioteca vira carta que
-   não baixa, e o `pdf_generator` desenha o retângulo vermelho de falha.
-   Seria preciso guardar o id **e** o nome, e ter um caminho de volta.
-3. **Cartas de duas faces.** O `/2/DFCPairs/` resolve (chaveado pelo nome
-   exato, que a base local já tem), mas é uma escolha a mais por carta.
-4. **Verso e opções do pedido.** `cardback`, stock e bracket saem hoje do
-   próprio MPC Fill; teriam que virar controle nosso.
+**Uma arte por nome, não por cópia**, e isso é uma limitação conhecida: as 30
+Florestas recebem todas a mesma arte. Uma cópia não tem identidade estável num
+deck que guarda só nome e quantidade. O caminho de extensão, se um dia
+incomodar, é acrescentar `copia` à chave primária com o mesmo `ALTER` +
+`PRAGMA` do resto do projeto.
 
-#### A recomendação
+#### O id do Drive envelhece
 
-**Vale, mas não como próximo passo.** O caminho de hoje — exportar a
-decklist, colar no MPC Fill, subir o XML — custa dois cliques e entrega a
-tela deles, que faz isso melhor do que a nossa faria no primeiro ano. O ganho
-real de trazer pra cá é fechar o ciclo numa aba só; o custo é a maior tela do
-projeto e um id que envelhece dentro do nosso banco.
+É o risco que o README já apontava, e continua sendo o mais caro: arquivo
+removido da biblioteca vira, no PDF, o retângulo vermelho de "FALHA NO
+DOWNLOAD" — e descobrir isso **depois de a pessoa ter pago** é o pior
+resultado que este sistema sabe produzir.
 
-Se for pra fazer, o pedaço com melhor relação custo/benefício é o **primeiro
-terço**: um botão "escolher arte" por carta que abre a grade de miniaturas e
-guarda a escolha, deixando o resto (verso, stock, DFC) no padrão. Isso já
-elimina a ida ao site de fora pra quem só quer a arte bonita de três ou
-quatro cartas do deck, que é o caso comum.
+Duas defesas. `POST /decks/{id}/artes/revalidar` pergunta ao MPC Fill se os
+ids guardados ainda existem e devolve as mortas com **o nome do arquivo
+junto** — que é o que permite dizer *qual* arte sumiu, em vez de um id de 33
+caracteres. E o `arquivo` fica guardado ao lado do id justamente pra isso: é
+metade do caminho de volta.
 
-Se um dia for construído, o oposto também merece nota: o
-`GET /2/importSiteDecklist/` deles importa de dez sites (Aetherhub,
-CubeCobra, Deckstats, MTGGoldfish, TappedOut…). Como o nosso importador já
-cobre Archidekt, Moxfield e texto colado, ele só valeria a pena se a lista de
-sites pedida crescer — e ele nos poria dependendo do serviço deles pra uma
-coisa que hoje funciona sem eles.
+#### O que ficou de fora, e por quê
+
+O verso das cartas de duas faces (`/2/DFCPairs/` está implementado no cliente,
+mas a tela ainda escolhe só a frente), o `cardback` e o stock. É a
+recomendação que a própria avaliação fazia: **o primeiro terço** — o botão por
+carta que abre a grade e guarda a escolha — já elimina a ida ao site de fora
+pra quem só quer a arte bonita de três ou quatro cartas do deck, que é o caso
+comum. O resto fica no padrão.
+
+E o oposto continua não valendo a pena: o `GET /2/importSiteDecklist/` deles
+importa de dez sites, mas o nosso importador já cobre Archidekt, Moxfield e
+texto colado — trazê-lo nos poria dependendo do serviço deles pra uma coisa
+que hoje funciona sem eles.
 
 ### Barra de rolagem
 

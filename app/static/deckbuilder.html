@@ -693,6 +693,57 @@
     color:var(--text-muted);font-weight:400;
   }
 
+  /* ---------------- escolher a arte ---------------- */
+  .arte-fundo{position:fixed;inset:0;background:rgba(15,13,23,.78);
+    display:grid;place-items:center;z-index:65;padding:16px;}
+  .arte-caixa{background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:16px;width:min(920px,100%);
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;gap:10px;
+    box-shadow:0 20px 46px rgba(0,0,0,.5);}
+  .arte-topo{display:flex;align-items:center;gap:8px;}
+  .arte-topo h3{font-family:'Cinzel',serif;font-size:17px;margin:0;}
+
+  /* A tira da Scryfall. Rola na horizontal e é BAIXA de propósito: ela é
+     vitrine, não a escolha — dar altura a ela roubaria a grade de baixo, que
+     é onde a decisão acontece. */
+  .arte-vitrine{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;
+    flex:none;min-height:20px;}
+  .arte-impressao{flex:none;width:86px;cursor:pointer;background:none;
+    border:1px solid transparent;border-radius:7px;padding:3px;color:inherit;
+    font:inherit;text-align:center;}
+  .arte-impressao:hover{border-color:var(--purple);}
+  .arte-impressao.ativa{border-color:var(--gold);}
+  .arte-impressao img{width:100%;border-radius:5px;display:block;}
+  .arte-impressao small{display:block;font-size:9px;color:var(--text-muted);
+    margin-top:3px;line-height:1.2;overflow:hidden;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+
+  .arte-filtros{display:flex;gap:8px;flex-wrap:wrap;flex:none;}
+  .arte-filtros .campo{flex:1;min-width:120px;padding:7px 10px;font-size:12.5px;}
+  .arte-conta{font-size:11.5px;color:var(--text-muted);flex:none;}
+
+  .arte-grade{display:grid;gap:8px;overflow-y:auto;flex:1;min-height:120px;
+    grid-template-columns:repeat(auto-fill,minmax(108px,1fr));align-content:start;}
+  .arte-op{background:var(--inset);border:1px solid var(--border);
+    border-radius:8px;padding:4px;cursor:pointer;color:inherit;font:inherit;
+    text-align:center;}
+  .arte-op:hover{border-color:var(--purple);}
+  .arte-op.ativa{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
+  .arte-op img{width:100%;border-radius:5px;display:block;background:var(--surface-2);
+    aspect-ratio:5/7;object-fit:cover;}
+  .arte-op small{display:block;font-size:9.5px;color:var(--text-muted);
+    margin-top:3px;line-height:1.2;overflow:hidden;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    word-break:break-word;}
+  .arte-rodape{display:flex;gap:8px;align-items:center;flex:none;flex-wrap:wrap;}
+  .arte-nota{font-size:11px;color:var(--text-muted);line-height:1.5;flex:none;}
+
+  /* O botão na linha do deck mostra ESTADO: contorno = arte padrão,
+     miniatura = escolhida. Ver de relance quais cartas estão customizadas é
+     metade do valor desta feature. */
+  .linha .mini.tem-arte{border-color:var(--gold);background-size:cover;
+    background-position:center;}
+
   /* ---------------- goldfish ---------------- */
   .gf-topo{display:flex;align-items:center;gap:8px;margin-bottom:10px;
     flex-wrap:wrap;}
@@ -1596,6 +1647,7 @@
   <symbol id="i-magnifying-glass" viewBox="0 0 256 256"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></symbol>
   <symbol id="i-sparkle" viewBox="0 0 256 256"><path d="M197.58,129.06,146,110l-19-51.62a15.92,15.92,0,0,0-29.88,0L78,110l-51.62,19a15.92,15.92,0,0,0,0,29.88L78,178l19,51.62a15.92,15.92,0,0,0,29.88,0L146,178l51.62-19a15.92,15.92,0,0,0,0-29.88ZM137,164.22a8,8,0,0,0-4.74,4.74L112,223.85,91.78,169A8,8,0,0,0,87,164.22L32.15,144,87,123.78A8,8,0,0,0,91.78,119L112,64.15,132.22,119a8,8,0,0,0,4.74,4.74L191.85,144ZM144,40a8,8,0,0,1,8-8h16V16a8,8,0,0,1,16,0V32h16a8,8,0,0,1,0,16H184V64a8,8,0,0,1-16,0V48H152A8,8,0,0,1,144,40ZM248,88a8,8,0,0,1-8,8h-8v8a8,8,0,0,1-16,0V96h-8a8,8,0,0,1,0-16h8V72a8,8,0,0,1,16,0v8h8A8,8,0,0,1,248,88Z"/></symbol>
   <symbol id="i-lightning" viewBox="0 0 256 256"><path d="M215.79,118.17a8,8,0,0,0-5-5.66L153.18,90.9l14.66-73.33a8,8,0,0,0-13.69-7l-112,120a8,8,0,0,0,3,13l57.63,21.61L88.16,238.43a8,8,0,0,0,13.69,7l112-120A8,8,0,0,0,215.79,118.17ZM109.37,214l10.47-52.38a8,8,0,0,0-5-9.06L62,132.71l84.62-90.66L136.16,94.43a8,8,0,0,0,5,9.06l52.8,19.8Z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.07a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z"/></symbol>
   <symbol id="i-arrow-counter-clockwise" viewBox="0 0 256 256"><path d="M224,128a96,96,0,0,1-94.71,96H128A95.38,95.38,0,0,1,62.1,197.8a8,8,0,0,1,11-11.63A80,80,0,1,0,71.43,71.39a3.07,3.07,0,0,1-.26.25L44.59,96H72a8,8,0,0,1,0,16H24a8,8,0,0,1-8-8V56a8,8,0,0,1,16,0V85.8L60.25,60A96,96,0,0,1,224,128Z"/></symbol>
 </svg>
 
@@ -2052,6 +2104,46 @@
   </div>
 </div>
 
+<!-- ================= escolher a arte =================
+     Duas listas, e a diferença entre elas é a coisa mais importante desta
+     tela: em cima, as impressões OFICIAIS da Scryfall — servem pra achar,
+     e clicar nelas não escolhe nada. Embaixo, os arquivos do MPC Fill, que
+     são o que de fato vira papel. -->
+<div class="arte-fundo" id="arte-fundo" hidden>
+  <div class="arte-caixa" role="dialog" aria-modal="true" aria-labelledby="arte-titulo">
+    <div class="arte-topo">
+      <h3 id="arte-titulo">Escolher arte</h3>
+      <span class="gf-espaco"></span>
+      <button class="mini sai" id="arte-fechar" title="Fechar"
+        aria-label="Fechar">✕</button>
+    </div>
+
+    <div class="arte-vitrine" id="arte-vitrine"></div>
+
+    <div class="arte-filtros" id="arte-filtros" hidden>
+      <input class="campo" id="arte-busca" placeholder="filtrar pelo nome do arquivo"
+        autocomplete="off" spellcheck="false">
+      <select class="campo" id="arte-fonte"></select>
+      <select class="campo" id="arte-dpi">
+        <option value="0">qualquer DPI</option>
+        <option value="600">600+</option>
+        <option value="800">800+</option>
+        <option value="1200">1200+</option>
+      </select>
+    </div>
+
+    <div class="arte-conta" id="arte-conta"></div>
+    <div class="arte-grade" id="arte-grade"></div>
+
+    <div class="arte-rodape">
+      <button class="btn" id="arte-anterior">Anterior</button>
+      <button class="btn" id="arte-proxima">Próxima</button>
+      <span class="gf-espaco"></span>
+      <button class="btn" id="arte-padrao">Voltar ao padrão</button>
+    </div>
+  </div>
+</div>
+
 <div class="carta-fundo" id="carta-fundo" hidden>
   <div class="carta-modal" role="dialog" aria-modal="true"
        aria-labelledby="carta-titulo">
@@ -2448,6 +2540,352 @@ function precoMaxEmUsd(digitado){
   const t = taxa();
   const n = Number(digitado);
   return t ? (n / t) : n;
+}
+
+/* =========================================================================
+   ESCOLHER A ARTE
+
+   A frase que sustenta o desenho inteiro: SCRYFALL É O CATÁLOGO DO QUE
+   EXISTE; MPC FILL É O ARQUIVO QUE IMPRIME. A tira de cima mostra as
+   impressões oficiais — edição, ano, artista — e serve pra pessoa RECONHECER
+   a arte que quer; clicar nela não escolhe nada, só semeia o filtro da grade.
+   O que fica guardado é sempre um arquivo do MPC Fill, porque é dele que o
+   `pdf_generator` baixa desde sempre.
+
+   DUAS REQUISIÇÕES POR DECK, E SÓ NO CLIQUE. A busca (`/artes/buscar`) traz
+   os ids de todas as cartas de uma vez e é cara; os metadados vêm por página
+   de miniaturas, só do que está à vista. Sol Ring tem 713 artes — pedir os
+   metadados de todas seria buscar o que ninguém vai olhar.
+
+   `loading="lazy"` e 24 por página não são detalhe: as miniaturas vêm do
+   Google Drive, e uma grade que carrega 700 imagens de uma vez toma 429 e
+   deixa de mostrar qualquer coisa.
+   ========================================================================= */
+
+const ARTES_POR_PAGINA = 24;
+
+const arte = {
+  carta: null,        // a carta aberta agora
+  ids: [],            // todos os ids de arte dela, na ordem das fontes
+  meta: {},           // id -> metadados, preenchido por página
+  pagina: 0,
+  filtro: {texto: "", fonte: "", dpi: 0},
+  impressoes: null,   // null = buscando, false = não deu, array = ok
+  escolhas: {},       // nome achatado -> {frente:{...}, verso:{...}}
+  fontes: [],
+  // Os ids de arte do deck inteiro, buscados de uma vez na primeira abertura.
+  // `null` = ainda não busquei nada.
+  porNome: null,
+};
+
+/* O nome achatado, do MESMO jeito que o `cartas.normalizar` do servidor.
+   Aqui não dá pra chamar o Python, então a regra mora duas vezes — e a que
+   importa é a do servidor, que é quem grava. Esta serve só pra a tela saber
+   se uma carta já tem arte escolhida. */
+function chaveDaArte(nome){
+  return String(nome || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+function arteEscolhida(carta){
+  if (!carta) return null;
+  return (arte.escolhas[chaveDaArte(carta.nome)] || {}).frente || null;
+}
+
+/* O botão na linha do deck. Mostra a miniatura quando há arte escolhida, e o
+   ícone quando está no padrão: ver de relance o que já foi customizado é
+   metade do valor. */
+function botaoDeArte(carta){
+  const escolha = arteEscolhida(carta);
+  const nome = escapar(carta.nome);
+  const fundo = escolha
+    ? ` style="background-image:url('https://drive.google.com/thumbnail?id=${
+        escapar(escolha.drive_id)}&sz=w40')"` : "";
+  return `<button class="mini ${escolha ? "tem-arte" : ""}"
+    data-arte-carta="${nome}"${fundo}
+    title="${escolha ? "Arte escolhida: " + escapar(escolha.arquivo || escolha.drive_id)
+                     : "Escolher a arte de " + nome}"
+    aria-label="Escolher arte de ${nome}">${escolha ? "" : ico("image")}</button>`;
+}
+
+/* As escolhas do deck inteiro, uma vez, ao abrir. Sem rede por linha: a lista
+   desenha 100 botões e uma consulta por botão seria 100 requisições. */
+async function carregarArtes(){
+  if (!estado.id) return;
+  try {
+    const r = await api(`/decks/${estado.id}/artes`);
+    arte.escolhas = r.escolhas || {};
+  } catch (e){
+    return;   // sem isto a lista mostra todos no padrão, que é o que eles são
+  }
+  desenharDeck();
+}
+
+async function abrirEscolhaDeArte(nome){
+  const carta = (estado.cartas.find(e => e.carta && e.carta.nome === nome)
+    || estado.comandantes.map(c => ({carta: c})).find(e => e.carta.nome === nome) || {}).carta;
+  if (!carta) return;
+  if (!estado.id) return toast("Salve o deck antes de escolher artes.");
+
+  arte.carta = carta;
+  arte.ids = [];
+  arte.meta = {};
+  arte.pagina = 0;
+  arte.filtro = {texto: "", fonte: "", dpi: 0};
+  arte.impressoes = null;
+  $("arte-titulo").textContent = carta.nome;
+  $("arte-busca").value = "";
+  $("arte-fundo").hidden = false;
+  $("arte-filtros").hidden = true;
+  $("arte-conta").textContent = "Procurando as artes…";
+  $("arte-grade").innerHTML = "";
+  desenharVitrine();
+
+  // As duas viajam juntas: a vitrine é da Scryfall e a grade é do MPC Fill,
+  // e nenhuma das duas precisa esperar a outra.
+  buscarImpressoes(carta.nome);
+  buscarArtesDaCarta(carta.nome);
+}
+
+async function buscarImpressoes(nome){
+  try {
+    const r = await api(`/cartas/impressoes?nome=${encodeURIComponent(nome)}`);
+    if (arte.carta && arte.carta.nome !== nome) return;   // trocou de carta
+    arte.impressoes = r.impressoes || [];
+  } catch (e){
+    // `false` e não `[]`: "não consegui perguntar" e "essa carta só saiu uma
+    // vez" são coisas diferentes, e a tela diz as duas de formas diferentes.
+    arte.impressoes = false;
+  }
+  desenharVitrine();
+}
+
+/* A busca cobre o DECK INTEIRO na primeira vez, não a carta aberta.
+
+   É a forma que a API deles permite (uma requisição aceita a lista toda) e é
+   o que torna escolher arte de 100 cartas suportável: abrir a segunda carta
+   não custa requisição nenhuma. Buscar por carta seria uma ida ao servidor
+   deles por clique — que é exatamente o que o cache e o freio deste módulo
+   existem pra evitar.
+
+   O resultado fica em `arte.porNome` pela sessão da página. Se a pessoa
+   acrescentar uma carta depois, ela não estará ali, e aí sim busca só ela. */
+async function buscarArtesDaCarta(nome){
+  if (arte.porNome && arte.porNome[nome]){
+    aplicarIds(nome, arte.porNome[nome]);
+    return;
+  }
+  const soEsta = !!arte.porNome;   // já busquei o deck; esta carta é nova
+  try {
+    const r = await api(`/decks/${estado.id}/artes/buscar`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(soEsta ? {nomes: [nome]} : {}),
+    });
+    arte.porNome = Object.assign(arte.porNome || {}, r.por_nome || {});
+    arte.fontes = r.fontes || arte.fontes;
+    if (arte.carta && arte.carta.nome !== nome) return;   // trocou de carta
+    aplicarIds(nome, arte.porNome[nome] || []);
+  } catch (e){
+    $("arte-conta").textContent = e.message;
+    $("arte-grade").innerHTML = "";
+  }
+}
+
+function aplicarIds(nome, ids){
+  arte.ids = ids;
+  montarFiltroDeFonte();
+  $("arte-filtros").hidden = !ids.length;
+  desenharGrade();
+}
+
+function montarFiltroDeFonte(){
+  const sel = $("arte-fonte");
+  sel.innerHTML = `<option value="">todas as fontes</option>` +
+    arte.fontes.map(f =>
+      `<option value="${escapar(f.nome)}">${escapar(f.nome)}</option>`).join("");
+}
+
+function desenharVitrine(){
+  const caixa = $("arte-vitrine");
+  if (arte.impressoes === null){
+    caixa.innerHTML = `<span class="arte-nota">Carregando as impressões oficiais…</span>`;
+    return;
+  }
+  if (arte.impressoes === false){
+    caixa.innerHTML = `<span class="arte-nota">Não consegui falar com a
+      Scryfall — a grade abaixo continua funcionando.</span>`;
+    return;
+  }
+  if (!arte.impressoes.length){ caixa.innerHTML = ""; return; }
+
+  caixa.innerHTML = `<span class="arte-nota" style="max-width:120px">Estas são
+    as artes oficiais. Servem pra achar — o que imprime é o arquivo abaixo.</span>`
+    + arte.impressoes.slice(0, 24).map((i, k) => `
+      <button class="arte-impressao" data-impressao="${k}"
+        title="${escapar(i.edicao)}${i.artista ? " · " + escapar(i.artista) : ""}">
+        ${i.imagem ? `<img src="${escapar(i.imagem)}" alt="" loading="lazy"
+          referrerpolicy="no-referrer">` : ""}
+        <small>${escapar(i.sigla)}${i.lancamento
+          ? " · " + escapar(i.lancamento.slice(0, 4)) : ""}</small>
+      </button>`).join("");
+}
+
+/* Os ids que sobram depois dos filtros. Filtrar por metadados só funciona no
+   que já foi carregado — por isso o filtro de fonte e DPI atua sobre a página
+   à vista, e o de texto (nome do arquivo) também. É o preço de não baixar os
+   metadados de 713 artes de uma vez, e é o preço certo. */
+function idsFiltrados(){
+  const f = arte.filtro;
+  if (!f.texto && !f.fonte && !f.dpi) return arte.ids;
+  return arte.ids.filter(id => {
+    const m = arte.meta[id];
+    if (!m) return true;    // ainda não sei; não escondo o que não conheço
+    if (f.fonte && m.fonte !== f.fonte) return false;
+    if (f.dpi && (m.dpi || 0) < f.dpi) return false;
+    if (f.texto && !(m.arquivo || "").toLowerCase().includes(f.texto)) return false;
+    return true;
+  });
+}
+
+async function desenharGrade(){
+  const ids = idsFiltrados();
+  const total = ids.length;
+  if (!total){
+    $("arte-conta").textContent = arte.ids.length
+      ? "Nenhuma arte com esses filtros."
+      : "O MPC Fill não tem arte pra esta carta.";
+    $("arte-grade").innerHTML = "";
+    return;
+  }
+  const paginas = Math.ceil(total / ARTES_POR_PAGINA);
+  if (arte.pagina >= paginas) arte.pagina = 0;
+  const inicio = arte.pagina * ARTES_POR_PAGINA;
+  const daPagina = ids.slice(inicio, inicio + ARTES_POR_PAGINA);
+
+  $("arte-conta").textContent =
+    `${total} arte(s) — mostrando ${inicio + 1}–${inicio + daPagina.length}`;
+  $("arte-anterior").disabled = arte.pagina === 0;
+  $("arte-proxima").disabled = arte.pagina >= paginas - 1;
+
+  const escolhida = arteEscolhida(arte.carta);
+  const marcado = escolhida ? escolhida.drive_id : "";
+  $("arte-grade").innerHTML = daPagina.map(id => {
+    const m = arte.meta[id] || {};
+    return `<button class="arte-op ${id === marcado ? "ativa" : ""}" data-arte-id="${escapar(id)}">
+      <img src="https://drive.google.com/thumbnail?id=${escapar(id)}&sz=w300"
+        alt="" loading="lazy" referrerpolicy="no-referrer">
+      <small>${escapar(m.arquivo || "…")}${m.dpi ? ` · ${m.dpi} DPI` : ""}</small>
+    </button>`;
+  }).join("");
+
+  // Os metadados só desta página, e só do que ainda não temos.
+  const faltando = daPagina.filter(id => !arte.meta[id]);
+  if (!faltando.length) return;
+  try {
+    const r = await api("/artes/metadados", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ids: faltando}),
+    });
+    Object.assign(arte.meta, r.artes || {});
+    desenharGrade();
+  } catch (e){
+    // A grade já está desenhada com as miniaturas; sem metadados ela perde só
+    // o nome do arquivo e o DPI, e continua servindo pra escolher pela arte.
+  }
+}
+
+async function usarArte(id){
+  const m = arte.meta[id] || {};
+  try {
+    await api(`/decks/${estado.id}/artes`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({nome: arte.carta.nome, drive_id: id,
+                            arquivo: m.arquivo || "", fonte: m.fonte || "",
+                            dpi: m.dpi || 0}),
+    });
+  } catch (e){
+    return toast("Não consegui guardar: " + e.message);
+  }
+  arte.escolhas[chaveDaArte(arte.carta.nome)] = {
+    frente: {drive_id: id, arquivo: m.arquivo || "", fonte: m.fonte || "",
+             dpi: m.dpi || 0}};
+  desenharGrade();
+  desenharDeck();
+  toast("Arte escolhida.");
+}
+
+async function voltarAoPadrao(){
+  if (!arte.carta) return;
+  try {
+    await api(`/decks/${estado.id}/artes?nome=${
+      encodeURIComponent(arte.carta.nome)}&face=frente`, {method: "DELETE"});
+  } catch (e){
+    return toast("Não consegui: " + e.message);
+  }
+  delete arte.escolhas[chaveDaArte(arte.carta.nome)];
+  desenharGrade();
+  desenharDeck();
+  toast("Voltou pra arte padrão.");
+}
+
+function fecharArte(){
+  $("arte-fundo").hidden = true;
+  arte.carta = null;
+}
+
+function ligarArte(){
+  $("arte-fechar").addEventListener("click", fecharArte);
+  $("arte-fundo").addEventListener("click", (e) => {
+    if (e.target.id === "arte-fundo") fecharArte();
+  });
+
+  $("arte-vitrine").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-impressao]");
+    if (!b) return;
+    // Clicar numa impressão NÃO escolhe nada: ela é da Scryfall, e o que
+    // imprime é o arquivo do MPC Fill. O que ela faz é semear o filtro —
+    // é assim que se acha "a de Kaladesh" entre setecentas.
+    const i = arte.impressoes[Number(b.dataset.impressao)];
+    if (!i) return;
+    arte.filtro.texto = (i.edicao || "").toLowerCase();
+    $("arte-busca").value = i.edicao || "";
+    arte.pagina = 0;
+    for (const outro of $("arte-vitrine").querySelectorAll("[data-impressao]")){
+      outro.classList.toggle("ativa", outro === b);
+    }
+    desenharGrade();
+  });
+
+  $("arte-grade").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-arte-id]");
+    if (b) usarArte(b.dataset.arteId);
+  });
+
+  $("arte-padrao").addEventListener("click", voltarAoPadrao);
+  $("arte-anterior").addEventListener("click", () => {
+    arte.pagina = Math.max(0, arte.pagina - 1); desenharGrade();
+  });
+  $("arte-proxima").addEventListener("click", () => {
+    arte.pagina++; desenharGrade();
+  });
+
+  let atraso = 0;
+  $("arte-busca").addEventListener("input", (e) => {
+    clearTimeout(atraso);
+    const v = e.target.value.trim().toLowerCase();
+    atraso = setTimeout(() => {
+      arte.filtro.texto = v; arte.pagina = 0; desenharGrade();
+    }, 250);
+  });
+  $("arte-fonte").addEventListener("change", (e) => {
+    arte.filtro.fonte = e.target.value; arte.pagina = 0; desenharGrade();
+  });
+  $("arte-dpi").addEventListener("change", (e) => {
+    arte.filtro.dpi = Number(e.target.value) || 0; arte.pagina = 0; desenharGrade();
+  });
 }
 
 /* =========================================================================
@@ -3607,7 +4045,8 @@ function linhaHTML(entrada, identidade, tabuleiro){
       <button class="mini" data-menos="${nome}" title="Menos uma">${ico("minus")}</button>
       <button class="mini" data-sug-carta="${nome}"
               title="O que o EDHREC vê jogando junto de ${nome}"
-              aria-label="Sugestões a partir de ${nome}">${ico("sparkle")}</button>`}
+              aria-label="Sugestões a partir de ${nome}">${ico("sparkle")}</button>
+      ${botaoDeArte(c)}`}
       <button class="mini" data-menu-carta="${nome}"
               title="${estreita ? "Categoria, voltar pro deck e mais"
                                 : "Categoria, maybeboard e mais"}"
@@ -5873,6 +6312,10 @@ function ligarEventos(){
       if (estado.aba === "goldfish" && estado.mesa) desfazerMesa();
       else desfazer();
     }
+    if (e.key === "Escape" && !$("arte-fundo").hidden){
+      fecharArte();
+      return;   // fecha uma coisa por Esc: a modal, não a tela cheia atrás dela
+    }
     // Sair da tela cheia pelo Esc, que é onde a mão vai primeiro.
     if (e.key === "Escape" && document.body.classList.contains("gf-cheia")){
       document.body.classList.remove("gf-cheia");
@@ -5998,6 +6441,8 @@ function ligarEventos(){
     if (sai) return tirar(sai.dataset.tirar, doTabuleiro(sai));
     const sugCarta = e.target.closest("[data-sug-carta]");
     if (sugCarta) return sugerirPelaCarta(sugCarta.dataset.sugCarta);
+    const arteCarta = e.target.closest("[data-arte-carta]");
+    if (arteCarta) return abrirEscolhaDeArte(arteCarta.dataset.arteCarta);
     const menuCarta = e.target.closest("[data-menu-carta]");
     if (menuCarta) return menuDaCarta(menuCarta, menuCarta.dataset.menuCarta,
                                       doTabuleiro(menuCarta));
@@ -6508,6 +6953,7 @@ async function abrir(){
   ligarEventos();
   ligarOrfao();
   ligarGoldfish();
+  ligarArte();
   atualizarBotaoMeus();
   conferirBase();
   // Sem `await`: a taxa é a régua do preço, não o deck. Ela redesenha sozinha
@@ -6550,6 +6996,9 @@ async function abrir(){
   // Depois do deck, de propósito: a oferta de reclamar precisa saber se este
   // deck tem dono, e isso só se sabe com o deck em mãos.
   carregarConta();
+  // As artes escolhidas, uma vez: a lista desenha 100 botões e uma consulta
+  // por botão seria 100 requisições.
+  carregarArtes();
   if (estado.comandantes.length){ buscar(); }
   else { buscarComandante(); $("busca-cmd").focus(); }
   // O foco na busca só faz sentido onde ela está sempre à vista: no celular
