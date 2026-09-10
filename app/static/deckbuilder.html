@@ -694,10 +694,14 @@
   }
 
   /* ---------------- goldfish ---------------- */
-  .gf-topo{display:flex;align-items:center;gap:8px;margin-bottom:8px;
+  .gf-topo{display:flex;align-items:center;gap:8px;margin-bottom:10px;
     flex-wrap:wrap;}
+  /* Empurra os botões pra direita. Existe em vez do `.traco` do cabeçalho de
+     grupo porque aquele só é estilizado como `.grupo h3 .traco` — aqui fora
+     ele é um span de largura zero, e os botões ficavam colados no título. */
+  .gf-espaco{flex:1;min-width:8px;}
   .gf-turno{font-family:'IBM Plex Mono',monospace;font-size:12px;
-    color:var(--gold-light);}
+    color:var(--gold-light);white-space:nowrap;}
   .gf-zonas{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 6px;
     font-size:11.5px;color:var(--text-muted);}
   .gf-zonas b{color:var(--text);font-family:'IBM Plex Mono',monospace;
@@ -718,15 +722,22 @@
     background:var(--inset) center/cover no-repeat;cursor:pointer;flex:none;
     position:relative;padding:0;transition:transform .12s;}
   .gf-carta:hover{border-color:var(--purple);transform:translateY(-3px);}
-  .gf-carta.deitada{transform:rotate(90deg) translateY(-3px);margin:12px 16px;}
-  .gf-carta.deitada:hover{transform:rotate(90deg) translateY(-6px);}
+  /* Deitada gira 90°, e girar não muda a caixa do layout: a carta continua
+     ocupando 62 de largura enquanto DESENHA 87. A margem lateral cobre essa
+     diferença — (87-62)/2 = 13px de cada lado — senão ela invade as vizinhas. */
+  .gf-carta.deitada{transform:rotate(90deg);margin:0 13px;}
+  .gf-carta.deitada:hover{transform:rotate(90deg) translateY(-3px);}
   .gf-carta.virada{background-image:none;
     background:repeating-linear-gradient(45deg,var(--surface-2),
       var(--surface-2) 4px,var(--inset) 4px,var(--inset) 8px);}
-  .gf-carta .gf-nome{position:absolute;inset:auto 0 0 0;font-size:8px;
-    line-height:1.15;padding:2px 3px;background:rgba(15,13,23,.82);
+  /* Nome de carta de Magic é longo ("Hanna, Ship's Navigator"), e a carta tem
+     72px. Duas linhas com reticências: cortar no meio da palavra sem aviso faz
+     duas cartas diferentes parecerem a mesma. */
+  .gf-carta .gf-nome{position:absolute;inset:auto 0 0 0;font-size:8.5px;
+    line-height:1.2;padding:2px 3px;background:rgba(15,13,23,.86);
     color:var(--text);border-radius:0 0 4px 4px;overflow:hidden;
-    max-height:22px;}
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    word-break:break-word;}
   /* Só a mão mostra o nome: é onde a decisão acontece, e onde as cartas são
      poucas o bastante pra caber. */
   .gf-fila.gf-mao .gf-carta{width:72px;height:100px;}
@@ -1761,11 +1772,11 @@
         <div class="gf-topo">
           <h2 class="secao" style="margin:0">Goldfish</h2>
           <span class="gf-turno" id="gf-turno"></span>
-          <span class="traco"></span>
-          <button class="btn mini" id="gf-desfazer" title="Desfaz a última jogada (Ctrl+Z)"
-            disabled>${""}Desfazer</button>
-          <button class="btn mini" id="gf-tela">Tela cheia</button>
-          <button class="btn mini ouro" id="gf-embaralhar">Embaralhar</button>
+          <span class="gf-espaco"></span>
+          <button class="btn" id="gf-desfazer" title="Desfaz a última jogada (Ctrl+Z)"
+            disabled>Desfazer</button>
+          <button class="btn" id="gf-tela">Tela cheia</button>
+          <button class="btn ouro" id="gf-embaralhar">Embaralhar</button>
         </div>
 
         <p class="nota" id="gf-aviso">Aqui não tem juiz: nada impede de baixar
@@ -2706,14 +2717,13 @@ function desenharMesa(){
           ? "Mão de abertura."
           : `${m.mulligans}º mulligan.`} Se manter agora, ${devolve
           ? `devolve <b>${devolve}</b> carta(s) pro fundo`
-          : "fica com as <b>7</b>"} — no Commander o primeiro mulligan é
-          grátis.</p>`;
+          : "fica com as <b>7</b>"}.</p>`;
     alvo.innerHTML = zonas + explica +
       `<div class="gf-secao">Mão</div>` +
       gfFilaHTML(m.mao, "mao", "sem cartas") +
       (m.fase === "fundo" ? "" : `<div class="gf-acoes">
-        <button class="btn mini ouro" id="gf-manter">Manter esta mão</button>
-        <button class="btn mini" id="gf-mulligan">Mulligan</button>
+        <button class="btn ouro" id="gf-manter">Manter esta mão</button>
+        <button class="btn" id="gf-mulligan">Mulligan</button>
       </div>`);
     return;
   }
@@ -2727,8 +2737,8 @@ function desenharMesa(){
     `<div class="gf-secao">Mão (${m.mao.length})</div>` +
     gfFilaHTML(m.mao, "mao", "mão vazia") +
     `<div class="gf-acoes">
-      <button class="btn mini ouro" id="gf-turno-btn">Passar turno (compra 1)</button>
-      <button class="btn mini" id="gf-comprar">Comprar 1</button>
+      <button class="btn ouro" id="gf-turno-btn">Passar turno (compra 1)</button>
+      <button class="btn" id="gf-comprar">Comprar 1</button>
     </div>`;
 }
 
