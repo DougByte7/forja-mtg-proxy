@@ -1047,11 +1047,6 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 .linha .qtd::-webkit-inner-spin-button,
 .linha .qtd::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
 .linha .qtd:focus{outline:none;box-shadow:inset 0 -1px var(--gold);}
-/* O ✕ abre a linha, colado na quantidade, e aparece junto com os
-   controles: o lugar fica reservado pra linha não pular no hover. */
-.linha .sai-qtd{display:flex;align-items:center;flex:none;}
-.linha .sai{flex:none;opacity:0;transition:opacity .12s;}
-.linha:hover .sai,.linha:focus-within .sai{opacity:1;}
 .linha .nome{
   flex:1;min-width:0;font-size:13px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -1081,9 +1076,8 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
     rgba(40,28,50,0), rgb(40,28,50) 18px);
 }
 /* O ⋯ do menu da carta só existe no celular e no toque: no mouse o menu
-   abre no clique direito da linha. Depois do `.ctrl` de propósito — no
-   maybeboard o `.ctrl` inteiro é só o ⋯, e tem que sumir junto. As regras
-   que o mostram ficam nos blocos de toque e de celular, mais abaixo. */
+   abre no clique direito da linha. As regras que o mostram ficam nos blocos
+   de toque e de celular, mais abaixo. */
 .linha .so-celular{display:none;}
 .mini{
   width:21px;height:21px;border-radius:6px;border:1px solid var(--border);
@@ -1100,7 +1094,6 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
     position:static;transform:none;opacity:1;
     flex:none;padding-left:0;background:none;
   }
-  .linha .sai{opacity:1;}
   .linha .so-celular{display:flex;}
 }
 
@@ -1640,7 +1633,6 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
     position:static;transform:none;opacity:1;
     flex:none;padding-left:0;background:none;
   }
-  .linha .sai{opacity:1;}
   .linha .so-celular{display:flex;}
   .linha{padding:7px 6px;}
   .mini{width:28px;height:28px;font-size:15px;}
