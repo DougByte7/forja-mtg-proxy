@@ -3294,7 +3294,7 @@ async function salvarAgora(){
     estado.id = resposta.deck.id;
     estado.validacao = resposta.validacao;
     if (novo){
-      estado.dono = r.deck.dono || null;
+      estado.dono = resposta.deck.dono || null;
       history.replaceState(null, "", `?deck=${estado.id}`);
       $("btn-compartilhar").hidden = false;
     }
