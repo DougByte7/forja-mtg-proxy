@@ -24,9 +24,9 @@ Quatro coisas que este teste persegue:
    Se forem a mesma referência, deitar uma deita as trinta — o bug clássico
    deste tipo de tela.
 
-COMO ELE RODA. Igual ao `test_deckbuilder.py`: o JavaScript da página é
-extraído do HTML e roda num interpretador (Duktape, via `dukpy`) sobre um DOM
-de mentira. Não sobe servidor, não abre navegador e não vai à rede.
+COMO ELE RODA. Igual ao `test_deckbuilder.py`: o JavaScript da página (os
+arquivos de `app/static/deckbuilder/`, na ordem do HTML) roda num
+interpretador (Duktape, via `dukpy`) sobre um DOM de mentira. Não sobe servidor, não abre navegador e não vai à rede.
 
     pip install dukpy
     python tests/test_goldfish.py
@@ -34,12 +34,9 @@ de mentira. Não sobe servidor, não abre navegador e não vai à rede.
 Sai com código 1 se qualquer checagem falhar.
 """
 import json
-import re
 import sys
-from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parents[1]
-PAGINA = RAIZ / "app" / "static" / "deckbuilder.html"
+from js_do_deckbuilder import js_da_pagina
 
 try:
     import dukpy
@@ -63,9 +60,7 @@ def eq(nome, obtido, esperado):
           "" if obtido == esperado else f"{obtido!r}, esperado {esperado!r}")
 
 
-_JS = re.search(r"<script>\n(.*)\n</script>",
-                PAGINA.read_text(encoding="utf-8"), re.S).group(1)
-_JS = _JS.rsplit("abrir();", 1)[0]
+_JS = js_da_pagina()
 
 _DOM = """
 var __els = {};

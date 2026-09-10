@@ -230,7 +230,16 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   *Tela de pedidos (admin)*.
 - `app/static/deckbuilder.html` — a tela de montar deck de Commander, em
   `/deckbuilder`. Três colunas (maybeboard, deck, busca), categorias próprias
-  e as análises embaixo do deck. Ver *Deckbuilder de Commander*.
+  e as análises embaixo do deck. Ver *Deckbuilder de Commander*. A página
+  guarda só a marcação; o CSS e o JavaScript moram em
+  `app/static/deckbuilder/`, um script por assunto (`estado.js`, `busca.js`,
+  `goldfish.js`, `combos.js`…). São scripts comuns, sem módulo e sem build:
+  todos dividem o mesmo escopo global, e a ordem das tags `<script>` na
+  página é a ordem de carga. A rota `/deckbuilder` serve a página com o hash
+  de cada arquivo na URL e com `no-cache`, pra que um deploy nunca misture
+  HTML novo com JS velho. Arquivo novo entra na lista de tags da página — os
+  testes de JS leem essa mesma lista, e acusam arquivo na pasta que ela não
+  pede.
 - `app/cartas.py` — a cópia local do bulk data da Scryfall (busca instantânea
   sem tocar na API deles) e a sincronização diária que a mantém.
 - `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
@@ -327,10 +336,14 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   das 100 mas dentro do preço: `python tests/test_decks.py`.
 - `tests/test_deckbuilder.py` — as mesmas regras do outro lado: as de
   categoria, sideboard e maybeboard existem DUAS vezes, porque a tela responde
-  ao clique sem esperar a rede. Este teste extrai o JavaScript da página e o
-  roda num interpretador, sobre um DOM de mentira, pra que as duas
+  ao clique sem esperar a rede. Este teste roda o JavaScript da página (os
+  arquivos de `app/static/deckbuilder/`, na ordem em que o HTML os carrega)
+  num interpretador, sobre um DOM de mentira, pra que as duas
   implementações não divirjam calado — e confere que nenhuma carta pode ficar
-  invisível na lista por causa de uma categoria que não foi desenhada. Precisa
+  invisível na lista por causa de uma categoria que não foi desenhada. Também
+  carrega os arquivos um de cada vez, como o navegador, pra pegar código que
+  na carga chama o que só um arquivo posterior declara; e, com o `fastapi`
+  instalado, confere que a rota serve cada arquivo com a versão na URL. Precisa
   do `dukpy` (`pip install dukpy`; ele não está no `requirements.txt` porque
   não é dependência do serviço): `python tests/test_deckbuilder.py`.
 - `tests/test_spellbook.py` — o cliente do Commander Spellbook contra uma

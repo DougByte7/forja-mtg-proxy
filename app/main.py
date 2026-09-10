@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import os
 import re
@@ -786,13 +787,29 @@ def get_cotacao(job_id: str):
 # A busca não fala com a Scryfall: ela lê a cópia local do bulk data (ver
 # `cartas.py`), porque busca-a-cada-tecla contra a API de fora seria o jeito
 # mais rápido de levar 429 em cima de quem só está digitando.
+#
+# O CSS e os scripts moram em `app/static/deckbuilder/`, e a página sai daqui
+# com o hash de cada um na URL (`?v=`) e com `no-cache`. É esse par que impede
+# um deploy de misturar HTML novo com JS velho: o navegador sempre confere a
+# página, e ela aponta pra versão exata de cada arquivo — que, com o hash na
+# URL, pode ficar no cache à vontade.
+
+_ARQUIVO_DO_DECKBUILDER = re.compile(r'(src|href)="/(deckbuilder/[^"?]+)"')
+
+
+def _com_versao(m):
+    with open(os.path.join("app/static", m[2]), "rb") as f:
+        versao = hashlib.sha256(f.read()).hexdigest()[:12]
+    return f'{m[1]}="/{m[2]}?v={versao}"'
 
 
 @app.get("/deckbuilder", response_class=HTMLResponse)
 def deckbuilder_page():
     """A página do deckbuilder. Igual ao /admin: fica antes do mount estático
     pra a URL ser /deckbuilder, sem o .html."""
-    return FileResponse("app/static/deckbuilder.html", media_type="text/html")
+    with open("app/static/deckbuilder.html", encoding="utf-8") as f:
+        html = _ARQUIVO_DO_DECKBUILDER.sub(_com_versao, f.read())
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
 # ---------------------------------------------------------------------------

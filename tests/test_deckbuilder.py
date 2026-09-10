@@ -21,10 +21,12 @@ Três divergências custam caro, e são as três que este teste persegue:
    não desenha continua no deck, no contador e na cotação — invisível e
    paga. É o pior estrago possível aqui, e o mais silencioso.
 
-COMO ELE RODA. O JavaScript da página é extraído do HTML e executado num
-interpretador (Duktape, via `dukpy`) sobre um DOM de mentira — as funções de
+COMO ELE RODA. O JavaScript da página — os arquivos de
+`app/static/deckbuilder/`, na ordem em que o HTML os carrega — é executado num
+interpretador (Duktape, via `dukpy`) sobre um DOM de mentira: as funções de
 desenho e de estado não tocam em nada além do que este arquivo lhes dá. Não
-sobe servidor, não abre navegador e não vai à rede.
+abre navegador e não vai à rede. Com o `fastapi` instalado, confere também a
+rota `/deckbuilder`, direto no app, sem subir servidor.
 
     pip install dukpy
     python tests/test_deckbuilder.py
@@ -34,12 +36,15 @@ e sai com 0: ele não está no `requirements.txt` porque não é dependência do
 serviço, só deste teste.
 """
 import json
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
+from js_do_deckbuilder import ESTATICO, arquivos, js_da_pagina, sem_abrir
+
 RAIZ = Path(__file__).resolve().parents[1]
-PAGINA = RAIZ / "app" / "static" / "deckbuilder.html"
 
 try:
     import dukpy
@@ -67,11 +72,9 @@ def eq(nome, obtido, esperado):
 # O aparato: o JS da página e um DOM que não faz nada
 # ---------------------------------------------------------------------------
 
-# `abrir()` fica de fora: é a única linha do arquivo que vai à rede e mexe em
+# `abrir()` fica de fora: é a única linha da página que vai à rede e mexe em
 # elementos de verdade. Todo o resto é função pura o bastante pra rodar aqui.
-_JS = re.search(r"<script>\n(.*)\n</script>",
-                PAGINA.read_text(encoding="utf-8"), re.S).group(1)
-_JS = _JS.rsplit("abrir();", 1)[0]
+_JS = js_da_pagina()
 
 _DOM = """
 var __els = {};
@@ -181,7 +184,47 @@ def grupos_desenhados(html):
     return re.findall(r'data-categoria="([^"]+)"', html)
 
 
+def carregar_um_por_um():
+    """Carrega os scripts do jeito do navegador: um de cada vez, todos no
+    mesmo escopo global. Devolve `(arquivo, erro)` do primeiro que quebrar, ou
+    None. É o que pega a função chamada na carga por um arquivo que vem ANTES
+    do que a declara — com tudo emendado num script só, esse erro não existe."""
+    interpretador = dukpy.JSInterpreter()
+    interpretador.evaljs(_DOM)
+    lista = arquivos()
+    for i, caminho in enumerate(lista):
+        codigo = caminho.read_text(encoding="utf-8")
+        if i == len(lista) - 1:
+            codigo = sem_abrir(codigo)
+        try:
+            interpretador.evaljs(codigo)
+        except Exception as e:      # noqa: BLE001 — o erro é o resultado
+            return caminho.name, str(e).split("\n")[0]
+    return None
+
+
 try:
+    # ---------------------------------------------------- a página em partes
+    print("\n--- a página, arquivo por arquivo ---")
+    lista = arquivos()
+    check("a página carrega os scripts por arquivo", len(lista) > 1, len(lista))
+    faltando = [p.name for p in lista if not p.exists()]
+    eq("todo script que a página pede existe", faltando, [])
+    # Um arquivo na pasta que a página não pede é código que não roda — e que
+    # nenhum teste roda, porque a lista dos testes sai da página.
+    fora = sorted({p.name for p in (ESTATICO / "deckbuilder").glob("*.js")}
+                  - {p.name for p in lista})
+    eq("todo script da pasta está na página", fora, [])
+    if not faltando:
+        # O "use strict" vale só pro arquivo em que está. Sem ele, atribuir a
+        # um nome não declarado cria uma global calada em vez de dar erro.
+        eq("todo script liga o modo estrito",
+           [p.name for p in lista
+            if not p.read_text(encoding="utf-8").startswith('"use strict";')],
+           [])
+        eq("carregados um de cada vez, como no navegador, nenhum quebra",
+           carregar_um_por_um(), None)
+
     # ------------------------------------------------------- o que aparece
     print("\n--- a lista, agrupada ---")
     r = rodar("")
@@ -347,6 +390,41 @@ try:
     # receber a primeira carta se ela só existisse nas entradas.
     check("as categorias vão inteiras, inclusive a vazia",
           "Ainda vazia" in corpo["categorias"])
+
+    # ------------------------------------------------------------- a rota
+    print("\n--- a rota /deckbuilder ---")
+    try:
+        from fastapi.testclient import TestClient
+    except ImportError:
+        print("PULADO: fastapi não está instalado "
+              "(pip install -r requirements.txt)")
+    else:
+        # Antes de importar o app: os módulos leem o ambiente no import, e um
+        # teste não pode encostar num banco de verdade.
+        os.environ.setdefault("DB_PATH",
+                              os.path.join(tempfile.mkdtemp(), "orders.db"))
+        os.environ.setdefault("CARTAS_DB_PATH",
+                              os.path.join(tempfile.mkdtemp(), "cartas.db"))
+        os.environ.setdefault("LOG_DIR", tempfile.mkdtemp())
+        os.environ.setdefault("LOG_NIVEL", "ERROR")
+        sys.path.insert(0, str(RAIZ))
+        os.chdir(RAIZ)
+        from app.main import app  # noqa: E402
+
+        cliente = TestClient(app)
+        r = cliente.get("/deckbuilder")
+        eq("a página responde", r.status_code, 200)
+        # Sem isto o navegador pode servir a página do cache dele, e ela
+        # apontaria pros arquivos de outro deploy.
+        check("a página sai com no-cache",
+              "no-cache" in r.headers.get("cache-control", ""),
+              r.headers.get("cache-control"))
+        urls = re.findall(r'(?:src|href)="(/deckbuilder/[^"]+)"', r.text)
+        eq("pede o CSS e todos os scripts", len(urls), len(arquivos()) + 1)
+        eq("cada arquivo sai com a versão na URL",
+           [u for u in urls if not re.search(r"\?v=[0-9a-f]{12}$", u)], [])
+        eq("e cada URL versionada responde",
+           [u for u in urls if cliente.get(u).status_code != 200], [])
 
 except Exception as e:      # noqa: BLE001 — o erro é o resultado do teste
     import traceback

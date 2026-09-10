@@ -21,9 +21,9 @@ persegue:
    viaja em dólar; se um dos dois esquecer a taxa, o teto passa a valer cinco
    vezes mais (ou menos) do que a pessoa pediu, e nada na tela denuncia.
 
-COMO ELE RODA. Igual ao `test_deckbuilder.py`: o JavaScript da página é
-extraído do HTML e roda num interpretador (Duktape, via `dukpy`) sobre um DOM
-de mentira. Não sobe servidor, não abre navegador e não vai à rede.
+COMO ELE RODA. Igual ao `test_deckbuilder.py`: o JavaScript da página (os
+arquivos de `app/static/deckbuilder/`, na ordem do HTML) roda num
+interpretador (Duktape, via `dukpy`) sobre um DOM de mentira. Não sobe servidor, não abre navegador e não vai à rede.
 
     pip install dukpy
     python tests/test_precos_brl.py
@@ -32,12 +32,9 @@ Sai com código 1 se qualquer checagem falhar. Sem o `dukpy` instalado, avisa e
 sai com 0, pela mesma razão do outro: ele não é dependência do serviço.
 """
 import json
-import re
 import sys
-from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parents[1]
-PAGINA = RAIZ / "app" / "static" / "deckbuilder.html"
+from js_do_deckbuilder import js_da_pagina
 
 try:
     import dukpy
@@ -68,9 +65,7 @@ def eq(nome, obtido, esperado):
 # `abrir()` fica de fora — e é justamente de dentro dele que a página busca a
 # taxa, pra este corte continuar valendo. Se `carregarCambio()` subir pro topo
 # do script, o `fetch` abaixo levanta e todos os testes de JS param de rodar.
-_JS = re.search(r"<script>\n(.*)\n</script>",
-                PAGINA.read_text(encoding="utf-8"), re.S).group(1)
-_JS = _JS.rsplit("abrir();", 1)[0]
+_JS = js_da_pagina()
 
 _DOM = """
 var __els = {};
