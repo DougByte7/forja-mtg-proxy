@@ -34,8 +34,14 @@
   }
   .wrap{max-width:560px;margin:0 auto;}
 
-  header{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
-  .brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0;}
+  /* Nome da página e botões dividem a linha enquanto couberem; quando não
+     cabem, o bloco de botões desce INTEIRO pra linha de baixo, em vez de
+     espremer o nome. O flex-grow desproporcional é o que faz isso: lado a
+     lado, a sobra vai quase toda pro nome e os botões ficam no tamanho
+     natural; sozinho na linha, o bloco de botões ocupa a largura toda. */
+  header{display:flex;align-items:center;flex-wrap:wrap;gap:12px 16px;margin-bottom:28px;}
+  .brand{display:flex;align-items:center;gap:12px;flex:999 1 auto;min-width:0;}
+  .acoes{display:flex;flex-wrap:wrap;gap:8px;flex:1 1 auto;justify-content:flex-end;}
   .brand .rune{
     width:38px;height:38px;border:1.5px solid var(--gold);
     display:flex;align-items:center;justify-content:center;
@@ -188,19 +194,14 @@
      ver o andamento de um pedido antigo não tem XML nenhum selecionado, e o
      card inteiro ainda está vazio. Nasce escondido — sem pedido guardado
      neste navegador, o botão não teria o que abrir. */
-  .meus-btn{flex:none;padding:9px 12px;white-space:nowrap;
+  .meus-btn{flex:1 1 auto;padding:9px 12px;white-space:nowrap;
     display:inline-flex;align-items:center;justify-content:center;}
   .meus-btn[hidden]{display:none;}
-  /* Em tela estreita com os DOIS botões (quem já pediu antes vê "Meus
-     Pedidos" ao lado de "Montar deck"), espremer os três numa linha só
-     quebrava o nome da página em três linhas e passava o botão por cima
-     dele. Aqui o nome fica com a linha inteira e os botões dividem a de
-     baixo. */
-  @media (max-width:430px){
-    header{flex-wrap:wrap;}
-    .brand{min-width:100%;}
-    .meus-btn{flex:1;}
-  }
+  /* O botão da conta mostra o nome de quem entrou, que pode ser comprido:
+     corta com reticências em vez de empurrar os outros botões. `block` porque
+     text-overflow não age sobre o texto de um contêiner flex. */
+  .conta-btn{display:block;text-align:center;max-width:14em;
+    overflow:hidden;text-overflow:ellipsis;}
   .meus-btn .n{
     display:inline-block;margin-left:6px;padding:1px 6px;border-radius:9px;
     background:var(--surface-2);border:1px solid var(--border);
@@ -522,24 +523,26 @@
         <p>Orçamento na hora, pagamento por Pix</p>
       </div>
     </div>
-    <!-- O deckbuilder é o passo ANTES desta tela: monta o deck, exporta a
-         lista pro MPC Fill e volta pra cá com o XML. Fica no cabeçalho porque
-         quem ainda não tem deck não tem o que subir aqui. -->
-    <a class="sec-btn meus-btn" href="/deckbuilder"
-       style="text-decoration:none;">Montar deck</a>
-    <!-- Só aparece pra quem já tem deck salvo: um "Meus decks" vazio no
-         cabeçalho de quem nunca montou nenhum é botão que só sabe decepcionar.
-         Lê a MESMA chave que o deckbuilder escreve. -->
-    <a class="sec-btn meus-btn" id="meusDecksBtn" href="/meus-decks" hidden
-       style="text-decoration:none;">Meus decks <span class="n" id="meusDecksN">0</span></a>
-    <!-- Nasce escondido: aparece como "Entrar" ou com o nome de quem entrou,
-         só depois de `GET /conta` responder. Um botão que pisca de "Entrar"
-         pra "Fulano" a cada carregamento é pior que um que chega pronto. -->
-    <a class="sec-btn meus-btn" id="contaBtn" href="/entrar" hidden
-       style="text-decoration:none;">Entrar</a>
-    <button class="sec-btn meus-btn" id="ordersBtn" hidden>
-      Meus Pedidos <span class="n" id="ordersCount">0</span>
-    </button>
+    <nav class="acoes">
+      <!-- O deckbuilder é o passo ANTES desta tela: monta o deck, exporta a
+           lista pro MPC Fill e volta pra cá com o XML. Fica no cabeçalho porque
+           quem ainda não tem deck não tem o que subir aqui. -->
+      <a class="sec-btn meus-btn" href="/deckbuilder"
+         style="text-decoration:none;">Montar deck</a>
+      <!-- Só aparece pra quem já tem deck salvo: um "Meus decks" vazio no
+           cabeçalho de quem nunca montou nenhum é botão que só sabe decepcionar.
+           Lê a MESMA chave que o deckbuilder escreve. -->
+      <a class="sec-btn meus-btn" id="meusDecksBtn" href="/meus-decks" hidden
+         style="text-decoration:none;">Meus decks <span class="n" id="meusDecksN">0</span></a>
+      <!-- Nasce escondido: aparece como "Entrar" ou com o nome de quem entrou,
+           só depois de `GET /conta` responder. Um botão que pisca de "Entrar"
+           pra "Fulano" a cada carregamento é pior que um que chega pronto. -->
+      <a class="sec-btn meus-btn conta-btn" id="contaBtn" href="/entrar" hidden
+         style="text-decoration:none;">Entrar</a>
+      <button class="sec-btn meus-btn" id="ordersBtn" hidden>
+        Meus Pedidos <span class="n" id="ordersCount">0</span>
+      </button>
+    </nav>
   </header>
 
   <!-- Fica no topo, antes de tudo, porque a página parece uma loja: tem
