@@ -109,6 +109,40 @@
   .btn-sec.perigo:hover:not(:disabled){border-color:var(--red);color:#F2AFA1;}
 
   /* --- Lista de pedidos -------------------------------------------------- */
+  /* Troca de assunto do painel: pedidos ou decks. Fica acima dos filtros
+     porque muda O QUE se lista, não como. */
+  .abas{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);}
+  .aba{background:none;border:none;border-bottom:2px solid transparent;
+    color:var(--text-muted);font-size:13px;padding:8px 12px;cursor:pointer;
+    font-family:inherit;}
+  .aba:hover{color:var(--gold-light);}
+  .aba.ativo{color:var(--gold-light);border-bottom-color:var(--gold);}
+  .aba .n{font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.75;
+    margin-left:5px;}
+
+  /* --- Decks -------------------------------------------------------- */
+  .deck{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:12px 14px;margin-bottom:9px;display:flex;gap:12px;align-items:center;
+  }
+  /* Deck sem dono não é erro — hoje é o estado de todos eles. A marca é
+     informativa, não alarme: fica no texto, sem cor de aviso. */
+  .deck .arte{width:44px;height:44px;border-radius:8px;flex:none;
+    background:var(--surface-2);object-fit:cover;object-position:50% 20%;}
+  .deck .miolo{flex:1;min-width:0;}
+  .deck .nome{font-size:14.5px;font-weight:600;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;}
+  .deck .meta{font-size:11.5px;color:var(--text-muted);margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .deck .dono{font-size:12px;text-align:right;flex:none;}
+  .deck .dono .sem{color:var(--text-muted);font-style:italic;}
+  .deck .conta{font-family:'IBM Plex Mono',monospace;font-size:12px;flex:none;}
+  .deck .acoes{display:flex;gap:6px;flex:none;}
+  @media (max-width:640px){
+    .deck{flex-wrap:wrap;}
+    .deck .dono,.deck .acoes{text-align:left;}
+  }
+
   .pedido{
     background:var(--surface);border:1px solid var(--border);border-radius:12px;
     padding:14px 16px;margin-bottom:10px;
@@ -264,6 +298,11 @@
 
   <div class="aviso" id="avisoTopo" hidden></div>
 
+  <div class="abas" id="abas">
+    <button class="aba ativo" data-aba="pedidos">Pedidos</button>
+    <button class="aba" data-aba="decks">Baralhos<span class="n" id="abaDecksN"></span></button>
+  </div>
+
   <div class="barra" id="filtros"></div>
   <div class="busca-linha">
     <input type="search" id="buscaInput" placeholder="Buscar por nome, id do pedido ou código do deck">
@@ -271,10 +310,15 @@
 
   <div id="lista"></div>
 
-  <p class="rodape">
+  <p class="rodape" id="rodapePedidos">
     <b>Imprimir</b> marca como pago e manda pra fila — é a única ação que gasta papel.<br>
     Marque dois ou mais pedidos pra juntá-los numa folha só e aproveitar o papel.<br>
     Conferir o Pix no app do banco continua sendo com você.
+  </p>
+  <p class="rodape" id="rodapeDecks" hidden>
+    Todos os baralhos do banco, do mais mexido pro mais parado.<br>
+    <b>Apagar</b> aqui é definitivo e não avisa quem montou — o deck é da pessoa,
+    não do sistema.
   </p>
 </div>
 
@@ -328,9 +372,11 @@ const ESTADOS = {
 };
 const LAMINACAO = {single: "Um lado", double: "Dois lados"};
 
+let aba = "pedidos";       // "pedidos" | "decks" — o que a lista mostra
 let filtro = "";           // "" = todos
 let busca = "";
 let pedidos = [];
+let decks = [];            // a listagem do admin, quando a aba é "decks"
 let notas = {};            // id -> {tipo, texto} mostrado embaixo do pedido
 let carregando = false;
 let ocupado = 0;           // ações longas em andamento (montagem, impressão)
@@ -436,6 +482,7 @@ async function carregar() {
   carregando = true;
   $("btnAtualizar").disabled = true;
   try {
+    if (aba === "decks") { await carregarDecks(); return; }
     const params = new URLSearchParams();
     if (filtro) params.set("status", filtro);
     if (busca) params.set("busca", busca);
@@ -454,6 +501,102 @@ async function carregar() {
     carregando = false;
     $("btnAtualizar").disabled = false;
   }
+}
+
+/* ---------------------------------------------------------------- decks
+
+   A lista de TODOS os baralhos, que é a única tela do projeto que enumera
+   deck. Ela mostra o dono de cada um — e hoje mostra "sem dono" em todos,
+   porque a coluna só passa a ser preenchida quando o login existir. Isso é
+   informação, não pendência: é o retrato do acervo de antes do login, e
+   depois dele é o que ainda não foi reclamado por ninguém. */
+
+async function carregarDecks() {
+  const params = new URLSearchParams();
+  if (busca) params.set("busca", busca);
+  const dados = await api("/admin/decks?" + params.toString());
+  decks = dados.decks || [];
+  const c = dados.contagem || {};
+  $("abaDecksN").textContent = c.total || 0;
+  $("filtros").innerHTML = "";
+  if (c.total) {
+    const nota = document.createElement("div");
+    nota.className = "chip";
+    nota.style.cursor = "default";
+    nota.textContent = c.sem_dono === c.total
+      ? `${c.total} baralho(s), nenhum com dono ainda`
+      : `${c.total} baralho(s) · ${c.sem_dono} sem dono`;
+    $("filtros").appendChild(nota);
+  }
+  desenharDecks();
+}
+
+function quandoTexto(ts) {
+  if (!ts) return "";
+  const dias = Math.floor((Date.now() / 1000 - ts) / 86400);
+  if (dias <= 0) return "hoje";
+  if (dias === 1) return "ontem";
+  if (dias < 30) return `há ${dias} dias`;
+  const meses = Math.round(dias / 30);
+  return meses === 1 ? "há um mês" : `há ${meses} meses`;
+}
+
+function desenharDecks() {
+  const lista = $("lista");
+  lista.innerHTML = "";
+  if (!decks.length) {
+    lista.appendChild(caixaVazia(busca
+      ? "Nenhum baralho casa com essa busca."
+      : "Nenhum baralho no banco ainda."));
+    return;
+  }
+  for (const d of decks) {
+    const el = document.createElement("div");
+    el.className = "deck";
+    const comandante = (d.comandantes || []).join(" + ") || "sem comandante";
+    el.innerHTML = `
+      ${d.arte
+        ? `<img class="arte" src="${escapar(d.arte)}" alt="" loading="lazy"
+             referrerpolicy="no-referrer">`
+        : `<div class="arte"></div>`}
+      <div class="miolo">
+        <div class="nome">${escapar(d.nome)}</div>
+        <div class="meta"><span class="mono">${escapar(d.id)}</span> ·
+          ${escapar(comandante)} · mexido ${escapar(quandoTexto(d.atualizado_em))}</div>
+      </div>
+      <div class="conta" title="${d.faltam
+        ? "Faltam " + d.faltam + " pras 100. O sideboard não conta."
+        : "As 100 do formato, fechadas."}">${d.total}/100</div>
+      <div class="dono">${d.dono
+        ? escapar(d.dono)
+        : `<span class="sem">sem dono</span>`}</div>
+      <div class="acoes">
+        <button class="btn-sec" data-abrir-deck="${escapar(d.id)}">Abrir</button>
+        <button class="btn-sec" data-apagar-deck="${escapar(d.id)}">Apagar</button>
+      </div>`;
+    lista.appendChild(el);
+  }
+}
+
+function trocarAba(nova) {
+  if (aba === nova) return;
+  aba = nova;
+  busca = "";
+  filtro = "";
+  $("buscaInput").value = "";
+  $("buscaInput").placeholder = aba === "decks"
+    ? "Buscar por nome do baralho, comandante, dono ou id"
+    : "Buscar por nome, id do pedido ou código do deck";
+  for (const b of document.querySelectorAll("[data-aba]")) {
+    b.classList.toggle("ativo", b.getAttribute("data-aba") === aba);
+  }
+  $("rodapePedidos").hidden = aba !== "pedidos";
+  $("rodapeDecks").hidden = aba !== "decks";
+  // A barra de combinar é dos pedidos: some junto com eles, senão fica uma
+  // ação de outro assunto flutuando sobre uma lista que não a entende.
+  $("comboBarra").hidden = true;
+  $("lista").innerHTML = "";
+  carregar();
 }
 
 function desenharFiltros(contagem) {
@@ -1037,6 +1180,51 @@ $("modalOk").addEventListener("click", async () => {
 /* --------------------------------------------------------------- eventos */
 
 $("btnAtualizar").addEventListener("click", () => carregar());
+
+/* Troca de aba e ações de deck, por delegação: a lista é redesenhada inteira
+   a cada carga, e pendurar listener em cada linha vazaria um por redesenho. */
+$("abas").addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-aba]");
+  if (b) trocarAba(b.getAttribute("data-aba"));
+});
+
+$("lista").addEventListener("click", (ev) => {
+  const abrir = ev.target.closest("[data-abrir-deck]");
+  if (abrir) {
+    // Aba nova: o operador quase sempre volta pra lista depois de olhar.
+    window.open(`/deckbuilder?deck=${encodeURIComponent(
+      abrir.getAttribute("data-abrir-deck"))}`, "_blank", "noopener");
+    return;
+  }
+  const apagar = ev.target.closest("[data-apagar-deck]");
+  if (!apagar) return;
+  const id = apagar.getAttribute("data-apagar-deck");
+  const d = decks.find((x) => x.id === id);
+  abrirModal({
+    titulo: "Apagar este baralho?",
+    // O deck é da pessoa que montou, não do sistema: ela não é avisada, e o
+    // link que ela guardou simplesmente para de abrir. Isso precisa estar
+    // escrito na hora de clicar, não descoberto depois.
+    texto: `<b>${escapar(d ? d.nome : id)}</b> some do banco pra sempre. ` +
+           `Quem montou não é avisado — o link dela apenas para de abrir, e ` +
+           `não há como desfazer.<br><br>Digite o id <b>${escapar(id)}</b> ` +
+           `pra confirmar.`,
+    ok: "Apagar",
+    perigo: true,
+    confirmarCom: id,
+    aoConfirmar: async () => {
+      try {
+        await api(`/decks/${encodeURIComponent(id)}`, {method: "DELETE"});
+        await carregar();
+      } catch (e) {
+        if (e.message !== "401") {
+          $("avisoTopo").hidden = false;
+          $("avisoTopo").textContent = "Não consegui apagar: " + e.message;
+        }
+      }
+    },
+  });
+});
 
 let debounce;
 $("buscaInput").addEventListener("input", (ev) => {

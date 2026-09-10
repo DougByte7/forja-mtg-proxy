@@ -431,6 +431,97 @@ try:
           fantasma["pecas"][1]["na_base"] is False)
     eq("peça desconhecida não tem arte", fantasma["pecas"][1]["imagem"], "")
 
+    # -------------------------------------------------------------- resumo
+    print("\n--- resumo pra página de decks ---")
+
+    # A regra que faz esta seção existir: o cartão da lista e o contador do
+    # deckbuilder têm que dizer o MESMO número pro mesmo deck. São duas contas
+    # em dois arquivos, e divergir é o tipo de erro que ninguém percebe até
+    # alguém conferir na mão.
+    d1 = decks.criar("Primeiro", ["Atraxa"], [
+        {"nome": "Sol Ring", "quantidade": 1},
+        {"nome": "Forest", "quantidade": 30},
+        {"nome": "Lightning Bolt", "quantidade": 2, "categoria": "Sideboard"},
+    ], maybeboard=[{"nome": "Llanowar Elves", "quantidade": 3}])
+    d2 = decks.criar("Segundo", ["Krenko"])
+
+    r = decks.resumo([d2["id"], d1["id"]])
+    eq("a ordem de saída é a de entrada",
+       [d["id"] for d in r], [d2["id"], d1["id"]])
+
+    um = next(d for d in r if d["id"] == d1["id"])
+    # 1 comandante + 1 Sol Ring + 30 Forest. Os 2 do sideboard ficam fora,
+    # exatamente como em `validar`.
+    eq("conta as mesmas 100 que a validação", um["total"], 32)
+    eq("e a validação concorda",
+       decks.validar(["Atraxa"], [
+           {"nome": "Sol Ring", "quantidade": 1},
+           {"nome": "Forest", "quantidade": 30},
+           {"nome": "Lightning Bolt", "quantidade": 2, "categoria": "Sideboard"},
+       ])["total"], um["total"])
+    eq("faltam bate com o total", um["faltam"], 100 - 32)
+    eq("o maybeboard é contado à parte, não no total", um["talvez"], 3)
+    eq("distintas conta as linhas, sideboard incluído", um["distintas"], 3)
+    eq("a identidade sai dos comandantes", um["identidade"], "WUBG")
+    check("a arte do comandante vem junto", bool(um["arte"]))
+
+    # Deck apagado no meio da lista não pode derrubar os outros: quem chama é
+    # a lista do navegador, que envelhece sozinha.
+    r2 = decks.resumo([d1["id"], "naoexisteid", d2["id"]])
+    eq("id inexistente sai calado, sem derrubar o resto",
+       [d["id"] for d in r2], [d1["id"], d2["id"]])
+
+    # Nenhum caminho daqui pode significar "todos": sem dono, isso seria os
+    # decks de todo mundo.
+    eq("lista vazia devolve lista vazia, nunca todos", decks.resumo([]), [])
+    eq("lista só de ids inválidos também", decks.resumo([None, ""]), [])
+
+    # Deck sem comandante escolhido: a capa da tela precisa saber a diferença
+    # entre "não tem comandante" e "a base não conhece o que está lá".
+    d3 = decks.criar("Sem líder", [], [{"nome": "Sol Ring", "quantidade": 1}])
+    orfao = decks.resumo([d3["id"]])[0]
+    eq("deck sem comandante não inventa arte", orfao["arte"], "")
+    eq("nem identidade", orfao["identidade"], "")
+    eq("mas conta as cartas que tem", orfao["total"], 1)
+
+    # ----------------------------------------------------------- a rota
+    print("\n--- a rota do resumo ---")
+
+    try:
+        from fastapi.testclient import TestClient
+    except ImportError:
+        print("PULADO: fastapi não está instalado")
+    else:
+        os.chdir(RAIZ)
+        from app.main import app
+
+        cliente = TestClient(app)
+        resp = cliente.post("/decks/resumo",
+                            json={"ids": [d1["id"], "naoexisteid"]})
+        eq("responde 200", resp.status_code, 200)
+        corpo = resp.json()
+        eq("devolve os que existem", [d["id"] for d in corpo["decks"]], [d1["id"]])
+        eq("e separa os que não existem", corpo["desconhecidos"], ["naoexisteid"])
+
+        eq("corpo que não é lista vira 400, não 500",
+           cliente.post("/decks/resumo", json={"ids": "abc"}).status_code, 400)
+        eq("sem `ids` também",
+           cliente.post("/decks/resumo", json={}).status_code, 400)
+        # Truncar esconderia decks sem dizer; recusar é honesto.
+        eq("mais que o teto é recusado, não truncado",
+           cliente.post("/decks/resumo",
+                        json={"ids": ["x"] * (decks.MAX_RESUMO + 1)}).status_code, 400)
+        eq("no teto exato ainda passa",
+           cliente.post("/decks/resumo",
+                        json={"ids": ["x"] * decks.MAX_RESUMO}).status_code, 200)
+
+        # A armadilha da ordem de rota: `/decks/resumo` declarado depois do
+        # `/decks/{deck_id}` viraria "o deck de id resumo", em silêncio.
+        eq("GET /decks/resumo não é confundido com um deck chamado 'resumo'",
+           cliente.get("/decks/resumo").status_code, 404)
+
+        eq("a página /meus-decks é servida", cliente.get("/meus-decks").status_code, 200)
+
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

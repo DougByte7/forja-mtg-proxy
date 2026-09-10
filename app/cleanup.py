@@ -37,14 +37,33 @@ def _is_ours(name: str) -> bool:
     return bool(_PDF_RE.match(name) or _MARKER_RE.match(name))
 
 
+def _podar_sessoes() -> int:
+    """Sessões vencidas, na carona da faxina que já existe.
+
+    Fica aqui, e não num laço próprio, porque é a mesma natureza de trabalho —
+    apagar o que venceu — e uma thread a mais pra rodar uma vez por dia seria
+    maquinário sem serventia. Nunca levanta: faxina que derruba o processo é
+    pior do que sujeira.
+    """
+    try:
+        from . import usuarios
+        return usuarios.podar_sessoes()
+    except Exception as e:
+        print(f"[cleanup] não consegui podar as sessões: {e}")
+        return 0
+
+
 def run_once() -> dict:
     """Apaga os PDFs mais velhos que PDF_KEEP_DAYS. Devolve um resuminho."""
+    sessoes = _podar_sessoes()
     if PDF_KEEP_DAYS <= 0:
-        return {"desligado": True, "removidos": 0, "liberado_mb": 0.0}
+        return {"desligado": True, "removidos": 0, "liberado_mb": 0.0,
+                "sessoes_podadas": sessoes}
 
     directory = pdf_generator.OUTPUT_DIR
     if not os.path.isdir(directory):
-        return {"removidos": 0, "liberado_mb": 0.0, "mantidos": 0}
+        return {"removidos": 0, "liberado_mb": 0.0, "mantidos": 0,
+                "sessoes_podadas": sessoes}
 
     cutoff = time.time() - PDF_KEEP_DAYS * 86400
     removed, freed, kept = 0, 0, 0
@@ -69,7 +88,8 @@ def run_once() -> dict:
 
     return {"removidos": removed,
             "liberado_mb": round(freed / (1024 * 1024), 2),
-            "mantidos": kept}
+            "mantidos": kept,
+            "sessoes_podadas": sessoes}
 
 
 def _loop():

@@ -1,10 +1,16 @@
 """
-Confere o câmbio que alimenta o indicador de "carta cara aqui".
+Confere o câmbio: o indicador de "carta cara aqui" e a régua que faz o
+deckbuilder escrever em real um preço que a base guarda em dólar.
 
-Motivo de existir: o câmbio é enfeite de comparação, então a regra dele é
-NUNCA atrapalhar. Se a API cair, mudar de formato ou devolver bobagem, a
-cotação inteira tem que seguir com a taxa fixa — e o cache tem que segurar
-a requisição, pra uma cotação de 75 cartas não virar 75 consultas de câmbio.
+Motivo de existir: os dois usos são de apresentação, então a regra é NUNCA
+atrapalhar. Se a API cair, mudar de formato ou devolver bobagem, a cotação
+inteira tem que seguir com a taxa fixa — e o cache tem que segurar a
+requisição, pra uma cotação de 75 cartas não virar 75 consultas de câmbio.
+
+Desde que o deckbuilder passou a converter preço, uma coisa a mais precisa
+valer: `GET /cambio` tem que responder SEMPRE, inclusive sem rede. A tela
+cai pra dólar se ela falhar, mas cair pra dólar é o plano B — o plano A é
+esta rota nunca ser o motivo.
 
 Não precisa de rede nem de pytest. Rode de dentro da raiz do projeto:
 
@@ -12,11 +18,21 @@ Não precisa de rede nem de pytest. Rode de dentro da raiz do projeto:
 
 Sai com código 1 se qualquer checagem falhar.
 """
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
+
+# Antes de importar qualquer coisa do app: os módulos leem o ambiente no
+# import, e um teste não pode encostar num banco de verdade.
+os.environ.setdefault("DB_PATH", os.path.join(tempfile.mkdtemp(), "orders.db"))
+os.environ.setdefault("CARTAS_DB_PATH",
+                      os.path.join(tempfile.mkdtemp(), "cartas.db"))
+os.environ.setdefault("LOG_DIR", tempfile.mkdtemp())
+os.environ.setdefault("LOG_NIVEL", "ERROR")
 
 from app import cambio  # noqa: E402
 
@@ -107,6 +123,47 @@ try:
 finally:
     cambio.requests.get = salvo_get
     cambio._cache = None
+
+
+# ---------------------------------------------------------------------------
+# A rota
+# ---------------------------------------------------------------------------
+#
+# `GET /cambio` é a régua que o deckbuilder usa pra escrever preço em real.
+# O que se trava aqui é que ela responde mesmo com a busca desligada — se ela
+# devolvesse 502 quando a AwesomeAPI está fora, a tela perderia a moeda por
+# causa de um enfeite.
+
+print("\n--- a rota ---")
+
+try:
+    from fastapi.testclient import TestClient
+except ImportError:
+    print("PULADO: fastapi não está instalado (pip install -r requirements.txt)")
+else:
+    os.chdir(RAIZ)
+    from app.main import app  # noqa: E402
+
+    cliente = TestClient(app)
+    salvo_buscar, salvo_get = cambio.BUSCAR, cambio.requests.get
+    try:
+        # Sem rede e sem busca: é o pior caso, e é o que tem que funcionar.
+        cambio.BUSCAR = False
+        cambio._cache = None
+        cambio.requests.get = lambda *a, **k: (_ for _ in ()).throw(
+            RuntimeError("o teste não vai à rede"))
+
+        r = cliente.get("/cambio")
+        eq("responde 200 mesmo sem rede", r.status_code, 200)
+        corpo = r.json()
+        check("o valor é utilizável pra multiplicar",
+              isinstance(corpo.get("valor"), (int, float)) and corpo["valor"] > 0,
+              f"(obtido {corpo.get('valor')!r})")
+        eq("e diz que veio da taxa fixa", corpo.get("fonte"), "fixa")
+        check("traz quando foi apurado", isinstance(corpo.get("quando"), (int, float)))
+    finally:
+        cambio.BUSCAR, cambio.requests.get = salvo_buscar, salvo_get
+        cambio._cache = None
 
 print()
 if falhas:

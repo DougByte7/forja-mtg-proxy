@@ -1,15 +1,26 @@
 """
-Câmbio dólar→real, usado só pra COMPARAR as duas colunas da cotação.
+Câmbio dólar→real. Dois usos, e a diferença entre eles importa.
 
-Não é conversão de preço pra cobrar nada e não entra em total nenhum: serve
-pra tela poder dizer "esta carta está bem mais cara aqui do que lá fora".
-Por isso ele pode errar um pouco sem estragar nada — e por isso ele NUNCA
-levanta exceção: quando a rede falha, cai numa taxa fixa e a comparação
-segue, só um pouco menos precisa.
+1. COMPARAR as duas colunas da cotação: a tela marca com ▲ a carta que está
+   bem mais cara aqui do que lá fora.
+2. LER em real o `preco_usd` da base local, que é dólar porque a base é o
+   bulk da Scryfall (ver `cartas.py`) e quem monta deck aqui pensa em real.
+
+Os dois são de APRESENTAÇÃO, e é isso que permite a taxa errar um pouco sem
+estragar nada. Nenhum valor cobrado passa por aqui: a impressão é em real
+desde sempre (`calc.py`), e o total de comprar tem fonte brasileira própria
+(`ligamagic.py`) que já devolve real de verdade. O que esta taxa muda é a
+RÉGUA com que um preço de referência é lido, nunca o preço.
+
+Por isso ele NUNCA levanta exceção: quando a rede falha, cai numa taxa fixa
+e a tela segue, só um pouco menos precisa — e escreve na própria tela qual
+das duas aplicou, que é o que separa aproximação honesta de número inventado.
 
 Isso é diferente do `USD_BRL` do `scryfall.py`, que é opcional, fixo no .env
-e converte os preços MOSTRADOS. Aqui a taxa é sempre necessária (o indicador
-precisa de alguma), então tem valor padrão e busca automática.
+e converte os preços da COTAÇÃO ao vivo. Aqui a taxa é sempre necessária
+(a tela precisa de alguma), então tem valor padrão e busca automática. Os
+dois nunca se aplicam ao mesmo número: converter duas vezes é o erro que
+esta separação existe pra impedir.
 
 A busca é na AwesomeAPI: endpoint público, sem cadastro nem chave, uma
 requisição a cada `CAMBIO_TTL` (o valor fica em memória entre as cotações).
@@ -71,8 +82,9 @@ def taxa() -> dict:
     """Quantos reais vale um dólar, com de onde veio.
 
     Devolve `{"valor", "fonte", "quando"}` — `fonte` é "awesomeapi" ou
-    "fixa", e a tela usa isso pra escrever no rodapé qual câmbio ela aplicou.
-    Sempre devolve alguma coisa utilizável.
+    "fixa", e a tela usa isso pra escrever qual câmbio ela aplicou. Sempre
+    devolve alguma coisa utilizável, e `valor` é sempre maior que zero: quem
+    converte pode multiplicar sem checar, mas não pode omitir de onde veio.
     """
     global _cache
     with _trava:

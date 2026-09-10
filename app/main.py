@@ -1,24 +1,43 @@
+import hmac
 import os
 import re
 import threading
 import time
 
-from fastapi import (Body, FastAPI, Form, Header, HTTPException, Request,
-                     UploadFile)
+from fastapi import (Body, Cookie, Depends, FastAPI, Form, Header,
+                     HTTPException, Request, Response, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (calc, cartas, cleanup, cotacao_job, decks, detalhe_carta,
-               edhrec, fulfillment, importar, log, manabase, notify, pix,
-               poder, printer, spellbook, storage, tinta, visitas)
+from . import (calc, cambio, cartas, cleanup, cotacao_job, decks,
+               detalhe_carta, edhrec, fulfillment, importar, log, manabase,
+               notify, pix, poder, printer, spellbook, storage, tinta,
+               usuarios, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
+# Origens permitidas. Deixou de ser "*" quando o login entrou: com cookie de
+# sessão, "*" seria o convite pra qualquer página da internet fazer pedido em
+# nome de quem está logado aqui. O navegador recusa `*` junto de credenciais,
+# então isto também é o que faz o cookie funcionar de verdade.
+#
+# Vazio = só mesma origem, que é o caso normal: as telas são servidas por este
+# mesmo servidor. As duas bases já existem no `.env` pros links do e-mail.
+# `or` e não o default do `.get`: a variável existe no .env como `CORS_ORIGENS=`,
+# e aí o `.get` devolve string vazia — não o default. Sem isto, "vazio" viraria
+# lista vazia (nenhuma origem permitida) em vez do que o .env promete.
+_ORIGENS = [o.strip() for o in (
+    os.environ.get("CORS_ORIGENS", "").strip()
+    or ",".join(filter(None, [os.environ.get("PUBLIC_BASE_URL", ""),
+                              os.environ.get("LOCAL_BASE_URL", "")]))
+).split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # em produção, restringir ao domínio do front-end
+    allow_origins=_ORIGENS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,9 +51,75 @@ ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 NOTIFY_COOLDOWN_SECONDS = 120
 
 
-def _check_admin(x_admin_token: str | None):
-    if not ADMIN_TOKEN or x_admin_token != ADMIN_TOKEN:
-        raise HTTPException(401, "Token de administrador inválido ou ausente.")
+COOKIE_SESSAO = "forja_sessao"
+# `secure` desligável porque a mesma página roda em http:// na rede local (é
+# pra isso que o LOCAL_BASE_URL existe). Com secure=True em http o navegador
+# simplesmente NÃO GRAVA o cookie, sem erro nenhum — e o login "não funciona"
+# sem nada na tela explicando por quê.
+SESSAO_SEGURA = os.environ.get("SESSAO_SEGURA", "1") == "1"
+
+
+def quem_e(forja_sessao: str | None = Cookie(default=None)) -> dict | None:
+    """Quem está pedindo, ou `None` pra anônimo — que NÃO é erro.
+
+    É a peça que faz o login ser ADITIVO: nenhuma rota fica fechada por causa
+    dela. Sem cookie, o sistema se comporta exatamente como antes de existir
+    conta neste projeto.
+    """
+    return usuarios.da_sessao(forja_sessao) if forja_sessao else None
+
+
+def exige_login(quem: dict | None = Depends(quem_e)) -> dict:
+    """Pras poucas rotas que não fazem sentido sem conta ("os meus")."""
+    if not quem:
+        raise HTTPException(401, "Entre na sua conta pra ver isso.")
+    return quem
+
+
+def _pode_mexer(dono: str | None, quem: dict | None) -> bool:
+    """Quem pode gravar e apagar. UMA função, vale pra deck e pra pedido.
+
+    * SEM dono -> qualquer um, inclusive anônimo. É o sistema de sempre:
+      quem tem o id, mexe.
+    * COM dono -> só o dono e o admin. O link continua ABRINDO pra qualquer
+      um, porque compartilhar deck é a razão de o link existir; o que fecha é
+      gravar e apagar.
+
+    Ler nunca passa por aqui, de propósito.
+    """
+    if not dono:
+        return True
+    if not quem:
+        return False
+    return quem["id"] == dono or quem.get("perfil") == "admin"
+
+
+def _proibido():
+    return HTTPException(403, "Este deck é de outra pessoa. Você pode abrir e "
+                              "duplicar, mas não alterar.")
+
+
+def _check_admin(x_admin_token: str | None, quem: dict | None = None):
+    """A porta do operador. Duas chaves abrem, e as duas continuam existindo.
+
+    O `ADMIN_TOKEN` do `.env` é a chave da CASA: funciona de `curl`, sem
+    cookie e sem banco, e é o que ainda abre o painel quando a tabela de
+    usuários está vazia (como todo deploy novo começa) ou quando alguém
+    esquece a senha. A sessão de um usuário `admin` é a chave do dia a dia.
+
+    `quem` tem valor padrão pra as dezoito chamadas que já existiam seguirem
+    valendo sem serem tocadas: mexer nas dezoito no mesmo commit que introduz
+    sessão é como se deixa uma delas aberta por engano.
+
+    `compare_digest` e não `!=`: comparação que sai no primeiro byte diferente
+    conta quanto tempo levou, e isso basta pra adivinhar o token byte a byte.
+    """
+    if quem and quem.get("perfil") == "admin":
+        return
+    if ADMIN_TOKEN and x_admin_token and \
+            hmac.compare_digest(str(x_admin_token), ADMIN_TOKEN):
+        return
+    raise HTTPException(401, "Token de administrador inválido ou ausente.")
 
 
 # Requisições que valem uma linha de log mesmo vindo de bot, porque mexem em
@@ -129,6 +214,9 @@ def startup():
     storage.init_db()
     decks.init_db()
     cartas.init_db()
+    usuarios.init_db()
+    # Só faz alguma coisa se não existir conta nenhuma — ver `semear_admin`.
+    usuarios.semear_admin()
     cleanup.start_background()
     # Monta a base de cartas se ela estiver vazia ou velha, em segundo plano.
     # Sem isto o deckbuilder nasce sem carta nenhuma e dependeria de alguém
@@ -170,6 +258,39 @@ async def create_order(xml_file: UploadFile, lamination: str = Form(...),
         "pix_copia_cola": payload,
         "pix_qr_base64": qr_b64,
     }
+
+
+@app.get("/pedidos/meus")
+def meus_pedidos(quem: dict = Depends(exige_login)):
+    """Os pedidos desta conta, de qualquer aparelho."""
+    return {"pedidos": storage.list_by_dono(quem["id"])}
+
+
+@app.post("/pedidos/reclamar")
+def reclamar_pedidos(corpo: dict = Body(default={}),
+                     quem: dict = Depends(exige_login)):
+    """Vira dono dos pedidos que a pessoa já tinha no navegador.
+
+    A home chama isto sozinha ao abrir, com a lista do `localStorage`, e em
+    silêncio: é recado, não serviço. Se falhar, a tela segue exatamente como
+    antes — os pedidos continuam abrindo pelo id, como sempre.
+
+    Só pega o que está ÓRFÃO (ver `storage.reclamar`): pedido que já é de
+    outra pessoa não é tocado nem vira erro. Dois irmãos num computador só é
+    um caso real, não uma hipótese.
+
+    A prova de posse é ter o id, que é o nível em que este sistema já opera —
+    `POST /orders/{id}/cancel` é aberta pelo mesmo motivo. E aqui a
+    reclamação é rotulagem ADITIVA: ela não fecha nenhuma rota que estava
+    aberta.
+    """
+    ids = corpo.get("ids")
+    if not isinstance(ids, list):
+        raise HTTPException(400, "Manda a lista de ids em `ids`.")
+    reclamados = storage.reclamar(ids, quem["id"])
+    if reclamados:
+        log.evento("pedido", "reclamou", quantos=len(reclamados), por=quem["id"])
+    return {"reclamados": reclamados}
 
 
 @app.get("/orders/{order_id}")
@@ -282,9 +403,19 @@ def cancel_order(order_id: str):
 
 
 def _authorize(purpose: str, order_id: str, token: str | None,
-               x_admin_token: str | None) -> dict:
-    """Valida o link assinado (ou o header de admin) e devolve o pedido."""
-    authorized = bool(x_admin_token and ADMIN_TOKEN and x_admin_token == ADMIN_TOKEN)
+               x_admin_token: str | None, quem: dict | None = None) -> dict:
+    """Valida o link assinado (ou o admin) e devolve o pedido.
+
+    Três chaves abrem, e nenhuma substitui as outras: o link assinado do
+    e-mail (que é como o operador chega aqui do celular), o `ADMIN_TOKEN` e a
+    sessão de um usuário `admin` — esta última pra quem já entrou no painel
+    não precisar de mais nada pra abrir um PDF a partir dele.
+
+    `compare_digest` e não `==`: mesmo motivo do `_check_admin`.
+    """
+    authorized = bool(quem and quem.get("perfil") == "admin")
+    if not authorized and x_admin_token and ADMIN_TOKEN:
+        authorized = hmac.compare_digest(str(x_admin_token), ADMIN_TOKEN)
     if not authorized:
         try:
             authorized = fulfillment.check_token(purpose, order_id, token)
@@ -419,7 +550,8 @@ def _servir_pdf(request: Request, path: str, order_id: str,
 @app.get("/orders/{order_id}/pdf")
 def view_pdf(request: Request, order_id: str, token: str | None = None,
              fresh: bool = False,
-             x_admin_token: str | None = Header(default=None)):
+             x_admin_token: str | None = Header(default=None),
+             quem: dict | None = Depends(quem_e)):
     """
     Link "Ver PDF" do e-mail. Monta a folha (se ainda não existir) e devolve
     o arquivo inline, pra abrir direto no navegador ou no visualizador do
@@ -432,7 +564,7 @@ def view_pdf(request: Request, order_id: str, token: str | None = None,
 
     Só conferir NÃO marca o pedido como pago nem imprime nada.
     """
-    _authorize("view", order_id, token, x_admin_token)
+    _authorize("view", order_id, token, x_admin_token, quem)
     estado = fulfillment.request_pdf(order_id, fresh=fresh)
 
     if estado["estado"] == "erro":
@@ -450,7 +582,8 @@ def view_pdf(request: Request, order_id: str, token: str | None = None,
 @app.get("/combos/{combo_id}/pdf")
 def view_combo_pdf(request: Request, combo_id: str, token: str | None = None,
                    fresh: bool = False,
-                   x_admin_token: str | None = Header(default=None)):
+                   x_admin_token: str | None = Header(default=None),
+                   quem: dict | None = Depends(quem_e)):
     """A folha combinada (vários pedidos num papel só), pra conferir.
 
     Mesmo comportamento do `/orders/{id}/pdf`: monta em segundo plano se ainda
@@ -461,7 +594,11 @@ def view_combo_pdf(request: Request, combo_id: str, token: str | None = None,
     não abre a folha combinada e vice-versa. Conferir não imprime nada nem
     marca pedido nenhum como pago.
     """
-    autorizado = bool(x_admin_token and ADMIN_TOKEN and x_admin_token == ADMIN_TOKEN)
+    # As mesmas três chaves do `_authorize`: sessão de admin, token da casa e
+    # o link assinado do e-mail.
+    autorizado = bool(quem and quem.get("perfil") == "admin")
+    if not autorizado and x_admin_token and ADMIN_TOKEN:
+        autorizado = hmac.compare_digest(str(x_admin_token), ADMIN_TOKEN)
     if not autorizado:
         try:
             autorizado = fulfillment.check_combo_token("view", combo_id, token)
@@ -491,14 +628,15 @@ def view_combo_pdf(request: Request, combo_id: str, token: str | None = None,
 
 @app.get("/orders/{order_id}/print", response_class=HTMLResponse)
 def print_order(order_id: str, token: str | None = None,
-                x_admin_token: str | None = Header(default=None)):
+                x_admin_token: str | None = Header(default=None),
+                quem: dict | None = Depends(quem_e)):
     """
     Link "Imprimir" do e-mail. Reaproveita o PDF já conferido, marca o
     pedido como pago e manda pra fila da impressora. Aceita o token assinado
     da querystring (o do e-mail) ou o header X-Admin-Token, pra disparar na
     mão quando precisar.
     """
-    order = _authorize("print", order_id, token, x_admin_token)
+    order = _authorize("print", order_id, token, x_admin_token, quem)
     was_paid = order["status"] == "paid"
 
     try:
@@ -656,6 +794,99 @@ def deckbuilder_page():
     return FileResponse("app/static/deckbuilder.html", media_type="text/html")
 
 
+# ---------------------------------------------------------------------------
+# Conta
+# ---------------------------------------------------------------------------
+
+@app.get("/entrar")
+def pagina_de_entrar():
+    """A tela de login. Rota própria pra a URL não ter .html, como as outras."""
+    return FileResponse("app/static/entrar.html", media_type="text/html")
+
+
+@app.get("/conta")
+def conta_atual(quem: dict | None = Depends(quem_e)):
+    """Quem está logado, ou `{"usuario": null}`.
+
+    200 com `null` pra anônimo, e NÃO 401, de propósito: é a rota que toda
+    página chama ao abrir, e um 401 por carregamento ensina o operador a
+    ignorar o console — junto com os erros que importam.
+    """
+    return {"usuario": quem}
+
+
+@app.post("/conta/entrar")
+def conta_entrar(resposta: Response, request: Request,
+                 corpo: dict = Body(default={})):
+    """Confere a senha e abre a sessão, devolvendo o cookie.
+
+    Não existe cadastro aberto neste sistema: conta é criada pelo admin. O
+    README abre dizendo que isto não é uma loja — é ferramenta privada, de um
+    grupo de jogo —, e um `/conta/criar` público é a primeira coisa que um bot
+    encontra.
+    """
+    try:
+        aberta = usuarios.entrar(
+            corpo.get("login", ""), corpo.get("senha", ""),
+            lembrar=bool(corpo.get("lembrar")),
+            agente=request.headers.get("user-agent", ""))
+    except PermissionError as e:
+        raise HTTPException(429, str(e))
+    if aberta is None:
+        # Uma mensagem só pros dois casos (login inexistente e senha errada):
+        # respostas diferentes transformam esta tela num conferidor de quais
+        # contas existem.
+        raise HTTPException(401, "Login ou senha não conferem.")
+
+    usuario, token, duracao = aberta
+    resposta.set_cookie(
+        COOKIE_SESSAO, token, max_age=duracao, httponly=True,
+        samesite="lax", path="/", secure=SESSAO_SEGURA)
+    return {"usuario": usuario}
+
+
+@app.post("/conta/sair")
+def conta_sair(resposta: Response,
+               forja_sessao: str | None = Cookie(default=None)):
+    """Encerra a sessão deste aparelho. Sem token, não é erro: sair de onde já
+    se está fora é o resultado que a pessoa queria."""
+    usuarios.sair(forja_sessao)
+    resposta.delete_cookie(COOKIE_SESSAO, path="/")
+    return {"ok": True}
+
+
+@app.post("/conta/senha")
+def conta_senha(corpo: dict = Body(default={}),
+                quem: dict = Depends(exige_login)):
+    """Troca a própria senha. Pede a atual: um cookie roubado não pode virar
+    troca de senha, que é o que transformaria um acesso temporário em
+    permanente."""
+    if not usuarios.entrar(quem["login"], corpo.get("atual", "")):
+        raise HTTPException(403, "A senha atual não confere.")
+    try:
+        usuarios.trocar_senha(quem["id"], corpo.get("nova", ""))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    # `trocar_senha` derruba TODAS as sessões, inclusive esta: é o que se
+    # espera de trocar senha, e é o que faz a troca servir pra alguma coisa
+    # quando o motivo dela foi desconfiança.
+    return {"ok": True, "saiu_de_todos": True}
+
+
+@app.get("/meus-decks")
+def pagina_de_decks():
+    """A tela que lista os decks. Serve o HTML por rota própria, e não pelo
+    mount de estáticos, pra a URL ser /meus-decks, sem o .html — igual ao
+    /deckbuilder.
+
+    Página e recurso separados, como no admin (`/admin` é a casca, os dados
+    vêm de `/admin/pedidos`): o HTML aqui não tem deck nenhum dentro. Quais
+    decks aparecem, quem decide é o navegador, com a lista que ele guarda —
+    e é por isso que servir este arquivo publicamente não é problema.
+    """
+    return FileResponse("app/static/decks.html", media_type="text/html")
+
+
 @app.get("/cartas/estado")
 def cartas_estado():
     """Quantas cartas a base local tem e quando foi montada.
@@ -665,6 +896,29 @@ def cartas_estado():
     dizer a diferença entre "carta não existe" e "a base ainda está vindo".
     """
     return cartas.estado()
+
+
+@app.get("/cambio")
+def cambio_atual():
+    """Quantos reais vale um dólar, e de onde veio esse número.
+
+    Público, e o deckbuilder chama ao abrir: o `preco_usd` da base local é
+    dólar (é o bulk da Scryfall) e quem monta deck aqui pensa em real.
+
+    A conversão que esta rota alimenta é de APRESENTAÇÃO. O número guardado
+    continua em dólar, nada cobrado passa por aqui e o total de comprar tem
+    fonte brasileira própria (`ligamagic.py`), que devolve real de verdade.
+    O que a taxa muda é a RÉGUA com que o preço da base é lido, não o preço.
+
+    Rota separada, e não mais um campo em `/cartas/estado`, de propósito:
+    aquela é consultada em laço enquanto a base sincroniza, e os dois assuntos
+    têm prazos diferentes (base: 24 h; câmbio: 6 h). Juntos, a taxa oscilaria
+    no meio de uma sincronização por nenhuma razão.
+
+    Nunca falha: sem rede, volta a taxa fixa do `.env` com `fonte: "fixa"`, e
+    é a tela que escreve qual das duas aplicou.
+    """
+    return cambio.taxa()
 
 
 @app.get("/cartas/busca")
@@ -716,7 +970,8 @@ def cartas_detalhe(nome: str):
 
 
 @app.post("/admin/cartas/sync")
-def cartas_sync(x_admin_token: str | None = Header(default=None)):
+def cartas_sync(x_admin_token: str | None = Header(default=None),
+                quem: dict | None = Depends(quem_e)):
     """Refaz a base de cartas na hora, sem esperar o ciclo diário.
 
     Com token porque baixa mais de 100 MB da Scryfall: é a única rota daqui
@@ -724,7 +979,7 @@ def cartas_sync(x_admin_token: str | None = Header(default=None)):
     página. Roda em segundo plano — a resposta volta na hora com o andamento,
     que a tela do admin pode acompanhar por `GET /cartas/estado`.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     if cartas.andamento()["rodando"]:
         return {"ok": True, "ja_rodando": True, **cartas.estado()}
     threading.Thread(target=cartas.sincronizar, daemon=True).start()
@@ -787,20 +1042,97 @@ def importar_deck(corpo: dict = Body(default={})):
 
 
 @app.post("/decks")
-def criar_deck(corpo: dict = Body(default={})):
+def criar_deck(corpo: dict = Body(default={}),
+               quem: dict | None = Depends(quem_e)):
     """Cria um deck e devolve o id.
 
-    Sem token e sem dono, pela mesma regra dos pedidos: quem tem o id, mexe.
-    O id tem 12 dígitos hex — mais que os 8 do pedido, porque aqui o estrago
-    de acertar um por sorte é reescrever o deck de alguém (ver `decks.py`).
+    Aberta pra qualquer um, com ou sem conta: quem tem o id, mexe. O id tem 12
+    dígitos hex — mais que os 8 do pedido, porque aqui o estrago de acertar um
+    por sorte é reescrever o deck de alguém (ver `decks.py`).
+
+    Quem está logado nasce dono; anônimo cria deck órfão, que é como todo deck
+    deste sistema existiu até o login aparecer.
     """
     try:
         deck = decks.criar(corpo.get("nome", ""), corpo.get("comandantes"),
                            corpo.get("cartas"), corpo.get("maybeboard"),
-                           corpo.get("categorias"))
+                           corpo.get("categorias"),
+                           dono=quem["id"] if quem else None)
     except ValueError as e:
         raise HTTPException(400, str(e))
     log.evento("deck", "criou", deck=deck["id"])
+    return _deck_completo(deck)
+
+
+@app.post("/decks/resumo")
+def resumo_de_decks(corpo: dict = Body(default={})):
+    """Os metadados de vários decks de uma vez, pra tela `/meus-decks`.
+
+    POST pra uma LEITURA, de propósito, e por dois motivos. O primeiro é que
+    uma lista de dezenas de ids não cabe numa URL que vai parar em log de
+    acesso, histórico do navegador e cabeçalho `Referer` — e neste sistema
+    essa lista É a credencial: quem tem o id, mexe. O segundo é que `GET` com
+    corpo é o que o Commander Spellbook faz, e a gente já achou estranho lá
+    (ver `spellbook.py`); não vale repetir de dentro de casa.
+
+    A rota é sobre ids que o cliente JÁ TEM. Ela nunca lista o banco: sem
+    dono, "todos os decks" seria os decks de todo mundo. Lista vazia devolve
+    lista vazia, e id que não existe não volta — cabe a quem chamou comparar
+    o que pediu com o que recebeu pra saber o que sumiu.
+
+    Declarada antes do `GET /decks/{deck_id}` porque o FastAPI casa por ordem:
+    se ela viesse depois, um dia alguém acrescentaria um `GET` aqui e ele
+    viraria, em silêncio, "o deck de id `resumo`".
+    """
+    ids = corpo.get("ids")
+    if not isinstance(ids, list):
+        raise HTTPException(400, "Manda a lista de ids em `ids`.")
+    if len(ids) > decks.MAX_RESUMO:
+        # Não trunca: truncar esconderia decks sem dizer, e a tela mostraria
+        # uma lista incompleta que parece completa.
+        raise HTTPException(
+            400, f"São até {decks.MAX_RESUMO} decks por consulta; "
+                 f"vieram {len(ids)}.")
+
+    achados = decks.resumo(ids)
+    conhecidos = {d["id"] for d in achados}
+    return {"decks": achados,
+            "desconhecidos": [str(i) for i in ids if str(i) not in conhecidos]}
+
+
+@app.get("/decks/meus")
+def meus_decks(quem: dict = Depends(exige_login)):
+    """Os decks desta conta, de qualquer aparelho.
+
+    É o que o `POST /decks/resumo` não consegue dar: aquele responde sobre os
+    ids que o navegador guardou, então um deck montado no celular não aparece
+    no computador. Com dono, aparece.
+
+    Declarada ANTES do `GET /decks/{deck_id}` porque o FastAPI casa por ordem
+    de declaração: depois dele, esta rota viraria, em silêncio, "o deck de id
+    `meus`" — e responderia 404 pra sempre.
+    """
+    return {"decks": decks.de(quem["id"])}
+
+
+@app.post("/decks/{deck_id}/reclamar")
+def reclamar_deck(deck_id: str, quem: dict = Depends(exige_login)):
+    """Vira dono de um deck que não tem dono.
+
+    Primeiro-a-chegar, e sem problema: reclamar um órfão não tira de ninguém
+    nada que a pessoa tivesse. Antes da reclamação, qualquer um com o id já
+    podia reescrever aquele deck; depois, só o dono e o admin. A reclamação
+    REDUZ o conjunto de quem edita — ver o cabeçalho do `usuarios.py`.
+
+    409 e não 403 quando o deck já é de alguém: não é "você não pode", é "essa
+    ação não cabe mais neste deck", e a tela diz coisas diferentes pros dois.
+    """
+    try:
+        deck = decks.reclamar(deck_id, quem["id"])
+    except PermissionError as e:
+        raise HTTPException(409, str(e))
+    if deck is None:
+        raise HTTPException(404, "Deck não encontrado.")
     return _deck_completo(deck)
 
 
@@ -816,13 +1148,21 @@ def obter_deck(deck_id: str):
 
 
 @app.put("/decks/{deck_id}")
-def salvar_deck(deck_id: str, corpo: dict = Body(...)):
+def salvar_deck(deck_id: str, corpo: dict = Body(...),
+                quem: dict | None = Depends(quem_e)):
     """Grava o deck por cima. É o autosave da tela.
 
     A validação vai na resposta, mas NÃO impede de gravar: deck pela metade é
     o estado normal de quem está montando (ver `decks.py`).
+
+    Deck órfão qualquer um grava, como sempre foi. Deck com dono, só ele e o
+    admin — e o `GET` acima continua aberto, porque compartilhar o link é a
+    razão de o link existir.
     """
     _deck_ou_404(deck_id)
+    existe, dono = decks.dono_de(deck_id)
+    if not _pode_mexer(dono, quem):
+        raise _proibido()
     try:
         deck = decks.salvar(deck_id, corpo.get("nome", ""),
                             corpo.get("comandantes"), corpo.get("cartas"),
@@ -835,17 +1175,28 @@ def salvar_deck(deck_id: str, corpo: dict = Body(...)):
 
 
 @app.post("/decks/{deck_id}/duplicar")
-def duplicar_deck(deck_id: str):
-    """Cópia com id novo — o "salvar como" de um sistema sem login."""
+def duplicar_deck(deck_id: str, quem: dict | None = Depends(quem_e)):
+    """Cópia com id novo — o "salvar como" deste sistema.
+
+    Fica LIVRE mesmo quando o original tem dono, de propósito: é a válvula de
+    escape de quem abriu o deck de outra pessoa e quis mexer. Não altera nada
+    do original, e a cópia nasce de quem duplicou — não do dono do original.
+    """
     _deck_ou_404(deck_id)
     copia = decks.duplicar(deck_id)
+    if quem:
+        decks.definir_dono(copia["id"], quem["id"])
+        copia = decks.obter(copia["id"])
     log.evento("deck", "duplicou", deck=deck_id, copia=copia["id"])
     return _deck_completo(copia)
 
 
 @app.delete("/decks/{deck_id}")
-def apagar_deck(deck_id: str):
+def apagar_deck(deck_id: str, quem: dict | None = Depends(quem_e)):
     """Apaga o deck. Não tem volta: o deck vive só aqui."""
+    existe, dono = decks.dono_de(deck_id)
+    if existe and not _pode_mexer(dono, quem):
+        raise _proibido()
     if not decks.apagar(deck_id):
         raise HTTPException(404, "Deck não encontrado.")
     log.evento("deck", "apagou", deck=deck_id)
@@ -1031,42 +1382,46 @@ def ink_level():
 
 
 @app.get("/admin/orders")
-def list_open_orders(x_admin_token: str | None = Header(default=None)):
+def list_open_orders(x_admin_token: str | None = Header(default=None),
+                     quem: dict | None = Depends(quem_e)):
     """Pedidos ainda não impressos, com o status de cada um ('pending' =
     ninguém avisou nada; 'notified' = o cliente disse que pagou)."""
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     return storage.list_open()
 
 
 @app.get("/admin/printers")
-def list_printers(x_admin_token: str | None = Header(default=None)):
+def list_printers(x_admin_token: str | None = Header(default=None),
+                  quem: dict | None = Depends(quem_e)):
     """Lista as filas que o CUPS conhece, vistas de dentro do container —
     é assim que se descobre o nome certo pra PRINTER_QUEUE."""
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     return printer.list_queues()
 
 
 @app.get("/admin/tinta")
-def ink_diagnostics(x_admin_token: str | None = Header(default=None)):
+def ink_diagnostics(x_admin_token: str | None = Header(default=None),
+                    quem: dict | None = Depends(quem_e)):
     """O que a impressora respondeu sobre tinta, cru.
 
     Serve pra responder "esse modelo informa o nível?" sem abrir terminal:
     se não vier nenhum `marker-*`, ele não informa, e o aviso da página passa
     a depender do `TINTA_ESTADO` no .env.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     return tinta.diagnostico()
 
 
 @app.get("/admin/visitas")
-def list_visitas(x_admin_token: str | None = Header(default=None)):
+def list_visitas(x_admin_token: str | None = Header(default=None),
+                 quem: dict | None = Depends(quem_e)):
     """Quem está no sistema agora, separado por classe.
 
     Complementa o `visitas.log`: o arquivo responde "o que aconteceu ontem",
     isto responde "tem alguém aí neste momento" sem precisar abrir terminal.
     A janela é `VISITA_JANELA_MINUTOS`.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     ativas = visitas.registro.ativas()
     return {
         "janela_minutos": visitas.JANELA_MINUTOS,
@@ -1094,11 +1449,12 @@ def admin_page():
 
 
 @app.get("/admin/sessao")
-def admin_session(x_admin_token: str | None = Header(default=None)):
+def admin_session(x_admin_token: str | None = Header(default=None),
+                  quem: dict | None = Depends(quem_e)):
     """Só diz se o token vale. A tela chama isto ao abrir (e ao colar um
     token novo) pra saber se mostra a lista ou o formulário de entrada, sem
     ter que pedir a lista inteira só pra descobrir isso."""
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     return {"ok": True, "impressora": printer.PRINTER_QUEUE or None,
             "email_configurado": notify.is_configured()}
 
@@ -1106,7 +1462,8 @@ def admin_session(x_admin_token: str | None = Header(default=None)):
 @app.get("/admin/pedidos")
 def admin_list_orders(status: str | None = None, busca: str | None = None,
                       limite: int = 200,
-                      x_admin_token: str | None = Header(default=None)):
+                      x_admin_token: str | None = Header(default=None),
+                      quem: dict | None = Depends(quem_e)):
     """Todos os pedidos, do mais novo pro mais antigo, com os contadores por
     estado e o link assinado de conferir o PDF de cada um.
 
@@ -1114,7 +1471,7 @@ def admin_list_orders(status: str | None = None, busca: str | None = None,
     PUBLIC_BASE_URL é o domínio de fora, que num acesso pela rede local pode
     nem resolver.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     pedidos = storage.list_orders(status=status, busca=busca, limite=limite)
     for pedido in pedidos:
         try:
@@ -1128,12 +1485,101 @@ def admin_list_orders(status: str | None = None, busca: str | None = None,
     return {"contagem": storage.count_by_status(), "pedidos": pedidos}
 
 
+@app.get("/admin/usuarios")
+def admin_list_usuarios(x_admin_token: str | None = Header(default=None),
+                        quem: dict | None = Depends(quem_e)):
+    """As contas do sistema. Nenhuma delas traz hash de senha: `usuarios`
+    tem um caminho de saída só (`_publico`), e ele não copia essa coluna."""
+    _check_admin(x_admin_token, quem)
+    return {"usuarios": usuarios.listar()}
+
+
+@app.post("/admin/usuarios")
+def admin_criar_usuario(corpo: dict = Body(default={}),
+                        x_admin_token: str | None = Header(default=None),
+                        quem: dict | None = Depends(quem_e)):
+    """Cria uma conta. É o único caminho: não existe cadastro aberto.
+
+    O README abre dizendo que isto não é uma loja — é ferramenta privada, de
+    um grupo de jogo. Um `POST /conta/criar` público seria a primeira coisa
+    que um bot encontraria, e a primeira que encheria o banco.
+    """
+    _check_admin(x_admin_token, quem)
+    try:
+        return {"usuario": usuarios.criar(
+            corpo.get("login", ""), corpo.get("senha", ""),
+            nome=corpo.get("nome", ""), perfil=corpo.get("perfil", "cliente"))}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/admin/usuarios/{usuario_id}/senha")
+def admin_trocar_senha(usuario_id: str, corpo: dict = Body(default={}),
+                       x_admin_token: str | None = Header(default=None),
+                       quem: dict | None = Depends(quem_e)):
+    """Redefine a senha de alguém — é a saída pra quem esqueceu a dela.
+
+    Derruba todas as sessões daquela conta junto (ver `usuarios.trocar_senha`),
+    o que também a torna a ferramenta certa quando o motivo foi desconfiança.
+    """
+    _check_admin(x_admin_token, quem)
+    try:
+        if not usuarios.trocar_senha(usuario_id, corpo.get("nova", "")):
+            raise HTTPException(404, "Conta não encontrada.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.delete("/admin/usuarios/{usuario_id}")
+def admin_apagar_usuario(usuario_id: str,
+                         x_admin_token: str | None = Header(default=None),
+                         quem: dict | None = Depends(quem_e)):
+    """Apaga a conta e as sessões dela.
+
+    Os decks e pedidos daquela pessoa NÃO são apagados: eles voltam a ser
+    órfãos, e órfão é um estado que este sistema sabe tratar desde sempre.
+    Apagar o acervo junto seria transformar "tirar o acesso de alguém" em
+    "destruir o trabalho de alguém", que são coisas bem diferentes.
+    """
+    _check_admin(x_admin_token, quem)
+    if not usuarios.apagar(usuario_id):
+        raise HTTPException(404, "Conta não encontrada.")
+    soltos = decks.soltar_de(usuario_id) + storage.soltar_de(usuario_id)
+    log.evento("usuarios", "apagou", usuario=usuario_id, orfanados=soltos)
+    return {"ok": True, "orfanados": soltos}
+
+
+@app.get("/admin/decks")
+def admin_list_decks(busca: str | None = None, limite: int = 200,
+                     x_admin_token: str | None = Header(default=None),
+                     quem: dict | None = Depends(quem_e)):
+    """Todos os decks do banco, com o dono de cada um, pro operador.
+
+    Esta é a ÚNICA leitura do projeto que enumera decks, e é por isso que ela
+    está aqui atrás do `_check_admin` em vez de junto do `POST /decks/resumo`.
+    Aquele é público de propósito e responde só sobre ids que quem chamou já
+    tinha — sem dono no banco, "liste os decks" significaria "liste os decks
+    de todo mundo", e é exatamente o que esta rota faz, deliberadamente, pra
+    quem é dono do sistema.
+
+    `contagem.sem_dono` é o número que responde "quanto do acervo ainda não é
+    de ninguém". Hoje é todo ele: a coluna `dono` só passa a ser preenchida
+    quando o login existir, e até lá cada deck sai daqui com `dono: null`, que
+    é a verdade sobre eles — não um campo esquecido.
+    """
+    _check_admin(x_admin_token, quem)
+    return {"contagem": decks.contar(),
+            "decks": decks.listar(busca=busca, limite=limite)}
+
+
 @app.get("/admin/pedidos/{order_id}")
 def admin_get_order(order_id: str,
-                    x_admin_token: str | None = Header(default=None)):
+                    x_admin_token: str | None = Header(default=None),
+                    quem: dict | None = Depends(quem_e)):
     """Um pedido só, pra tela atualizar a linha depois de uma ação sem
     recarregar a lista inteira."""
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     pedido = storage.get_order(order_id)
     if not pedido:
         raise HTTPException(404, "Pedido não encontrado.")
@@ -1147,7 +1593,8 @@ def admin_get_order(order_id: str,
 
 @app.post("/admin/pedidos/{order_id}/status")
 def admin_set_status(order_id: str, status: str = Form(...),
-                     x_admin_token: str | None = Header(default=None)):
+                     x_admin_token: str | None = Header(default=None),
+                     quem: dict | None = Depends(quem_e)):
     """Muda o estado de um pedido na mão.
 
     Serve pros casos que o fluxo normal não cobre: marcar como pago um Pix
@@ -1157,7 +1604,7 @@ def admin_set_status(order_id: str, status: str = Form(...),
     Marcar como 'paid' por aqui NÃO imprime nada — quem imprime é o botão de
     imprimir, que é uma ação separada de propósito (papel e tinta não voltam).
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     try:
         mudou = storage.set_status(order_id, status)
     except ValueError as e:
@@ -1170,14 +1617,15 @@ def admin_set_status(order_id: str, status: str = Form(...),
 
 @app.post("/admin/pedidos/{order_id}/pdf")
 def admin_build_pdf(order_id: str, fresh: bool = False,
-                    x_admin_token: str | None = Header(default=None)):
+                    x_admin_token: str | None = Header(default=None),
+                    quem: dict | None = Depends(quem_e)):
     """Manda montar a folha (ou diz como está a montagem em andamento).
 
     Devolve o mesmo `{"estado": "pronto"|"montando"|"erro"}` do link do
     e-mail, e a tela fica chamando isto enquanto for "montando" pra mostrar o
     progresso — pedido grande leva minutos baixando as artes do Drive.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     if not storage.get_order(order_id):
         raise HTTPException(404, "Pedido não encontrado.")
     estado = fulfillment.request_pdf(order_id, fresh=fresh)
@@ -1188,14 +1636,15 @@ def admin_build_pdf(order_id: str, fresh: bool = False,
 
 @app.post("/admin/pedidos/{order_id}/imprimir")
 def admin_print(order_id: str,
-                x_admin_token: str | None = Header(default=None)):
+                x_admin_token: str | None = Header(default=None),
+                quem: dict | None = Depends(quem_e)):
     """Mesmo efeito do link "Imprimir" do e-mail: marca pago e manda pra fila.
 
     É a única ação da tela que gasta papel, então o botão pede confirmação do
     outro lado. Aqui roda síncrono igual ao link, pra resposta já dizer se o
     CUPS aceitou.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     order = storage.get_order(order_id)
     if not order:
         raise HTTPException(404, "Pedido não encontrado.")
@@ -1293,7 +1742,8 @@ def _resposta_combo(combo_id: str, pedidos: list[dict]) -> dict:
 
 @app.post("/admin/combos")
 def admin_criar_combo(ids: str = Form(...),
-                      x_admin_token: str | None = Header(default=None)):
+                      x_admin_token: str | None = Header(default=None),
+                      quem: dict | None = Depends(quem_e)):
     """Cria (ou reaproveita) a combinação dos pedidos em `ids`, separados por
     vírgula, e devolve quanto papel ela economiza.
 
@@ -1303,7 +1753,7 @@ def admin_criar_combo(ids: str = Form(...),
     Escolher os mesmos pedidos de novo cai na mesma combinação e reaproveita
     a folha já montada — o id sai do conjunto, não do clique.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     pedidos = _pedidos_do_combo(ids.split(","))
     combo_id = storage.save_combo([p["id"] for p in pedidos])
     log.evento("admin", "combinou-pedidos", combo=combo_id,
@@ -1313,9 +1763,10 @@ def admin_criar_combo(ids: str = Form(...),
 
 @app.get("/admin/combos/{combo_id}")
 def admin_get_combo(combo_id: str,
-                    x_admin_token: str | None = Header(default=None)):
+                    x_admin_token: str | None = Header(default=None),
+                    quem: dict | None = Depends(quem_e)):
     """Uma combinação já criada, com os pedidos dela no estado de agora."""
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     combo = storage.get_combo(combo_id)
     if not combo:
         raise HTTPException(404, "Combinação não encontrada.")
@@ -1330,13 +1781,14 @@ def admin_get_combo(combo_id: str,
 
 @app.post("/admin/combos/{combo_id}/pdf")
 def admin_build_combo_pdf(combo_id: str, fresh: bool = False,
-                          x_admin_token: str | None = Header(default=None)):
+                          x_admin_token: str | None = Header(default=None),
+                          quem: dict | None = Depends(quem_e)):
     """Manda montar a folha combinada (ou diz como vai a montagem).
 
     Mesmo `{"estado": "pronto"|"montando"|"erro"}` da folha de um pedido só,
     e a tela fica chamando isto enquanto for "montando".
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     if not storage.get_combo(combo_id):
         raise HTTPException(404, "Combinação não encontrada.")
     estado = fulfillment.request_combo_pdf(combo_id, fresh=fresh)
@@ -1350,14 +1802,15 @@ def admin_build_combo_pdf(combo_id: str, fresh: bool = False,
 
 @app.post("/admin/combos/{combo_id}/imprimir")
 def admin_print_combo(combo_id: str,
-                      x_admin_token: str | None = Header(default=None)):
+                      x_admin_token: str | None = Header(default=None),
+                      quem: dict | None = Depends(quem_e)):
     """Manda a folha combinada pra fila e marca TODOS os pedidos dela como pagos.
 
     É um papel só com as cartas de várias pessoas, então não existe imprimir
     metade: ou o conjunto inteiro é confirmado, ou nenhum. Confira os Pix de
     todos antes — a tela pede confirmação do outro lado.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     combo = storage.get_combo(combo_id)
     if not combo:
         raise HTTPException(404, "Combinação não encontrada.")
@@ -1386,13 +1839,14 @@ def admin_print_combo(combo_id: str,
 
 @app.delete("/admin/combos/{combo_id}")
 def admin_delete_combo(combo_id: str,
-                       x_admin_token: str | None = Header(default=None)):
+                       x_admin_token: str | None = Header(default=None),
+                       quem: dict | None = Depends(quem_e)):
     """Esquece a combinação e apaga a folha montada dela.
 
     Os pedidos NÃO são tocados: desfazer uma combinação é só jogar fora um
     arranjo de papel, e cada pedido continua com o estado que tinha.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     existia = storage.delete_combo(combo_id)
     tinha_pdf = fulfillment.descartar_combo_pdf(combo_id)
     if not existia and not tinha_pdf:
@@ -1403,14 +1857,15 @@ def admin_delete_combo(combo_id: str,
 
 @app.delete("/admin/pedidos/{order_id}")
 def admin_delete_order(order_id: str,
-                       x_admin_token: str | None = Header(default=None)):
+                       x_admin_token: str | None = Header(default=None),
+                       quem: dict | None = Depends(quem_e)):
     """Apaga o pedido de vez, junto com o PDF montado.
 
     O XML do deck vive só aqui, então isso não tem volta — por isso a tela
     pede o id digitado antes de chamar. Pra tirar da frente sem perder o
     histórico, o caminho é cancelar.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     if not storage.delete_order(order_id):
         raise HTTPException(404, "Pedido não encontrado.")
     tinha_pdf = fulfillment.descartar_pdf(order_id)
@@ -1419,9 +1874,10 @@ def admin_delete_order(order_id: str,
 
 
 @app.post("/admin/cleanup")
-def run_cleanup(x_admin_token: str | None = Header(default=None)):
+def run_cleanup(x_admin_token: str | None = Header(default=None),
+                quem: dict | None = Depends(quem_e)):
     """Roda a faxina dos PDFs antigos na hora, sem esperar o ciclo diário."""
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token, quem)
     return cleanup.run_once()
 
 

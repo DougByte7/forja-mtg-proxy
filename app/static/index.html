@@ -527,6 +527,16 @@
          quem ainda não tem deck não tem o que subir aqui. -->
     <a class="sec-btn meus-btn" href="/deckbuilder"
        style="text-decoration:none;">Montar deck</a>
+    <!-- Só aparece pra quem já tem deck salvo: um "Meus decks" vazio no
+         cabeçalho de quem nunca montou nenhum é botão que só sabe decepcionar.
+         Lê a MESMA chave que o deckbuilder escreve. -->
+    <a class="sec-btn meus-btn" id="meusDecksBtn" href="/meus-decks" hidden
+       style="text-decoration:none;">Meus decks <span class="n" id="meusDecksN">0</span></a>
+    <!-- Nasce escondido: aparece como "Entrar" ou com o nome de quem entrou,
+         só depois de `GET /conta` responder. Um botão que pisca de "Entrar"
+         pra "Fulano" a cada carregamento é pior que um que chega pronto. -->
+    <a class="sec-btn meus-btn" id="contaBtn" href="/entrar" hidden
+       style="text-decoration:none;">Entrar</a>
     <button class="sec-btn meus-btn" id="ordersBtn" hidden>
       Meus Pedidos <span class="n" id="ordersCount">0</span>
     </button>
@@ -2765,6 +2775,58 @@
   });
 
   atualizarBotaoPedidos();
+
+  // --- Conta -------------------------------------------------------------
+  // O login é OPCIONAL: esta home funciona igual sem ele, e por isso tudo
+  // aqui falha em silêncio. O que ele acrescenta é dono — e, com dono, os
+  // pedidos aparecem em qualquer aparelho em vez de só neste navegador.
+  //
+  // A reclamação é AUTOMÁTICA aqui (e não um botão, como nos decks) porque a
+  // prova de posse já está na mão: os ids que este navegador guardou. O
+  // servidor só carimba o que está órfão, então isso nunca tira pedido de
+  // ninguém — ver `storage.reclamar`.
+  (async function conta(){
+    let quem = null;
+    try{
+      const r = await fetch('/conta', {cache:'no-store'});
+      quem = (await r.json()).usuario || null;
+    }catch(e){ return; }   // silêncio de propósito: isto é recado, não serviço
+
+    const btn = document.getElementById('contaBtn');
+    btn.hidden = false;
+    if(!quem){
+      btn.textContent = 'Entrar';
+      btn.href = '/entrar?voltar=' + encodeURIComponent(location.pathname);
+      return;
+    }
+    btn.textContent = quem.nome;
+    btn.href = '/meus-decks';
+    btn.title = 'Entrou como ' + quem.login;
+
+    const ids = lerPedidos().map(p => p.id).filter(Boolean);
+    if(!ids.length) return;
+    try{
+      await fetch('/pedidos/reclamar', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ids}),
+      });
+    }catch(e){ /* fica pra próxima vez que a home abrir */ }
+  })();
+
+  // --- Meus decks no cabeçalho -------------------------------------------
+  // A mesma chave que o deckbuilder e a página /meus-decks usam. Aqui só se
+  // LÊ: esta tela nunca escreve nela, pra não ter uma terceira dona de um
+  // formato que já mora em dois lugares.
+  (function contarDecks(){
+    let decks = [];
+    try{
+      const bruto = JSON.parse(localStorage.getItem('forja.decks') || '[]');
+      if(Array.isArray(bruto)) decks = bruto.filter(d => d && d.id);
+    }catch(e){ return; }   // navegador privado: o botão simplesmente não vem
+    if(!decks.length) return;
+    document.getElementById('meusDecksN').textContent = decks.length;
+    document.getElementById('meusDecksBtn').hidden = false;
+  })();
 
   // --- Tinta da impressora -----------------------------------------------
   // A pastilha só aparece quando alguém sabe responder. Impressora de tanque
