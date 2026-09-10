@@ -75,6 +75,16 @@ function mudarQuantidade(nome, delta, tabuleiro){
   agendarSalvar();
 }
 
+/* A quantidade digitada no número da linha. Zero é o mesmo que o ✕, com o
+   mesmo toast — é ele que avisa que o Ctrl+Z devolve a carta. */
+function definirQuantidade(nome, quantidade, tabuleiro){
+  const entrada = acharEntrada(nome, tabuleiro);
+  if (!entrada) return;
+  if (quantidade <= 0) return tirar(nome, tabuleiro);
+  if (quantidade === entrada.quantidade) return;
+  mudarQuantidade(nome, quantidade - entrada.quantidade, tabuleiro);
+}
+
 function tirar(nome, tabuleiro){
   tabuleiro = tabuleiro || ondeEsta(nome) || "deck";
   guardarDesfazer();
@@ -151,7 +161,7 @@ function definirCategoria(nome, tabuleiro, categoria){
   }
 }
 
-/* Cria uma categoria. `carta` opcional: criar a partir do ⋯ de uma linha já
+/* Cria uma categoria. `carta` opcional: criar a partir do menu de uma linha já
    põe aquela carta dentro, senão o caminho seria criar, fechar, reabrir o
    menu e escolher. */
 function criarCategoria(nome, carta, tabuleiro){

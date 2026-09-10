@@ -295,7 +295,7 @@ button.medidor:hover b{color:var(--gold);}
 /* ---------------- destino da carta que está entrando ----------------
    Quem procura já sabe pra onde a carta vai — pro sideboard, pro
    maybeboard, pra "combo principal". Dizer isso uma vez e adicionar vinte
-   cartas seguidas é uma decisão só, em vez de vinte visitas ao ⋯ de cada
+   cartas seguidas é uma decisão só, em vez de vinte visitas ao menu de cada
    linha depois de adicionada. */
 .destino{
   display:flex;flex-direction:column;gap:7px;margin:9px 0 2px;
@@ -670,7 +670,8 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 /* ---------------- preço na lista e prévia do orçamento ---------------- */
 .linha .valor{
   font-family:'IBM Plex Mono',monospace;font-size:10.5px;
-  color:var(--text-muted);flex:none;width:52px;text-align:right;
+  color:var(--text-muted);flex:none;min-width:52px;text-align:right;
+  white-space:nowrap;
 }
 .linha .valor.caro{color:var(--gold-light);}
 .linha .valor.desconhecido{color:#6F6490;}
@@ -1013,13 +1014,16 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 .menu button .rot-menu{flex:1;min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;}
 .menu button.perigo:hover{border-color:var(--red);color:var(--red);}
-.menu .risco{height:1px;background:var(--border);margin:5px 4px;}
+/* `.separador`, e não `.risco`: esse nome já é o cartão de risco das
+   chances de comprar, e o estilo dele vazaria pra cá. */
+.menu .separador{height:1px;background:var(--border);margin:5px 4px;}
 /* 352px é o mínimo em que o nome da carta não trunca com a coluna de preço
    (~46px) ao lado. Medido: abaixo disso o corte pega quase um terço das
    cartas nas larguras de tablet; acima, não melhora nada e só custa uma
-   coluna inteira. */
+   coluna inteira. O `min(…, 100%)` é o telefone: lá o painel tem menos de
+   352px, e o mínimo cheio empurraria o fim da linha — o ⋯ — pra fora dele. */
 .colunas{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(352px,1fr));
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(min(352px,100%),1fr));
   gap:2px 16px;
 }
 
@@ -1031,10 +1035,22 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 }
 .linha:hover{background:var(--surface-2);}
 .linha.problema{border-color:rgba(217,99,74,.5);background:rgba(217,99,74,.07);}
+/* A quantidade é um campo de número que se lê como texto: sem caixa, sem
+   setinhas. Só no foco ganha um traço embaixo, pra quem clicou ver que
+   está digitando. */
 .linha .qtd{
   font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gold-light);
-  width:20px;text-align:right;flex:none;
+  width:3ch;text-align:right;flex:none;
+  background:none;border:none;border-radius:0;padding:0;margin:0;
+  appearance:textfield;-moz-appearance:textfield;
 }
+.linha .qtd::-webkit-inner-spin-button,
+.linha .qtd::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+.linha .qtd:focus{outline:none;box-shadow:inset 0 -1px var(--gold);}
+/* O ✕ abre a linha, na frente da quantidade, e aparece junto com os
+   controles: o lugar fica reservado pra linha não pular no hover. */
+.linha > .sai{flex:none;opacity:0;transition:opacity .12s;}
+.linha:hover > .sai,.linha:focus-within > .sai{opacity:1;}
 .linha .nome{
   flex:1;min-width:0;font-size:13px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -1043,10 +1059,10 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
   font-size:10px;color:#F2AFA1;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;max-width:100%;
 }
-/* Os quatro botões flutuam por cima do fim da linha em vez de ocuparem uma
-   coluna fixa nela: reservados no fluxo, eles tiravam ~90px do nome da
-   carta o tempo todo pra aparecerem no hover. O degradê à esquerda separa
-   os botões do texto que passa por baixo. */
+/* Os botões do fim da linha flutuam por cima dela em vez de ocuparem uma
+   coluna fixa: reservados no fluxo, eles tirariam espaço do nome da carta
+   o tempo todo pra aparecerem só no hover. O degradê à esquerda separa os
+   botões do texto que passa por baixo. */
 .linha .ctrl{
   position:absolute;top:50%;right:5px;transform:translateY(-50%);
   display:flex;gap:2px;opacity:0;transition:opacity .12s;
@@ -1063,6 +1079,11 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
   background:linear-gradient(to right,
     rgba(40,28,50,0), rgb(40,28,50) 18px);
 }
+/* O ⋯ do menu da carta só existe no celular e no toque: no mouse o menu
+   abre no clique direito da linha. Depois do `.ctrl` de propósito — no
+   maybeboard o `.ctrl` inteiro é só o ⋯, e tem que sumir junto. As regras
+   que o mostram ficam nos blocos de toque e de celular, mais abaixo. */
+.linha .so-celular{display:none;}
 .mini{
   width:21px;height:21px;border-radius:6px;border:1px solid var(--border);
   background:var(--surface);color:var(--text-muted);cursor:pointer;
@@ -1070,14 +1091,16 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 }
 .mini:hover{border-color:var(--gold);color:var(--gold-light);}
 .mini.sai:hover{border-color:var(--red);color:var(--red);}
-/* Em telas de toque não existe hover: os controles ficam sempre à vista,
-   senão não teria como mexer na quantidade. E, sempre à vista, voltam pro
+/* Em telas de toque não existe hover: o ✕ e os controles ficam sempre à
+   vista, senão não teria como tirar a carta. E, sempre à vista, voltam pro
    fluxo — flutuando eles cobririam o fim de todo nome, o tempo todo. */
 @media (hover:none){
   .linha .ctrl{
     position:static;transform:none;opacity:1;
     flex:none;padding-left:0;background:none;
   }
+  .linha > .sai{opacity:1;}
+  .linha .so-celular{display:flex;}
 }
 
 /* comandante em destaque */
@@ -1089,8 +1112,8 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 .comandante img{width:52px;height:52px;object-fit:cover;object-position:center 18%;
   border-radius:8px;flex:none;background:var(--surface-2);}
 /* Arte e nome viram um botão só: é ele que abre a carta inteira. Botão de
-   verdade, e não o <div> com um clique, porque aqui não existe ⋯ pra servir
-   de porta de teclado — no deck existe. */
+   verdade, e não o <div> com um clique, porque aqui não existe menu de
+   linha pra servir de porta de teclado — no deck existe. */
 .comandante .ver{
   display:flex;align-items:center;gap:12px;flex:1;min-width:0;
   background:none;border:none;padding:0;margin:0;color:inherit;font:inherit;
@@ -1539,8 +1562,8 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 }
 
 /* Em tela estreita a linha do deck não cabe inteira, e aí é preciso
-   escolher o que sai. Sai o preço: em toque os controles de quantidade
-   ficam sempre visíveis (não há hover pra escondê-los), e sem esta regra
+   escolher o que sai. Sai o preço: em toque o ✕ e os controles ficam
+   sempre visíveis (não há hover pra escondê-los), e sem esta regra
    um "Badgermole Cub" vira "Badgermol…" pra caber num número que o
    subtotal do grupo e o total do cabeçalho já dizem — os dois continuam na
    tela. Nome truncado, não. */
@@ -1610,12 +1633,14 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
   }
   .barra-mobile{display:flex;}
   .previa{display:none;}
-  /* Sem hover em toque: os controles da linha ficam sempre à vista, senão
-     não haveria como mexer na quantidade. */
+  /* Sem hover em toque: o ✕ e os controles da linha ficam sempre à vista,
+     senão não haveria como tirar a carta. */
   .linha .ctrl{
     position:static;transform:none;opacity:1;
     flex:none;padding-left:0;background:none;
   }
+  .linha > .sai{opacity:1;}
+  .linha .so-celular{display:flex;}
   .linha{padding:7px 6px;}
   .mini{width:28px;height:28px;font-size:15px;}
 }

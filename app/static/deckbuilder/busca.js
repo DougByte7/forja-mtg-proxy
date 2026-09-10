@@ -151,7 +151,7 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
 /* ------------------------------------------------------- destino da carta
 
    Quem monta o sideboard põe dez cartas seguidas nele: a decisão é a mesma
-   pras dez, e se diz uma vez aqui em vez de dez visitas ao ⋯ de cada linha
+   pras dez, e se diz uma vez aqui em vez de dez visitas ao menu de cada linha
    depois de adicionada.
 
    "Sideboard" é categoria e não tabuleiro (é o que o servidor entende em
@@ -181,7 +181,7 @@ function escolherDestino(destino){
 }
 
 /* O seletor de categoria acompanha as categorias que existem: uma criada no
-   ⋯ de uma carta tem que aparecer aqui na hora, senão a pessoa a criaria duas
+   menu de uma carta tem que aparecer aqui na hora, senão a pessoa a criaria duas
    vezes. Sideboard não entra na lista — ele é o segmento ao lado. */
 function atualizarCategoriasDoDestino(){
   const sel = $("sel-categoria");

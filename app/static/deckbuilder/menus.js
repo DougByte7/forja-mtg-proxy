@@ -2,10 +2,10 @@
 
 /* ----------------------------------------------------------------- menus
 
-   Um menu ancorado no botão que o abriu. Ele existe porque mover carta entre
-   categorias e tabuleiros precisa funcionar no TOQUE: arrastar é o gesto
-   natural no mouse e não existe no celular, então o arrastar é atalho e
-   este menu é o caminho.
+   Um menu ancorado no botão que o abriu, ou no ponto do clique direito. O
+   da carta abre no clique direito da linha, e no celular pelo ⋯ dela:
+   arrastar é o gesto natural no mouse e não existe no celular, então o
+   arrastar é atalho e este menu é o caminho.
 
    Ele é montado a cada abertura em vez de ficar escondido no HTML: a lista
    de categorias muda a cada carta, e um menu guardado teria que ser
@@ -19,8 +19,9 @@ function fecharMenu(){
   menuAberto = null;
 }
 
-/* `itens` é uma lista de `{rotulo, marca, aoClicar, classe}` ou `"risco"`
-   pra uma linha divisória, ou `{titulo}` pra um cabeçalho. */
+/* `ancora` é um elemento ou um DOMRect (o ponto do clique direito). `itens`
+   é uma lista de `{rotulo, marca, aoClicar, classe}` ou `"risco"` pra uma
+   linha divisória, ou `{titulo}` pra um cabeçalho. */
 function abrirMenu(ancora, itens){
   fecharMenu();
   const menu = document.createElement("div");
@@ -28,7 +29,7 @@ function abrirMenu(ancora, itens){
   menu.setAttribute("role", "menu");
   for (const item of itens){
     if (item === "risco"){
-      menu.insertAdjacentHTML("beforeend", '<div class="risco"></div>');
+      menu.insertAdjacentHTML("beforeend", '<div class="separador"></div>');
       continue;
     }
     if (item.titulo){
@@ -48,7 +49,7 @@ function abrirMenu(ancora, itens){
 
   // Posiciona depois de medir: um menu de 12 categorias perto do rodapé
   // abriria pra fora da tela, e aí a metade de baixo dele é inalcançável.
-  const caixa = ancora.getBoundingClientRect();
+  const caixa = ancora instanceof Element ? ancora.getBoundingClientRect() : ancora;
   const m = menu.getBoundingClientRect();
   const x = Math.min(caixa.left, window.innerWidth - m.width - 8);
   const y = caixa.bottom + m.height + 8 > window.innerHeight
@@ -73,9 +74,10 @@ function menuDaCarta(ancora, nome, tabuleiro){
   // inteira seria coisa só de quem usa mouse.
   const itens = [{rotulo: "Ver a carta", marca: ico("cards"),
                   aoClicar: () => abrirCarta(entrada.carta)},
-                 // O botão de arte fica nos controles da linha, que só
-                 // aparecem no hover. Este item é a porta de teclado — e a
-                 // porta pra quem procura no menu em vez de caçar o ícone.
+                 // O botão de arte fica nos controles da linha do deck, que
+                 // só aparecem no hover, e o maybeboard nem tem. Este item é
+                 // a porta de teclado, a do maybeboard — e a de quem procura
+                 // no menu em vez de caçar o ícone.
                  {rotulo: "Escolher a arte", marca: ico("image"),
                   aoClicar: () => abrirEscolhaDeArte(nome)},
                  "risco",

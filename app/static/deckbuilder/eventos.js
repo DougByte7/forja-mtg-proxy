@@ -169,21 +169,21 @@ function ligarEventos(){
       if (carta && caixa.aoClicar) caixa.aoClicar(carta);
       return;
     }
-    // Os botões da linha herdam o tabuleiro dela: o mesmo "+" serve o deck e
-    // o maybeboard, e sem isto o "+" de uma carta em dúvida somaria cópia no
-    // deck — na lista errada, calado.
+    // Os botões da linha herdam o tabuleiro dela: o mesmo ✕ serve o deck e
+    // o maybeboard, e sem isto o ✕ de uma carta em dúvida tiraria a cópia
+    // do deck — na lista errada, calado.
     const doTabuleiro = (alvo) =>
       alvo.closest("[data-tabuleiro]")?.dataset.tabuleiro || "deck";
-    const mais = e.target.closest("[data-mais]");
-    if (mais) return mudarQuantidade(mais.dataset.mais, +1, doTabuleiro(mais));
-    const menos = e.target.closest("[data-menos]");
-    if (menos) return mudarQuantidade(menos.dataset.menos, -1, doTabuleiro(menos));
+    // Clicar no número é ir editá-lo, não abrir a carta.
+    if (e.target.closest("[data-qtd]")) return;
     const sai = e.target.closest("[data-tirar]");
     if (sai) return tirar(sai.dataset.tirar, doTabuleiro(sai));
     const sugCarta = e.target.closest("[data-sug-carta]");
     if (sugCarta) return sugerirPelaCarta(sugCarta.dataset.sugCarta);
     const arteCarta = e.target.closest("[data-arte-carta]");
     if (arteCarta) return abrirEscolhaDeArte(arteCarta.dataset.arteCarta);
+    // O ⋯ da linha, que só aparece no celular: é lá que o menu da carta não
+    // tem clique direito pra abrir.
     const menuCarta = e.target.closest("[data-menu-carta]");
     if (menuCarta) return menuDaCarta(menuCarta, menuCarta.dataset.menuCarta,
                                       doTabuleiro(menuCarta));
@@ -191,7 +191,7 @@ function ligarEventos(){
     if (menuGrupo) return menuDoGrupo(menuGrupo, menuGrupo.dataset.menuGrupo);
     // A linha inteira abre a carta — depois dos botões dela, que já
     // devolveram acima. Clicar no nome é o gesto óbvio pra "me conta mais
-    // sobre esta carta", e o ⋯ continua sendo o caminho de quem não tem mouse.
+    // sobre esta carta", e o "Ver a carta" do menu é o caminho do teclado.
     const linhaCarta = e.target.closest(".linha[data-nome]");
     if (linhaCarta) return abrirCarta(
       acharEntrada(linhaCarta.dataset.nome, doTabuleiro(linhaCarta))?.carta);
@@ -216,6 +216,51 @@ function ligarEventos(){
       $("busca-cmd").focus();
       buscarComandante();
     }
+  });
+
+  // O menu da carta abre no clique direito da linha (no celular, pelo ⋯
+  // dela, logo acima). Pelo teclado, a tecla
+  // de menu (ou Shift+F10) com o número da quantidade em foco chega aqui do
+  // mesmo jeito — o número é a parte da linha que recebe foco.
+  document.addEventListener("contextmenu", (e) => {
+    if (menuAberto && !menuAberto.contains(e.target)) fecharMenu();
+    const linha = e.target.closest?.(".linha[data-nome]");
+    if (!linha) return;
+    e.preventDefault();
+    // A prévia da arte segue o mouse, que está parado em cima do nome: sem
+    // isto ela ficaria aberta por baixo do menu.
+    $("previa").classList.remove("mostra");
+    // Vindo do teclado não há ponteiro, e o evento chega em (0, 0): aí o
+    // menu ancora na própria linha.
+    const ancora = e.clientX || e.clientY
+      ? new DOMRect(e.clientX, e.clientY, 0, 0) : linha;
+    menuDaCarta(ancora, linha.dataset.nome, linha.dataset.tabuleiro);
+  });
+
+  // A quantidade vale no Enter, nas setas e ao sair do campo. Vazio ou
+  // lixo volta pro número de antes em vez de virar zero — zero tira a
+  // carta, e apagar o campo pra digitar outro número não é pedir isso.
+  document.addEventListener("change", (e) => {
+    const campo = e.target.closest?.("[data-qtd]");
+    if (!campo) return;
+    const nome = campo.dataset.qtd;
+    const tabuleiro = campo.closest(".linha").dataset.tabuleiro;
+    const n = Math.floor(Number(campo.value));
+    if (campo.value.trim() === "" || !Number.isFinite(n)){
+      campo.value = acharEntrada(nome, tabuleiro)?.quantidade ?? "";
+      return;
+    }
+    // Ainda em foco é Enter ou seta: a lista se redesenha por baixo, e o
+    // foco volta pro número novo pra a próxima seta continuar contando.
+    const emFoco = document.activeElement === campo;
+    // Escrito de volta porque, quando a conta não muda (150 num deck que já
+    // tem 99, 2,5 onde já há 2), nada se redesenha e o campo ficaria mentindo.
+    campo.value = Math.min(99, n);
+    definirQuantidade(nome, Math.min(99, n), tabuleiro);
+    if (!emFoco) return;
+    const novo = [...document.querySelectorAll("[data-qtd]")].find(el =>
+      el.dataset.qtd === nome && el.closest(".linha").dataset.tabuleiro === tabuleiro);
+    novo?.focus();
   });
 
   $("nome-deck").addEventListener("input", () => {

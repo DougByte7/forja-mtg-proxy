@@ -55,7 +55,7 @@ function desenharDeck(){
 
   const identidade = identidadeDoDeck();
   $("cmd-box").innerHTML = estado.comandantes.map((c, i) => `
-    <button class="ver" data-ver-cmd="${i}"
+    <button class="ver" data-ver-cmd="${i}"${ganchosDaPrevia(c)}
             title="Ver ${escapar(c.nome)} inteira">
       <img src="${escapar(c.imagem)}" alt="" loading="lazy">
       <span class="dados">
@@ -119,7 +119,8 @@ function gruposHTML(entradas, identidade, tabuleiro){
     const n = itens.reduce((soma, e) => soma + e.quantidade, 0);
     // Sem subtotal no maybeboard: ele não entra na cotação, e um preço ao
     // lado do grupo diria o contrário — a pessoa somaria de cabeça um
-    // dinheiro que a faixa de orçamento não está cobrando dela.
+    // dinheiro que a faixa de orçamento não está cobrando dela. O preço de
+    // cada carta fica na linha, que é onde ele ajuda a decidir.
     const subtotal = tabuleiro === "talvez"
       ? null : subtotalDoGrupo(itens);
     const propria = ehPropria(cat);
@@ -128,7 +129,8 @@ function gruposHTML(entradas, identidade, tabuleiro){
       ? `<div class="colunas">${itens.map(e =>
             linhaHTML(e, identidade, tabuleiro)).join("")}</div>`
       : `<div class="grupo-vazio">Categoria vazia. Arraste uma carta pra cá,
-           ou escolha esta categoria no ${ico("dots-three")} da linha dela.</div>`;
+           ou escolha esta categoria no menu da linha dela — clique direito,
+           ou o ${ico("dots-three")} no celular.</div>`;
     return `<div class="grupo ${propria ? "propria" : ""} ${fora ? "fora-da-conta" : ""}"
       data-categoria="${escapar(cat)}" data-tabuleiro="${tabuleiro}">
       <h3>
@@ -167,36 +169,42 @@ function linhaHTML(entrada, identidade, tabuleiro){
 
   const nome = escapar(c.nome);
   // A coluna do maybeboard tem 288px, e a linha do deck não cabe nela
-  // inteira: sai o preço (ele não entra na cotação — mostrá-lo diria o
-  // contrário), saem os botões de quantidade (o formato é singleton, e a
-  // dúvida é sobre a carta, não sobre quantas) e sai a estrela de sugerir
-  // (pedir o que combina com uma carta que talvez nem fique é sugestão pra
-  // um deck que não existe). Sobram o ⋯ e o ✕, que são as duas coisas que se
-  // faz com uma carta em dúvida: decidir e desistir.
+  // inteira: sai a estrela de sugerir (pedir o que combina com uma carta que
+  // talvez nem fique é sugestão pra um deck que não existe) e sai o botão de
+  // arte, que continua no menu. O preço fica — "vale o que custa?" é metade
+  // da dúvida sobre uma carta.
+  //
+  // O resto da carta (categoria, trocar de tabuleiro, ver, arte) mora no
+  // menu da linha, e a quantidade se digita no próprio número: zero tira a
+  // carta. No mouse o menu abre no clique direito; no celular não existe
+  // clique direito (e o toque longo não o dispara em todo navegador), então
+  // lá ele ganha o ⋯ no fim da linha.
   const estreita = tabuleiro === "talvez";
+  const onde = estreita ? "maybeboard" : "deck";
+  const botaoMenu = `<button class="mini so-celular" data-menu-carta="${nome}"
+    title="${estreita ? "Categoria, voltar pro deck e mais"
+                      : "Categoria, maybeboard e mais"}"
+    aria-label="Opções de ${nome}">${ico("dots-three")}</button>`;
   return `<div class="linha ${problema ? "problema" : ""}" data-nome="${nome}"
     data-tabuleiro="${tabuleiro}" draggable="true">
-    ${estreita && entrada.quantidade === 1 ? ""
-      : `<span class="qtd">${entrada.quantidade}</span>`}
+    <button class="mini sai" data-tirar="${nome}" title="Tirar do ${onde}"
+            aria-label="Tirar ${nome} do ${onde}">${ico("x")}</button>
+    <input class="qtd" type="number" min="0" max="99" step="1"
+           inputmode="numeric" value="${entrada.quantidade}" data-qtd="${nome}"
+           aria-label="Quantidade de ${nome}"
+           title="Quantidade — zero tira a carta. Clique direito na linha pro menu.">
     <span class="nome"${ganchosDaPrevia(c)}>${nome}
       ${porque ? `<span class="porque">· ${porque}</span>` : ""}</span>
     ${manaHTML(c.mana_cost)}
-    ${estreita ? "" : valorHTML(entrada)}
-    <span class="ctrl">
-      ${estreita ? "" : `
-      <button class="mini" data-mais="${nome}" title="Mais uma">${ico("plus")}</button>
-      <button class="mini" data-menos="${nome}" title="Menos uma">${ico("minus")}</button>
+    ${valorHTML(entrada)}
+    ${estreita ? `<span class="ctrl so-celular">${botaoMenu}</span>`
+      : `<span class="ctrl">
       <button class="mini" data-sug-carta="${nome}"
               title="O que o EDHREC vê jogando junto de ${nome}"
               aria-label="Sugestões a partir de ${nome}">${ico("sparkle")}</button>
-      ${botaoDeArte(c)}`}
-      <button class="mini" data-menu-carta="${nome}"
-              title="${estreita ? "Categoria, voltar pro deck e mais"
-                                : "Categoria, maybeboard e mais"}"
-              aria-label="Opções de ${nome}">${ico("dots-three")}</button>
-      <button class="mini sai" data-tirar="${nome}"
-              title="${estreita ? "Tirar do maybeboard" : "Tirar do deck"}">${ico("x")}</button>
-    </span>
+      ${botaoDeArte(c)}
+      ${botaoMenu}
+    </span>`}
   </div>`;
 }
 

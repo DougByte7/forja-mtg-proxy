@@ -257,11 +257,12 @@ try:
     eq("carta com categoria que a lista não conhece continua visível",
        nomes_desenhados(orfa["htmlDeck"]), ["Sol Ring"])
 
-    # O maybeboard não mostra preço: ele não entra na cotação, e um número
-    # ali diria o contrário.
-    check("o maybeboard não mostra preço por carta",
-          'class="valor' not in r["htmlTalvez"])
-    check("nem subtotal por grupo", "valor-grupo" not in r["htmlTalvez"])
+    # O maybeboard mostra o preço de cada carta — "vale o que custa?" é
+    # metade da dúvida —, mas não o subtotal do grupo: ele não entra na
+    # cotação, e uma soma ali diria o contrário.
+    check("o maybeboard mostra preço por carta",
+          'class="valor' in r["htmlTalvez"])
+    check("mas não subtotal por grupo", "valor-grupo" not in r["htmlTalvez"])
     check("o deck mostra os dois", 'class="valor' in r["htmlDeck"]
           and "valor-grupo" in r["htmlDeck"])
 
