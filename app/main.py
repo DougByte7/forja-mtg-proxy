@@ -1195,6 +1195,23 @@ def artes_do_deck(deck_id: str):
     return artes.para_deck(_deck_ou_404(deck_id))
 
 
+@app.get("/decks/{deck_id}/pedido")
+def pedido_do_deck(deck_id: str):
+    """O deck pronto pra virar pedido: o XML que a tela de orçamento sobe no
+    `POST /orders`, e o cartão do deck pra ela mostrar no lugar do upload.
+
+    Deck com arte faltando volta 200, com `xml` nulo e a lista do que falta
+    em `faltando`: não é erro de quem chamou, é um deck que ainda não está
+    pronto, e a tela precisa dos nomes pra dizer o que escolher. O deckbuilder
+    já não oferece o link nesse estado; esta é a conferência do lado de cá.
+    """
+    deck = _deck_ou_404(deck_id)
+    montado = artes.pedido(deck)
+    if not montado["cartas"]:
+        raise HTTPException(400, "Este deck não tem carta nenhuma pra imprimir.")
+    return {"deck": decks.resumo([deck["id"]])[0], **montado}
+
+
 @app.put("/decks/{deck_id}/artes")
 def escolher_arte(deck_id: str, corpo: dict = Body(default={}),
                   quem: dict | None = Depends(quem_e)):
@@ -1344,10 +1361,9 @@ def apagar_deck(deck_id: str, quem: dict | None = Depends(quem_e)):
 def lista_do_deck(deck_id: str):
     """A decklist em texto, uma carta por linha, comandante primeiro.
 
-    É o formato que se cola no MPC Fill pra escolher as artes — o passo que
-    liga esta tela ao fluxo de impressão. Este backend não consegue gerar o
-    XML sozinho: cada carta lá é um id de arquivo no Drive, e a biblioteca de
-    artes é do MPC Fill, não nossa (ver `pdf_generator.py`).
+    É o formato que se cola no MPC Fill pra escolher as artes por lá. Quem
+    escolheu as artes aqui mesmo não precisa dela pra imprimir: o XML sai
+    pronto do `GET /decks/{id}/pedido`.
     """
     return decks.lista_texto(_deck_ou_404(deck_id))
 

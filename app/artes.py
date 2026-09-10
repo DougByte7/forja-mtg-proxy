@@ -32,6 +32,7 @@ o id morrer.
 import os
 import sqlite3
 import time
+import xml.etree.ElementTree as ET
 
 from . import cartas as base_cartas
 from . import log
@@ -151,8 +152,8 @@ def para_deck(deck: dict) -> dict:
     """As escolhas + quais cartas do deck ainda estão no padrão.
 
     `faltando` é a lista que a tela usa pra dizer "87 com a arte padrão, 12
-    escolhidas por você" — e é o mesmo número que o gerador de pedido vai
-    precisar mostrar antes de alguém pagar.
+    escolhidas por você". Conta por NOME: quem precisa saber lado a lado o
+    que falta pra imprimir é o `pedido`.
     """
     escolhas = do_deck(deck["id"])
     nomes = list(deck.get("comandantes") or []) + \
@@ -160,6 +161,82 @@ def para_deck(deck: dict) -> dict:
     faltando = [n for n in nomes if _chave(n) not in escolhas]
     return {"escolhas": escolhas, "faltando": faltando,
             "escolhidas": len(escolhas), "total": len(nomes)}
+
+
+def pedido(deck: dict) -> dict:
+    """O deck como pedido de impressão: o XML no formato do MPC Fill, montado
+    com as artes escolhidas.
+
+    É a ponte entre o deckbuilder e a tela de orçamento. O pedido nasce de um
+    XML do MPC Fill — é ele que o `calc` cobra e o `pdf_generator` imprime —,
+    e montar aqui o MESMO formato deixa revisão da folha, cobrança, PDF e
+    cotação funcionando sem saber de onde o pedido veio.
+
+    SÓ SAI XML COM TODAS AS ARTES ESCOLHIDAS. A arte padrão é a imagem da
+    Scryfall, que não tem id no Drive, e o PDF só sabe baixar do Drive: carta
+    sem escolha sairia como o retângulo de "FALHA NO DOWNLOAD". Faltando
+    uma, `xml` volta `None` e `faltando` diz quais — `{nome, face}`, porque
+    carta de duas faces pode ter a frente escolhida e o verso não.
+
+    Entra o que vai pro papel, pelo critério da aba Artes: comandantes e as
+    cartas do deck, sideboard incluído; o maybeboard não. O verso vai em
+    `<backs>` com os MESMOS slots da frente, que é como o MPC Fill amarra o
+    verso a cada cópia. Arquivos iguais dividem um `<card>` só, com todos os
+    slots — as 30 Florestas são um arquivo em 30 lugares da folha.
+    """
+    escolhas = do_deck(deck["id"])
+    linhas = [(nome, 1) for nome in deck.get("comandantes") or []] + \
+        [(c["nome"], c["quantidade"]) for c in deck.get("cartas") or []]
+    conhecidas = base_cartas.por_nomes([nome for nome, _ in linhas])
+
+    frentes: dict[str, dict] = {}
+    versos: dict[str, dict] = {}
+    faltando = []
+    artes_total = 0
+    proximo = 0
+    for nome, quantidade in linhas:
+        carta = conhecidas.get(nome) or {}
+        faces = FACES if carta.get("imagem_verso") else FACES[:1]
+        artes_total += len(faces)
+        escolhidas = escolhas.get(_chave(nome), {})
+        faltando += [{"nome": nome, "face": f} for f in faces
+                     if f not in escolhidas]
+        slots = list(range(proximo, proximo + quantidade))
+        proximo += quantidade
+        for face, destino in zip(faces, (frentes, versos)):
+            escolha = escolhidas.get(face)
+            if not escolha:
+                continue
+            # O <query> é o nome da carta, que o `calc` usa pro código do
+            # pedido e a cotação usa pra saber o que cotar. O verso leva só o
+            # nome dele, como o MPC Fill escreve.
+            consulta = nome
+            if face == "verso":
+                consulta = (carta.get("nome") or nome).split(" // ")[-1].strip()
+            grupo = destino.setdefault(escolha["drive_id"], {
+                "arquivo": escolha["arquivo"], "consulta": consulta, "slots": []})
+            grupo["slots"] += slots
+
+    xml = None
+    if proximo and not faltando:
+        raiz = ET.Element("order")
+        ET.SubElement(ET.SubElement(raiz, "details"), "quantity").text = str(proximo)
+        for secao, grupos in (("fronts", frentes), ("backs", versos)):
+            if not grupos:
+                continue
+            el = ET.SubElement(raiz, secao)
+            for drive_id, grupo in grupos.items():
+                card = ET.SubElement(el, "card")
+                ET.SubElement(card, "id").text = drive_id
+                ET.SubElement(card, "slots").text = ",".join(map(str, grupo["slots"]))
+                if grupo["arquivo"]:
+                    ET.SubElement(card, "name").text = grupo["arquivo"]
+                ET.SubElement(card, "query").text = grupo["consulta"]
+        ET.indent(raiz, space="    ")
+        xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+               + ET.tostring(raiz, encoding="unicode") + "\n")
+    return {"xml": xml, "faltando": faltando, "artes": artes_total,
+            "cartas": proximo}
 
 
 def apagar_do_deck(deck_id: str) -> int:

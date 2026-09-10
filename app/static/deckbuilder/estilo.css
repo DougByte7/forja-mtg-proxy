@@ -128,10 +128,13 @@ html.sem-rolar.com-barra{scrollbar-gutter:stable;}
   border-radius:999px;padding:8px 14px;font-size:12px;cursor:pointer;
   transition:border-color .15s,color .15s,background .15s;white-space:nowrap;
 }
-.btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
-.btn:disabled{opacity:.4;cursor:not-allowed;}
+/* O `.btn` também veste link — o que leva a outra página é <a>, mesmo com
+   cara de botão. Link não tem `disabled`: o desligado é `aria-disabled`. */
+a.btn{display:inline-block;text-decoration:none;}
+.btn:hover:not(:disabled,[aria-disabled="true"]){border-color:var(--gold);color:var(--gold-light);}
+.btn:disabled,.btn[aria-disabled="true"]{opacity:.4;cursor:not-allowed;}
 .btn.ouro{background:var(--gold);border-color:var(--gold);color:var(--sobre-gold);font-weight:700;}
-.btn.ouro:hover:not(:disabled){background:var(--gold-light);border-color:var(--gold-light);color:var(--sobre-gold);}
+.btn.ouro:hover:not(:disabled,[aria-disabled="true"]){background:var(--gold-light);border-color:var(--gold-light);color:var(--sobre-gold);}
 .btn.verde{border-color:var(--green);color:var(--green);}
 .btn.verde:hover:not(:disabled){background:rgba(76,154,107,.10);border-color:var(--green);color:var(--green);}
 .acoes{display:flex;gap:7px;flex-wrap:wrap;}
@@ -1101,22 +1104,24 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
   text-transform:uppercase;color:var(--text-muted);margin:7px 8px 4px;
   font-weight:600;
 }
-.menu button{
+/* Item que leva a outra página é <a>, o resto é <button>; os dois com a
+   mesma cara. */
+.menu [role="menuitem"]{
   display:flex;align-items:center;gap:8px;width:100%;text-align:left;
   background:transparent;border:1px solid transparent;border-radius:8px;
   color:var(--text);padding:7px 9px;font-size:12.5px;cursor:pointer;
-  font-family:'Inter',sans-serif;
+  font-family:'Inter',sans-serif;text-decoration:none;
 }
-.menu button:hover,.menu button:focus-visible{
+.menu [role="menuitem"]:hover,.menu [role="menuitem"]:focus-visible{
   background:var(--surface);border-color:var(--border);
 }
-.menu button .marca{
+.menu [role="menuitem"] .marca{
   width:13px;flex:none;color:var(--gold-light);
   display:inline-flex;align-items:center;justify-content:center;
 }
-.menu button .rot-menu{flex:1;min-width:0;overflow:hidden;
+.menu [role="menuitem"] .rot-menu{flex:1;min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;}
-.menu button.perigo:hover{border-color:var(--red);color:var(--red);}
+.menu [role="menuitem"].perigo:hover{border-color:var(--red);color:var(--red);}
 /* `.separador`, e não `.risco`: esse nome já é o cartão de risco das
    chances de comprar, e o estilo dele vazaria pra cá. */
 .menu .separador{height:1px;background:var(--border);margin:5px 4px;}

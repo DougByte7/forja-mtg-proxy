@@ -161,6 +161,90 @@ try:
     check("e a face verso continua lá, que é outra escolha",
           "verso" in artes.do_deck(deck["id"])[chave])
 
+    print("\n--- o deck vira pedido ---")
+
+    # Uma carta de duas faces na base, pra o pedido saber que ela tem verso.
+    conn = cartas._conn()
+    conn.execute(
+        f"INSERT OR REPLACE INTO cartas ({cartas._COLUNAS}) "
+        f"VALUES ({cartas._INTERROGACOES})",
+        cartas._linha({
+            "oracle_id": "delver", "layout": "transform", "cmc": 1.0,
+            "name": "Delver of Secrets // Insectile Aberration",
+            "colors": ["U"], "color_identity": ["U"],
+            "legalities": {"commander": "legal"},
+            "card_faces": [
+                {"name": "Delver of Secrets", "type_line": "Creature — Human Wizard",
+                 "mana_cost": "{U}", "image_uris": {"normal": "http://arte/delver"}},
+                {"name": "Insectile Aberration", "type_line": "Creature — Human Insect",
+                 "mana_cost": "", "image_uris": {"normal": "http://arte/inseto"}},
+            ],
+        }))
+    conn.commit()
+    conn.close()
+
+    delver = "Delver of Secrets // Insectile Aberration"
+    ped = decks.criar("Pedido", ["Atraxa"], [
+        {"nome": "Sol Ring", "quantidade": 1},
+        {"nome": "Forest", "quantidade": 3},
+        {"nome": delver, "quantidade": 2},
+        {"nome": "Lightning Bolt", "quantidade": 1,
+         "categoria": decks.CATEGORIA_SIDEBOARD},
+    ], maybeboard=[{"nome": "Island", "quantidade": 1}])
+
+    montado = artes.pedido(ped)
+    eq("sem arte nenhuma, não sai XML", montado["xml"], None)
+    eq("a carta de duas faces conta frente e verso",
+       [f["face"] for f in montado["faltando"] if f["nome"] == delver],
+       ["frente", "verso"])
+    check("o sideboard vai pro papel",
+          any(f["nome"] == "Lightning Bolt" for f in montado["faltando"]))
+    check("o maybeboard não",
+          not any(f["nome"] == "Island" for f in montado["faltando"]))
+    eq("uma arte por lado de cada carta", montado["artes"], 6)
+    eq("uma posição na folha por cópia", montado["cartas"], 8)
+
+    for nome, drive_id in (("Atraxa", "id-atraxa"), ("Sol Ring", "id-sol"),
+                           ("Lightning Bolt", "id-bolt"), (delver, "id-delver")):
+        artes.escolher(ped["id"], nome, drive_id, arquivo=f"{nome}.png")
+    artes.escolher(ped["id"], "Forest", "id-floresta")
+    montado = artes.pedido(ped)
+    eq("com o verso ainda no padrão, continua sem XML", montado["xml"], None)
+    eq("e o que falta é só o verso", montado["faltando"],
+       [{"nome": delver, "face": "verso"}])
+
+    artes.escolher(ped["id"], delver, "id-inseto", face="verso")
+    montado = artes.pedido(ped)
+    check("com tudo escolhido, sai o XML", bool(montado["xml"]))
+    eq("e não falta nada", montado["faltando"], [])
+
+    # O XML é o que o resto do sistema já sabe cobrar, imprimir e cotar.
+    from app import calc, pdf_generator
+    import xml.etree.ElementTree as ET
+    eq("o calc cobra as 8 cartas e os 2 versos",
+       calc.parse_order(montado["xml"]), (8, 2))
+    eq("a fila de impressão: frentes na ordem, versos no fim",
+       pdf_generator._build_print_queue(ET.fromstring(montado["xml"])),
+       ["id-atraxa", "id-sol", "id-floresta", "id-floresta", "id-floresta",
+        "id-delver", "id-delver", "id-bolt", "id-inseto", "id-inseto"])
+    eq("a cotação lê os nomes das cartas",
+       calc.parse_card_list(montado["xml"]),
+       [{"nome": "Atraxa", "quantidade": 1}, {"nome": "Sol Ring", "quantidade": 1},
+        {"nome": "Forest", "quantidade": 3}, {"nome": delver, "quantidade": 2},
+        {"nome": "Lightning Bolt", "quantidade": 1}])
+    raiz = ET.fromstring(montado["xml"])
+    eq("as 3 Florestas são um <card> com 3 slots",
+       [c.findtext("slots") for c in raiz.findall("fronts/card")
+        if c.findtext("id") == "id-floresta"], ["2,3,4"])
+    eq("o verso fica nos mesmos slots da frente, com o nome dele",
+       [(c.findtext("slots"), c.findtext("query")) for c in raiz.findall("backs/card")],
+       [("5,6", "Insectile Aberration")])
+    eq("o nome do arquivo vai no <name>",
+       raiz.find("fronts/card").findtext("name"), "Atraxa.png")
+
+    vazio = decks.criar("Vazio", [], [])
+    eq("deck vazio não tem o que imprimir", artes.pedido(vazio)["cartas"], 0)
+
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

@@ -49,13 +49,22 @@ const arte = {
   buscandoDeck: null,
 };
 
-/* O nome achatado, do MESMO jeito que o `cartas.normalizar` do servidor.
-   Aqui não dá pra chamar o Python, então a regra mora duas vezes — e a que
-   importa é a do servidor, que é quem grava. Esta serve só pra a tela saber
-   se uma carta já tem arte escolhida. */
+/* O nome achatado, do MESMO jeito que o `cartas.normalizar` do servidor:
+   ligaduras abertas, sem acento, sem caixa, apóstrofo some e o resto da
+   pontuação vira espaço. Aqui não dá pra chamar o Python, então a regra mora
+   duas vezes — e a que importa é a do servidor, que é quem grava. Esta serve
+   pra a tela achar a escolha que ele devolveu: um passo a menos aqui e
+   "Atraxa, Praetors' Voice" aparece no padrão com a arte escolhida, e o
+   "Gerar pedido" nunca liga. */
+const LIGATURAS_ARTE = {"æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe",
+                        "ø": "o", "Ø": "o", "ß": "ss", "đ": "d"};
+
 function chaveDaArte(nome){
-  return String(nome || "").trim().toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return String(nome || "")
+    .replace(/[æÆœŒøØßđ]/g, (c) => LIGATURAS_ARTE[c])
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/['’ʼ]/g, "")
+    .replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function arteEscolhida(carta, face){
@@ -110,12 +119,13 @@ function botaoDeArte(carta){
 }
 
 /* Tudo o que mostra arte escolhida, de uma vez: a linha do deck (o botão), o
-   maybeboard e a galeria (a prévia do hover sai dos atributos que eles
-   escrevem). */
+   maybeboard, a galeria (a prévia do hover sai dos atributos que eles
+   escrevem) e o "Gerar pedido", que só vale com todas escolhidas. */
 function redesenharArtes(){
   desenharDeck();
   desenharMaybe();
   desenharGaleria();
+  atualizarBotaoPedido();
 }
 
 /* As escolhas do deck inteiro, uma vez, ao abrir. Sem rede por linha: a lista

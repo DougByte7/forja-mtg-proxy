@@ -106,6 +106,39 @@
   .file-row label.filebtn:hover{border-color:var(--gold);color:var(--gold-light);background:rgba(201,162,39,0.06);}
   .file-row input[type=file]{display:none;}
   .file-name{font-size:12px;color:var(--text-muted);width:100%;}
+  .file-row[hidden],.deck-pedido[hidden]{display:none;}
+
+  /* O deck no lugar do upload, quando o pedido vem do deckbuilder. Mesmo
+     desenho do cartão de /meus-decks: é o mesmo deck, e reconhecê-lo de lá
+     é a confirmação de que o pedido é daquele. */
+  .deck-cartao{background:var(--surface-2);border:1px solid var(--border);
+    border-radius:12px;overflow:hidden;}
+  .deck-capa{height:112px;background:#16112A;position:relative;
+    display:grid;place-items:center;overflow:hidden;}
+  /* A arte do comandante é um retrato; o pedaço que interessa é o alto. */
+  .deck-capa img{width:118%;height:100%;position:relative;bottom:14%;display:block;}
+  .deck-capa .semarte{color:var(--text-muted);font-size:11px;padding:0 12px;
+    text-align:center;}
+  .deck-capa::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(to top,rgba(15,13,23,0.92),transparent 62%);}
+  .deck-miolo{padding:11px 13px 13px;display:flex;flex-direction:column;gap:7px;}
+  .deck-miolo h4{font-size:15px;margin:0;font-weight:600;line-height:1.25;
+    overflow-wrap:anywhere;}
+  .deck-cmd{color:var(--text-muted);font-size:12px;line-height:1.35;
+    overflow-wrap:anywhere;}
+  .deck-info{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    font-size:11.5px;color:var(--text-muted);}
+  .deck-info .n{font-family:'IBM Plex Mono',monospace;}
+  .deck-cores{display:inline-flex;gap:2px;}
+  .deck-pip{width:11px;height:11px;border-radius:50%;display:inline-block;
+    border:1px solid rgba(0,0,0,0.35);background:#B9B4C8;}
+  .deck-pip.W{background:#F5F0D8;} .deck-pip.U{background:#9FC7E8;}
+  .deck-pip.B{background:#3b3540;} .deck-pip.R{background:#E4907A;}
+  .deck-pip.G{background:#89B894;}
+  .deck-links{display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:10px;font-size:12px;}
+  .deck-links a{color:var(--purple);}
+  .deck-links a:hover{color:var(--gold-light);}
+  .deck-nota{font-size:12px;color:var(--text-muted);margin:0;}
 
   .lam-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .lam-opt{
@@ -524,9 +557,10 @@
       </div>
     </div>
     <nav class="acoes">
-      <!-- O deckbuilder é o passo ANTES desta tela: monta o deck, exporta a
-           lista pro MPC Fill e volta pra cá com o XML. Fica no cabeçalho porque
-           quem ainda não tem deck não tem o que subir aqui. -->
+      <!-- O deckbuilder é o passo ANTES desta tela: monta o deck, escolhe as
+           artes e volta pra cá pelo "Gerar pedido" — ou exporta a lista pro
+           MPC Fill e volta com o XML. Fica no cabeçalho porque quem ainda não
+           tem deck não tem o que pedir aqui. -->
       <a class="sec-btn meus-btn" href="/deckbuilder"
          style="text-decoration:none;">Montar deck</a>
       <!-- Só aparece pra quem já tem deck salvo: um "Meus decks" vazio no
@@ -567,12 +601,16 @@
 
     <div class="step">
       <span class="step-label">Passo 1</span>
-      <h3>Selecione o XML do MPC Fill</h3>
-      <div class="file-row">
+      <h3 id="passo1Titulo">Selecione o XML do MPC Fill</h3>
+      <div class="file-row" id="fileRow">
         <label class="filebtn" for="fileInput">Selecionar arquivo .xml</label>
         <input type="file" id="fileInput" accept=".xml,text/xml">
         <span class="file-name" id="fileName">Nenhum arquivo selecionado</span>
       </div>
+      <!-- Quem chega pelo "Gerar pedido" do deckbuilder já tem o deck: o XML
+           sai do servidor e este cartão ocupa o lugar do upload (ver
+           `carregarDeckDoPedido`). -->
+      <div class="deck-pedido" id="deckPedido" hidden></div>
     </div>
 
     <div class="step">
@@ -747,6 +785,9 @@
   let loadedXmlText = '';
   let parsedOrder = null;   // {qty, backsCount} do XML atual
   let xmlError = '';        // mensagem de erro do XML atual, se houver
+  // O deck que o "Gerar pedido" do deckbuilder mandou, ou null. Com ele, o
+  // XML vem do servidor em vez do upload (ver `carregarDeckDoPedido`).
+  const deckDoPedido = new URLSearchParams(location.search).get('deck');
   fileInput.addEventListener('change', ()=>{
     const f = fileInput.files[0];
     if(!f) return;
@@ -889,11 +930,15 @@
 
     const customerName = nameInput.value.trim();
     if(!parsedOrder && !customerName){
-      resetResult('Selecione o XML e escreva seu nome — o resumo aparece sozinho.');
+      resetResult(deckDoPedido
+        ? 'Escreva seu nome — o resumo aparece sozinho.'
+        : 'Selecione o XML e escreva seu nome — o resumo aparece sozinho.');
       return;
     }
     if(!parsedOrder){
-      resetResult('Falta selecionar o arquivo .xml do MPC Fill.');
+      resetResult(deckDoPedido
+        ? 'Montando o pedido do deck…'
+        : 'Falta selecionar o arquivo .xml do MPC Fill.');
       return;
     }
     if(!customerName){
@@ -2867,10 +2912,103 @@
   }
   carregarTinta();
 
+  // --- Pedido a partir de um deck -----------------------------------------
+  // O "Gerar pedido" do deckbuilder chega aqui com `?deck=<id>`. O servidor
+  // monta o XML com as artes escolhidas lá (`GET /decks/{id}/pedido`), e ele
+  // entra no MESMO lugar do XML subido: revisão da folha, cobrança e cotação
+  // seguem sem saber de onde ele veio. No lugar do upload fica o cartão do
+  // deck, pra a pessoa reconhecer o que está pedindo.
+  //
+  // O deckbuilder só oferece o link com todas as artes escolhidas. A
+  // conferência daqui é a garantia: o deck pode ter mudado noutra aba, ou o
+  // link ter sido colado à mão. Faltando arte o servidor não devolve XML, e
+  // o pedido não anda.
+  function cartaoDoDeck(d){
+    const capa = d.arte
+      ? `<img src="${esc(d.arte)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+      : `<span class="semarte">${d.comandantes.length
+          ? 'arte não está na base local' : 'sem comandante escolhido'}</span>`;
+    const cores = (d.identidade || 'C').split('')
+      .map(c => `<span class="deck-pip ${esc(c)}"></span>`).join('');
+    return `<div class="deck-cartao">
+      <div class="deck-capa">${capa}</div>
+      <div class="deck-miolo">
+        <h4>${esc(d.nome)}</h4>
+        <div class="deck-cmd">${d.comandantes.length
+          ? esc(d.comandantes.join(' + ')) : 'Sem comandante'}</div>
+        <div class="deck-info">
+          <span class="deck-cores">${cores}</span>
+          <span class="n">${d.total}/100</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // O verso aparece como verso: numa carta de duas faces a frente pode estar
+  // escolhida e ele não.
+  function artesQueFaltam(faltando){
+    const MOSTRA = 5;
+    const nomes = faltando.map(f => f.face === 'verso' ? f.nome + ' (verso)' : f.nome);
+    return nomes.length > MOSTRA
+      ? nomes.slice(0, MOSTRA).join(', ') + ` e mais ${nomes.length - MOSTRA}`
+      : nomes.join(', ');
+  }
+
+  async function carregarDeckDoPedido(id){
+    document.getElementById('fileRow').hidden = true;
+    document.getElementById('passo1Titulo').textContent = 'Seu deck';
+    const box = document.getElementById('deckPedido');
+    // A saída pro upload fica sempre à vista: quem chegou pelo link e prefere
+    // o XML do MPC Fill não pode ficar preso aqui.
+    const links = rotulo => `<div class="deck-links">
+      <a href="/deckbuilder?deck=${encodeURIComponent(id)}">${rotulo}</a>
+      <a href="/">Enviar um XML em vez disso</a></div>`;
+    box.hidden = false;
+    box.innerHTML = '<p class="deck-nota">Carregando o deck…</p>';
+
+    let r;
+    try{
+      const resp = await fetch(`/decks/${encodeURIComponent(id)}/pedido`, {cache:'no-store'});
+      if(!resp.ok) throw new Error(await motivoDaFalha(resp));
+      r = await resp.json();
+    }catch(err){
+      box.innerHTML = links('Abrir no deckbuilder');
+      xmlError = err.message || 'Não consegui abrir esse deck agora. Tente de novo em instantes.';
+      recalc();
+      return;
+    }
+
+    if(!r.xml){
+      box.innerHTML = cartaoDoDeck(r.deck) + links('Escolher as artes no deckbuilder');
+      xmlError = `Este deck ainda não vira pedido: faltam ${r.faltando.length} `
+        + `arte(s) — ${artesQueFaltam(r.faltando)}. A arte padrão não vai pro `
+        + `papel; escolha as que faltam na aba Artes do deckbuilder.`;
+      recalc();
+      return;
+    }
+
+    box.innerHTML = cartaoDoDeck(r.deck) + links('Abrir no deckbuilder');
+    loadedXmlText = r.xml;
+    try{
+      parsedOrder = parseOrder(r.xml);
+      buildSheetModel(r.xml);
+      xmlError = '';
+    }catch(err){
+      parsedOrder = null;
+      clearSheetModel();
+      xmlError = err.message;
+    }
+    recalc();
+    // A cotação já sabe quem é o comandante: é o do deck.
+    const cmd = (r.deck.comandantes || [])[0];
+    if(cmd && [...cmdSelect.options].some(o => o.value === cmd)) cmdSelect.value = cmd;
+  }
+
   // Primeira pintura da tela. Fica aqui no fim de propósito: o recalc()
   // usa as constantes declaradas acima, e `const` não é içada como as
   // funções — chamar antes daqui estouraria.
   recalc();
+  if(deckDoPedido) carregarDeckDoPedido(deckDoPedido);
 </script>
 </body>
 </html>

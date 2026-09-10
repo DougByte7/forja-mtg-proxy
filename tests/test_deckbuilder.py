@@ -85,6 +85,8 @@ function __el(id){
     classList:{add:function(){},remove:function(){},toggle:function(){},
                contains:function(){return false;}},
     setAttribute:function(){}, getAttribute:function(){return null;},
+    removeAttribute:function(k){ delete this[k]; },
+    hasAttribute:function(k){ return k in this; },
     addEventListener:function(){}, insertAdjacentHTML:function(){},
     querySelector:function(){return null;}, querySelectorAll:function(){return [];},
     appendChild:function(){}, removeChild:function(){}, remove:function(){},
@@ -425,10 +427,20 @@ try:
                ' nomeDaBusca(DELVER, "frente")])'),
        ["Insectile Aberration", "Delver of Secrets // Insectile Aberration"])
 
+    # A chave da tela tem que ser a do servidor: é por ela que a escolha que
+    # ele devolve é achada aqui ao reabrir o deck. Os esperados são o que o
+    # `cartas.normalizar` responde pra esses mesmos nomes.
+    nomes = ["Atraxa, Praetors' Voice", "Delver of Secrets // Insectile Aberration",
+             "Lim-Dûl's Vault", "Ærathi Berserker", "  Jötun   Grunt "]
+    eq("a chave da arte é o nome achatado do servidor",
+       avaliar("JSON.stringify(%s.map(chaveDaArte))" % json.dumps(nomes)),
+       ["atraxa praetors voice", "delver of secrets insectile aberration",
+        "lim duls vault", "aerathi berserker", "jotun grunt"])
+
     # A prévia do hover mostra o arquivo escolhido, e não a arte oficial.
     previa = avaliar(
         'arte.escolhas["sol ring"] = {frente: {drive_id: "id-sol"}};'
-        'arte.escolhas["delver of secrets // insectile aberration"] ='
+        'arte.escolhas["delver of secrets insectile aberration"] ='
         ' {verso: {drive_id: "id-inseto"}};'
         'JSON.stringify([ganchosDaPrevia(SOL_RING), ganchosDaPrevia(ELVES),'
         ' ganchosDaPrevia(DELVER)])')
@@ -460,6 +472,34 @@ try:
         is not None)
     # Atraxa, 5 cartas do deck, Delver (2 artes) e o Room: 9 artes, 1 escolhida.
     check("a conta é por arte, e diz quantas faltam", "<b>1/9</b>" in galeria)
+
+    # O "Gerar pedido" só leva à tela de orçamento com TODAS as artes
+    # escolhidas — o verso da carta de duas faces inclusive.
+    pedido = avaliar(
+        'estado.id = "abc123";'
+        'estado.cartas = [{carta: SOL_RING, quantidade: 4, categoria: ""},'
+        ' {carta: DELVER, quantidade: 1, categoria: ""}];'
+        'var fotos = [];'
+        'function foto(){ atualizarBotaoPedido(); var l = $("btn-pedido");'
+        ' fotos.push([l.hidden, l.href || null, l.title]); }'
+        'foto();'
+        'arte.escolhas["atraxa"] = {frente: {drive_id: "a"}};'
+        'arte.escolhas["sol ring"] = {frente: {drive_id: "s"}};'
+        'arte.escolhas["delver of secrets insectile aberration"] ='
+        ' {frente: {drive_id: "d"}};'
+        'foto();'
+        'arte.escolhas["delver of secrets insectile aberration"].verso ='
+        ' {drive_id: "i"};'
+        'foto();'
+        'estado.id = null; foto();'
+        'JSON.stringify(fotos)')
+    eq("sem arte escolhida, o link não leva a lugar nenhum e diz quantas faltam",
+       pedido[0], [False, None, "Faltam 4 arte(s) — escolha na aba Artes"])
+    eq("com só o verso faltando, continua desligado",
+       pedido[1][1:], [None, "Faltam 1 arte(s) — escolha na aba Artes"])
+    eq("com tudo escolhido, leva o id do deck pra tela de orçamento",
+       pedido[2][:2], [False, "/?deck=abc123"])
+    eq("deck que ainda não foi salvo não mostra o link", pedido[3][:2], [True, None])
 
     # -------------------------------------------------- o que vai pro servidor
     print("\n--- o que a tela manda pro servidor ---")

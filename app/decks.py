@@ -988,12 +988,10 @@ def importado_para_deck(trazido: dict) -> dict:
 def lista_texto(deck: dict) -> str:
     """A decklist em texto, uma carta por linha, comandante primeiro.
 
-    É o formato que o MPC Fill aceita colado na caixa dele — e é assim que
-    este deckbuilder se liga ao fluxo de impressão que já existe: monta aqui,
-    cola lá pra escolher as artes, e sobe o XML que sai de lá no orçamento
-    de sempre. Este backend não tem biblioteca de arte nenhuma pra gerar esse
-    XML sozinho (ver `pdf_generator.py`: cada carta é um id de arquivo no
-    Drive).
+    É o formato que o MPC Fill aceita colado na caixa dele: monta aqui, cola
+    lá pra escolher as artes, e sobe o XML que sai de lá no orçamento de
+    sempre. O outro caminho é escolher as artes no próprio deckbuilder, e aí
+    o XML sai daqui mesmo (ver `artes.pedido`).
 
     O sideboard entra e o maybeboard não, pelo mesmo critério da cotação: a
     lista é o que vai pra impressão, e o que a pessoa ainda está decidindo

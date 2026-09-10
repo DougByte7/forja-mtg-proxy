@@ -65,6 +65,25 @@ function contaDaGaleria(){
   return {total, escolhidas};
 }
 
+/* O "Gerar pedido" do cabeçalho: um link pra tela de orçamento com o id do
+   deck, que lá vira pedido com as artes escolhidas aqui (ver `artes.pedido`).
+   Só ganha `href` com TODAS as artes escolhidas, pela mesma conta desta aba:
+   a arte padrão é imagem da Scryfall, e o PDF só baixa arquivo do Drive.
+   Sem id não há deck no servidor pra levar, e ele some junto com o
+   Compartilhar. */
+function atualizarBotaoPedido(){
+  const link = $("btn-pedido");
+  link.hidden = !estado.id;
+  const {total, escolhidas} = contaDaGaleria();
+  const pronto = !!estado.id && total > 0 && escolhidas === total;
+  if (pronto) link.href = `/?deck=${encodeURIComponent(estado.id)}`;
+  else link.removeAttribute("href");
+  link.setAttribute("aria-disabled", String(!pronto));
+  link.title = pronto ? "Levar este deck pra tela de orçamento"
+    : total ? `Faltam ${total - escolhidas} arte(s) — escolha na aba Artes`
+    : "O deck ainda não tem carta";
+}
+
 function desenharGaleria(){
   const caixa = $("galeria-resultado");
   if (!estado.comandantes.length){

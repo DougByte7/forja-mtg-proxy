@@ -97,6 +97,9 @@ function agendarSalvar(){
 }
 
 async function salvarAgora(){
+  // Zerado aqui, e não só no `clearTimeout`: é por ele que o `salvarJa`
+  // sabe se ainda há gravação esperando a vez.
+  salvarTimer = null;
   if (salvando){ salvarDeNovo = true; return; }
   // Deck sem comandante e sem carta não vira registro no servidor: senão cada
   // pessoa que só abriu a página deixaria um deck vazio pra trás.
@@ -115,6 +118,7 @@ async function salvarAgora(){
       estado.dono = resposta.deck.dono || null;
       history.replaceState(null, "", `?deck=${estado.id}`);
       $("btn-compartilhar").hidden = false;
+      atualizarBotaoPedido();
     }
     lembrarDeck();
     marcarEstado("salvo " + new Date().toLocaleTimeString("pt-BR",
@@ -140,6 +144,18 @@ async function salvarAgora(){
     salvando = false;
     if (salvarDeNovo){ salvarDeNovo = false; agendarSalvar(); }
   }
+}
+
+/* Grava agora o que estiver esperando o autosave, e diz se o servidor ficou
+   com a versão da tela. É pra quem sai da página levando o deck — o pedido
+   é montado com o que o SERVIDOR tem, e os 900 ms de espera cabem folgados
+   entre a última carta e o clique no link. */
+async function salvarJa(){
+  if (!salvarTimer && !salvando) return true;
+  while (salvando) await new Promise(r => setTimeout(r, 100));
+  clearTimeout(salvarTimer);
+  await salvarAgora();
+  return $("estado-salvo").classList.contains("ok");
 }
 
 /* ------------------------------------------------- meus decks (localStorage)

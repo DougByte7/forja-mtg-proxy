@@ -72,6 +72,10 @@
     <div class="espaco"></div>
 
     <div class="acoes">
+      <!-- Link, e não botão: leva o deck pra tela de orçamento. Nasce sem
+           `href` e só ganha um com todas as artes escolhidas (ver
+           `atualizarBotaoPedido`). -->
+      <a class="btn" id="btn-pedido" hidden aria-disabled="true">Gerar pedido</a>
       <button class="btn ouro" id="btn-compartilhar" hidden>Compartilhar</button>
       <button class="btn redondo" id="btn-mais" type="button"
               aria-haspopup="menu" aria-expanded="false"

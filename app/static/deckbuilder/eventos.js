@@ -279,6 +279,16 @@ function ligarEventos(){
     } catch(e){ prompt("Link do deck:", url); }
   });
 
+  // O link segue sozinho quando o servidor já tem o deck da tela. Com uma
+  // gravação pendente, grava antes: senão o pedido sairia sem a última carta.
+  $("btn-pedido").addEventListener("click", async (e) => {
+    const link = e.currentTarget;
+    if (!link.hasAttribute("href") || (!salvarTimer && !salvando)) return;
+    e.preventDefault();
+    if (await salvarJa()) location.href = link.href;
+    else toast("Não consegui salvar o deck — o pedido fica pra depois.");
+  });
+
   // Copiar a lista é a ação que se faz olhando pro total, então ela mora no
   // próprio número em vez de num botão separado.
   $("btn-total").addEventListener("click", exportar);
@@ -338,24 +348,27 @@ function ligarEventos(){
 }
 
 /* O menu do "···". Ele guarda o que se faz uma vez por deck; o cabeçalho
-   guarda o que se faz sempre. */
+   guarda o que se faz sempre. O que leva a outra página é link (`href`); o
+   que age aqui mesmo é botão. */
 function menuDoCabecalho(){
   const itens = [];
   const meus = lidos();
   if (meus.length){
-    itens.push({rotulo: `Meus decks (${meus.length})`,
-                aoClicar: () => { location.href = "/meus-decks"; }});
+    itens.push({rotulo: `Meus decks (${meus.length})`, href: "/meus-decks"});
   }
   itens.push({rotulo: "Importar lista", aoClicar: () => abrirGaveta("gaveta-importar")});
   itens.push({rotulo: "Exportar lista (copiar)", aoClicar: exportar});
   itens.push("risco");
-  itens.push({rotulo: "Novo deck", aoClicar: comecarNovo});
-  itens.push({rotulo: "Imprimir proxies", aoClicar: () => { location.href = "/"; }});
+  itens.push({rotulo: "Novo deck", href: location.pathname, aoClicar: comecarNovo});
+  itens.push({rotulo: "Imprimir proxies", href: "/"});
   return itens;
 }
 
-function comecarNovo(){
+/* O clique no "Novo deck", que é link pro deckbuilder sem `?deck=`. A
+   pergunta vale só pro clique que troca ESTA aba: o Ctrl+clique abre o deck
+   novo noutra aba e deixa este onde está. */
+function comecarNovo(e){
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return;
   if (estado.cartas.length && !confirm("Começar um deck novo? O atual fica " +
-      "salvo e continua em Meus decks.")) return;
-  location.href = location.pathname;
+      "salvo e continua em Meus decks.")) e.preventDefault();
 }

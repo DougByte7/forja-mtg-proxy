@@ -21,7 +21,12 @@ function fecharMenu(){
 
 /* `ancora` é um elemento ou um DOMRect (o ponto do clique direito). `itens`
    é uma lista de `{rotulo, marca, aoClicar, classe}` ou `"risco"` pra uma
-   linha divisória, ou `{titulo}` pra um cabeçalho. */
+   linha divisória, ou `{titulo}` pra um cabeçalho.
+
+   Item com `href` vira link: o que leva a outra página abre em aba nova no
+   Ctrl+clique e mostra o destino no hover, como qualquer link. O `aoClicar`
+   dele é opcional e recebe o evento — pra desistir da ida com
+   `preventDefault`. */
 function abrirMenu(ancora, itens){
   fecharMenu();
   const menu = document.createElement("div");
@@ -36,14 +41,18 @@ function abrirMenu(ancora, itens){
       menu.insertAdjacentHTML("beforeend", `<h4>${escapar(item.titulo)}</h4>`);
       continue;
     }
-    const botao = document.createElement("button");
-    botao.type = "button";
-    botao.setAttribute("role", "menuitem");
-    botao.className = item.classe || "";
-    botao.innerHTML = `<span class="marca">${item.marca || ""}</span>
+    const el = document.createElement(item.href ? "a" : "button");
+    if (item.href) el.href = item.href;
+    else el.type = "button";
+    el.setAttribute("role", "menuitem");
+    el.className = item.classe || "";
+    el.innerHTML = `<span class="marca">${item.marca || ""}</span>
       <span class="rot-menu">${escapar(item.rotulo)}</span>`;
-    botao.addEventListener("click", () => { fecharMenu(); item.aoClicar(); });
-    menu.appendChild(botao);
+    el.addEventListener("click", (e) => {
+      fecharMenu();
+      if (item.aoClicar) item.aoClicar(e);
+    });
+    menu.appendChild(el);
   }
   document.body.appendChild(menu);
 
@@ -58,7 +67,7 @@ function abrirMenu(ancora, itens){
   menu.style.left = Math.max(8, x) + "px";
   menu.style.top = y + "px";
   menuAberto = menu;
-  menu.querySelector("button")?.focus();
+  menu.querySelector("[role=menuitem]")?.focus();
 }
 
 /* O menu de uma carta: categoria, tabuleiro e sair. Nesta ordem porque é a
