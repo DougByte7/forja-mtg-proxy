@@ -158,3 +158,67 @@ function desenharSugestoes(){
 
   caixa.innerHTML = html;
 }
+
+/* ------------------------------------------------------------ deck médio
+
+   A outra pergunta que o EDHREC responde nesta aba: não "que carta entra
+   agora?", e sim "por onde eu começo?". O deck médio é a lista das cartas
+   mais jogadas nos decks registrados com o comandante, estreitada por
+   bracket e orçamento. Vem do servidor no formato do importar e entra pelo
+   mesmo `aplicarImportado`.
+
+   Deck só com o comandante recebe a lista nele mesmo: não há carta pra
+   perder. Com carta no deck, vale a regra do importar — pergunta antes, e o
+   resultado vira um deck novo, com o de agora intacto em Meus decks. */
+async function importarDeckMedio(){
+  if (!estado.comandantes.length){
+    toast("Escolha o comandante primeiro: o deck médio é dele.");
+    return;
+  }
+  const caixa = $("dm-resultado");
+  const botao = $("btn-deck-medio");
+  botao.disabled = true;
+  caixa.innerHTML = `<div class="nota">Pedindo o deck médio ao EDHREC…</div>`;
+  let trazido;
+  try {
+    trazido = await api("/decks/deck-medio", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        comandantes: estado.comandantes.map(c => c.nome),
+        bracket: $("dm-bracket").value,
+        orcamento: $("seg-orcamento-medio").querySelector(".ativa")
+                     ?.dataset.orcamento || "",
+      }),
+    });
+  } catch (e){
+    caixa.innerHTML =
+      `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
+    return;
+  } finally {
+    botao.disabled = false;
+  }
+
+  const temCarta = estado.cartas.length || estado.maybe.length;
+  if (temCarta && !confirm(`Trocar as cartas do deck pelo deck médio do ` +
+      `EDHREC?\n\nO deck de agora continua salvo e na lista de Meus decks — ` +
+      `mas esta janela passa a mostrar o deck médio.`)){
+    caixa.innerHTML = `<div class="nota">Importação cancelada.</div>`;
+    return;
+  }
+
+  aplicarImportado(trazido, {mesmoDeck: !temCarta});
+  mostrarResultadoImportacao(trazido, caixa);
+  // Quantos decks entraram na média muda como ler a lista: a de doze decks
+  // é o gosto de doze pessoas, a de quarenta mil é o formato falando.
+  caixa.insertAdjacentHTML("beforeend", `<div class="fonte-edhrec">Média de
+    ${trazido.decks ? `<b>${trazido.decks.toLocaleString("pt-BR")}</b>`
+                    : "todos os"} decks registrados na
+    <a href="${escapar(trazido.link)}" target="_blank" rel="noopener">página
+    do deck médio no EDHREC</a>.</div>`);
+
+  // As sugestões foram zeradas junto com o deck antigo, e esta é a aba que
+  // está à vista: pede de novo, contra o deck que acabou de entrar. Grava
+  // antes, porque é o deck do SERVIDOR que filtra o que já está nele.
+  if (await salvarJa()) buscarSugestoes({tema: estado.sugestoesTema});
+}

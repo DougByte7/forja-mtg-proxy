@@ -312,6 +312,41 @@
           junto do alvo da lista do que num deck qualquer. A lista começa no
           <b>comandante</b> — a estrela no hover de qualquer carta do deck
           troca pra <b>ela</b>.</p>
+
+        <!-- O deck médio fica acima da lista porque é o gesto de quem ainda
+             não tem deck, e é quem mais abre esta aba com o deck vazio. Veste
+             a caixa do "Vai para": são escolhas feitas uma vez antes do
+             clique, do mesmo jeito. -->
+        <div class="destino deck-medio">
+          <div class="destino-linha">
+            <span class="deck-medio-titulo">Deck médio do EDHREC</span>
+            <button type="button" class="btn ouro" id="btn-deck-medio"
+                    title="Trocar as cartas do deck pela média dos decks registrados no EDHREC com este comandante">
+              Importar</button>
+          </div>
+          <div class="destino-linha">
+            <span class="destino-rot">Bracket</span>
+            <select class="campo" id="dm-bracket"
+                    aria-label="Bracket dos decks que entram na média">
+              <option value="">Qualquer</option>
+              <option value="exhibition">1 · Exibição</option>
+              <option value="core">2 · Núcleo</option>
+              <option value="upgraded">3 · Turbinado</option>
+              <option value="optimized">4 · Otimizado</option>
+              <option value="cedh">5 · cEDH</option>
+            </select>
+          </div>
+          <div class="destino-linha">
+            <span class="destino-rot">Orçamento</span>
+            <div class="segmento" id="seg-orcamento-medio">
+              <button type="button" data-orcamento="" class="ativa">Qualquer</button>
+              <button type="button" data-orcamento="budget">Econômico</button>
+              <button type="button" data-orcamento="expensive">Caro</button>
+            </div>
+          </div>
+          <div id="dm-resultado"></div>
+        </div>
+
         <div id="sug-resultado" style="margin-top:4px;"></div>
       </div>
 

@@ -59,10 +59,14 @@ async function fazerImportar(){
 
    Escrever por cima do deck aberto apagaria do servidor o que alguém pode ter
    compartilhado por link. Um id novo custa uma linha no banco e não destrói
-   nada — é a mesma escolha do botão "duplicar". */
-function aplicarImportado(trazido){
+   nada — é a mesma escolha do botão "duplicar".
+
+   `mesmoDeck` é a exceção, pra quem chama sabendo que o deck aberto não tem
+   o que perder: só o comandante, nenhuma carta (ver `importarDeckMedio`). Aí
+   o id novo é que faria estrago — deixaria em Meus decks um deck vazio. */
+function aplicarImportado(trazido, {mesmoDeck = false} = {}){
   guardarDesfazer();
-  estado.id = null;
+  if (!mesmoDeck) estado.id = null;
   estado.validacao = null;
   estado.comandantes = trazido.comandantes_completos;
   const entrada = (e) => ({carta: e.carta, quantidade: e.quantidade,
@@ -83,18 +87,24 @@ function aplicarImportado(trazido){
   $("mb-resultado").innerHTML = "";
   $("orc-resultado").innerHTML = "";
 
-  if (trazido.nome){
+  // No mesmo deck, o nome que a pessoa deu fica: ele é dela, e o que mudou
+  // foram as cartas. Só o nome de fábrica cede lugar ao que veio.
+  if (trazido.nome && (!mesmoDeck || estado.nome === "Deck sem nome")){
     estado.nome = trazido.nome;
     $("nome-deck").value = estado.nome;
   }
-  history.replaceState(null, "", location.pathname);
-  $("btn-compartilhar").hidden = true;
+  if (!mesmoDeck){
+    history.replaceState(null, "", location.pathname);
+    $("btn-compartilhar").hidden = true;
+  }
   desenharTudo();
   buscar();
   agendarSalvar();
 }
 
-function mostrarResultadoImportacao(trazido){
+/* `caixa` é onde o recado aparece: a gaveta de importar, ou o bloco do deck
+   médio na aba de sugestões. */
+function mostrarResultadoImportacao(trazido, caixa = $("i-resultado")){
   const total = trazido.cartas_completas.reduce((n, e) => n + e.quantidade, 0)
               + trazido.comandantes_completos.length;
   const talvez = (trazido.maybeboard_completo || [])
@@ -134,7 +144,7 @@ function mostrarResultadoImportacao(trazido){
       dizia quem é o comandante. Escolha ele na tela — é ele que define a
       identidade de cor de tudo.</span></div>`;
   }
-  $("i-resultado").innerHTML = html;
+  caixa.innerHTML = html;
 }
 
 /* --------------------------------------------------------------- exportar */

@@ -40,6 +40,7 @@ import requests
 
 from . import identidade as ident, log, ritmo
 from .cartas import face_da_frente
+from .poder import NOME_DO_BRACKET
 
 BASE = os.environ.get("EDHREC_URL", "https://json.edhrec.com/pages")
 SITE = os.environ.get("EDHREC_SITE", "https://edhrec.com")
@@ -61,6 +62,12 @@ _freio = ritmo.Freio("edhrec", DELAY_SEGUNDOS)
 
 class EDHRECError(Exception):
     """Falha lendo o EDHREC. A mensagem diz se foi rede ou mudança de formato."""
+
+
+class PaginaInexistente(EDHRECError):
+    """O EDHREC não tem a página pedida. É informação, não falha de rede — e
+    quem pediu às vezes sabe dizer POR QUE ela não existe melhor que o
+    `_pedir` (ver `deck_medio`)."""
 
 
 # As categorias que valem a pena mostrar, na ordem em que aparecem, com o
@@ -213,7 +220,7 @@ def _pedir(caminho: str) -> dict:
             # 403 que não traz esse XML é outra coisa — bloqueio de verdade,
             # WAF, IP barrado — e continua caindo no caminho de tentar de
             # novo logo abaixo.
-            raise EDHRECError(
+            raise PaginaInexistente(
                 f"o EDHREC não tem página pra isso ({caminho}). Se for uma "
                 f"dupla de parceiros, pode ser que ninguém tenha registrado "
                 f"deck com ela ainda.")
@@ -426,4 +433,114 @@ def sugerir_por_carta(nome: str) -> dict:
         "link": f"{SITE}/cards/{alvo}",
         "cache": bool(dados.get("_cache")),
         "quando": time.time(),
+    }
+
+
+# O deck médio mora em `average-decks/<comandante>[/<bracket>][/<orçamento>]`,
+# os filtros nessa ordem e nenhum obrigatório. Os brackets são os slugs que o
+# EDHREC usa na URL, na ordem oficial de 1 a 5; o nome em português sai do
+# `poder.py`, que é quem fala de bracket no resto da tela.
+BRACKETS = ("exhibition", "core", "upgraded", "optimized", "cedh")
+# As contagens da página falam em "middle" também, mas ele não tem página
+# própria: o meio é o que se vê sem filtro de orçamento nenhum.
+ORCAMENTOS = {"budget": "econômico", "expensive": "caro"}
+
+
+def _cartas_do_deck_medio(dados: dict) -> list[dict]:
+    """As 99 do deck médio, com quantidade.
+
+    Saem de `deck.cards`, que agrupa por tipo (`{"Creature": [["Birds of
+    Paradise", 1], ...]}`) e traz os básicos já somados (`["Forest", 4]`). O
+    agrupamento é jogado fora: a tela agrupa por tipo sozinha, e a categoria
+    de uma carta aqui é o nome que a PESSOA dá — "combo principal" —, não o
+    tipo.
+
+    As listas de `cardlists` da mesma página descrevem o mesmo deck, mas o
+    básico vem ali como etiqueta ("4 Forest") e não como quantidade.
+    """
+    deck = dados.get("deck")
+    grupos = deck.get("cards") if isinstance(deck, dict) else None
+    if not isinstance(grupos, dict):
+        raise EDHRECError("o formato do EDHREC mudou: não achei 'deck.cards' "
+                          "na página do deck médio.")
+    cartas = []
+    for linhas in grupos.values():
+        for linha in linhas if isinstance(linhas, list) else []:
+            if (not isinstance(linha, list) or len(linha) != 2
+                    or not isinstance(linha[1], int)):
+                continue
+            nome = str(linha[0] or "").strip()
+            if nome and linha[1] > 0:
+                cartas.append({"nome": nome, "quantidade": linha[1]})
+    if not cartas:
+        raise EDHRECError("a página do deck médio veio sem carta nenhuma — o "
+                          "formato do EDHREC deve ter mudado.")
+    return cartas
+
+
+def deck_medio(comandantes: list[str], bracket: str | None = None,
+               orcamento: str | None = None) -> dict:
+    """O deck médio do EDHREC pro comandante, no formato de `importar.py`.
+
+    É a lista que junta as cartas mais jogadas nos decks registrados com esse
+    comandante — o ponto de partida que muita gente usa pra começar um deck.
+    `bracket` e `orcamento` estreitam os decks que entram na média.
+
+    O comandante que volta é o que foi PEDIDO, não o que a página escreve: o
+    nome canônico da base local é o de duas faces inteiro, e o do EDHREC é o
+    da frente. Trocar um pelo outro faria o deck mudar de comandante ao ser
+    importado.
+
+    Levanta `ValueError` pra filtro desconhecido e `EDHRECError` pra o resto,
+    `PaginaInexistente` incluída.
+    """
+    if not LIGADO:
+        raise EDHRECError("as sugestões estão desligadas no .env (EDHREC=0).")
+    if bracket and bracket not in BRACKETS:
+        raise ValueError(f"Bracket desconhecido: {bracket}.")
+    if orcamento and orcamento not in ORCAMENTOS:
+        raise ValueError(f"Orçamento desconhecido: {orcamento}.")
+
+    caminho = "/".join([f"average-decks/{slug_do_deck(comandantes)}"]
+                       + [f for f in (bracket, orcamento) if f])
+    inicio = time.time()
+    try:
+        dados = _pedir(caminho)
+    except PaginaInexistente:
+        if not (bracket or orcamento):
+            raise
+        # Com filtro, "não existe" quase sempre quer dizer "poucos decks
+        # assim": o EDHREC não publica média de um punhado de listas. O
+        # recado genérico do `_pedir` mandaria procurar erro de parceria.
+        raise PaginaInexistente(
+            "o EDHREC não tem deck médio desse comandante com esse bracket e "
+            "orçamento — poucos decks registrados assim. Tente um filtro "
+            "mais largo.")
+    cartas = _cartas_do_deck_medio(dados)
+
+    filtros = []
+    if bracket:
+        filtros.append(NOME_DO_BRACKET[BRACKETS.index(bracket) + 1][0])
+    if orcamento:
+        filtros.append(ORCAMENTOS[orcamento])
+    nome = f"Deck médio de {' e '.join(comandantes)}"
+    if filtros:
+        nome += f" ({', '.join(filtros)})"
+
+    card = ((dados.get("container") or {}).get("json_dict") or {}).get("card")
+    num_decks = card.get("num_decks") if isinstance(card, dict) else None
+
+    log.evento("edhrec", "deck-medio", caminho=caminho, cartas=len(cartas),
+               decks=num_decks, cache=dados.get("_cache"),
+               ms=int((time.time() - inicio) * 1000))
+
+    return {
+        "nome": nome,
+        "comandantes": list(comandantes),
+        "cartas": cartas,
+        "maybeboard": [],
+        "fonte": "EDHREC",
+        "link": f"{SITE}/{caminho}",
+        "decks": num_decks if isinstance(num_decks, int) else None,
+        "cache": bool(dados.get("_cache")),
     }

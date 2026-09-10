@@ -329,6 +329,79 @@ try:
         check("desligado no .env levanta em vez de dar lista vazia", True)
     edhrec.LIGADO = True
 
+    # ------------------------------------------------------------ deck médio
+    print("\n--- o deck médio ---")
+
+    def pagina_media(cartas_por_tipo, num_decks=329):
+        return {"deck": {"commander": ["Ojer Taq, Deepest Foundation"],
+                         "cards": cartas_por_tipo},
+                "container": {"json_dict": {"cardlists": [],
+                                            "card": {"num_decks": num_decks}}}}
+
+    MEDIA = pagina_media({
+        "Artifact": [["Sol Ring", 1], ["Arcane Signet", 1]],
+        "Land": [["Command Tower", 1], ["Plains", 12]],
+        "Creature": [["Esquisita", "um"], ["Zerada", 0], ["Sem Par"]],
+    })
+
+    OJER = "Ojer Taq, Deepest Foundation // Temple of Civilization"
+    sessao = com_sessao(RespostaFalsa(MEDIA))
+    medio = edhrec.deck_medio([OJER], "core", "budget")
+    eq("o caminho leva bracket e orçamento, nessa ordem",
+       sessao.chamadas[0].rsplit("/pages/", 1)[1],
+       "average-decks/ojer-taq-deepest-foundation/core/budget.json")
+    eq("as cartas saem com quantidade, e básico somado",
+       sorted((c["nome"], c["quantidade"]) for c in medio["cartas"]),
+       [("Arcane Signet", 1), ("Command Tower", 1), ("Plains", 12),
+        ("Sol Ring", 1)])
+    eq("o comandante que volta é o pedido, não o da página",
+       medio["comandantes"], [OJER])
+    eq("o nome diz os filtros em português",
+       medio["nome"], f"Deck médio de {OJER} (Núcleo, econômico)")
+    eq("quantos decks entraram na média", medio["decks"], 329)
+    eq("e o link é da página filtrada", medio["link"],
+       f"{edhrec.SITE}/average-decks/ojer-taq-deepest-foundation/core/budget")
+
+    sessao = com_sessao(RespostaFalsa(MEDIA))
+    edhrec.deck_medio(["Muldrotha, the Gravetide"], orcamento="expensive")
+    eq("só orçamento, sem bracket",
+       sessao.chamadas[0].rsplit("/pages/", 1)[1],
+       "average-decks/muldrotha-the-gravetide/expensive.json")
+
+    for nome, args in (("bracket desconhecido", ("bracket-6", None)),
+                       ("orçamento desconhecido", (None, "middle"))):
+        com_sessao()   # se pedir, explode
+        try:
+            edhrec.deck_medio(["Muldrotha, the Gravetide"], *args)
+            check(f"{nome} levanta ValueError", False, "(não levantou)")
+        except ValueError:
+            check(f"{nome} levanta ValueError", True)
+
+    # Com filtro, a página que falta quase sempre é "poucos decks assim" — e o
+    # recado tem que dizer isso, não mandar procurar erro de parceria.
+    com_sessao(RespostaFalsa(None, status=403, texto=ACESSO_NEGADO))
+    try:
+        edhrec.deck_medio(["Comandante Raro"], "cedh", "budget")
+        check("combinação sem página levanta", False, "(não levantou)")
+    except edhrec.PaginaInexistente as e:
+        check("combinação sem página sugere filtro mais largo",
+              "filtro mais largo" in str(e), f"({str(e)[:58]}…)")
+
+    com_sessao(RespostaFalsa({"container": {"json_dict": {}}}))
+    try:
+        edhrec.deck_medio(["Deck Medio Sem Deck"])
+        check("página sem 'deck' levanta", False, "(não levantou)")
+    except edhrec.EDHRECError as e:
+        check("página sem 'deck' levanta", "formato" in str(e),
+              f"({str(e)[:58]}…)")
+
+    com_sessao(RespostaFalsa(pagina_media({"Land": []})))
+    try:
+        edhrec.deck_medio(["Deck Medio Vazio"])
+        check("deck médio vazio levanta em vez de lista vazia", False)
+    except edhrec.EDHRECError:
+        check("deck médio vazio levanta em vez de lista vazia", True)
+
     # ------------------------------------------- o filtro do que vale mostrar
     print("\n--- o filtro contra o deck ---")
 

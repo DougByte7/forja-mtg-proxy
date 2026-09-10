@@ -1094,6 +1094,42 @@ def importar_deck(corpo: dict = Body(default={})):
     return pronto
 
 
+@app.post("/decks/deck-medio")
+def deck_medio(corpo: dict = Body(default={})):
+    """O deck médio do EDHREC pro comandante, pronto pra virar o deck.
+
+    `comandantes` são os nomes que a tela já tem; `bracket` (`exhibition` a
+    `cedh`) e `orcamento` (`budget` ou `expensive`) são opcionais e
+    estreitam os decks que entram na média.
+
+    Mesmo contrato do `/decks/importar`, e de propósito: NÃO grava nada, e
+    volta no formato que a tela já sabe aplicar, com o que a base local não
+    conhece em `nao_encontradas`. `decks` diz de quantas listas saiu a média
+    — uma média de doze decks se lê diferente de uma de quarenta mil.
+
+    Endpoint NÃO OFICIAL do EDHREC, como o das sugestões: falha vira 502 com
+    a mensagem (ver `edhrec.py`).
+    """
+    comandantes = corpo.get("comandantes") or []
+    if not isinstance(comandantes, list):
+        raise HTTPException(400, "`comandantes` precisa ser uma lista de nomes.")
+    comandantes = [str(n).strip() for n in comandantes if str(n).strip()]
+    if not comandantes:
+        raise HTTPException(400, "Escolha o comandante primeiro: o deck médio "
+                                 "é dele.")
+    try:
+        trazido = edhrec.deck_medio(
+            comandantes,
+            str(corpo.get("bracket") or "").strip() or None,
+            str(corpo.get("orcamento") or "").strip() or None)
+    except edhrec.EDHRECError as e:
+        raise HTTPException(502, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    pronto = decks.importado_para_deck(trazido)
+    return {**pronto, "decks": trazido["decks"], "cache": trazido["cache"]}
+
+
 @app.post("/decks")
 def criar_deck(corpo: dict = Body(default={}),
                quem: dict | None = Depends(quem_e)):

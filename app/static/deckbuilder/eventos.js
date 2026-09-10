@@ -337,6 +337,18 @@ function ligarEventos(){
     atualizarCategoriasDoDestino();
   });
 
+  // ---- deck médio do EDHREC ----
+  // O orçamento escolhido mora na classe do botão: só é lido no clique de
+  // importar, e não há mais ninguém na tela que precise dele.
+  $("seg-orcamento-medio").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-orcamento]");
+    if (!b) return;
+    for (const irmao of b.parentElement.children){
+      irmao.classList.toggle("ativa", irmao === b);
+    }
+  });
+  $("btn-deck-medio").addEventListener("click", importarDeckMedio);
+
   // ---- a folha de baixo do celular ----
   $("btn-abrir-busca").addEventListener("click", abrirFolha);
   $("folha-fundo").addEventListener("click", fecharFolha);
