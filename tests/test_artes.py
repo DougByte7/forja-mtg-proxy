@@ -245,6 +245,117 @@ try:
     vazio = decks.criar("Vazio", [], [])
     eq("deck vazio não tem o que imprimir", artes.pedido(vazio)["cartas"], 0)
 
+    print("\n--- as fichas vão pro papel ---")
+
+    # Três armadilhas numa base de mentira: as duas Wurm do Wurmcoil têm
+    # nome, tipo e corpo iguais e só o texto separa; duas cartas que criam
+    # Treasure citam IMPRESSÕES diferentes da mesma ficha; e o sideboard cria
+    # uma ficha que não vai pra mesa.
+    def ficha(ident, nome, texto, tipo="Token Artifact Creature — Wurm",
+              poder="3", resistencia="3", verso=None):
+        f = {"id": ident, "name": nome, "layout": "token", "type_line": tipo,
+             "oracle_text": texto, "power": poder, "toughness": resistencia,
+             "colors": [], "image_uris": {"normal": f"http://arte/{ident}"}}
+        if verso:
+            f.update(layout="double_faced_token", image_uris=None, card_faces=[
+                {"name": nome.split(" // ")[0], "type_line": tipo,
+                 "oracle_text": texto, "image_uris": {"normal": f"http://arte/{ident}"}},
+                {"name": nome.split(" // ")[1], "type_line": tipo,
+                 "oracle_text": "", "image_uris": {"normal": f"http://arte/{verso}"}}])
+        return f
+
+    def cria(nome, *ids):
+        return {"oracle_id": "o-" + nome, "layout": "normal", "cmc": 3.0,
+                "name": nome, "type_line": "Artifact", "colors": [],
+                "color_identity": [], "legalities": {"commander": "legal"},
+                "image_uris": {"normal": f"http://arte/{nome}"},
+                "all_parts": [{"component": "token", "id": i} for i in ids]}
+
+    tesouro = "Token Artifact — Treasure"
+    conn = cartas._conn()
+    for c in (cria("Motor de Wurm", "wurm-dt", "wurm-ll"),
+              cria("Mapa do Tesouro", "tesouro-a"),
+              cria("Fábrica de Tesouro", "tesouro-b"),
+              cria("Porta Dupla", "dia-noite"),
+              cria("Quartel", "soldado")):
+        conn.execute(f"INSERT OR REPLACE INTO cartas ({cartas._COLUNAS}) "
+                     f"VALUES ({cartas._INTERROGACOES})", cartas._linha(c))
+    for f in (ficha("wurm-dt", "Wurm", "Deathtouch"),
+              ficha("wurm-ll", "Wurm", "Lifelink"),
+              ficha("tesouro-a", "Treasure", "Sacrifice this: add one mana.",
+                    tesouro, "", ""),
+              ficha("tesouro-b", "Treasure", "Sacrifice this: add one mana.",
+                    tesouro, "", ""),
+              ficha("dia-noite", "Dia // Noite", "", "Token Creature — Spirit",
+                    "1", "1", verso="noite"),
+              ficha("soldado", "Soldier", "", "Token Creature — Soldier", "1", "1")):
+        conn.execute(f"INSERT OR REPLACE INTO tokens ({cartas._COLUNAS_TOKENS}) "
+                     f"VALUES ({cartas._INTERROGACOES_TOKENS})", cartas._linha_token(f))
+    conn.commit()
+    conn.close()
+
+    fichado = decks.criar("Fichas", ["Atraxa"], [
+        {"nome": "Motor de Wurm", "quantidade": 1},
+        {"nome": "Mapa do Tesouro", "quantidade": 1},
+        {"nome": "Fábrica de Tesouro", "quantidade": 1},
+        {"nome": "Porta Dupla", "quantidade": 1},
+        {"nome": "Quartel", "quantidade": 1, "categoria": decks.CATEGORIA_SIDEBOARD},
+    ])
+    grupos = artes.fichas_do_deck(fichado)
+    chaves = {f["id"]: f["chave_arte"] for g in grupos for f in g["tokens"]}
+    check("as duas Wurm do Wurmcoil são duas escolhas",
+          chaves["wurm-dt"] != chaves["wurm-ll"])
+    eq("duas impressões da mesma Treasure são uma escolha só",
+       chaves["tesouro-a"], chaves["tesouro-b"])
+    check("a chave começa pela sintaxe de ficha do MPC Fill, com o nome",
+          chaves["wurm-dt"].startswith("t:Wurm "), chaves["wurm-dt"])
+    check("o sideboard não cria ficha", "soldado" not in chaves)
+
+    montado = artes.pedido(fichado)
+    fichas_faltando = [(f["nome"], f["face"]) for f in montado["faltando"]
+                       if f.get("ficha")]
+    eq("ficha sem arte segura o pedido, uma de cada, verso incluído",
+       fichas_faltando, [("Wurm", "frente"), ("Wurm", "frente"),
+                         ("Treasure", "frente"), ("Dia // Noite", "frente"),
+                         ("Dia // Noite", "verso")])
+    check("carta não ganha a marca de ficha",
+          not any(f.get("ficha") for f in montado["faltando"]
+                  if f["nome"] in ("Atraxa", "Quartel")))
+    # 1 comandante + 5 cartas + 4 fichas; frente e verso da Dia // Noite.
+    eq("uma posição na folha por ficha", montado["cartas"], 10)
+    eq("e uma arte por lado", montado["artes"], 11)
+
+    for nome in ("Atraxa", "Motor de Wurm", "Mapa do Tesouro",
+                 "Fábrica de Tesouro", "Porta Dupla", "Quartel"):
+        artes.escolher(fichado["id"], nome, "id-" + nome)
+    for ident in ("wurm-dt", "wurm-ll", "tesouro-a", "dia-noite"):
+        artes.escolher(fichado["id"], chaves[ident], "id-" + ident,
+                       arquivo=f"{ident}.png")
+    montado = artes.pedido(fichado)
+    eq("falta só o verso da ficha de duas faces", montado["faltando"],
+       [{"nome": "Dia // Noite", "face": "verso", "ficha": True}])
+    artes.escolher(fichado["id"], chaves["dia-noite"], "id-noite", face="verso")
+    montado = artes.pedido(fichado)
+    check("com as fichas escolhidas, sai o XML", bool(montado["xml"]))
+
+    raiz = ET.fromstring(montado["xml"])
+    eq("as fichas vêm depois das cartas, com o <query> na sintaxe do MPC Fill",
+       [(c.findtext("slots"), c.findtext("query")) for c in raiz.findall("fronts/card")][-4:],
+       [("6", "t:Wurm"), ("7", "t:Wurm"), ("8", "t:Treasure"), ("9", "t:Dia")])
+    eq("o verso da ficha vai no mesmo slot, pelo nome dele",
+       [(c.findtext("slots"), c.findtext("query")) for c in raiz.findall("backs/card")],
+       [("9", "t:Noite")])
+    eq("o calc cobra as fichas junto", calc.parse_order(montado["xml"]), (10, 1))
+
+    from app import cotacao
+    cotaveis, fora = cotacao.filtrar_cotaveis(calc.parse_card_list(montado["xml"]),
+                                              "Atraxa")
+    eq("a cotação não procura preço de ficha",
+       [c["nome"] for c in cotaveis if calc.e_ficha(c["nome"])], [])
+    eq("e diz que as deixou de fora",
+       sorted(c["nome"] for c in fora if c["motivo"] == "token"),
+       ["t:Dia", "t:Treasure", "t:Wurm"])
+
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

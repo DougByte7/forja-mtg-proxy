@@ -135,9 +135,10 @@ async function salvarAgora(){
     // A mana base é conta local, sem custo de fora: depois de aberta uma
     // vez, acompanha cada autosave em vez de envelhecer com aviso.
     if (estado.manabase) analisarManabase();
-    // Fichas idem: a resposta sai da base local, então acompanhar o deck
-    // custa o mesmo que avisar que a lista envelheceu.
-    if (estado.tokens) buscarTokens();
+    // Fichas sempre, aberta a aba ou não: elas vão pro papel, e a aba Artes
+    // e o "Gerar pedido" contam as artes delas. A resposta sai da base
+    // local, sem rede de fora.
+    buscarTokens();
   } catch (e){
     marcarEstado("não consegui salvar: " + e.message, "erro");
   } finally {

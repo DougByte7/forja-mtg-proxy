@@ -1506,17 +1506,16 @@ def tokens_do_deck(deck_id: str):
     carta por carta, quais fichas ela cria, e a base local guarda isso. Sem
     rede, então é GET e a tela pode chamar sempre que a aba abrir.
 
-    O sideboard fica de fora (`CATEGORIAS_FORA_DA_CONTA`) porque ficha é o que
-    a pessoa leva pra mesa junto com as 100. O maybeboard também: carta que
-    ainda não entrou no deck não gera ficha pra levar. Comandante entra, e
-    entra primeiro — é a carta que mais define o que o deck vai criar.
+    Sideboard e maybeboard ficam de fora (ver `artes.fichas_do_deck`).
+    Comandante entra, e entra primeiro — é a carta que mais define o que o
+    deck vai criar.
+
+    Cada ficha leva a `chave_arte`, que é por onde a aba Artes acha a arte
+    escolhida pra ela: as fichas vão pro pedido de impressão junto com as
+    cartas.
     """
     deck = _deck_ou_404(deck_id)
-    fora = decks.CATEGORIAS_FORA_DA_CONTA
-    nomes = list(deck.get("comandantes") or []) + [
-        c["nome"] for c in deck.get("cartas") or []
-        if (c.get("categoria") or "") not in fora]
-    grupos = cartas.tokens_de(nomes)
+    grupos = artes.fichas_do_deck(deck)
     return {"grupos": grupos,
             "total": sum(len(g["tokens"]) for g in grupos)}
 

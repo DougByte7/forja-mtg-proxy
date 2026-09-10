@@ -70,6 +70,9 @@ async function abrir(){
   // As artes escolhidas, uma vez: a lista desenha 100 botões e uma consulta
   // por botão seria 100 requisições.
   carregarArtes();
+  // As fichas vão pro papel com o deck: sem elas, a aba Artes e o "Gerar
+  // pedido" contariam só as cartas até a aba Tokens ser aberta.
+  if (estado.id) buscarTokens();
   if (estado.comandantes.length){ buscar(); }
   else { buscarComandante(); $("busca-cmd").focus(); }
   // O foco na busca só faz sentido onde ela está sempre à vista: no celular

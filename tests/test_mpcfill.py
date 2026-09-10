@@ -212,6 +212,21 @@ try:
     eq("e devolve chaveado pelo nome que veio do deck",
        achado, {"Delver of Secrets // Insectile Aberration": ["ddd"]})
 
+    # Ficha chega como "t:Nome", a sintaxe da tela deles. Medido em 10/09/2026:
+    # "t:Treasure" como CARD volta zero artes; "Treasure" como TOKEN volta 224.
+    sessao = ligar(RespostaFalsa(FONTES), RespostaFalsa({"results": {
+        "Sol Ring": {"CARD": ["aaa"]},
+        "Treasure": {"TOKEN": ["ttt", "uuu"]},
+        "Wurm": {"TOKEN": ["www"]}}}))
+    achado = mpcfill.buscar(["Sol Ring", "t:Treasure", "T:Wurm"])
+    corpo = json.loads(sessao.chamadas[-1][1])
+    eq("ficha vai sem o prefixo, como TOKEN; carta como CARD, na mesma busca",
+       [(q["query"], q["cardType"]) for q in corpo["queries"]],
+       [("Sol Ring", "CARD"), ("Treasure", "TOKEN"), ("Wurm", "TOKEN")])
+    eq("e volta chaveada pelo nome com o prefixo, como a tela pediu",
+       achado, {"Sol Ring": ["aaa"], "t:Treasure": ["ttt", "uuu"],
+                "T:Wurm": ["www"]})
+
     # A versão no nome do arquivo é o que descarta um cache gravado com uma
     # leitura errada da API, sem ninguém entrar no servidor.
     check("o arquivo do cache carrega a versão",

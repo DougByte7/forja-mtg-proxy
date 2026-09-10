@@ -42,7 +42,7 @@ import time
 
 import requests
 
-from . import identidade as ident, log, ritmo
+from . import calc, identidade as ident, log, ritmo
 
 BASE = os.environ.get("MPCFILL_URL", "https://mpcfill.com")
 USER_AGENT = os.environ.get(
@@ -248,6 +248,9 @@ def buscar(nomes: list[str]) -> dict[str, list[str]]:
     vêm depois, só da página que a pessoa está olhando — Sol Ring tem 713
     artes, e pedir metadados de todas seria buscar o que ninguém vai ver.
 
+    Nome de ficha vem como "t:Treasure" e volta chaveado assim mesmo; carta e
+    ficha cabem na mesma lista (ver `_consulta`).
+
     Nome que a busca deles não conhece volta com lista VAZIA, não some do
     dicionário: quem chama precisa distinguir "não tem arte" de "não perguntei".
     """
@@ -263,24 +266,24 @@ def buscar(nomes: list[str]) -> dict[str, list[str]]:
     if guardado is not None:
         return guardado
 
-    # O formato do `editorSearch` deles: uma "query" por carta, com o tipo de
-    # face. `CARD` é a frente; o verso sai do `/2/DFCPairs/`, que é chaveado
-    # por nome e não por id.
+    # O formato do `editorSearch` deles: uma "query" por nome, com o tipo —
+    # `CARD` pras cartas, `TOKEN` pras fichas (ver `_consulta`).
     consultas = {nome: _consulta(nome) for nome in nomes}
     corpo = {
         "searchSettings": _busca_padrao(),
-        "queries": [{"query": q, "cardType": "CARD"}
-                    for q in dict.fromkeys(consultas.values())],
+        "queries": [{"query": q, "cardType": tipo}
+                    for q, tipo in dict.fromkeys(consultas.values())],
     }
     bruto = _pedir("2/editorSearch/", corpo)
     resultados = (bruto.get("results") or {})
 
     saida: dict[str, list[str]] = {}
-    for nome, q in consultas.items():
-        # A chave da resposta é a query como foi mandada; o minúsculo fica de
-        # reserva, porque o casamento do lado deles ignora caixa.
+    for nome, (q, tipo) in consultas.items():
+        # A chave da resposta é a query como foi mandada, e dentro dela o
+        # tipo; o minúsculo fica de reserva, porque o casamento do lado deles
+        # ignora caixa.
         achado = resultados.get(q) or resultados.get(q.lower()) or {}
-        ids = achado.get("CARD") if isinstance(achado, dict) else achado
+        ids = achado.get(tipo) if isinstance(achado, dict) else achado
         saida[nome] = [str(i) for i in (ids or [])]
 
     achadas = sum(1 for v in saida.values() if v)
@@ -293,15 +296,23 @@ def buscar(nomes: list[str]) -> dict[str, list[str]]:
     return saida
 
 
-def _consulta(nome: str) -> str:
-    """O que se pergunta ao MPC Fill por uma carta: o nome da FRENTE.
+def _consulta(nome: str) -> tuple[str, str]:
+    """O que se pergunta ao MPC Fill por um nome: `(query, cardType)`.
 
-    A base local guarda carta de duas faces como "Delver of Secrets //
-    Insectile Aberration", e a biblioteca deles indexa cada face pelo próprio
-    nome — o nome inteiro volta com zero artes, e a grade diria que a carta
-    não tem nenhuma.
+    Ficha chega como "t:Treasure", que é a sintaxe da tela deles pra busca de
+    token. A API não entende o prefixo — "t:Treasure" como `CARD` volta com
+    zero artes — e quer o nome puro com `cardType` `TOKEN`. Medido contra a
+    API de verdade: "Treasure" como `TOKEN` tem 224 artes.
+
+    O nome é o da FRENTE. A base local guarda carta de duas faces como
+    "Delver of Secrets // Insectile Aberration", e a biblioteca deles indexa
+    cada face pelo próprio nome — o nome inteiro volta com zero artes, e a
+    grade diria que a carta não tem nenhuma.
     """
-    return nome.split(" // ")[0].strip() or nome
+    tipo = "CARD"
+    if calc.e_ficha(nome):
+        nome, tipo = calc.sem_prefixo_de_ficha(nome), "TOKEN"
+    return (nome.split(" // ")[0].strip() or nome), tipo
 
 
 def _busca_padrao() -> dict:

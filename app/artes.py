@@ -29,13 +29,16 @@ resultado possível. `revalidar` existe pra perguntar antes, e o nome guardado
 é o que permite reconhecer a arte que a pessoa tinha escolhido mesmo depois de
 o id morrer.
 """
+import hashlib
+import json
 import os
 import sqlite3
 import time
 import xml.etree.ElementTree as ET
 
+from . import calc
 from . import cartas as base_cartas
-from . import log
+from . import decks, log
 
 DB_PATH = os.environ.get("DB_PATH", "/app/data/orders.db")
 
@@ -163,6 +166,54 @@ def para_deck(deck: dict) -> dict:
             "escolhidas": len(escolhas), "total": len(nomes)}
 
 
+def chave_da_ficha(ficha: dict) -> str:
+    """O nome sob o qual a arte de uma ficha é guardada: "t:Wurm 1a2b3c4d".
+
+    NOME NÃO IDENTIFICA FICHA. O Wurmcoil Engine cria duas "Wurm" 3/3
+    incolores, uma com deathtouch e outra com lifelink, e no MPC Fill são
+    arquivos diferentes — "Wurm (Deathtouch)" e "Wurm (Lifelink)". O id da
+    Scryfall também não serve: é o da IMPRESSÃO, e duas cartas que criam
+    Treasure citam impressões diferentes de uma ficha que no papel é uma só.
+
+    O que identifica é o que está escrito nela — nome, tipo, texto, corpo e
+    cores —, resumido num sufixo curto. O prefixo e o nome ficam legíveis
+    de propósito: são o que se reconhece numa linha da tabela.
+    """
+    escrito = [ficha.get(k) or "" for k in
+               ("nome", "tipo", "texto", "poder", "resistencia", "cores")]
+    resumo = hashlib.sha256(json.dumps(escrito, ensure_ascii=False)
+                            .encode("utf-8")).hexdigest()[:8]
+    return f"{calc.PREFIXO_FICHA}{ficha.get('nome') or ''} {resumo}"
+
+
+def fichas_do_deck(deck: dict) -> list[dict]:
+    """As fichas que o deck cria, agrupadas por quem as cria, cada uma com a
+    `chave_arte` dela.
+
+    Quem cria é quem joga: os comandantes e as cartas das 100. O sideboard
+    fica de fora (`decks.cartas_contadas`) porque ficha é o que se leva pra
+    mesa junto com as 100, e o maybeboard porque carta que ainda não entrou
+    no deck não gera ficha pra levar.
+    """
+    nomes = list(deck.get("comandantes") or []) + \
+        [c["nome"] for c in decks.cartas_contadas(deck)]
+    grupos = base_cartas.tokens_de(nomes)
+    for grupo in grupos:
+        for ficha in grupo["tokens"]:
+            ficha["chave_arte"] = chave_da_ficha(ficha)
+    return grupos
+
+
+def _fichas_distintas(grupos: list[dict]) -> list[dict]:
+    """Uma de cada, na ordem em que aparecem: a mesma ficha criada por duas
+    cartas é uma ficha só no papel."""
+    vistas: dict[str, dict] = {}
+    for grupo in grupos:
+        for ficha in grupo["tokens"]:
+            vistas.setdefault(ficha["chave_arte"], ficha)
+    return list(vistas.values())
+
+
 def pedido(deck: dict) -> dict:
     """O deck como pedido de impressão: o XML no formato do MPC Fill, montado
     com as artes escolhidas.
@@ -179,40 +230,57 @@ def pedido(deck: dict) -> dict:
     carta de duas faces pode ter a frente escolhida e o verso não.
 
     Entra o que vai pro papel, pelo critério da aba Artes: comandantes e as
-    cartas do deck, sideboard incluído; o maybeboard não. O verso vai em
-    `<backs>` com os MESMOS slots da frente, que é como o MPC Fill amarra o
-    verso a cada cópia. Arquivos iguais dividem um `<card>` só, com todos os
-    slots — as 30 Florestas são um arquivo em 30 lugares da folha.
+    cartas do deck, sideboard incluído; o maybeboard não. Depois delas, as
+    fichas que o deck cria (`fichas_do_deck`), UMA DE CADA: ficha é o que se
+    leva pra mesa, e a mesma Treasure pedida por cinco cartas continua sendo
+    uma ficha na caixa. Ficha sem arte escolhida também segura o XML — no
+    `faltando` ela vem com `ficha: True`.
+
+    O verso vai em `<backs>` com os MESMOS slots da frente, que é como o MPC
+    Fill amarra o verso a cada cópia. Arquivos iguais dividem um `<card>` só,
+    com todos os slots — as 30 Florestas são um arquivo em 30 lugares da
+    folha.
     """
     escolhas = do_deck(deck["id"])
     linhas = [(nome, 1) for nome in deck.get("comandantes") or []] + \
         [(c["nome"], c["quantidade"]) for c in deck.get("cartas") or []]
     conhecidas = base_cartas.por_nomes([nome for nome, _ in linhas])
 
+    # O que vai pra folha: (chave da escolha, nome pro `faltando`, o <query>
+    # de cada face, cópias, se é ficha). O <query> é o nome, que o `calc` usa
+    # pro código do pedido e a cotação usa pra saber o que cotar; o verso leva
+    # só o nome dele, como o MPC Fill escreve, e a ficha vai com o `t:`.
+    impressos = []
+    for nome, quantidade in linhas:
+        carta = conhecidas.get(nome) or {}
+        consultas = [nome]
+        if carta.get("imagem_verso"):
+            consultas.append((carta.get("nome") or nome).split(" // ")[-1].strip())
+        impressos.append((nome, nome, consultas, quantidade, False))
+    for ficha in _fichas_distintas(fichas_do_deck(deck)):
+        lados = [ficha["nome"].split(" // ")[0].strip()]
+        if ficha.get("imagem_verso"):
+            lados.append(ficha["nome"].split(" // ")[-1].strip())
+        impressos.append((ficha["chave_arte"], ficha["nome"],
+                          [calc.PREFIXO_FICHA + lado for lado in lados], 1, True))
+
     frentes: dict[str, dict] = {}
     versos: dict[str, dict] = {}
     faltando = []
     artes_total = 0
     proximo = 0
-    for nome, quantidade in linhas:
-        carta = conhecidas.get(nome) or {}
-        faces = FACES if carta.get("imagem_verso") else FACES[:1]
+    for chave, rotulo, consultas, quantidade, e_ficha in impressos:
+        faces = FACES[:len(consultas)]
         artes_total += len(faces)
-        escolhidas = escolhas.get(_chave(nome), {})
-        faltando += [{"nome": nome, "face": f} for f in faces
-                     if f not in escolhidas]
+        escolhidas = escolhas.get(_chave(chave), {})
+        faltando += [{"nome": rotulo, "face": f, **({"ficha": True} if e_ficha else {})}
+                     for f in faces if f not in escolhidas]
         slots = list(range(proximo, proximo + quantidade))
         proximo += quantidade
-        for face, destino in zip(faces, (frentes, versos)):
+        for face, consulta, destino in zip(faces, consultas, (frentes, versos)):
             escolha = escolhidas.get(face)
             if not escolha:
                 continue
-            # O <query> é o nome da carta, que o `calc` usa pro código do
-            # pedido e a cotação usa pra saber o que cotar. O verso leva só o
-            # nome dele, como o MPC Fill escreve.
-            consulta = nome
-            if face == "verso":
-                consulta = (carta.get("nome") or nome).split(" // ")[-1].strip()
             grupo = destino.setdefault(escolha["drive_id"], {
                 "arquivo": escolha["arquivo"], "consulta": consulta, "slots": []})
             grupo["slots"] += slots

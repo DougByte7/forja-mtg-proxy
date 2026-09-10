@@ -22,6 +22,11 @@
    CARTA DE DUAS FACES TEM DUAS ESCOLHAS. Frente e verso são dois arquivos
    no papel, e o MPC Fill indexa cada face pelo próprio nome — então cada lado
    tem a sua busca, a sua grade e a sua linha no servidor (`artes.FACES`).
+
+   FICHA SE ESCOLHE AQUI TAMBÉM. As fichas que o deck cria vão pro pedido
+   junto com as cartas e passam pela mesma modal, com duas diferenças: a
+   busca vai como "t:Nome" (`nomeDaBusca`), e a escolha é guardada pela chave
+   da ficha, não pelo nome (`nomeDaArte`).
    ========================================================================= */
 
 const ARTES_POR_PAGINA = 24;
@@ -67,9 +72,16 @@ function chaveDaArte(nome){
     .replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/* O nome sob o qual a arte é guardada no servidor. A carta é o próprio nome;
+   a ficha é a `chave_arte` que o servidor devolve com ela, porque nome não
+   identifica ficha (ver `artes.chave_da_ficha`). */
+function nomeDaArte(carta){
+  return carta.chaveArte || carta.nome;
+}
+
 function arteEscolhida(carta, face){
   if (!carta) return null;
-  return (arte.escolhas[chaveDaArte(carta.nome)] || {})[face || "frente"] || null;
+  return (arte.escolhas[chaveDaArte(nomeDaArte(carta))] || {})[face || "frente"] || null;
 }
 
 /* Duas faces DE PAPEL, e não de texto: carta partida e aventura têm duas
@@ -79,13 +91,18 @@ function temVerso(carta){
   return !!(carta && carta.imagem_verso);
 }
 
+/* Como a tela do MPC Fill escreve uma busca de ficha: "t:Treasure". O
+   servidor desfaz o prefixo na hora de perguntar (ver `mpcfill._consulta`). */
+const PREFIXO_FICHA = "t:";
+
 /* O que se pergunta ao MPC Fill por um lado da carta. A frente vai com o nome
    inteiro, que o servidor corta no " // " (ver `mpcfill._consulta`); o verso
    vai só com o nome dele, porque a biblioteca deles indexa cada face pelo
-   próprio nome. */
+   próprio nome. Ficha vai com o prefixo de ficha. */
 function nomeDaBusca(carta, face){
-  if (face !== "verso") return carta.nome;
-  return (carta.nome.split(" // ")[1] || "").trim() || carta.nome;
+  const nome = face !== "verso" ? carta.nome
+    : (carta.nome.split(" // ")[1] || "").trim() || carta.nome;
+  return carta.ficha ? PREFIXO_FICHA + nome : nome;
 }
 
 function miniaturaDoDrive(id, largura){
@@ -141,10 +158,13 @@ async function carregarArtes(){
   redesenharArtes();
 }
 
+/* `nome` é o que o quadro carrega em `data-arte-carta`: o nome da carta, ou a
+   chave da ficha (ver `nomeDaArte`). */
 function acharCartaDaArte(nome){
   const noDeck = estado.cartas.find(e => e.carta && e.carta.nome === nome);
   if (noDeck) return noDeck.carta;
-  return estado.comandantes.find(c => c.nome === nome) || null;
+  return estado.comandantes.find(c => c.nome === nome) ||
+    fichasDoDeck().find(f => f.chaveArte === nome) || null;
 }
 
 async function abrirEscolhaDeArte(nome, face){
@@ -155,8 +175,11 @@ async function abrirEscolhaDeArte(nome, face){
   arte.carta = carta;
   arte.meta = {};
   arte.filtro = {texto: "", fonte: "", dpi: 0, impressao: null};
-  arte.impressoes = null;
-  $("arte-titulo").textContent = carta.nome;
+  // Ficha não tem vitrine de impressões: a Scryfall responde pelo nome, e
+  // "Soldier" seria a tira de todos os Soldier já impressos, de toda cor e
+  // corpo. O que ajuda é ver a ficha que o deck cria (`desenharVitrine`).
+  arte.impressoes = carta.ficha ? [] : null;
+  $("arte-titulo").textContent = carta.ficha ? rotuloDaFicha(carta) : carta.nome;
   $("arte-busca").value = "";
   $("arte-fonte").value = "";
   $("arte-dpi").value = "0";
@@ -168,7 +191,7 @@ async function abrirEscolhaDeArte(nome, face){
 
   // As duas viajam juntas: a vitrine é da Scryfall e a grade é do MPC Fill,
   // e nenhuma das duas precisa esperar a outra.
-  buscarImpressoes(carta.nome);
+  if (!carta.ficha) buscarImpressoes(carta.nome);
   mostrarFace(face === "verso" && temVerso(carta) ? "verso" : "frente");
 }
 
@@ -210,7 +233,7 @@ function desenharFaces(){
 async function buscarImpressoes(nome){
   try {
     const r = await api(`/cartas/impressoes?nome=${encodeURIComponent(nome)}`);
-    if (arte.carta && arte.carta.nome !== nome) return;   // trocou de carta
+    if (!arte.carta || arte.carta.ficha || arte.carta.nome !== nome) return;   // trocou de carta
     arte.impressoes = r.impressoes || [];
   } catch (e){
     // `false` e não `[]`: "não consegui perguntar" e "essa carta só saiu uma
@@ -230,14 +253,25 @@ async function buscarImpressoes(nome){
 
    O resultado fica em `arte.porNome` pela sessão da página. O que não veio
    nele — carta acrescentada depois, e o VERSO das cartas de duas faces, que
-   a busca do deck não pergunta — é buscado sozinho, na hora em que abre. */
+   a busca do deck não pergunta — é buscado sozinho, na hora em que abre.
+
+   As fichas também ficam fora da busca do deck, e vão TODAS juntas na
+   primeira que se abre: quem abre uma costuma abrir as outras em seguida. */
 async function buscarArtesDaCarta(busca){
   try {
     if (!arte.porNome){
       arte.buscandoDeck = arte.buscandoDeck || pedirArtes(null);
       try { await arte.buscandoDeck; } finally { arte.buscandoDeck = null; }
     }
-    if (!(busca in arte.porNome)) await pedirArtes([busca]);
+    if (!(busca in arte.porNome)){
+      const pedir = [busca];
+      // Duas fichas de mesmo nome (as Wurm do Wurmcoil) são a mesma busca.
+      for (const f of arte.carta && arte.carta.ficha ? fichasDoDeck() : []){
+        const b = nomeDaBusca(f, "frente");
+        if (!(b in arte.porNome) && !pedir.includes(b)) pedir.push(b);
+      }
+      await pedirArtes(pedir);
+    }
   } catch (e){
     if (arte.busca !== busca) return;
     $("arte-conta").textContent = e.message;
@@ -313,8 +347,27 @@ function quadroHTML(src, deitada, extra){
     : ""}${extra || ""}</span>`;
 }
 
+/* No lugar da tira de impressões, a ficha que o deck cria, com o que está
+   escrito nela. É o que separa um arquivo certo de um quase certo: a grade de
+   "Wurm" tem "Wurm (Deathtouch)" e "Wurm (Lifelink)", e só o texto diz qual
+   das duas esta é. */
+function vitrineDaFicha(f){
+  const verso = arte.face === "verso";
+  const corpo = f.poder && f.resistencia ? ` · ${f.poder}/${f.resistencia}` : "";
+  return `<span class="arte-ficha">${quadroHTML(
+      (verso && f.imagem_verso) || f.imagem, false)}</span>
+    <span class="arte-nota" style="max-width:260px">É esta a ficha que o deck
+      cria: <b>${escapar(f.tipo || f.nome)}${escapar(corpo)}</b>${f.texto
+        ? ` — ${escapar(f.texto)}` : ""}. Escolha abaixo um arquivo que diga o
+      mesmo.</span>`;
+}
+
 function desenharVitrine(){
   const caixa = $("arte-vitrine");
+  if (arte.carta && arte.carta.ficha){
+    caixa.innerHTML = vitrineDaFicha(arte.carta);
+    return;
+  }
   if (arte.impressoes === null){
     caixa.innerHTML = `<span class="arte-nota">Carregando as impressões oficiais…</span>`;
     return;
@@ -426,7 +479,8 @@ function desenharGrade(){
   if (!total){
     const imp = arte.filtro.impressao;
     $("arte-conta").textContent = !arte.ids.length
-      ? `O MPC Fill não tem arte pra ${arte.face === "verso" ? "o verso desta" : "esta"} carta.`
+      ? `O MPC Fill não tem arte pra ${arte.face === "verso" ? "o verso desta" : "esta"} ${
+          arte.carta.ficha ? "ficha" : "carta"}.`
       : imp
         ? `Nenhum arquivo do MPC Fill identificado como ${imp.sigla}${
             imp.artista ? " ou de " + imp.artista : ""} — clique de novo na ` +
@@ -476,12 +530,12 @@ async function usarArte(id){
     await api(`/decks/${estado.id}/artes`, {
       method: "PUT",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(Object.assign({nome: carta.nome, face}, escolha)),
+      body: JSON.stringify(Object.assign({nome: nomeDaArte(carta), face}, escolha)),
     });
   } catch (e){
     return toast("Não consegui guardar: " + e.message);
   }
-  const chave = chaveDaArte(carta.nome);
+  const chave = chaveDaArte(nomeDaArte(carta));
   arte.escolhas[chave] = Object.assign({}, arte.escolhas[chave], {[face]: escolha});
   redesenharArtes();
   toast(face === "verso" ? "Arte do verso escolhida." : "Arte escolhida.");
@@ -496,11 +550,11 @@ async function voltarAoPadrao(){
   const carta = arte.carta, face = arte.face;
   try {
     await api(`/decks/${estado.id}/artes?nome=${
-      encodeURIComponent(carta.nome)}&face=${face}`, {method: "DELETE"});
+      encodeURIComponent(nomeDaArte(carta))}&face=${face}`, {method: "DELETE"});
   } catch (e){
     return toast("Não consegui: " + e.message);
   }
-  const chave = chaveDaArte(carta.nome);
+  const chave = chaveDaArte(nomeDaArte(carta));
   const faces = Object.assign({}, arte.escolhas[chave]);
   delete faces[face];
   if (Object.keys(faces).length) arte.escolhas[chave] = faces;

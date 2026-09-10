@@ -11,6 +11,20 @@ CARDS_PER_PAGE = 9
 PRICE_SINGLE_SIDE = 2.50
 PRICE_DOUBLE_SIDE_PER_PAGE = 3.3333
 
+# Como a tela do MPC Fill escreve uma busca de ficha: "t:Treasure". É a forma
+# do nome de ficha em todo o caminho daqui — a busca que o deckbuilder manda
+# pro `mpcfill` e o `<query>` que o `artes.pedido` escreve no XML — e é por
+# ele que a cotação sabe que aquilo não é carta pra comprar.
+PREFIXO_FICHA = "t:"
+
+
+def e_ficha(nome: str) -> bool:
+    return str(nome or "").strip()[:len(PREFIXO_FICHA)].lower() == PREFIXO_FICHA
+
+
+def sem_prefixo_de_ficha(nome: str) -> str:
+    return str(nome or "").strip()[len(PREFIXO_FICHA):].strip()
+
 
 def parse_order(xml_text: str):
     """Retorna (quantidade_de_cartas, quantidade_de_versos_especiais)."""

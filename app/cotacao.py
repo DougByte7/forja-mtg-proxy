@@ -22,7 +22,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
-from . import log
+from . import calc, log
 
 
 @dataclass(frozen=True)
@@ -127,6 +127,10 @@ def filtrar_cotaveis(cartas, comandante: "str | list | None" = None):
     de preço se aplica ao deck SEM eles. Por isso o total que sai daqui é o
     número que se compara com o teto.
 
+    A ficha ("t:Treasure", ver `calc.PREFIXO_FICHA`) também fica de fora, e
+    por outro motivo: ela vai pro papel, mas não é carta que se compra — não
+    tem preço pra achar, e procurá-la só a faria cair em "sem oferta".
+
     `comandante` aceita um nome ou uma LISTA de nomes: deck de parceiros tem
     dois comandantes, e a regra do formato é sobre a zona de comando, não
     sobre a carta — deixar o segundo na conta faria o total não bater com o
@@ -142,7 +146,9 @@ def filtrar_cotaveis(cartas, comandante: "str | list | None" = None):
     cotaveis, excluidas = [], []
     for carta in cartas:
         norma = normalizar_nome(carta["nome"])
-        if norma in alvos:
+        if calc.e_ficha(carta["nome"]):
+            excluidas.append({**carta, "motivo": "token"})
+        elif norma in alvos:
             excluidas.append({**carta, "motivo": "comandante"})
         elif norma in BASICAS:
             excluidas.append({**carta, "motivo": "terreno básico"})

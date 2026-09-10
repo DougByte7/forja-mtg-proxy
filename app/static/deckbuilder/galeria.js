@@ -15,7 +15,10 @@
    saem com a mesma arte (ver `artes.py`), então aparecem uma vez, com o 30×.
 
    O maybeboard fica de fora — não vai pro papel. O sideboard entra: é carta
-   que a pessoa quer ter, e entra na lista de impressão. */
+   que a pessoa quer ter, e entra na lista de impressão.
+
+   As fichas entram no fim, uma de cada (ver `fichasDoDeck`): vão pro papel
+   junto com o deck, e são a parte que se esquece de escolher. */
 
 // O HTML da última pintura. O autosave redesenha a tela a cada carta, e
 // reescrever cem <img> iguais faria a galeria piscar inteira a cada clique.
@@ -23,7 +26,11 @@ let galeriaDesenhada = "";
 
 function quadroDaGaleria(carta, face, quantidade){
   const escolha = arteEscolhida(carta, face);
-  const nome = escapar(carta.nome);
+  // Ficha leva o corpo e o texto: as duas Wurm do Wurmcoil são dois quadros
+  // de mesmo nome, e o texto é o que diz qual é qual.
+  const nome = escapar(carta.ficha
+    ? rotuloDaFicha(carta) + (carta.texto ? ` (${carta.texto})` : "")
+    : carta.nome);
   const verso = face === "verso";
   const src = imagemDaFace(carta, face, 400);
   const situacao = escolha
@@ -35,7 +42,7 @@ function quadroDaGaleria(carta, face, quantidade){
     carta.deitada ? ' data-deitada="1"' : ""}` : "";
   return `<button class="galeria-carta ${escolha ? "tem-arte" : ""} ${
       carta.deitada ? "deitada" : ""}"
-    data-arte-carta="${nome}" data-arte-face="${face}"${previa}
+    data-arte-carta="${escapar(nomeDaArte(carta))}" data-arte-face="${face}"${previa}
     title="${verso ? "Verso de " : ""}${nome} — ${escapar(situacao)}"
     aria-label="${verso ? "Verso de " : ""}${nome}: ${escapar(situacao)}">
     ${quadroHTML(src, carta.deitada,
@@ -52,9 +59,10 @@ function quadrosDaCarta(carta, quantidade){
 }
 
 /* O que falta escolher, contado por ARTE: carta de duas faces conta duas,
-   que é o que vai pro papel. */
+   que é o que vai pro papel. Ficha conta como carta. */
 function contaDaGaleria(){
-  const cartas = estado.comandantes.concat(estado.cartas.map(e => e.carta));
+  const cartas = estado.comandantes.concat(estado.cartas.map(e => e.carta),
+                                           fichasDoDeck());
   let total = 0, escolhidas = 0;
   for (const c of cartas){
     for (const face of temVerso(c) ? ["frente", "verso"] : ["frente"]){
@@ -119,6 +127,13 @@ function desenharGaleria(){
     html += `<div class="galeria-grupo"><h3>${escapar(cat)}</h3>
       <div class="galeria-grade">${itens.map(e =>
         quadrosDaCarta(e.carta, e.quantidade)).join("")}</div></div>`;
+  }
+
+  const fichas = fichasDoDeck();
+  if (fichas.length){
+    html += `<div class="galeria-grupo"><h3>Tokens</h3>
+      <div class="galeria-grade">${fichas.map(f =>
+        quadrosDaCarta(f, 1)).join("")}</div></div>`;
   }
 
   if (html === galeriaDesenhada) return;

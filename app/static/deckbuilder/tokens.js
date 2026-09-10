@@ -36,6 +36,49 @@ async function buscarTokens(){
     return;
   }
   desenharTokens();
+  // As fichas também vão pro papel: a aba Artes tem um quadro por ficha, e o
+  // "Gerar pedido" conta as artes delas.
+  desenharGaleria();
+  atualizarBotaoPedido();
+}
+
+/* As fichas como coisa a imprimir: UMA DE CADA, pela `chave_arte` que o
+   servidor manda com cada uma. A aba Tokens lista por carta que cria; o papel
+   leva a mesma Treasure uma vez só, peça quantas cartas pedirem (ver
+   `artes.pedido`).
+
+   Cada uma vira um objeto com a forma de carta que a modal de arte e a
+   galeria já sabem desenhar — `ficha` e `chaveArte` são o que as separa de
+   uma carta (ver `nomeDaArte` e `nomeDaBusca`). Montado uma vez por
+   resposta do servidor: a galeria e a conta do "Gerar pedido" pedem a lista
+   a cada desenho, e o autosave redesenha a cada carta. */
+const fichasMontadas = {de: null, lista: []};
+
+function fichasDoDeck(){
+  const dados = estado.tokens;
+  if (dados && fichasMontadas.de === dados) return fichasMontadas.lista;
+  const vistas = new Map();
+  for (const g of (dados && dados.grupos) || []){
+    for (const t of g.tokens){
+      if (!t.chave_arte || vistas.has(t.chave_arte)) continue;
+      vistas.set(t.chave_arte, {
+        nome: t.nome, chaveArte: t.chave_arte, ficha: true,
+        tipo: t.tipo || "", texto: t.texto || "",
+        poder: t.poder || "", resistencia: t.resistencia || "",
+        imagem: t.imagem || "", imagem_verso: t.imagem_verso || "",
+      });
+    }
+  }
+  fichasMontadas.de = dados;
+  fichasMontadas.lista = Array.from(vistas.values());
+  return fichasMontadas.lista;
+}
+
+/* "Wurm 3/3": o nome sozinho não distingue ficha, e o corpo é o que se
+   reconhece de relance. O resto (tipo, texto) mora no título do quadro e na
+   vitrine da modal. */
+function rotuloDaFicha(f){
+  return f.nome + (f.poder && f.resistencia ? ` ${f.poder}/${f.resistencia}` : "");
 }
 
 /* Uma ficha vira uma imagem por FACE. Ficha de duas faces existe (o lobisomem

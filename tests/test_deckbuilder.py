@@ -431,11 +431,12 @@ try:
     # ele devolve é achada aqui ao reabrir o deck. Os esperados são o que o
     # `cartas.normalizar` responde pra esses mesmos nomes.
     nomes = ["Atraxa, Praetors' Voice", "Delver of Secrets // Insectile Aberration",
-             "Lim-Dûl's Vault", "Ærathi Berserker", "  Jötun   Grunt "]
+             "Lim-Dûl's Vault", "Ærathi Berserker", "  Jötun   Grunt ",
+             "t:Wurm e76e0314"]
     eq("a chave da arte é o nome achatado do servidor",
        avaliar("JSON.stringify(%s.map(chaveDaArte))" % json.dumps(nomes)),
        ["atraxa praetors voice", "delver of secrets insectile aberration",
-        "lim duls vault", "aerathi berserker", "jotun grunt"])
+        "lim duls vault", "aerathi berserker", "jotun grunt", "t wurm e76e0314"])
 
     # A prévia do hover mostra o arquivo escolhido, e não a arte oficial.
     previa = avaliar(
@@ -500,6 +501,47 @@ try:
     eq("com tudo escolhido, leva o id do deck pra tela de orçamento",
        pedido[2][:2], [False, "/?deck=abc123"])
     eq("deck que ainda não foi salvo não mostra o link", pedido[3][:2], [True, None])
+
+    # As fichas vão pro papel: quadro na aba Artes, conta no "Gerar pedido".
+    # A resposta de `/decks/{id}/tokens` traz a mesma Wurm de deathtouch por
+    # duas cartas, e a de lifelink, de mesmo nome, por uma.
+    def wurm(texto, chave):
+        return {"nome": "Wurm", "tipo": "Token Artifact Creature — Wurm",
+                "texto": texto, "poder": "3", "resistencia": "3",
+                "imagem": "http://arte/" + chave, "chave_arte": chave}
+    tokens = {"total": 3, "grupos": [
+        {"carta": "Motor de Wurm", "tokens": [wurm("Deathtouch", "t:Wurm aaaa1111"),
+                                              wurm("Lifelink", "t:Wurm bbbb2222")]},
+        {"carta": "Sol Ring", "tokens": [wurm("Deathtouch", "t:Wurm aaaa1111")]}]}
+    fichas = avaliar(
+        'estado.id = "abc123"; estado.tokens = %s;'
+        'estado.cartas = [{carta: SOL_RING, quantidade: 1, categoria: ""}];'
+        'arte.escolhas["atraxa"] = {frente: {drive_id: "a"}};'
+        'arte.escolhas["sol ring"] = {frente: {drive_id: "s"}};'
+        'arte.escolhas["t wurm aaaa1111"] = {frente: {drive_id: "w"}};'
+        'var f = fichasDoDeck(); desenharGaleria(); atualizarBotaoPedido();'
+        'var antes = $("btn-pedido").title;'
+        'arte.escolhas["t wurm bbbb2222"] = {frente: {drive_id: "v"}};'
+        'atualizarBotaoPedido();'
+        'JSON.stringify({n: f.length, busca: nomeDaBusca(f[0], "frente"),'
+        ' achada: acharCartaDaArte("t:Wurm bbbb2222").texto,'
+        ' galeria: $("galeria-resultado").innerHTML, antes: antes,'
+        ' depois: $("btn-pedido").href || null})' % json.dumps(tokens))
+    eq("a mesma ficha criada por duas cartas é um quadro só", fichas["n"], 2)
+    eq("a busca de ficha vai na sintaxe do MPC Fill", fichas["busca"], "t:Wurm")
+    eq("o quadro acha a ficha pela chave, não pelo nome", fichas["achada"], "Lifelink")
+    quadros = re.findall(r'data-arte-carta="([^"]+)"', fichas["galeria"])
+    eq("as fichas vêm no fim da galeria, pela chave",
+       quadros[-2:], ["t:Wurm aaaa1111", "t:Wurm bbbb2222"])
+    check("num grupo próprio", "<h3>Tokens</h3>" in fichas["galeria"])
+    check("a ficha escolhida se marca pela chave", re.search(
+        r'class="galeria-carta tem-arte\s*"\s+data-arte-carta="t:Wurm aaaa1111"',
+        fichas["galeria"]) is not None)
+    check("e o texto no título separa as duas Wurm",
+          "Wurm 3/3 (Lifelink)" in fichas["galeria"])
+    eq("com uma ficha no padrão, o pedido não sai",
+       fichas["antes"], "Faltam 1 arte(s) — escolha na aba Artes")
+    eq("com as fichas escolhidas, sai", fichas["depois"], "/?deck=abc123")
 
     # -------------------------------------------------- o que vai pro servidor
     print("\n--- o que a tela manda pro servidor ---")

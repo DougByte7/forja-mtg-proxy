@@ -1406,7 +1406,8 @@
       });
       aviso = `<div class="cot-fora"><b>Fora da cotação:</b> ${partes.join(' e ')}.
         É como o Commander 500 conta: o teto de preço vale para o deck sem o
-        comandante e sem os terrenos básicos.</div>`;
+        comandante e sem os terrenos básicos.${porMotivo.has('token')
+          ? ' Token vai pro papel, mas não é carta que se compra.' : ''}</div>`;
     }
 
     // Explica o ▲ sempre que ele PUDER aparecer, mesmo que nenhuma carta o
@@ -2945,10 +2946,11 @@
   }
 
   // O verso aparece como verso: numa carta de duas faces a frente pode estar
-  // escolhida e ele não.
+  // escolhida e ele não. E o token como token, que ele não é carta do deck.
   function artesQueFaltam(faltando){
     const MOSTRA = 5;
-    const nomes = faltando.map(f => f.face === 'verso' ? f.nome + ' (verso)' : f.nome);
+    const nomes = faltando.map(f => f.nome + [f.ficha ? 'token' : '',
+      f.face === 'verso' ? 'verso' : ''].filter(Boolean).map(s => ` (${s})`).join(''));
     return nomes.length > MOSTRA
       ? nomes.slice(0, MOSTRA).join(', ') + ` e mais ${nomes.length - MOSTRA}`
       : nomes.join(', ');
