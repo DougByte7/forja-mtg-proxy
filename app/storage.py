@@ -46,10 +46,16 @@ def init_db():
         )
         """
     )
-    # migração pra bancos criados antes do fluxo de aviso manual
+    # Migrações. Cada coluna com o TIPO junto, porque elas divergem — e a
+    # forma tipada é a mesma do `cartas.py`, que já tinha esse problema.
+    #
+    # `dono` nasce NULL em todo pedido que já existe, e é isso mesmo: todos
+    # são órfãos até alguém logado reclamá-los ao abrir a home.
     cols = {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
-    if "notified_at" not in cols:
-        conn.execute("ALTER TABLE orders ADD COLUMN notified_at REAL")
+    for coluna, tipo in (("notified_at", "REAL"), ("dono", "TEXT")):
+        if coluna not in cols:
+            conn.execute(f"ALTER TABLE orders ADD COLUMN {coluna} {tipo}")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_dono ON orders(dono)")
     # Combinações de pedidos numa folha só (ver `save_combo`).
     conn.execute(
         """
@@ -116,7 +122,7 @@ def get_order(order_id: str):
     conn = _conn()
     cur = conn.execute(
         """SELECT id,status,amount,qty,pages,blanks,lamination,customer_name,
-                  deck_hash,notified_at,created_at
+                  deck_hash,notified_at,created_at,dono
            FROM orders WHERE id=?""",
         (order_id,),
     )
@@ -124,8 +130,11 @@ def get_order(order_id: str):
     conn.close()
     if not row:
         return None
+    # ATENÇÃO: esta lista e o SELECT acima são UM par. Acrescentar coluna em
+    # um sem acrescentar no outro não dá erro: desloca todos os campos
+    # seguintes em silêncio, e `customer_name` passa a valer `deck_hash`.
     keys = ["id", "status", "amount", "qty", "pages", "blanks", "lamination",
-            "customer_name", "deck_hash", "notified_at", "created_at"]
+            "customer_name", "deck_hash", "notified_at", "created_at", "dono"]
     return dict(zip(keys, row))
 
 
@@ -172,8 +181,11 @@ def list_open():
 # apagar de vez é outra ação, explícita.
 STATUS_VALIDOS = ("pending", "notified", "paid", "cancelado")
 
+# Esta lista monta o SELECT e o `zip` da resposta, então acrescentar aqui
+# basta — ao contrário do `get_order`, onde os dois estão escritos à mão.
 _CAMPOS_LISTA = ["id", "status", "customer_name", "deck_hash", "amount", "qty",
-                 "pages", "blanks", "lamination", "created_at", "notified_at"]
+                 "pages", "blanks", "lamination", "created_at", "notified_at",
+                 "dono"]
 
 
 def list_orders(status: str | None = None, busca: str | None = None,
@@ -195,8 +207,8 @@ def list_orders(status: str | None = None, busca: str | None = None,
     if busca and busca.strip():
         alvo = f"%{busca.strip().lower()}%"
         where.append("(LOWER(id) LIKE ? OR LOWER(customer_name) LIKE ? "
-                     "OR LOWER(deck_hash) LIKE ?)")
-        params += [alvo, alvo, alvo]
+                     "OR LOWER(deck_hash) LIKE ? OR LOWER(IFNULL(dono,'')) LIKE ?)")
+        params += [alvo, alvo, alvo, alvo]
     sql = f"""SELECT {','.join(_CAMPOS_LISTA)} FROM orders
               {'WHERE ' + ' AND '.join(where) if where else ''}
               ORDER BY created_at DESC LIMIT ?"""
@@ -204,6 +216,59 @@ def list_orders(status: str | None = None, busca: str | None = None,
 
     conn = _conn()
     rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return [dict(zip(_CAMPOS_LISTA, r)) for r in rows]
+
+
+def reclamar(order_ids: list[str], dono: str) -> list[str]:
+    """Põe dono nos pedidos que AINDA NÃO TÊM. Devolve os que mudaram.
+
+    O `WHERE dono IS NULL` é a peça inteira: reclamar nunca tira pedido de
+    ninguém. Quem chama manda a lista que o navegador guardou, e a lista pode
+    conter pedido que já é de outra pessoa (dois irmãos, um computador só) —
+    esse simplesmente não é tocado, e não vira erro.
+
+    A prova de posse é ter o id, que é exatamente o nível em que este sistema
+    já opera: `POST /orders/{id}/cancel` é aberta pelo mesmo motivo. E aqui a
+    reclamação é rotulagem ADITIVA — ela não fecha `notify-payment` nem
+    `cancel`, que seguem abertas pra quem tem o id.
+    """
+    ids = [str(i) for i in order_ids if i][:200]
+    if not ids or not dono:
+        return []
+    marcas = ",".join("?" * len(ids))
+    conn = _conn()
+    achados = [r[0] for r in conn.execute(
+        f"SELECT id FROM orders WHERE id IN ({marcas}) "
+        f"AND (dono IS NULL OR dono='')", ids)]
+    if achados:
+        conn.execute(
+            f"UPDATE orders SET dono=? WHERE id IN ({','.join('?' * len(achados))})",
+            [dono] + achados)
+        conn.commit()
+    conn.close()
+    return achados
+
+
+def soltar_de(dono: str) -> int:
+    """Devolve à orfandade os pedidos de alguém, quando a conta é apagada.
+    Mesma razão do `decks.soltar_de`: o histórico da pessoa não é lixo."""
+    conn = _conn()
+    cur = conn.execute("UPDATE orders SET dono=NULL WHERE dono=?", (dono,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount
+
+
+def list_by_dono(dono: str, limite: int = 200):
+    """Os pedidos de uma pessoa, do mais novo pro mais antigo."""
+    if not dono:
+        return []
+    conn = _conn()
+    rows = conn.execute(
+        f"SELECT {','.join(_CAMPOS_LISTA)} FROM orders WHERE dono=? "
+        f"ORDER BY created_at DESC LIMIT ?",
+        (dono, max(1, min(int(limite), 500)))).fetchall()
     conn.close()
     return [dict(zip(_CAMPOS_LISTA, r)) for r in rows]
 

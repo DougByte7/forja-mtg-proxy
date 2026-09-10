@@ -683,10 +683,26 @@
   }
   .linha .valor.caro{color:var(--gold-light);}
   .linha .valor.desconhecido{color:#6F6490;}
+  /* Preço medido (cotado na loja) e estimado (base local convertida) dividem
+     a mesma lista por força da regra do formato: comandante e básico nunca
+     são cotados. O tracejado marca qual é qual sem custar uma coluna, e o
+     title conta o resto. */
+  .linha .valor.estimado{text-decoration:underline dotted;text-underline-offset:3px;}
   .grupo h3 .valor-grupo{
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;
     color:var(--text-muted);font-weight:400;
   }
+
+  /* ---------------- oferta de reclamar deck órfão ---------------- */
+  .orfao-fundo{position:fixed;inset:0;background:rgba(15,13,23,.72);
+    display:grid;place-items:center;z-index:60;padding:20px;}
+  .orfao-caixa{background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:20px;max-width:400px;
+    box-shadow:0 20px 40px -20px rgba(0,0,0,.6);}
+  .orfao-caixa h3{font-family:'Cinzel',serif;font-size:17px;margin:0 0 8px;}
+  .orfao-caixa p{color:var(--text-muted);font-size:13.5px;line-height:1.55;
+    margin:0 0 16px;}
+  .orfao-acoes{display:flex;gap:8px;justify-content:flex-end;}
 
   /* ---------------- símbolos de mana ---------------- */
   .mana{display:inline-flex;gap:2px;align-items:center;flex:none;}
@@ -1844,13 +1860,13 @@
     </div>
 
     <div class="campo-grupo">
-      <label for="f-preco">Preço máximo (US$)</label>
+      <label for="f-preco">Preço máximo (<span id="rot-preco-moeda">US$</span>)</label>
       <input class="campo" id="f-preco" type="number" min="0" step="0.5"
              placeholder="sem teto" inputmode="decimal">
-      <p class="ajuda">Preço da base local, do dia da última sincronização —
-        serve pra dar ordem de grandeza. Quem responde "quanto custa comprar"
-        continua sendo o botão de cotar. Carta sem preço conhecido
-        <b>passa</b> no teto em vez de sumir.</p>
+      <p class="ajuda">Preço da base local, do dia da última sincronização,
+        convertido pelo câmbio — serve pra dar ordem de grandeza. Quem responde
+        "quanto custa comprar" continua sendo o botão de cotar. Carta sem preço
+        conhecido <b>passa</b> no teto em vez de sumir.</p>
     </div>
 
     <div class="campo-grupo">
@@ -1924,6 +1940,22 @@
      a lista responde "o que está no deck", e uma hora a pergunta vira "o que
      esta carta faz, mesmo?" — que é oracle, ambientação, ficha da edição e as
      notas de regras da Scryfall. -->
+<!-- Oferta de reclamar um deck sem dono. Nasce escondido e só aparece pra
+     quem está logado, abrindo um deck órfão. Não é `confirm()` porque o texto
+     tem duas frases, e a segunda — o link continua abrindo pra quem receber —
+     é justamente a que evita a recusa por medo. -->
+<div class="orfao-fundo" id="orfao-fundo" hidden>
+  <div class="orfao-caixa" role="dialog" aria-modal="true" aria-labelledby="orfao-titulo">
+    <h3 id="orfao-titulo">Este baralho não tem dono</h3>
+    <p>Quer ficar com ele? Depois disso só você edita e apaga — o link
+      continua abrindo normalmente pra quem você mandar.</p>
+    <div class="orfao-acoes">
+      <button class="btn" id="orfao-nao">Agora não</button>
+      <button class="btn ouro" id="orfao-sim">Ficar com ele</button>
+    </div>
+  </div>
+</div>
+
 <div class="carta-fundo" id="carta-fundo" hidden>
   <div class="carta-modal" role="dialog" aria-modal="true"
        aria-labelledby="carta-titulo">
@@ -2023,6 +2055,12 @@ const estado = {
   maybe: [],         // o mesmo formato — o que ainda está em dúvida
   categorias: [],    // os nomes criados à mão, na ordem escolhida
   validacao: null,   // a do servidor, quando chega
+  // A régua com que o preço em dólar da base é lido: {valor, fonte, quando}.
+  // Null até `GET /cambio` responder, e null pra sempre se ela falhar — nesse
+  // caso a tela mostra dólar, que é o número que ela tem de verdade.
+  cambio: null,
+  usuario: null,     // quem está logado, ou null pra anônimo (que não é erro)
+  dono: null,        // de quem é este deck, ou null pra órfão
   filtros: {...FILTROS_VAZIOS},
   desfazer: [],
   combos: null,             // a última resposta do Spellbook
@@ -2220,7 +2258,7 @@ function ico(nome, rotulo){
 }
 
 function preco(carta){
-  return carta.preco_usd ? "$" + Number(carta.preco_usd).toFixed(2) : "";
+  return carta.preco_usd ? moeda(carta.preco_usd) : "";
 }
 
 /* ------------------------------------------------------------------- preço
@@ -2232,30 +2270,302 @@ function preco(carta){
 
    Por isso tudo aqui é conta local, instantânea e sem rede: acompanha cada
    carta adicionada, do mesmo jeito que a curva de mana. E por isso a prévia
-   se chama prévia na tela, com o "cotar" logo abaixo dela. */
+   se chama prévia na tela, com o "cotar" logo abaixo dela.
 
-function moeda(valor){
-  return "$" + Number(valor || 0).toFixed(2);
+   MOEDA. A base é dólar e quem monta deck aqui pensa em real, então a tela
+   mostra real. A regra que sustenta isso: TODO NÚMERO INTERNO CONTINUA EM
+   DÓLAR e a conversão acontece na borda, dentro de `moeda()`. Converter cedo
+   — guardar real em `precoDaEntrada`, em `orcamentoLocal`, no `data-teto` —
+   espalharia a taxa por contas que não são dela e faria o mesmo deck mudar de
+   número conforme o dólar do dia sem ninguém ter mexido nele.
+
+   A taxa vem de `GET /cambio` uma vez, ao abrir (ver `abrir`). É aproximação
+   e a tela diz isso: todo valor convertido carrega `notaDoCambio()` no title,
+   com o valor da taxa e se ela veio do câmbio do dia ou do padrão fixo. */
+
+/* Acima disto a carta é "cara" e o valor fica em destaque. Dois números, um
+   por mercado, INDEPENDENTES de propósito: US$ 20 lá fora e R$ 100 aqui não
+   são a mesma carta convertida — carta que aqui custa desproporcionalmente
+   mais é justamente o que o ▲ da cotação existe pra apontar. Amarrar um ao
+   outro pela taxa do dia faria o destaque acender e apagar sozinho, sem
+   ninguém ter mexido no deck. */
+const CARO_USD = 20;
+const CARO_BRL = 100;
+
+function taxa(){
+  return (estado.cambio && estado.cambio.valor > 0) ? estado.cambio.valor : 0;
+}
+
+/* Um valor em dólar, escrito do jeito que a tela mostra.
+
+   Sem taxa (a rota ainda não voltou, ou voltou torta) volta pra dólar em vez
+   de multiplicar por zero: "R$ 0,00" em toda carta seria a mesma mentira que
+   o `—` de `valorHTML` existe pra não contar. Dólar é o número honesto que a
+   tela tem enquanto não tem o outro. */
+function moeda(valorUsd){
+  const t = taxa();
+  const n = Number(valorUsd || 0);
+  if (!t) return "US$ " + n.toFixed(2);
+  return "R$ " + reais(n * t);
+}
+
+/* Um número no formato de dinheiro daqui: ponto no milhar, vírgula no
+   centavo. Escrito à mão, e não com `toLocaleString("pt-BR")`, de propósito:
+   aquele depende do Intl do interpretador, e onde o Intl não existe ele não
+   levanta — devolve "108.6" calado, com o ponto no lugar da vírgula. Foi o
+   que o `tests/test_precos_brl.py` pegou. Formato de dinheiro é regra da
+   tela, e regra da tela tem que dar pra testar. */
+function reais(n){
+  const partes = Math.abs(n).toFixed(2).split(".");
+  const milhar = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return (n < 0 ? "-" : "") + milhar + "," + partes[1];
+}
+
+/* A nota que acompanha todo valor convertido, no title. É ela que faz a
+   diferença entre aproximação honesta e número inventado. */
+function notaDoCambio(){
+  const c = estado.cambio;
+  if (!c || !(c.valor > 0)) return "Preço em dólar: o câmbio ainda não chegou.";
+  return `Convertido a R$ ${c.valor.toFixed(2).replace(".", ",")} por dólar (`
+    + (c.fonte === "fixa" ? "taxa padrão do servidor" : "câmbio do dia") + ").";
+}
+
+/* O símbolo sozinho, pros lugares que escrevem o número por conta própria.
+   Nome comprido porque `desenharCotacao` tem um `const simbolo` local, com
+   outro sentido: lá é a moeda DA FONTE cotada, aqui é a moeda da tela. */
+function simboloDaTela(){
+  return taxa() ? "R$" : "US$";
+}
+
+/* O filtro de preço é DIGITADO na moeda da tela e VIAJA em dólar, que é o que
+   `cartas.buscar` filtra do outro lado. O rótulo (`#rot-preco-moeda`) e esta
+   divisão mudam juntos, sempre: se um dos dois esquecer a taxa, o teto passa a
+   valer cinco vezes mais ou menos do que a pessoa pediu, sem nada na tela
+   denunciando. Guardamos o que foi digitado, não o convertido, pra o campo
+   mostrar de volta o número que a pessoa escreveu. */
+function precoMaxEmUsd(digitado){
+  const t = taxa();
+  const n = Number(digitado);
+  return t ? (n / t) : n;
+}
+
+/* ------------------------------------------------------------------- conta
+
+   O login é OPCIONAL. Nada nesta tela depende dele: quem não entra monta,
+   salva e compartilha exatamente como antes de existir conta neste projeto.
+   O que ele acrescenta é dono — e, com dono, "os meus" em qualquer aparelho.
+
+   `estado.usuario` é null pra anônimo, e null NÃO é erro aqui. */
+
+async function carregarConta(){
+  try {
+    estado.usuario = (await api("/conta")).usuario || null;
+  } catch (e){
+    return;   // sem conta legível, a tela é a de sempre
+  }
+  if (estado.usuario) oferecerReclamar();
+}
+
+/* Quem recusou, fica recusado. Sem isto, quem deixa um deck órfão de
+   propósito (pra outra pessoa reclamar) leva a mesma pergunta em toda
+   recarga — e pergunta que sempre volta é pergunta que se aprende a
+   fechar sem ler. */
+const CHAVE_DISPENSADOS = "forja.orfaos.dispensados";
+
+function dispensados(){
+  try {
+    const bruto = JSON.parse(localStorage.getItem(CHAVE_DISPENSADOS) || "[]");
+    return Array.isArray(bruto) ? bruto : [];
+  } catch(e){ return []; }
+}
+
+function dispensar(id){
+  try {
+    localStorage.setItem(CHAVE_DISPENSADOS,
+      JSON.stringify([id, ...dispensados().filter(x => x !== id)].slice(0, 40)));
+  } catch(e){ /* navegador privado: a pergunta volta, e tudo bem */ }
+}
+
+/* Oferece pra QUALQUER órfão que a pessoa abra, não só os deste navegador:
+   quem montou no celular precisa poder reclamar no computador, e é
+   justamente esse o caso que o login existe pra resolver. */
+function oferecerReclamar(){
+  if (!estado.usuario || !estado.id) return;
+  if (estado.dono) return;                       // já é de alguém
+  if (dispensados().includes(estado.id)) return;
+  $("orfao-fundo").hidden = false;
+}
+
+async function reclamarDeck(){
+  $("orfao-fundo").hidden = true;
+  try {
+    const r = await api(`/decks/${estado.id}/reclamar`, {method: "POST"});
+    estado.dono = r.deck.dono;
+    toast("Pronto, o baralho é seu.");
+  } catch (e){
+    toast("Não consegui: " + e.message);
+  }
+}
+
+/* A taxa, pra tela poder mostrar real. Chamada de dentro de `abrir()` e não
+   aqui em cima de propósito: `tests/test_deckbuilder.py` roda este script sem
+   rede e corta em `abrir();`, então buscar no topo quebraria o teste. E o
+   deckbuilder tem que abrir mesmo sem esta rota — sem taxa, tudo cai pra
+   dólar e nada mais muda. */
+async function carregarCambio(){
+  try {
+    estado.cambio = await api("/cambio");
+  } catch (e) {
+    return;   // silêncio de propósito: isto é a régua, não o serviço
+  }
+  desenharTudo();
 }
 
 function precoDaEntrada(entrada){
   return (entrada.carta?.preco_usd || 0) * entrada.quantidade;
 }
 
-function valorHTML(entrada){
-  const c = entrada.carta;
-  // Carta sem preço na base não vira "$0.00": zero é um preço, e este é o
-  // caso de não saber. O travessão diz isso em um caractere.
-  if (!c || !c.preco_usd){
-    return `<span class="valor desconhecido" title="Preço desconhecido na base local">—</span>`;
+/* ------------------------------------------- de onde vem o preço de uma carta
+
+   Duas origens, e a lista prefere sempre a primeira:
+
+   * COTADO — o preço da fonte principal da cotação (a LigaMagic, quando
+     ligada). É medido: loja brasileira, em real, buscado agora. A cotação é
+     automática (`agendarCotacao`) e fica em cache, então na prática ele já
+     está ali quando a lista desenha.
+   * BASE — o `preco_usd` da base local, que é dólar do dia da última
+     sincronização, convertido pela taxa do câmbio. É estimativa em cima de
+     estimativa: preço velho de outro mercado, vezes uma taxa aproximada.
+
+   Entre um preço medido e uma conversão estimada, a lista mostra o medido.
+   Mas as duas convivem na mesma tela por força da regra do formato, não por
+   descuido: comandante e terreno básico ficam FORA da cotação (Commander 500,
+   ver `cotacao.filtrar_cotaveis`) e carta que a loja não tem volta com `erro`.
+   Por isso cada linha diz, no tracejado e no title, qual das duas está
+   mostrando — um número que esconde de onde veio é pior que número nenhum. */
+
+let cotacaoIndice = null;     // Map: nome achatado -> preço da fonte principal
+/* Qual objeto de cotação gerou o índice acima. Começa numa sentinela, e não em
+   `null`, de propósito: `estado.cotacao` TAMBÉM é null antes da primeira
+   cotação, e aí a comparação de memoização daria certo no primeiro uso e
+   devolveria o índice ainda não construído. */
+const SEM_COTACAO = {};
+let cotacaoIndiceDe = SEM_COTACAO;
+
+/* Casamento por nome. A cotação do deckbuilder já parte dos nomes da base
+   local, que são os canônicos da Scryfall — os mesmos dos dois lados. O
+   achatamento é cinto de segurança pro dia em que `resolver_nomes` trocar
+   alguma coisa no meio do caminho. */
+function chaveDeNome(nome){
+  return String(nome || "").trim().toLowerCase();
+}
+
+/* Refeito só quando a cotação troca de objeto, e não a cada linha desenhada:
+   `desenharDeck` chama isto uma vez por carta, e um deck tem 100. */
+function indiceDaCotacao(){
+  if (cotacaoIndiceDe === estado.cotacao) return cotacaoIndice;
+  cotacaoIndiceDe = estado.cotacao;
+  cotacaoIndice = new Map();
+  const fonte = (estado.cotacao?.fontes || [])[0];
+  if (fonte){
+    for (const linha of estado.cotacao.linhas || []){
+      const p = (linha.precos || {})[fonte.id];
+      if (!p || p.erro || !p.preco_unitario) continue;
+      cotacaoIndice.set(chaveDeNome(linha.nome), {
+        valor: p.preco_unitario, moeda: fonte.moeda, fonte: "cotacao",
+        rotulo: fonte.rotulo, loja: p.loja || "",
+      });
+    }
   }
-  const total = precoDaEntrada(entrada);
-  const unitario = c.preco_usd;
-  const titulo = entrada.quantidade > 1
-    ? `${entrada.quantidade} × ${moeda(unitario)} na última sincronização da base`
-    : `${moeda(unitario)} na última sincronização da base`;
-  return `<span class="valor ${unitario >= 20 ? "caro" : ""}"
-    title="${titulo}">${moeda(total)}</span>`;
+  return cotacaoIndice;
+}
+
+/* O preço unitário de uma carta e de onde ele veio, ou null quando ninguém
+   sabe. `fonte` é "cotacao" (medido) ou "base" (estimado). */
+function precoUnitario(carta){
+  if (!carta) return null;
+  const cotado = indiceDaCotacao().get(chaveDeNome(carta.nome));
+  if (cotado) return cotado;
+  if (!carta.preco_usd) return null;
+  return {valor: carta.preco_usd, moeda: "USD", fonte: "base"};
+}
+
+/* Escreve um preço que já sabe a própria moeda.
+
+   O cotado passa INTACTO: ele já é real de verdade, e passá-lo pela régua do
+   câmbio converteria duas vezes — é o mesmo cuidado que o total do cabeçalho
+   toma em `desenharPreviaOrcamento`. Só o da base, que é dólar, é convertido. */
+function precoTexto(p, quantidade){
+  if (!p) return "";
+  const valor = p.valor * (quantidade || 1);
+  if (p.fonte === "base") return moeda(valor);
+  return p.moeda === "BRL" ? "R$ " + reais(valor) : "US$ " + valor.toFixed(2);
+}
+
+function ehCaro(p){
+  if (!p) return false;
+  return p.moeda === "BRL" ? p.valor >= CARO_BRL : p.valor >= CARO_USD;
+}
+
+/* O subtotal de um grupo, e o que ele é feito de.
+
+   NÃO SOMA MOEDAS DIFERENTES — é a regra que o `cotacao.py` escreve em
+   maiúsculas, e ela vale aqui pelo mesmo motivo. A soma acontece toda numa
+   moeda só: com câmbio, tudo em real (o cotado entra intacto, o da base é
+   convertido); sem câmbio, tudo em dólar, e aí o que só tem preço em real
+   fica DE FORA da soma em vez de ser convertido de volta por uma taxa que a
+   tela não tem. O que ficou de fora é contado e vai pro title. */
+function subtotalDoGrupo(itens){
+  const emReais = !!taxa();
+  let valor = 0, medidas = 0, estimadas = 0, sem = 0, foraDaSoma = 0;
+  for (const e of itens){
+    const p = precoUnitario(e.carta);
+    if (!p){ sem += e.quantidade; continue; }
+    const daBase = p.fonte === "base";
+    if (!emReais && !daBase && p.moeda === "BRL"){ foraDaSoma += e.quantidade; continue; }
+    // `precoTexto` converte na hora de escrever; aqui a conta precisa do
+    // número, então a mesma régua é aplicada à mão, e só ao que é dólar.
+    const t = taxa();
+    const bruto = p.valor * e.quantidade;
+    valor += (emReais && p.moeda === "USD") ? bruto * t : bruto;
+    if (daBase) estimadas += e.quantidade; else medidas += e.quantidade;
+  }
+  return {valor, medidas, estimadas, sem, foraDaSoma, emReais};
+}
+
+function subtotalTexto(s){
+  if (!s.valor) return "";
+  return s.emReais ? "R$ " + reais(s.valor) : "US$ " + s.valor.toFixed(2);
+}
+
+function subtotalTitulo(s){
+  const partes = [];
+  if (s.medidas) partes.push(`${s.medidas} cotada(s) na loja`);
+  if (s.estimadas) partes.push(`${s.estimadas} pelo preço da base, convertido`);
+  if (s.sem) partes.push(`${s.sem} sem preço conhecido, fora da soma`);
+  if (s.foraDaSoma) partes.push(`${s.foraDaSoma} em real, fora da soma até o câmbio chegar`);
+  return partes.join(" · ");
+}
+
+function valorHTML(entrada){
+  const p = precoUnitario(entrada.carta);
+  // Carta que ninguém sabe quanto custa não vira "R$ 0,00": zero é um preço,
+  // e este é o caso de não saber. O travessão diz isso em um caractere.
+  if (!p){
+    return `<span class="valor desconhecido"
+      title="Nem a loja nem a base local têm preço desta carta.">—</span>`;
+  }
+  const medido = p.fonte === "cotacao";
+  const unidade = entrada.quantidade > 1
+    ? `${entrada.quantidade} × ${precoTexto(p)}` : precoTexto(p);
+  const titulo = [
+    unidade,
+    medido
+      ? `${p.rotulo}${p.loja ? " · " + p.loja : ""} — cotado agora, sem frete.`
+      : "Preço da base local, do dia da última sincronização. " + notaDoCambio(),
+  ].join("\n");
+  return `<span class="valor ${ehCaro(p) ? "caro" : ""} ${medido ? "" : "estimado"}"
+    title="${escapar(titulo)}">${precoTexto(p, entrada.quantidade)}</span>`;
 }
 
 /* O total do deck, pelo mesmo critério do Commander 500 que a cotação usa
@@ -2310,11 +2620,16 @@ function desenharPreviaOrcamento(){
 
   const fonte = (estado.cotacao?.fontes || [])[0];
   const cotado = fonte && fonte.cartas_cotadas;
-  const simbolo = cotado ? (fonte.moeda === "BRL" ? "R$" : "US$") : "US$";
-  const valor = cotado ? Number(fonte.total).toFixed(2).replace(".", ",")
-                       : moeda(o.total).replace("US$ ", "");
+  // Cotado, o número já vem na moeda da fonte e NÃO passa por `moeda()`: o
+  // total da LigaMagic é real de verdade, e o da Scryfall pode já ter vindo
+  // convertido pelo `USD_BRL` do .env. Converter aqui converteria duas vezes.
+  // Não cotado, é a base local em dólar, e aí sim a régua se aplica.
+  const texto = cotado
+    ? `${fonte.moeda === "BRL" ? "R$" : "US$"} `
+      + Number(fonte.total).toFixed(2).replace(".", ",")
+    : moeda(o.total);
 
-  $("total-n").textContent = `${simbolo} ${valor}`;
+  $("total-n").textContent = texto;
   $("total-de").textContent = cotado ? fonte.rotulo : "prévia";
   // Entre mexer no deck e a cotação nova voltar existe uma janela em que o
   // número mostrado é de OUTRO deck. O giro cobre essa janela inteira — a
@@ -2325,6 +2640,7 @@ function desenharPreviaOrcamento(){
   botao.title = [
     cotado ? `Preço de comprar em ${fonte.rotulo}, cotado agora.`
            : "Soma da base local — a cotação de verdade chega em alguns segundos.",
+    cotado ? "" : notaDoCambio(),
     partes.join(" · "),
     "Clique pra copiar a lista do deck.",
   ].filter(Boolean).join("\n");
@@ -2472,6 +2788,7 @@ async function salvarAgora(){
     estado.id = resposta.deck.id;
     estado.validacao = resposta.validacao;
     if (novo){
+      estado.dono = r.deck.dono || null;
       history.replaceState(null, "", `?deck=${estado.id}`);
       $("btn-compartilhar").hidden = false;
     }
@@ -2537,6 +2854,7 @@ function desenharTudo(){
   desenharAnalise();
   desenharContador();
   desenharPreviaOrcamento();
+  $("rot-preco-moeda").textContent = simboloDaTela();
   atualizarNotaIdentidade();
   atualizarCategoriasDoDestino();
   // Redesenha os combos pra o aviso de "o deck mudou desde esta busca"
@@ -2712,7 +3030,7 @@ function gruposHTML(entradas, identidade, tabuleiro){
     // lado do grupo diria o contrário — a pessoa somaria de cabeça um
     // dinheiro que a faixa de orçamento não está cobrando dela.
     const subtotal = tabuleiro === "talvez"
-      ? 0 : itens.reduce((soma, e) => soma + precoDaEntrada(e), 0);
+      ? null : subtotalDoGrupo(itens);
     const propria = ehPropria(cat);
     const fora = CATEGORIAS_FORA_DA_CONTA.has(cat);
     const corpo = itens.length
@@ -2728,7 +3046,8 @@ function gruposHTML(entradas, identidade, tabuleiro){
         ${fora ? `<span class="fora-rot" title="O sideboard fica fora das 100
 e fora das análises, mas entra na cotação e na lista de impressão — é carta
 que você quer ter.">fora das 100</span>` : ""}
-        ${subtotal ? `<span class="valor-grupo">${moeda(subtotal)}</span>` : ""}
+        ${subtotal && subtotal.valor ? `<span class="valor-grupo"
+          title="${escapar(subtotalTitulo(subtotal))}">${subtotalTexto(subtotal)}</span>` : ""}
         <span class="traco"></span>
         ${cat === "Terrenos" && tabuleiro === "deck"
           ? `<button class="btn-atalho" data-abrir-manabase
@@ -3498,7 +3817,7 @@ async function buscar(){
   if (f.cores) params.set("cores", f.cores);
   if (f.cmcMin !== "") params.set("cmc_min", f.cmcMin);
   if (f.cmcMax !== "") params.set("cmc_max", f.cmcMax);
-  if (f.precoMax !== "") params.set("preco_max", f.precoMax);
+  if (f.precoMax !== "") params.set("preco_max", precoMaxEmUsd(f.precoMax));
   if (f.ordem && f.ordem !== "nome") params.set("ordem", f.ordem);
   try {
     const r = await api("/cartas/busca?" + params);
@@ -3667,7 +3986,8 @@ function filtrosLigados(){
     const ate = f.cmcMax === "" ? "∞" : f.cmcMax;
     ligados.push({chave:"cmc", rotulo: `custo ${de}–${ate}`});
   }
-  if (f.precoMax !== "") ligados.push({chave:"precoMax", rotulo: `até $${f.precoMax}`});
+  if (f.precoMax !== "") ligados.push({chave:"precoMax",
+    rotulo: `até ${simboloDaTela()} ${f.precoMax}`});
   if (f.ordem && f.ordem !== "nome"){
     // O chip da ordenação é a única coisa da barra em que a seta É o
     // conteúdo: "preço" sozinho não diz se a mais cara vem antes. Por isso
@@ -3810,6 +4130,10 @@ function terminarCotacao(resultado, erro){
   if (resultado) estado.cotacao = resultado;
   desenharCotacao();
   desenharPreviaOrcamento();
+  // A lista também muda: cada carta que a loja achou troca o preço estimado
+  // da base pelo medido. Sem isto os preços novos só apareceriam na próxima
+  // vez que alguém encostasse no deck.
+  if (resultado) desenharDeck();
   // O deck pode ter mudado enquanto o servidor cotava: se mudou, esta
   // resposta já nasce velha e a próxima é marcada agora.
   agendarCotacao();
@@ -4263,9 +4587,13 @@ function desenharManabase(){
   html += `</div><div>`;
 
   if (!m.monocolor){
+    // O `data-teto` fica em DÓLAR: é o que `manabase.py` filtra do outro lado,
+    // e o rótulo é a única parte que a régua toca. Converter o valor mandado
+    // faria o teto mudar de significado conforme o dólar do dia.
     const chips = [1, 3, 10, 999].map(v => `
       <button class="chip ${m.teto_usd === v || (v === 999 && m.teto_usd >= 999) ? "ativo" : ""}"
-        data-teto="${v}">${v >= 999 ? "Sem teto" : "até US$ " + v}</button>`).join("");
+        data-teto="${v}"${v >= 999 ? "" : ` title="${escapar(notaDoCambio())}"`
+        }>${v >= 999 ? "Sem teto" : "até " + moeda(v)}</button>`).join("");
     html += `<h2 class="secao">Terrenos que fixam</h2>
       <div class="temas" style="margin-top:0">${chips}</div>`;
     // Uma lista só, do mais barato ao mais caro, cinco por vez. O teto de
@@ -4732,7 +5060,8 @@ function custoHTML(combo, ehSugestao){
     ? ` ${semPreco} peça(s) sem preço conhecido ficam de fora da soma.`
     : " Não é cotação: é o preço do dia da última sincronização.";
   return `<span class="custo ${fechar ? "fechar" : ""}"
-    title="${escapar(titulo + ressalva)}">${fechar ? "fechar por " : ""}${rotulo}</span>`;
+    title="${escapar(titulo + ressalva + " " + notaDoCambio())}"
+    >${fechar ? "fechar por " : ""}${rotulo}</span>`;
 }
 
 /* Adiciona a carta que falta pra fechar um combo. O nome vem do Spellbook,
@@ -5261,7 +5590,8 @@ function menuDoCabecalho(){
   const itens = [];
   const meus = lidos();
   if (meus.length){
-    itens.push({rotulo: `Meus decks (${meus.length})`, aoClicar: abrirMeusDecks});
+    itens.push({rotulo: `Meus decks (${meus.length})`,
+                aoClicar: () => { location.href = "/meus-decks"; }});
   }
   itens.push({rotulo: "Importar lista", aoClicar: () => abrirGaveta("gaveta-importar")});
   itens.push({rotulo: "Exportar lista (copiar)", aoClicar: exportar});
@@ -5271,19 +5601,9 @@ function menuDoCabecalho(){
   return itens;
 }
 
-function abrirMeusDecks(){
-  const lista = lidos();
-  if (!lista.length) return;
-  const escolha = prompt("Seus decks neste navegador:\n\n" +
-    lista.map((d, i) => `${i + 1}. ${d.nome}${d.comandante ? " — " + d.comandante : ""}`)
-      .join("\n") + "\n\nDigite o número pra abrir:");
-  const i = Number(escolha) - 1;
-  if (lista[i]) location.href = `?deck=${lista[i].id}`;
-}
-
 function comecarNovo(){
   if (estado.cartas.length && !confirm("Começar um deck novo? O atual fica " +
-      "salvo e continua na lista de Meus decks.")) return;
+      "salvo e continua em Meus decks.")) return;
   location.href = location.pathname;
 }
 
@@ -5477,7 +5797,13 @@ function dadosHTML(d){
 }
 
 /* Preço de referência, e só: são os do mercado americano/europeu, não os de
-   comprar no Brasil. Quem responde "quanto custa" é o botão de cotar. */
+   comprar no Brasil. Quem responde "quanto custa" é o botão de cotar.
+
+   Único lugar da tela que NÃO passa pela régua do câmbio, de propósito: são
+   quatro moedas de quatro mercados (dólar, dólar foil, euro e tix, que nem
+   dinheiro é), cruas da Scryfall. Passar euro e tix por uma taxa de dólar
+   inventaria um real que não existe em nenhum dos dois, e o rótulo de cada
+   chip já diz em que moeda o número está. */
 function precosHTML(d){
   const p = d.precos || {};
   const chips = [["usd", "US$", p.usd], ["usd_foil", "US$ foil", p.usd_foil],
@@ -5651,10 +5977,22 @@ async function conferirBase(){
   } catch (e){ /* a busca vai avisar sozinha se estiver fora do ar */ }
 }
 
+function ligarOrfao(){
+  $("orfao-sim").addEventListener("click", reclamarDeck);
+  $("orfao-nao").addEventListener("click", () => {
+    $("orfao-fundo").hidden = true;
+    dispensar(estado.id);
+  });
+}
+
 async function abrir(){
   ligarEventos();
+  ligarOrfao();
   atualizarBotaoMeus();
   conferirBase();
+  // Sem `await`: a taxa é a régua do preço, não o deck. Ela redesenha sozinha
+  // quando chega, e enquanto não chega a tela mostra dólar em vez de esperar.
+  carregarCambio();
   trocarAba("deck");
   trocarRail("buscar");
   escolherDestino("deck");
@@ -5677,6 +6015,7 @@ async function abrir(){
       estado.maybe = (r.deck.maybeboard_completo || []).filter(e => e.carta)
         .map(entrada);
       estado.categorias = r.deck.categorias || [];
+      estado.dono = r.deck.dono || null;
       $("nome-deck").value = estado.nome;
       $("btn-compartilhar").hidden = false;
       lembrarDeck();
@@ -5688,6 +6027,9 @@ async function abrir(){
   }
 
   desenharTudo();
+  // Depois do deck, de propósito: a oferta de reclamar precisa saber se este
+  // deck tem dono, e isso só se sabe com o deck em mãos.
+  carregarConta();
   if (estado.comandantes.length){ buscar(); }
   else { buscarComandante(); $("busca-cmd").focus(); }
   // O foco na busca só faz sentido onde ela está sempre à vista: no celular

@@ -395,6 +395,17 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /deckbuilder` | você, no navegador | a tela de montar deck de Commander — ver *Deckbuilder de Commander* |
 | `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta |
 | `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
+| `GET /conta` | todas as telas | quem está logado, ou `{usuario: null}`. **200 pra anônimo**, não 401 |
+| `POST /conta/entrar` | /entrar | confere a senha e devolve o cookie de sessão |
+| `POST /conta/sair` · `POST /conta/senha` | cabeçalho | encerra a sessão deste aparelho; troca a própria senha (pede a atual, e derruba todas as sessões) |
+| `GET /decks/meus` · `GET /pedidos/meus` | listagens | o que é da conta, de qualquer aparelho |
+| `POST /decks/{id}/reclamar` | deckbuilder | vira dono de um deck órfão. 409 se já tem dono |
+| `POST /pedidos/reclamar` | home | carimba os pedidos órfãos do `localStorage`. Roda sozinho ao abrir |
+| `GET/POST /admin/usuarios`, `POST /admin/usuarios/{id}/senha`, `DELETE …` | admin | as contas. Não existe cadastro aberto |
+| `GET /admin/decks` | admin | **todos** os baralhos do banco, com o dono de cada um, mais `contagem.sem_dono`. Única leitura do projeto que enumera decks — por isso atrás do `_check_admin` |
+| `GET /meus-decks` | navegador | a tela que lista os decks deste navegador — só a casca, sem deck nenhum dentro |
+| `POST /decks/resumo` | página de decks | recebe `{ids:[…]}` e devolve os metadados de cada um (nome, comandante, arte, X/100, quando mexeu) mais os que não existem mais. Nunca lista o banco |
+| `GET /cambio` | deckbuilder | a taxa dólar→real e de onde ela veio (`awesomeapi` ou `fixa`), pra tela escrever em real o preço que a base guarda em dólar. Nunca falha: sem rede, volta a taxa fixa do `.env` |
 | `GET /cartas/detalhe?nome=…` | deckbuilder | a carta inteira pra modal: edição, raridade, artista, ambientação e as **notas de regras** (rulings). Vem da API da Scryfall, com cache de um dia |
 | `POST /admin/cartas/sync` | você (`X-Admin-Token`) | refaz a base de cartas na hora. Baixa 100+ MB da Scryfall, daí o token |
 | `POST /decks/importar` | botão **Importar** | traz um deck do Archidekt/Moxfield pelo link, ou de uma lista colada. Devolve as cartas resolvidas na base local + o que ela não conhece. Não grava nada |
@@ -914,12 +925,83 @@ adicionada, sem rede.
 `preco_usd` da base local, que é o preço do dia da última sincronização e
 serve pra ordem de grandeza ("essa carta é cara?"). Quem responde "quanto
 custa comprar" continua sendo o botão **Cotar preços**, que vai à LigaMagic e
-à Scryfall na hora. Por isso a prévia se chama prévia, em dólar, com o botão
-de cotar logo abaixo dela.
+à Scryfall na hora. Por isso a prévia se chama prévia, com o botão de cotar
+logo abaixo dela.
+
+#### Em real, e a régua aparece
+
+A base guarda dólar, porque a base é o bulk da Scryfall. Quem monta deck aqui
+pensa em real, então a tela mostra real: `GET /cambio` entrega a taxa uma vez,
+ao abrir, e todo valor convertido carrega no `title` **qual taxa foi aplicada
+e de onde ela veio** — o câmbio do dia (AwesomeAPI, 6 h de cache) ou a taxa
+padrão do `.env`. Aproximação dita em voz alta é aproximação; escondida, é
+número inventado.
+
+#### O preço da loja ganha do preço convertido
+
+Quando a cotação já rodou — e ela roda **sozinha**, com debounce, guardando o
+resultado em cache —, cada linha do deck passa a mostrar o preço **medido na
+LigaMagic**, em real de verdade, com a loja no `title`. A conversão pela taxa
+do câmbio é o plano B, não o plano A: preço velho de outro mercado
+multiplicado por uma taxa aproximada é estimativa em cima de estimativa, e não
+faz sentido preferi-la a um número que já está ali, buscado agora.
+
+Nem toda carta tem o medido, e isso não é descuido: **comandante e terreno
+básico ficam fora da cotação** por regra do formato (Commander 500, ver
+`cotacao.filtrar_cotaveis`), e carta que a loja não tem volta com erro. Essas
+caem na base convertida. Como as duas origens dividem a mesma lista, cada
+linha diz qual está mostrando: o preço estimado leva um **tracejado** embaixo,
+e o `title` conta o resto. Um número que esconde de onde veio é pior que
+número nenhum.
+
+Duas consequências que valem escrever:
+
+* **O preço da loja não passa pela régua do câmbio.** Ele já é real; convertê-lo
+  de novo dobraria a taxa. É o mesmo cuidado que o total do cabeçalho toma.
+* **O subtotal do grupo não soma moedas diferentes** — a regra que o
+  `cotacao.py` escreve em maiúsculas vale aqui igual. Com câmbio, a soma
+  acontece toda em real (o medido entra intacto, o da base é convertido); sem
+  câmbio, toda em dólar, e o que só tem preço em real fica *de fora* da soma
+  em vez de ser convertido de volta por uma taxa que a tela não tem. O `title`
+  do subtotal diz quantas cartas são medidas, quantas são estimativa e quantas
+  ficaram de fora.
+
+E o limiar de "carta cara" tem **um número por mercado** — US$ 20 na base,
+R$ 100 na loja — independentes de propósito: não são a mesma carta convertida,
+e carta que aqui custa desproporcionalmente mais é justamente o que o ▲ da
+cotação existe pra apontar. Amarrar um ao outro pela taxa do dia faria o
+destaque acender e apagar sozinho.
+
+#### A régua, pro que a loja não cobre
+
+A regra que sustenta isso: **todo número interno continua em dólar, e a
+conversão acontece na borda, dentro de `moeda()`.** Converter cedo — guardar
+real em `precoDaEntrada`, em `orcamentoLocal`, no `data-teto` que viaja pro
+`manabase.py` — espalharia a taxa por contas que não são dela, e faria o mesmo
+deck mudar de número conforme o dólar do dia sem ninguém ter mexido nele.
+Quatro consequências disso, todas travadas em `tests/test_precos_brl.py`:
+
+* **Sem taxa, tudo volta pra dólar.** Se a rota falhar, `0 × preço` daria
+  "R$ 0,00" em toda carta — a mesma mentira que o `—` existe pra não contar.
+  A tela cai pro número que ela tem de verdade e segue funcionando.
+* **O limiar de "carta cara" (US$ 20, o vermelho) fica em dólar.** É um
+  julgamento sobre a *carta*; em real, a mesma carta entraria e sairia do
+  vermelho conforme o câmbio.
+* **O filtro "preço máximo" é digitado em real e viaja em dólar**, que é o que
+  `cartas.buscar` filtra. O rótulo e a divisão mudam juntos, sempre.
+* **A cotação não passa pela régua.** O total da LigaMagic já é real de
+  verdade, e o da Scryfall pode já ter vindo convertido pelo `USD_BRL` do
+  `.env` — converter aqui converteria duas vezes. Os preços de referência da
+  modal da carta também ficam crus: são quatro moedas de quatro mercados
+  (dólar, dólar foil, euro e tix), e uma taxa de dólar não fala pelas outras.
+
+O formato (`R$ 5.000,00`) é escrito à mão em `reais()`, não com
+`toLocaleString("pt-BR")`: onde o `Intl` não existe, aquele não levanta —
+devolve `"5000"` calado, com o separador errado. Foi o teste que pegou.
 
 Três decisões que evitam mentira barata:
 
-* **Carta sem preço na base mostra `—`, não `$0.00`.** Zero é um preço; este
+* **Carta sem preço na base mostra `—`, não `R$ 0,00`.** Zero é um preço; este
   é o caso de não saber. E o total avisa quantas cartas ficaram de fora, pra
   quem lê saber que ele está por baixo.
 * **O total usa o mesmo critério do Commander 500** que a cotação já usa
@@ -934,6 +1016,164 @@ Três decisões que evitam mentira barata:
   não. Pelo mesmo motivo a linha do maybeboard, numa coluna de 288 px, larga o
   preço e os botões de quantidade e fica com o `⋯` e o `✕` — que são as duas
   coisas que se faz com uma carta em dúvida: decidir e desistir.
+
+### A página de decks, e por que a listagem é por ids
+
+`/meus-decks` mostra os decks em cartões — arte do comandante, X/100, quando
+mexeu — com abrir, duplicar, copiar link, copiar a decklist e apagar.
+
+**Não existe `GET /decks`, e não é esquecimento.** Sem dono, "liste os decks"
+significaria "liste os decks de todo mundo": o servidor não sabe de quem é
+nada, porque a regra da casa é quem tem o id, mexe. Então a tela não pergunta
+*quais são os meus* — ela **diz** quais são, e o servidor responde o que eles
+são. Daí a forma da rota: `POST /decks/resumo` com `{"ids":[…]}`.
+
+O `POST` numa leitura é deliberado. Uma lista de dezenas de ids não cabe numa
+URL que vai parar em log de acesso, histórico e cabeçalho `Referer` — e neste
+sistema **essa lista é a credencial**. (`GET` com corpo, que é o que o
+Spellbook faz, já pareceu estranho de fora; não vale repetir de dentro.)
+
+Três consequências que o `tests/test_decks.py` trava:
+
+* **A ordem de saída é a de entrada, e id que não existe não volta.** Quem
+  chama é a lista do navegador, que envelhece sozinha: devolver erro faria um
+  deck apagado esconder os outros dezenove. Os ausentes voltam em
+  `desconhecidos`, e a tela oferece tirá-los da lista — não some com eles
+  sozinha, porque um servidor fora do ar não pode custar o id de um deck.
+* **Lista vazia devolve lista vazia**, nunca "todos". Nenhum caminho da rota
+  pode significar o banco inteiro.
+* **A contagem é a mesma do `validar`** — comandantes mais as cartas fora do
+  sideboard. Duas contas pro mesmo deck em duas telas é o tipo de divergência
+  que ninguém percebe até conferir na mão, e o teste compara as duas.
+
+A ordenação usa o `atualizado_em` **do servidor**, não o carimbo local: o
+`quando` do `localStorage` é quando *este* navegador encostou no deck, e num
+deck mexido no celular os dois discordam. Quem responde "no que eu estava
+mexendo" é o servidor.
+
+Página em arquivo próprio (`app/static/decks.html`), e não mais uma aba do
+deckbuilder: aquele já tem 5700 linhas, e a lista é a *porta de entrada* —
+uma porta que exige carregar o editor inteiro pra mostrar seis cartões está de
+costas. Vale a mesma separação do admin: `/meus-decks` é a casca, e o dado vem
+da rota. O HTML servido não tem id de deck nenhum dentro.
+
+Isto substituiu um `prompt()` numerado no menu do deckbuilder. E o campo
+"cole o link de um deck", que acrescenta um deck à lista local, é o antepassado
+direto do "reclamar deck órfão" que o login vai trazer.
+
+### Ver todos os baralhos (aba Baralhos do admin)
+
+O painel do operador ganhou uma segunda aba: **Baralhos**, com todos os decks
+do banco — arte do comandante, nome, id, comandante, X/100, quando foi mexido
+pela última vez, **o dono**, e os botões de abrir e apagar.
+
+Esta é a **única leitura do projeto que enumera decks**, e ela quebra de
+propósito a regra que rege o resto (quem tem o id, mexe). É exatamente por isso
+que ela mora atrás do `_check_admin` e numa função separada do `decks.resumo`:
+aquele é público e responde só sobre ids que quem chamou já tinha; este responde
+"o que existe aí dentro", que é pergunta de dono de sistema. O
+`tests/test_admin_decks.py` trava a porta antes de qualquer outra coisa — sem
+token é **401, não lista vazia**, porque "não pode ver" e "não tem nada" não
+podem parecer a mesma resposta.
+
+**Sobre o dono:** a coluna só passa a ser preenchida quando o login existir.
+Até lá todo deck sai daqui com `dono: null` e a tela escreve *sem dono* —
+que é a verdade sobre eles, não um campo esquecido. O `contagem.sem_dono`
+responde "quanto do acervo ainda não é de ninguém": hoje é o acervo inteiro;
+depois do login, é o que ninguém reclamou.
+
+Ordena por `atualizado_em`, e não por `criado_em` como os pedidos: um pedido
+acontece uma vez, um deck vive sendo mexido, e aqui interessa o que está vivo.
+A busca casa com id, nome do deck, nome do comandante e dono — o comandante
+mora dentro de um JSON, então o `LIKE` vai no texto cru da coluna, que é busca
+de operador numa base de dezenas de decks, não índice.
+
+Apagar pede o **id digitado** na caixa de confirmação, como os pedidos já
+pediam, e o texto diz o que a lista esconde: o deck é de quem montou, não do
+sistema — ela não é avisada, e o link que guardou simplesmente para de abrir.
+
+### Login opcional
+
+Entrar **não destranca nada**. Quem não tem conta monta deck, salva,
+compartilha e faz pedido exatamente como antes desta seção existir — o
+`tests/test_login.py` abre justamente por aí, porque essa é a promessa que uma
+mudança futura pode quebrar sem dar erro nenhum. O que a conta acrescenta é
+**dono**, e com dono vêm "os meus baralhos" em qualquer aparelho, em vez de só
+no navegador onde foram montados.
+
+A regra de autorização mora numa função só (`main._pode_mexer`) e vale para
+deck e pedido:
+
+* **Sem dono** → qualquer um mexe, inclusive anônimo. É o sistema de sempre.
+* **Com dono** → só o dono e o admin gravam ou apagam. O link continua
+  **abrindo** pra qualquer um, porque compartilhar é a razão de o link existir.
+
+Ler nunca passa por lá. E `duplicar` fica livre de propósito: é a válvula de
+escape de quem abriu o deck de outra pessoa e quis mexer — não altera o
+original, e a cópia nasce de quem duplicou.
+
+#### Reclamar órfão não tira nada de ninguém
+
+É o parágrafo que sustenta o resto. Antes da reclamação, **qualquer um com o
+id já podia reescrever aquele deck**. Depois dela, só o dono e o admin. A
+reclamação REDUZ o conjunto de quem edita — por isso ela pode ser
+primeiro-a-chegar sem virar um problema, e por isso o deckbuilder oferece
+reclamar **qualquer** órfão que a pessoa abra, e não só os que estão no
+`localStorage` daquele navegador: quem montou no celular precisa poder
+reclamar no computador, que é justamente o caso que o login existe pra
+resolver. Quem recusa fica registrado (`forja.orfaos.dispensados`), senão a
+pergunta voltaria a cada recarga de um deck deixado órfão de propósito.
+
+Nos pedidos isso é **automático** ao abrir a home, e em silêncio — é recado,
+não serviço. A prova de posse é ter o id, que é o nível em que este sistema já
+opera (`POST /orders/{id}/cancel` é aberta pelo mesmo motivo), e o `WHERE dono
+IS NULL` do `storage.reclamar` garante que só o que não tem dono é carimbado:
+pedido que já é de outra pessoa não é tocado nem vira erro. Dois irmãos num
+computador só é um caso real, não uma hipótese. E a reclamação é **rotulagem
+aditiva**: não fecha `notify-payment` nem `cancel`, que seguem abertas.
+
+#### Sem dependência nova, e duas chaves na porta do admin
+
+Senha é `hashlib.pbkdf2_hmac` da biblioteca padrão — o mesmo algoritmo do
+Django —, comparação com `hmac.compare_digest`, token de sessão com `secrets`.
+Mesma regra do `pix.py` e do `tinta.py`: dependência nova só quando não dá pra
+fazer direito sem ela. O número de iterações vai **guardado em cada senha**,
+então subir o teto amanhã não tranca ninguém do lado de fora.
+
+A sessão mora em **tabela**, não em cookie assinado: cookie assinado não se
+revoga, e "sair de todos os aparelhos" é o que se pede justamente no dia em
+que se desconfia de alguma coisa. Além disso a chave de assinatura teria que
+ser o `ADMIN_TOKEN`, que também assina os links de impressão do e-mail —
+rotacioná-lo derrubaria os dois de uma vez. O token vai pro banco em SHA-256
+pelo mesmo motivo da senha: um dump do arquivo não pode ser um maço de sessões
+vivas.
+
+O `ADMIN_TOKEN` **continua valendo**, ao lado da sessão de admin. Ele é a
+chave da casa: funciona de `curl`, sem cookie e sem banco, e é o que ainda
+abre o painel quando a tabela de usuários está vazia (como todo deploy novo
+começa) ou quando alguém esquece a senha. Um teste varre `app.routes`, acha
+toda rota `/admin/*` e exige que ela recuse anônimo **e** aceite sessão de
+admin — assim a próxima rota que alguém acrescentar entra na conferência no
+dia em que nascer, em vez de depender de alguém lembrar.
+
+#### As duas armadilhas que custaram caro
+
+**`SESSAO_SEGURA`.** Com `secure=True`, o cookie só é gravado em https. O site
+também roda em `http://` na rede local (é pra isso que o `LOCAL_BASE_URL`
+existe), e ali o navegador **descarta o cookie em silêncio** — sem erro, sem
+console, sem nada: a pessoa entra, volta pra tela de login e não há o que
+olhar. A variável existe pra esse caso, e o `.env.example` diz isso com essas
+palavras.
+
+**`storage.py` monta dicts por lista posicional** (`get_order` tem o `SELECT`
+e as chaves escritos à mão, um do lado do outro). Acrescentar `dono` num sem
+acrescentar no outro não dá erro: desloca todos os campos seguintes, e
+`customer_name` passa a valer `deck_hash`. Os dois foram editados no mesmo
+passo, com um comentário em caixa alta no lugar.
+
+**A migração é `ALTER TABLE ADD COLUMN`**, instantânea, preenchendo NULL: todo
+deck e todo pedido que já existia vira **órfão**. É exatamente o resultado
+desejado, e é a razão de o fluxo de reclamar existir.
 
 ### Combos, pelo Commander Spellbook
 

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entrar — Forja de Proxies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F0D17; --surface:#1B1730; --surface-2:#241F3D; --border:#382F5C;
+    --text:#EDE6D6; --text-muted:#A79BC7; --inset:#16112A;
+    --gold:#E9C765; --gold-light:#F5DC92; --sobre-gold:#1A1024;
+    --purple:#8B6BFF; --red:#D9634A;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 12% 0%, rgba(139,107,255,0.12), transparent 42%),
+      radial-gradient(circle at 88% 100%, rgba(233,199,101,0.10), transparent 42%),
+      var(--bg);
+    color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;
+    display:grid;place-items:center;padding:20px;
+  }
+  input:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
+  [hidden]{display:none !important;}
+
+  .caixa{width:100%;max-width:380px;background:var(--surface);
+    border:1px solid var(--border);border-radius:14px;padding:26px;
+    box-shadow:0 20px 40px -20px rgba(0,0,0,.6);}
+  .rune{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+    background:linear-gradient(150deg,var(--gold),#B9913C);
+    color:var(--sobre-gold);font-weight:700;margin-bottom:14px;}
+  h1{font-family:'Cinzel',serif;font-size:21px;margin:0 0 4px;}
+  .sub{color:var(--text-muted);font-size:13px;line-height:1.5;margin:0 0 20px;}
+  label{display:block;font-size:12px;color:var(--text-muted);margin:0 0 5px;}
+  .campo{width:100%;background:var(--inset);border:1px solid var(--border);
+    border-radius:9px;color:var(--text);padding:10px 12px;font-size:14px;
+    font-family:inherit;margin-bottom:13px;}
+  .lembrar{display:flex;align-items:center;gap:8px;font-size:13px;
+    color:var(--text-muted);margin-bottom:16px;cursor:pointer;}
+  .btn{width:100%;background:linear-gradient(150deg,var(--gold),#C9A24B);
+    color:var(--sobre-gold);border:none;border-radius:9px;padding:11px;
+    font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
+  .btn:disabled{opacity:.6;cursor:default;}
+  .erro{background:rgba(217,99,74,.10);border:1px solid var(--red);
+    border-radius:9px;padding:10px 12px;font-size:13px;color:#F0A899;
+    margin-bottom:14px;line-height:1.45;}
+  .rodape{margin:18px 0 0;font-size:12px;color:var(--text-muted);
+    line-height:1.55;text-align:center;}
+  .rodape a{color:var(--gold-light);}
+</style>
+</head>
+<body>
+
+<div class="caixa">
+  <div class="rune"><span>⌘</span></div>
+  <h1>Entrar</h1>
+  <!-- A tela diz o que muda com o login, porque a resposta honesta é "pouco":
+       tudo continua funcionando sem conta. Prometer mais do que isso faria a
+       pessoa procurar um recurso que não existe. -->
+  <p class="sub">Entrar guarda seus baralhos e pedidos na conta, pra eles
+    aparecerem em qualquer aparelho. Sem conta, o site funciona igual — só
+    depende do link e deste navegador.</p>
+
+  <div class="erro" id="erro" hidden></div>
+
+  <form id="form">
+    <label for="login">Login</label>
+    <input class="campo" id="login" autocomplete="username" autocapitalize="none"
+           spellcheck="false" required>
+
+    <label for="senha">Senha</label>
+    <input class="campo" id="senha" type="password" autocomplete="current-password"
+           required>
+
+    <label class="lembrar">
+      <input type="checkbox" id="lembrar"> Continuar conectado neste aparelho
+    </label>
+
+    <button class="btn" id="btn" type="submit">Entrar</button>
+  </form>
+
+  <p class="rodape">Não tem conta? Ela é criada pelo dono do sistema —
+    isto não é uma loja, é ferramenta de grupo de jogo.<br>
+    <a href="/">Voltar sem entrar</a></p>
+</div>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+
+/* Pra onde voltar depois de entrar.
+
+   Só caminho relativo é aceito: um `?voltar=` que aceitasse URL inteira
+   viraria redirecionamento aberto — o link parece do site, e joga a pessoa
+   num clone que pede a senha de novo. */
+function destino(){
+  const bruto = new URLSearchParams(location.search).get("voltar") || "";
+  return /^\/[^/\\]/.test(bruto) ? bruto : "/";
+}
+
+function mostrarErro(msg){
+  $("erro").textContent = msg;
+  $("erro").hidden = !msg;
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  mostrarErro("");
+  $("btn").disabled = true;
+  $("btn").textContent = "Entrando…";
+  try {
+    const r = await fetch("/conta/entrar", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        login: $("login").value,
+        senha: $("senha").value,
+        lembrar: $("lembrar").checked,
+      }),
+    });
+    const dados = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(dados.detail || `Erro ${r.status}`);
+    location.href = destino();
+    return;   // não reabilita o botão: a página está indo embora
+  } catch (err){
+    mostrarErro(err.message);
+    $("senha").value = "";
+    $("senha").focus();
+  }
+  $("btn").disabled = false;
+  $("btn").textContent = "Entrar";
+});
+
+/* Já logado? Então esta tela não tem o que fazer. Acontece com quem clica
+   "Entrar" num cabeçalho desatualizado, ou volta pelo histórico. */
+(async () => {
+  try {
+    const r = await fetch("/conta", {cache: "no-store"});
+    const dados = await r.json();
+    if (dados.usuario) location.replace(destino());
+  } catch (e){ /* sem rede, a tela de login é o lugar certo pra estar */ }
+})();
+
+$("login").focus();
+</script>
+</body>
+</html>

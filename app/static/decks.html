@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meus decks — Forja de Proxies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Mesma paleta, mesmas fontes e mesmos nomes de classe do deckbuilder: é a
+     mesma casa, e esta é a porta de entrada dela. */
+  :root{
+    --bg:#0F0D17;
+    --surface:#1B1730;
+    --surface-2:#241F3D;
+    --border:#382F5C;
+    --text:#EDE6D6;
+    --text-muted:#A79BC7;
+    --inset:#16112A;
+    --gold:#E9C765;
+    --gold-light:#F5DC92;
+    --sobre-gold:#1A1024;
+    --purple:#8B6BFF;
+    --green:#4C9A6B;
+    --red:#D9634A;
+    --mana-W:#F5F0D8; --mana-U:#9FC7E8; --mana-B:#3b3540;
+    --mana-R:#E4907A; --mana-G:#89B894; --mana-C:#B9B4C8;
+    --largura:1100px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 12% 0%, rgba(139,107,255,0.12), transparent 42%),
+      radial-gradient(circle at 88% 100%, rgba(233,199,101,0.10), transparent 42%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  button{font-family:inherit;}
+  input:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
+  [hidden]{display:none !important;}
+  .sprite{position:absolute;width:0;height:0;overflow:hidden;}
+  .ico{width:1em;height:1em;fill:currentColor;flex:none;vertical-align:-0.125em;}
+
+  /* ---------------- cabeçalho ---------------- */
+  .topo{border-bottom:1px solid var(--border);background:rgba(27,23,48,0.72);
+    backdrop-filter:blur(8px);position:sticky;top:0;z-index:5;}
+  .topo-in{max-width:var(--largura);margin:0 auto;padding:12px 20px;
+    display:flex;align-items:center;gap:12px;}
+  .rune{width:30px;height:30px;border-radius:8px;flex:none;display:grid;
+    place-items:center;background:linear-gradient(150deg,var(--gold),#B9913C);
+    color:var(--sobre-gold);font-weight:700;}
+  .marca{font-family:'Cinzel',serif;font-size:15px;letter-spacing:0.04em;}
+  .topo .espaco{flex:1;}
+
+  .btn{background:var(--surface-2);color:var(--text);border:1px solid var(--border);
+    border-radius:9px;padding:7px 13px;font-size:13px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
+  .btn:hover{border-color:var(--purple);}
+  .btn.ouro{background:linear-gradient(150deg,var(--gold),#C9A24B);
+    color:var(--sobre-gold);border-color:transparent;font-weight:600;}
+  .btn.mini{padding:5px 9px;font-size:12px;}
+  .btn.perigo:hover{border-color:var(--red);color:var(--red);}
+  .btn:disabled{opacity:0.5;cursor:default;}
+
+  /* ---------------- corpo ---------------- */
+  .corpo{max-width:var(--largura);margin:0 auto;padding:22px 20px 60px;}
+  h1{font-family:'Cinzel',serif;font-size:24px;margin:0 0 4px;}
+  .sub{color:var(--text-muted);font-size:13px;margin:0 0 20px;line-height:1.5;}
+  .secao{font-family:'Cinzel',serif;font-size:13px;letter-spacing:0.05em;
+    color:var(--text-muted);margin:26px 0 10px;text-transform:uppercase;}
+
+  .grade{display:grid;gap:12px;
+    grid-template-columns:repeat(auto-fill,minmax(300px,1fr));}
+
+  /* ---------------- cartão de deck ---------------- */
+  .cartao{background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;overflow:hidden;display:flex;flex-direction:column;}
+  .cartao:hover{border-color:var(--purple);}
+  .cartao.sumiu{opacity:0.62;}
+  .capa{height:112px;background:var(--inset);position:relative;flex:none;
+    display:grid;place-items:center;overflow:hidden;}
+  /* A arte do comandante é um retrato; o pedaço que interessa é o alto.
+     `object-position` alto evita cortar justamente o rosto. */
+  .capa img{width:100%;height:100%;object-fit:cover;object-position:50% 22%;
+    display:block;}
+  .capa .semarte{color:var(--text-muted);font-size:11px;padding:0 12px;
+    text-align:center;}
+  .capa::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(to top,rgba(15,13,23,0.92),transparent 62%);}
+
+  .cartao .miolo{padding:11px 13px 13px;display:flex;flex-direction:column;
+    gap:7px;flex:1;}
+  .cartao h2{font-size:15px;margin:0;font-weight:600;line-height:1.25;
+    overflow-wrap:anywhere;}
+  .cartao .cmd{color:var(--text-muted);font-size:12px;line-height:1.35;
+    overflow-wrap:anywhere;}
+  .cartao .linha-info{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    font-size:11.5px;color:var(--text-muted);margin-top:auto;}
+  .contagem{font-family:'IBM Plex Mono',monospace;}
+  .contagem.completo{color:var(--green);}
+  .contagem.falta{color:var(--gold-light);}
+  .pip{width:11px;height:11px;border-radius:50%;display:inline-block;
+    border:1px solid rgba(0,0,0,0.35);}
+  .pip.W{background:var(--mana-W);} .pip.U{background:var(--mana-U);}
+  .pip.B{background:var(--mana-B);} .pip.R{background:var(--mana-R);}
+  .pip.G{background:var(--mana-G);} .pip.C{background:var(--mana-C);}
+  .cores{display:inline-flex;gap:2px;}
+  .acoes{display:flex;gap:6px;flex-wrap:wrap;padding:0 13px 13px;}
+
+  /* ---------------- estados ---------------- */
+  .vazio{border:1px dashed var(--border);border-radius:12px;padding:28px 20px;
+    text-align:center;color:var(--text-muted);font-size:13.5px;line-height:1.6;}
+  .aviso{background:var(--surface-2);border:1px solid var(--border);
+    border-left:3px solid var(--gold);border-radius:9px;padding:11px 13px;
+    font-size:12.5px;color:var(--text-muted);line-height:1.5;margin-bottom:14px;}
+  .aviso.erro{border-left-color:var(--red);}
+  .adotar{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .campo{background:var(--inset);border:1px solid var(--border);border-radius:9px;
+    color:var(--text);padding:8px 11px;font-size:13px;font-family:inherit;
+    flex:1;min-width:200px;}
+  .campo::placeholder{color:#6F6490;}
+
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:9px 15px;font-size:13px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.4);}
+
+  @media (max-width:520px){
+    .grade{grid-template-columns:1fr;}
+    .topo-in{flex-wrap:wrap;}
+  }
+</style>
+</head>
+<body>
+
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-x" viewBox="0 0 256 256"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></symbol>
+  <symbol id="i-cards" viewBox="0 0 256 256"><path d="M184,72H40A16,16,0,0,0,24,88V200a16,16,0,0,0,16,16H184a16,16,0,0,0,16-16V88A16,16,0,0,0,184,72Zm0,128H40V88H184V200ZM232,56V176a8,8,0,0,1-16,0V56H64a8,8,0,0,1,0-16H216A16,16,0,0,1,232,56Z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 256 256"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 256 256"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,10A56,56,0,0,1,48.38,128.4L72.5,104.28A56,56,0,0,1,149.31,102a8,8,0,1,1-10.64,12,40,40,0,0,0-54.85,1.63L59.7,139.72a40,40,0,0,0,56.58,56.58l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.32,11.31l9.94-9.94a40,40,0,0,1,56.58,56.58l-24.12,24.12A40,40,0,0,1,117.33,140a8,8,0,1,0-10.64,12,56,56,0,0,0,76.81-2.26l24.12-24.12A56.08,56.08,0,0,0,207.62,48.38Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 256 256"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></symbol>
+  <symbol id="i-arrow-square-out" viewBox="0 0 256 256"><path d="M224,104a8,8,0,0,1-16,0V59.32l-66.33,66.34a8,8,0,0,1-11.32-11.32L196.68,48H152a8,8,0,0,1,0-16h64a8,8,0,0,1,8,8Zm-40,24a8,8,0,0,0-8,8v72H48V80h72a8,8,0,0,0,0-16H48A16,16,0,0,0,32,80V208a16,16,0,0,0,16,16H176a16,16,0,0,0,16-16V136A8,8,0,0,0,184,128Z"/></symbol>
+  <symbol id="i-printer" viewBox="0 0 256 256"><path d="M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C28.44,72,18,81.61,18,93.44v72.89c0,11.83,10.44,21.44,23.33,21.44H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V187.77h14.67c12.89,0,23.33-9.61,23.33-21.44V93.44C238,81.61,227.56,72,214.67,72ZM72,48H184V72H72ZM184,208H72V152H184Zm38-41.67c0,2.87-3.35,5.44-7.33,5.44H200V144a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v27.77H41.33c-4,0-7.33-2.57-7.33-5.44V93.44C34,90.57,37.35,88,41.33,88H214.67c4,0,7.33,2.57,7.33,5.44ZM198,112a10,10,0,1,1-10-10A10,10,0,0,1,198,112Z"/></symbol>
+</svg>
+
+<header class="topo">
+  <div class="topo-in">
+    <div class="rune"><span>⌘</span></div>
+    <span class="marca">Forja de Proxies</span>
+    <span class="espaco"></span>
+    <a class="btn" href="/"><svg class="ico"><use href="#i-printer"/></svg> Imprimir proxies</a>
+    <!-- Nasce escondido e só aparece depois de `GET /conta`: piscar de
+         "Entrar" pro nome da pessoa a cada carregamento é pior que chegar
+         pronto um instante depois. -->
+    <a class="btn" id="conta-btn" hidden></a>
+    <a class="btn ouro" href="/deckbuilder"><svg class="ico"><use href="#i-plus"/></svg> Deck novo</a>
+  </div>
+</header>
+
+<main class="corpo">
+  <h1>Meus decks</h1>
+  <p class="sub" id="sub">Carregando…</p>
+
+  <div id="avisos"></div>
+  <div id="conteudo"></div>
+</main>
+
+<script>
+"use strict";
+
+/* -------------------------------------------------------------------------
+   A página de decks.
+
+   ONDE MORA A VERDADE. No `localStorage`, e não no servidor. O servidor não
+   sabe de quem é deck nenhum (ver `decks.py`: quem tem o id, mexe), então não
+   existe "liste os meus" — existe "eu tenho estes ids, me diz o que eles são".
+   É por isso que a rota é um `POST /decks/resumo` que RECEBE a lista: pedir a
+   lista ao servidor seria pedir os decks de todo mundo.
+
+   A lista local é a mesma que o deckbuilder escreve (`forja.decks`), no mesmo
+   formato, e as duas telas precisam continuar concordando: quem mexer no
+   formato de um lado mexe no outro.
+
+   O QUE O SERVIDOR ACRESCENTA. O `quando` guardado aqui é quando ESTE
+   navegador tocou no deck; o `atualizado_em` que vem do servidor é quando o
+   deck mudou de verdade, de qualquer aparelho. A ordenação usa o do servidor,
+   que é o que responde "no que eu estava mexendo".
+   ------------------------------------------------------------------------- */
+
+const $ = id => document.getElementById(id);
+
+function escapar(txt){
+  return String(txt == null ? "" : txt)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+function ico(nome){
+  return `<svg class="ico" aria-hidden="true"><use href="#i-${nome}"/></svg>`;
+}
+
+/* Wrapper único de rede, igual ao do deckbuilder e ao do admin: erro do
+   servidor vira mensagem em português em vez de "[object Object]". */
+async function api(caminho, opcoes){
+  const r = await fetch(caminho, {cache: "no-store", ...(opcoes || {})});
+  if (r.status === 204) return null;
+  const texto = await r.text();
+  let dados = null;
+  try { dados = texto ? JSON.parse(texto) : null; } catch(e){ /* não era JSON */ }
+  if (!r.ok) throw new Error((dados && dados.detail) || texto || `Erro ${r.status}`);
+  return dados;
+}
+
+let toastTimer = 0;
+function toast(msg){
+  let el = document.querySelector(".toast");
+  if (!el){
+    el = document.createElement("div");
+    el.className = "toast";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.remove(), 2600);
+}
+
+/* ------------------------------------------------------ a lista do navegador
+
+   Mesmo formato do deckbuilder (`lidos`/`lembrarDeck`), de propósito: as duas
+   telas leem e escrevem a mesma chave, e um formato que divergisse faria um
+   deck salvo numa sumir da outra. */
+const CHAVE = "forja.decks";
+const MAX_LOCAL = 20;
+
+function lidos(){
+  try {
+    const bruto = JSON.parse(localStorage.getItem(CHAVE) || "[]");
+    return Array.isArray(bruto) ? bruto.filter(d => d && d.id) : [];
+  } catch(e){ return []; }
+}
+
+function gravar(lista){
+  try {
+    localStorage.setItem(CHAVE, JSON.stringify(lista.slice(0, MAX_LOCAL)));
+  } catch(e){ /* cota cheia ou navegador privado: a lista é conveniência */ }
+}
+
+function esquecer(id){
+  gravar(lidos().filter(d => d.id !== id));
+}
+
+function lembrar(id, nome, comandante){
+  const lista = lidos().filter(d => d.id !== id);
+  lista.unshift({id, nome: nome || "Deck sem nome", quando: Date.now(),
+                 comandante: comandante || ""});
+  gravar(lista);
+}
+
+/* ------------------------------------------------------------------ estado */
+
+const estado = {
+  decks: [],          // o que o servidor respondeu, na ordem que ele mandou
+  sumidos: [],        // ids que o navegador tem e o servidor não conhece
+  carregando: true,
+  erro: null,
+  armado: null,       // id do deck com o "Apagar" armado (dois cliques)
+  usuario: null,      // quem está logado, ou null pra anônimo (que não é erro)
+};
+
+/* -------------------------------------------------------------- carregar */
+
+/* Duas fontes pra mesma lista, e a conta manda quando existe:
+
+   * COM conta -> `GET /decks/meus`, que traz os decks daquela pessoa de
+     qualquer aparelho. É o que o outro caminho não consegue dar: um deck
+     montado no celular não está no `localStorage` do computador.
+   * SEM conta -> `POST /decks/resumo` com os ids que este navegador guardou,
+     que é como esta tela funcionava antes de existir login, e continua
+     funcionando pra quem prefere não ter conta.
+
+   Quem tem conta e decks órfãos neste navegador vê os dois: os órfãos são
+   acrescentados à lista, com a oferta de reclamá-los. Some-los agora seria
+   esconder deck que a pessoa tem na mão. */
+async function carregar(){
+  estado.carregando = true;
+  estado.erro = null;
+  desenhar();
+
+  try {
+    estado.usuario = (await api("/conta")).usuario || null;
+  } catch (e){ /* sem conta legível, a lista é a do navegador */ }
+
+  if (estado.usuario){
+    await carregarDaConta();
+    return;
+  }
+  await carregarDoNavegador();
+}
+
+async function carregarDaConta(){
+  try {
+    const meus = (await api("/decks/meus")).decks || [];
+    const conhecidos = new Set(meus.map(d => d.id));
+    // Os órfãos que este navegador conhece entram junto, marcados.
+    const soltos = lidos().map(d => d.id).filter(id => !conhecidos.has(id));
+    let extras = [];
+    if (soltos.length){
+      const r = await api("/decks/resumo", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ids: soltos.slice(0, 60)}),
+      });
+      extras = (r.decks || []).filter(d => !d.dono);
+      estado.sumidos = r.desconhecidos || [];
+    } else {
+      estado.sumidos = [];
+    }
+    estado.decks = meus.concat(extras)
+      .sort((a, b) => (b.atualizado_em || 0) - (a.atualizado_em || 0));
+  } catch (e){
+    estado.erro = e.message;
+  }
+  estado.carregando = false;
+  desenhar();
+}
+
+async function carregarDoNavegador(){
+  const locais = lidos();
+  if (!locais.length){
+    estado.carregando = false;
+    estado.decks = [];
+    estado.sumidos = [];
+    desenhar();
+    return;
+  }
+
+  try {
+    const r = await api("/decks/resumo", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ids: locais.map(d => d.id)}),
+    });
+    // Ordena pelo `atualizado_em` DO SERVIDOR, não pelo `quando` local: o
+    // servidor sabe quando o deck mudou, o navegador só sabe quando ele
+    // próprio encostou. Num deck mexido no celular, os dois discordam — e
+    // quem responde "no que eu estava mexendo" é o do servidor.
+    estado.decks = (r.decks || []).slice()
+      .sort((a, b) => (b.atualizado_em || 0) - (a.atualizado_em || 0));
+    estado.sumidos = r.desconhecidos || [];
+  } catch (e){
+    estado.erro = e.message;
+  }
+  estado.carregando = false;
+  desenhar();
+}
+
+/* --------------------------------------------------------------- desenhar */
+
+function quandoTexto(ts){
+  if (!ts) return "";
+  const dias = Math.floor((Date.now() / 1000 - ts) / 86400);
+  if (dias <= 0) return "mexido hoje";
+  if (dias === 1) return "mexido ontem";
+  if (dias < 30) return `mexido há ${dias} dias`;
+  const meses = Math.round(dias / 30);
+  return meses === 1 ? "mexido há um mês" : `mexido há ${meses} meses`;
+}
+
+function coresHTML(identidade){
+  if (!identidade) return `<span class="cores"><span class="pip C"
+    title="Incolor"></span></span>`;
+  return `<span class="cores">${identidade.split("").map(c =>
+    `<span class="pip ${c}"></span>`).join("")}</span>`;
+}
+
+function capaHTML(d){
+  if (d.arte){
+    return `<div class="capa"><img src="${escapar(d.arte)}" alt=""
+      loading="lazy" referrerpolicy="no-referrer"></div>`;
+  }
+  // Sem comandante escolhido (ou a base local não conhece o que está lá) não
+  // há arte. O espaço fica, com o motivo: um cartão sem capa entre cartões
+  // com capa parece defeito.
+  return `<div class="capa"><span class="semarte">${d.comandantes.length
+    ? "arte não está na base local" : "sem comandante escolhido"}</span></div>`;
+}
+
+function cartaoHTML(d){
+  const completo = d.total === 100;
+  const armado = estado.armado === d.id;
+  return `<article class="cartao" data-deck="${escapar(d.id)}">
+    ${capaHTML(d)}
+    <div class="miolo">
+      <h2>${escapar(d.nome)}</h2>
+      <div class="cmd">${d.comandantes.length
+        ? escapar(d.comandantes.join(" + ")) : "Sem comandante"}</div>
+      <div class="linha-info">
+        ${coresHTML(d.identidade)}
+        <span class="contagem ${completo ? "completo" : "falta"}"
+          title="${completo ? "As 100 do formato, fechadas."
+            : `Faltam ${d.faltam} pras 100. O sideboard não conta.`}"
+          >${d.total}/100</span>
+        ${d.talvez ? `<span title="No maybeboard, fora da conta">${d.talvez} talvez</span>` : ""}
+        <span>${escapar(quandoTexto(d.atualizado_em))}</span>
+        ${estado.usuario && !d.dono ? `<span title="Este baralho não está na
+          sua conta. Abra e escolha ficar com ele.">sem dono</span>` : ""}
+      </div>
+    </div>
+    <div class="acoes">
+      <a class="btn mini ouro" href="/deckbuilder?deck=${encodeURIComponent(d.id)}"
+        >${ico("arrow-square-out")} Abrir</a>
+      <button class="btn mini" data-copiar-link="${escapar(d.id)}"
+        title="Copia o link deste deck">${ico("link")}</button>
+      <button class="btn mini" data-copiar-lista="${escapar(d.id)}"
+        title="Copia a decklist em texto, pra colar no MPC Fill">${ico("cards")}</button>
+      <button class="btn mini" data-duplicar="${escapar(d.id)}"
+        title="Cria uma cópia deste deck">${ico("copy")}</button>
+      <span style="flex:1"></span>
+      <button class="btn mini perigo" data-apagar="${escapar(d.id)}"
+        >${ico("trash")} ${armado ? "Apagar mesmo?" : ""}</button>
+    </div>
+  </article>`;
+}
+
+function desenharConta(){
+  const btn = $("conta-btn");
+  btn.hidden = false;
+  if (!estado.usuario){
+    btn.textContent = "Entrar";
+    btn.href = "/entrar?voltar=/meus-decks";
+    btn.title = "Entrar guarda seus baralhos na conta, pra eles aparecerem "
+      + "em qualquer aparelho.";
+    return;
+  }
+  btn.textContent = estado.usuario.nome;
+  btn.href = "#";
+  btn.title = "Entrou como " + estado.usuario.login + " — clique pra sair.";
+  btn.onclick = async (e) => {
+    e.preventDefault();
+    try { await api("/conta/sair", {method: "POST"}); } catch (err){ /* já saiu */ }
+    location.reload();
+  };
+}
+
+function desenhar(){
+  desenharConta();
+  $("sub").textContent = estado.usuario
+    ? "Os baralhos da sua conta, de qualquer aparelho — mais os que este "
+      + "navegador conhece e ainda não têm dono."
+    : "Os baralhos que este navegador conhece. Eles ficam no servidor; o que "
+      + "fica aqui é só a lista de quais são os seus, então abrir em outro "
+      + "aparelho pede o link do deck.";
+  const avisos = [];
+
+  if (estado.erro){
+    avisos.push(`<div class="aviso erro">Não consegui falar com o servidor:
+      ${escapar(estado.erro)}. Seus decks continuam lá — é esta tela que não
+      está conseguindo ler.</div>`);
+  }
+
+  // Id que o navegador tem e o servidor não conhece. Não some sozinho da
+  // lista de propósito: apagar em silêncio o que pode ser um servidor fora do
+  // ar seria perder o id — que aqui é a única chave do deck.
+  if (estado.sumidos.length){
+    avisos.push(`<div class="aviso">
+      ${estado.sumidos.length} deck(s) desta lista não existem mais no
+      servidor. Isso acontece quando alguém apaga o deck em outro aparelho.
+      ${estado.sumidos.map(id => `<button class="btn mini"
+        data-esquecer="${escapar(id)}">${ico("x")} tirar ${escapar(id)}</button>`
+      ).join(" ")}</div>`);
+  }
+
+  avisos.push(`<div class="aviso">Tem o link de um deck? Cole aqui pra
+    acrescentá-lo a esta lista.
+    <div class="adotar">
+      <input class="campo" id="adotar" placeholder="link do deck, ou só o id"
+        autocomplete="off" spellcheck="false">
+      <button class="btn" id="btn-adotar">${ico("plus")} Acrescentar</button>
+    </div></div>`);
+
+  $("avisos").innerHTML = avisos.join("");
+
+  if (estado.carregando){
+    $("conteudo").innerHTML = `<div class="vazio">Carregando…</div>`;
+    return;
+  }
+  if (!estado.decks.length){
+    $("conteudo").innerHTML = `<div class="vazio">
+      <p style="margin:0 0 12px">Nenhum deck neste navegador ainda.</p>
+      <a class="btn ouro" href="/deckbuilder">${ico("plus")} Montar o primeiro</a>
+    </div>`;
+    return;
+  }
+  $("conteudo").innerHTML =
+    `<div class="grade">${estado.decks.map(cartaoHTML).join("")}</div>`;
+}
+
+/* ----------------------------------------------------------------- ações */
+
+async function copiar(texto, recado){
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast(recado);
+  } catch (e){
+    toast("O navegador não deixou copiar. Copie da barra de endereço.");
+  }
+}
+
+async function copiarLista(id){
+  try {
+    const r = await fetch(`/decks/${encodeURIComponent(id)}/lista`, {cache: "no-store"});
+    if (!r.ok) throw new Error(`Erro ${r.status}`);
+    await copiar(await r.text(), "Decklist copiada — cole no MPC Fill.");
+  } catch (e){
+    toast("Não consegui pegar a lista: " + e.message);
+  }
+}
+
+async function duplicar(id){
+  try {
+    const r = await api(`/decks/${encodeURIComponent(id)}/duplicar`, {method: "POST"});
+    const novo = r.deck;
+    lembrar(novo.id, novo.nome, (novo.comandantes || [])[0] || "");
+    toast("Deck duplicado.");
+    carregar();
+  } catch (e){
+    toast("Não consegui duplicar: " + e.message);
+  }
+}
+
+/* Apagar em dois cliques, e não num `confirm()`: o primeiro clique arma o
+   botão e o texto muda pra "Apagar mesmo?". É a mesma ideia do botão de
+   cancelar pedido da home — a pergunta fica no lugar onde a mão já está, em
+   vez de numa caixa que se fecha no reflexo. */
+async function apagar(id){
+  if (estado.armado !== id){
+    estado.armado = id;
+    desenhar();
+    return;
+  }
+  estado.armado = null;
+  try {
+    await api(`/decks/${encodeURIComponent(id)}`, {method: "DELETE"});
+    esquecer(id);
+    toast("Deck apagado.");
+    carregar();
+  } catch (e){
+    toast("Não consegui apagar: " + e.message);
+    desenhar();
+  }
+}
+
+/* Aceita o link inteiro ou só o id: quem compartilha manda a URL, e exigir
+   que a pessoa recorte o id dela seria trabalho de máquina jogado pra ela.
+   Os ids do deck têm 12 dígitos hex (ver `decks.py`). */
+function idDoTexto(bruto){
+  const texto = String(bruto || "").trim();
+  if (!texto) return "";
+  const naQuery = /[?&]deck=([0-9a-f]{6,32})/i.exec(texto);
+  if (naQuery) return naQuery[1].toLowerCase();
+  const solto = /^([0-9a-f]{6,32})$/i.exec(texto);
+  return solto ? solto[1].toLowerCase() : "";
+}
+
+async function adotar(){
+  const id = idDoTexto($("adotar").value);
+  if (!id){
+    toast("Não reconheci um id de deck aí. Cole o link inteiro.");
+    return;
+  }
+  if (lidos().some(d => d.id === id)){
+    toast("Esse deck já está na lista.");
+    return;
+  }
+  try {
+    const r = await api("/decks/resumo", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ids: [id]}),
+    });
+    const achado = (r.decks || [])[0];
+    if (!achado){
+      toast("Não existe deck com esse id.");
+      return;
+    }
+    lembrar(achado.id, achado.nome, (achado.comandantes || [])[0] || "");
+    $("adotar").value = "";
+    toast("Deck acrescentado à lista.");
+    carregar();
+  } catch (e){
+    toast("Não consegui conferir esse id: " + e.message);
+  }
+}
+
+/* ----------------------------------------------------------------- eventos */
+
+document.addEventListener("click", (e) => {
+  const alvo = (attr) => e.target.closest(`[${attr}]`);
+  let el;
+  if ((el = alvo("data-copiar-link"))){
+    const id = el.getAttribute("data-copiar-link");
+    copiar(`${location.origin}/deckbuilder?deck=${encodeURIComponent(id)}`,
+           "Link copiado.");
+  } else if ((el = alvo("data-copiar-lista"))){
+    copiarLista(el.getAttribute("data-copiar-lista"));
+  } else if ((el = alvo("data-duplicar"))){
+    duplicar(el.getAttribute("data-duplicar"));
+  } else if ((el = alvo("data-apagar"))){
+    apagar(el.getAttribute("data-apagar"));
+  } else if ((el = alvo("data-esquecer"))){
+    esquecer(el.getAttribute("data-esquecer"));
+    estado.sumidos = estado.sumidos.filter(i => i !== el.getAttribute("data-esquecer"));
+    desenhar();
+  } else if (e.target.closest("#btn-adotar")){
+    adotar();
+  } else if (estado.armado && !alvo("data-apagar")){
+    // Clicar em qualquer outro lugar desarma: um botão que fica esperando
+    // "sim" pra sempre acaba recebendo um sim distraído.
+    estado.armado = null;
+    desenhar();
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && document.activeElement &&
+      document.activeElement.id === "adotar"){
+    adotar();
+  } else if (e.key === "Escape" && estado.armado){
+    estado.armado = null;
+    desenhar();
+  }
+});
+
+carregar();
+</script>
+</body>
+</html>
