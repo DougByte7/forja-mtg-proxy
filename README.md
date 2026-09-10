@@ -1175,6 +1175,58 @@ passo, com um comentário em caixa alta no lugar.
 deck e todo pedido que já existia vira **órfão**. É exatamente o resultado
 desejado, e é a razão de o fluxo de reclamar existir.
 
+### Goldfish: o que ele não faz
+
+A aba **Goldfish** embaralha o deck e deixa a pessoa jogar sozinha — é o que a
+palavra quer dizer na mesa: jogar contra um peixinho dourado, que não faz nada.
+Compra 7, mulligan, baixa terreno, joga carta pro campo, deita, põe contador,
+passa turno e compra. Tudo por clique, com desfazer em Ctrl+Z e um botão de
+tela cheia (que esconde as duas colunas laterais — a mesa quer largura).
+
+**Não é motor de regras, e isso é o recurso.** Nada ali impede nada: dá pra
+baixar dois terrenos no mesmo turno, jogar uma carta de 8 manas no turno 1 e
+mandar qualquer coisa pra qualquer zona. Quem julga é quem está jogando, e a
+linha fixa no topo do painel diz isso antes do primeiro clique. A alternativa
+— validar custo, tipo e timing — é escrever um motor de Magic, que é um
+projeto inteiro e que erraria justamente nos casos que a pessoa conhece melhor
+do que ele.
+
+Quatro coisas que ele deliberadamente não sabe:
+
+* **Não soma mana.** Mostra quantos terrenos estão em pé e quantos deitados,
+  que é um fato do tabuleiro. No instante em que aparecesse "3 de mana
+  disponível", a pessoa passaria a esperar que o número a impedisse de fazer
+  coisa errada — e aí é motor de regras pela porta dos fundos.
+* **Não impede o segundo terreno do turno.** Conta, e mostra a contagem. Vira
+  informação, não trava.
+* **Não cobra o imposto do comandante.** O comandante vai pra zona de comando
+  (não pro baralho, senão o goldfish testaria um deck que ninguém joga) e a
+  tela diz quanto custaria a próxima vez. Pagar é decisão de quem joga.
+* **Não guarda nada.** `corpoDoDeck` não sabe que `estado.mesa` existe: uma mão
+  de goldfish gravada no deck é uma mão que volta três semanas depois, em outra
+  máquina, no meio de uma edição.
+
+O que ele **sabe** é a regra do formato: **o primeiro mulligan é grátis.**
+Sempre se compram 7; o que muda é quantas voltam pro fundo ao manter, e o
+número é `mulligans − 1`. Com zero a devolver, a tela pula direto pro jogo em
+vez de pedir "escolha 0 cartas". Cobrar já a primeira seria testar um deck de
+60, não um de Commander — e é o tipo de off-by-one que ninguém percebe olhando
+a tela, porque a mão só vem com uma carta a menos e parece que o formato mandou.
+
+O baralho sai de `cartasContadas()`, a mesma função do contador, da curva e da
+assinatura de cotação: sideboard e maybeboard ficam de fora aqui pelo mesmo
+motivo que ficam lá.
+
+`tests/test_goldfish.py` persegue a conservação das cartas: depois de uma
+sequência roteirizada (três mulligans, duas pro fundo, três turnos, campo,
+cemitério, exílio, comandante), o multiconjunto das zonas tem que ser o mesmo
+do começo. É a asserção que pega Fisher-Yates escrito errado — que perde ou
+duplica elemento **em silêncio**, e um goldfish que duplica carta mente sobre
+o deck. Foi esse teste que pegou também uma colisão de nome: já existia um
+`mover()` nesta página (o que troca carta entre deck e maybeboard), e duas
+declarações de função com o mesmo nome não dão erro — a segunda apaga a
+primeira no hoisting, e a mesa parava de mover carta sem nada dizer por quê.
+
 ### Combos, pelo Commander Spellbook
 
 O painel **Combos** responde duas coisas: que combos o deck **já tem**, e
