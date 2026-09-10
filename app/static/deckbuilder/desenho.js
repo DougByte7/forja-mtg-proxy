@@ -187,12 +187,13 @@ function linhaHTML(entrada, identidade, tabuleiro){
     aria-label="Opções de ${nome}">${ico("dots-three")}</button>`;
   return `<div class="linha ${problema ? "problema" : ""}" data-nome="${nome}"
     data-tabuleiro="${tabuleiro}" draggable="true">
+    <div>
     <button class="mini sai" data-tirar="${nome}" title="Tirar do ${onde}"
             aria-label="Tirar ${nome} do ${onde}">${ico("x")}</button>
     <input class="qtd" type="number" min="0" max="99" step="1"
            inputmode="numeric" value="${entrada.quantidade}" data-qtd="${nome}"
            aria-label="Quantidade de ${nome}"
-           title="Quantidade — zero tira a carta. Clique direito na linha pro menu.">
+           title="Quantidade — zero tira a carta. Clique direito na linha pro menu."></div>
     <span class="nome"${ganchosDaPrevia(c)}>${nome}
       ${porque ? `<span class="porque">· ${porque}</span>` : ""}</span>
     ${manaHTML(c.mana_cost)}
