@@ -62,9 +62,18 @@ LIGADO = os.environ.get("MPCFILL", "1") == "1"
 # O deck inteiro cabe numa busca. O teto existe pra impedir uma lista sem fim,
 # não pra policiar quem tem deck grande.
 MAX_NOMES = 120
-# Quantos ids por consulta de metadados. É o tamanho de uma página da grade
-# com folga — pedir mais seria buscar o que ninguém vai olhar.
-MAX_IDS = 60
+# Quantos ids por consulta de metadados. Alto de propósito, e medido: os 713
+# ids de Sol Ring — a carta com mais artes que se conhece — voltam com
+# metadados completos em 0,6 s numa requisição só.
+#
+# Isto não é detalhe de performance, é o que faz o FILTRO funcionar. Carregar
+# metadados por página deixaria o filtro de edição enxergando 24 arquivos de
+# 713: filtrar por "Kaladesh" não acharia quase nada, e nada na tela diria por
+# quê. Com tudo carregado, o filtro vê o conjunto inteiro.
+#
+# É UMA requisição por carta ABERTA (não por deck): quem abre a modal de três
+# cartas paga três, e o cache de uma semana cobre a segunda visita.
+MAX_IDS = 800
 
 _freio = ritmo.Freio("mpcfill", DELAY_SEGUNDOS)
 
@@ -204,15 +213,24 @@ def fontes() -> list[dict]:
         return guardado
 
     bruto = _pedir("2/sources/")
+    # `results` vem como DICIONÁRIO indexado pela pk ("1", "2", …), e não como
+    # lista — e os campos são camelCase (`sourceType`), porque o Django deles
+    # usa um renderer camelCase. Medido contra a API de verdade.
     saida = []
-    for f in (bruto.get("results") or {}).get("sources") or []:
+    for f in (bruto.get("results") or {}).values():
+        pk = f.get("pk")
+        if pk is None:
+            continue
         saida.append({
-            "chave": f.get("key") or f.get("pk") or "",
-            "nome": f.get("name") or "",
-            "tipo": f.get("source_type") or "",
+            "pk": int(pk),
+            "chave": f.get("key") or "",
+            "nome": f.get("name") or f.get("key") or "",
+            "tipo": f.get("sourceType") or "",
         })
     if not saida:
         raise MPCFillError("o MPC Fill devolveu uma lista de fontes vazia.")
+    # Na ordem de prioridade deles, que é a `pk`.
+    saida.sort(key=lambda f: f["pk"])
     _guardar("fontes", "todas", saida)
     return saida
 
@@ -252,8 +270,9 @@ def buscar(nomes: list[str]) -> dict[str, list[str]]:
 
     saida: dict[str, list[str]] = {}
     for nome in nomes:
-        # Eles devolvem indexado pela query, e a chave volta como foi mandada.
-        achado = resultados.get(nome) or resultados.get(nome.lower()) or {}
+        # A chave da resposta é a query ACHATADA — eles minúsculam antes de
+        # casar. Medido: mandar "Sol Ring" volta indexado por "sol ring".
+        achado = resultados.get(nome.lower()) or resultados.get(nome) or {}
         ids = achado.get("CARD") if isinstance(achado, dict) else achado
         saida[nome] = [str(i) for i in (ids or [])]
 
@@ -270,13 +289,16 @@ def _busca_padrao() -> dict:
     de DPI nem de tamanho — filtrar aqui esconderia arte da grade sem a pessoa
     ter pedido. O filtro de verdade é na tela, onde ela vê o que está tirando.
     """
+    # Por PK, e não pela `key`: o schema deles pede o número. Mandar a string
+    # volta 400 com "Schema error/s" — e um 400 não é retentável, então isso
+    # vira 502 na primeira tentativa, sem nada na tela explicando.
     try:
-        chaves = [f["chave"] for f in fontes() if f["chave"]]
+        pks = [f["pk"] for f in fontes()]
     except MPCFillError:
-        chaves = []
+        pks = []
     return {
         "searchTypeSettings": {"fuzzySearch": False, "filterCardbacks": False},
-        "sourceSettings": {"sources": [[c, True] for c in chaves]},
+        "sourceSettings": {"sources": [[pk, True] for pk in pks]},
         "filterSettings": {"minimumDPI": 0, "maximumDPI": 1500,
                            "maximumSize": 30, "languages": [], "includesTags": [],
                            "excludesTags": ["NSFW"]},
@@ -310,10 +332,14 @@ def metadados(ids: list[str]) -> dict[str, dict]:
             "id": str(ident_id),
             "nome": c.get("name") or "",
             "arquivo": _arquivo(c),
-            "fonte": c.get("source_name") or c.get("source") or "",
+            # camelCase, como todo o resto da API deles.
+            "fonte": c.get("sourceName") or c.get("source") or "",
             "dpi": int(c.get("dpi") or 0),
             "tamanho": int(c.get("size") or 0),
-            "miniatura": miniatura(str(ident_id)),
+            # ELES já devolvem a URL da miniatura pronta. Preferir a deles a
+            # montar a nossa é o certo: se um dia mudarem de hospedagem, a
+            # grade acompanha sozinha.
+            "miniatura": c.get("smallThumbnailUrl") or miniatura(str(ident_id)),
         }
     _guardar("cards", chave, saida)
     return saida
@@ -344,8 +370,10 @@ def pares_dfc() -> dict[str, str]:
         return guardado
 
     bruto = _pedir("2/DFCPairs/")
+    # A chave de topo é `dfcPairs`, não `results` — é a única das quatro rotas
+    # que foge do padrão. Medido contra a API de verdade.
     pares = {}
-    for frente, verso in ((bruto.get("results") or {})).items():
+    for frente, verso in ((bruto.get("dfcPairs") or bruto.get("results") or {})).items():
         if frente and verso:
             pares[str(frente).strip().lower()] = str(verso).strip()
     _guardar("dfc", "todos", pares)

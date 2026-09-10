@@ -1489,6 +1489,16 @@ sabe que este recurso existe.
 
 #### As duas requisições, e por que a tela tem a forma que tem
 
+**O contrato foi medido, não deduzido — e isso custou uma correção.** A
+primeira versão deste cliente foi escrita a partir da lista de rotas acima e
+devolvia 502 na primeira requisição, porque as quatro divergem do que parecia
+óbvio: `/2/sources/` devolve um **dicionário indexado pela pk**, não uma lista;
+o `editorSearch` quer as fontes pela **pk numérica** (mandar a chave de texto
+volta 400, que não é retentável e vira 502 imediato); o resultado da busca vem
+indexado pela query **em minúsculas**; e o `/2/DFCPairs/` responde em
+`dfcPairs`, não em `results`. Os campos são camelCase em tudo. O
+`tests/test_mpcfill.py` carrega essas formas medidas, com a data.
+
 Medido em 8 de setembro de 2026, com o nosso User-Agent honesto:
 
 ```
@@ -1503,9 +1513,12 @@ Daí sai tudo:
   lista toda e devolve **só ids**. Abrir a primeira carta paga a busca do
   deck; abrir a segunda não custa requisição nenhuma. Buscar por carta seria
   uma ida ao servidor deles por clique.
-* **Os metadados vêm por página de 24.** Nome do arquivo, DPI e fonte só do
-  que está à vista — pedir os de 713 artes seria buscar o que ninguém vai
-  olhar. A paginação sai da forma da API deles, não de uma escolha de tela.
+* **Os metadados vêm todos de uma vez, por carta aberta.** Medido: os 713 ids
+  de Sol Ring voltam com nome de arquivo, DPI e fonte em **0,6 s numa
+  requisição só**. Carregar por página parecia mais econômico e foi o que a
+  primeira versão fez — mas deixava o filtro de edição enxergando 24 arquivos
+  de 713, e filtrar por "Kaladesh" não achava quase nada, sem nada na tela
+  dizendo por quê.
 * **As miniaturas vêm do Drive direto pro navegador**, sem passar por este
   servidor. Com `loading="lazy"` e 24 por vez: uma grade que dispara 700
   imagens de uma vez toma 429 e deixa de mostrar qualquer coisa.

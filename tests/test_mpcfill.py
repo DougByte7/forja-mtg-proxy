@@ -100,19 +100,30 @@ def ligar(*respostas):
     return sessao
 
 
-FONTES = {"results": {"sources": [
-    {"key": "chilli", "name": "Chilli Axe MPC Proxies", "source_type": "Google Drive"},
-    {"key": "nofrills", "name": "No Frills", "source_type": "Google Drive"},
-]}}
+# As formas abaixo foram MEDIDAS contra a API de verdade em 10/09/2026, e
+# cada uma delas foge do que "parecia óbvio" — foi por isso que a primeira
+# versão deste cliente devolvia 502 na primeira requisição:
+#
+#   * `/2/sources/` devolve um DICIONÁRIO indexado pela pk, não uma lista em
+#     `results.sources`, e em camelCase (`sourceType`).
+#   * o `editorSearch` quer as fontes pela **pk numérica**; mandar a `key`
+#     volta 400 "Schema error/s".
+#   * o resultado da busca vem indexado pela query **em minúsculas**.
+#   * o `/2/DFCPairs/` devolve em `dfcPairs`, não em `results`.
+FONTES = {"results": {
+    "1": {"key": "MrTeferi", "name": "MrTeferi", "pk": 1, "sourceType": "Google Drive"},
+    "3": {"key": "Chilli_Axe", "name": "Chilli_Axe", "pk": 3, "sourceType": "Google Drive"},
+}}
 
 BUSCA = {"results": {
-    "Sol Ring": {"CARD": ["aaa", "bbb", "ccc"]},
-    "Carta Inventada": {"CARD": []},
+    "sol ring": {"CARD": ["aaa", "bbb", "ccc"]},
+    "carta inventada": {"CARD": []},
 }}
 
 CARDS = {"results": {
     "aaa": {"name": "Sol Ring (Kaladesh)", "extension": "png",
-            "source_name": "Chilli Axe MPC Proxies", "dpi": 800, "size": 9_000_000},
+            "sourceName": "Chilli_Axe", "dpi": 800, "size": 9_000_000,
+            "smallThumbnailUrl": "https://drive.google.com/thumbnail?sz=w400-h400&id=aaa"},
 }}
 
 try:
@@ -120,18 +131,22 @@ try:
 
     sessao = ligar(RespostaFalsa(FONTES))
     fontes = mpcfill.fontes()
-    eq("lê as fontes", [f["chave"] for f in fontes], ["chilli", "nofrills"])
+    eq("lê as fontes do dicionário indexado por pk",
+       [f["chave"] for f in fontes], ["MrTeferi", "Chilli_Axe"])
+    # A pk é o que a busca pede. Guardar só a `key` foi o bug que fez a
+    # primeira versão devolver 400 e virar 502 na tela.
+    eq("guarda a pk, que é o que a busca pede", [f["pk"] for f in fontes], [1, 3])
     # A ordem é a prioridade que o próprio site deles usa. Ordenar por conta
     # própria faria "a primeira arte" daqui ser outra que a de lá — e o fluxo
     # que isto substitui é justamente o de escolher lá.
-    eq("na ordem que eles mandaram", fontes[0]["nome"], "Chilli Axe MPC Proxies")
+    eq("na ordem de prioridade deles", fontes[0]["nome"], "MrTeferi")
 
     mpcfill.fontes()
     eq("a segunda chamada sai do cache, sem tocar na rede", len(sessao.chamadas), 1)
 
     # Lista vazia é resposta quebrada, não "não há fontes": sem fonte nenhuma
     # a busca inteira devolveria vazio, e isso se leria como "não tem arte".
-    ligar(RespostaFalsa({"results": {"sources": []}}))
+    ligar(RespostaFalsa({"results": {}}))
     try:
         mpcfill.fontes()
         check("fonte vazia grita em vez de virar lista vazia", False, "(passou)")
@@ -152,9 +167,10 @@ try:
     eq("manda uma query por carta", len(corpo["queries"]), 2)
     check("com o tipo de face que a API pede",
           all(q["cardType"] == "CARD" for q in corpo["queries"]))
-    check("e as fontes ligadas, na ordem delas",
-          [s[0] for s in corpo["searchSettings"]["sourceSettings"]["sources"]]
-          == ["chilli", "nofrills"])
+    # Por PK e não pela key: mandar string volta 400, que não é retentável e
+    # vira 502 imediato na tela — exatamente o sintoma que isto conserta.
+    eq("as fontes vão pela pk numérica",
+       [s[0] for s in corpo["searchSettings"]["sourceSettings"]["sources"]], [1, 3])
 
     sessao = ligar(RespostaFalsa(FONTES), RespostaFalsa(BUSCA))
     mpcfill.buscar(["Sol Ring", "Carta Inventada"])
@@ -177,12 +193,15 @@ try:
     eq("lê o nome do arquivo com extensão",
        meta["aaa"]["arquivo"], "Sol Ring (Kaladesh).png")
     eq("o DPI", meta["aaa"]["dpi"], 800)
-    eq("e a fonte", meta["aaa"]["fonte"], "Chilli Axe MPC Proxies")
+    eq("e a fonte, que vem em camelCase", meta["aaa"]["fonte"], "Chilli_Axe")
     # É assim que se descobre arte que sumiu da biblioteca: o id não volta.
     check("id que eles não conhecem simplesmente não volta", "zzz" not in meta)
 
-    check("a miniatura aponta pro Drive, sem passar por este servidor",
-          "drive.google.com" in meta["aaa"]["miniatura"] and "aaa" in meta["aaa"]["miniatura"])
+    # Eles já devolvem a URL pronta; preferir a deles faz a grade acompanhar
+    # sozinha se um dia mudarem de hospedagem.
+    eq("usa a miniatura que eles mandam",
+       meta["aaa"]["miniatura"],
+       "https://drive.google.com/thumbnail?sz=w400-h400&id=aaa")
 
     try:
         mpcfill.metadados(["x"] * (mpcfill.MAX_IDS + 1))
@@ -192,7 +211,7 @@ try:
 
     print("\n--- pares de dupla face ---")
 
-    sessao = ligar(RespostaFalsa({"results": {"Delver of Secrets": "Insectile Aberration"}}))
+    sessao = ligar(RespostaFalsa({"dfcPairs": {"Delver of Secrets": "Insectile Aberration"}}))
     pares = mpcfill.pares_dfc()
     # Chaveado pelo nome ACHATADO: a base local casa nomes assim, e a busca do
     # verso parte do nome da frente que ela tem.

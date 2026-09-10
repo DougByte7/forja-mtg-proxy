@@ -2697,6 +2697,36 @@ function aplicarIds(nome, ids){
   montarFiltroDeFonte();
   $("arte-filtros").hidden = !ids.length;
   desenharGrade();
+  carregarMetadados(nome, ids);
+}
+
+/* Os metadados de TODAS as artes desta carta, numa requisição só.
+
+   Medido: os 713 ids de Sol Ring voltam completos em 0,6 s. Carregar por
+   página parecia mais econômico e é o que a primeira versão fazia — mas
+   deixava o filtro enxergando 24 arquivos de 713, e filtrar por "Kaladesh"
+   não achava quase nada, sem nada na tela dizendo por quê.
+
+   É uma requisição por carta ABERTA, não por deck, e o servidor guarda o
+   resultado por uma semana. */
+async function carregarMetadados(nome, ids){
+  const faltando = ids.filter(id => !arte.meta[id]);
+  if (!faltando.length) return;
+  try {
+    const r = await api("/artes/metadados", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ids: faltando}),
+    });
+    if (arte.carta && arte.carta.nome !== nome) return;   // trocou de carta
+    Object.assign(arte.meta, r.artes || {});
+    desenharGrade();
+  } catch (e){
+    // A grade já está desenhada com as miniaturas: sem metadados ela perde o
+    // nome do arquivo e o DPI, e continua servindo pra escolher pela ARTE,
+    // que é o que a pessoa veio fazer. O filtro é que fica sem serventia.
+    $("arte-conta").textContent += " — sem os detalhes (nome do arquivo e DPI)";
+  }
 }
 
 function montarFiltroDeFonte(){
@@ -2740,7 +2770,10 @@ function idsFiltrados(){
   if (!f.texto && !f.fonte && !f.dpi) return arte.ids;
   return arte.ids.filter(id => {
     const m = arte.meta[id];
-    if (!m) return true;    // ainda não sei; não escondo o que não conheço
+    // Sem metadado ainda (a requisição está em voo): não esconde o que não
+    // conhece — a alternativa seria a grade encolher e voltar a crescer
+    // sozinha enquanto a pessoa olha.
+    if (!m) return true;
     if (f.fonte && m.fonte !== f.fonte) return false;
     if (f.dpi && (m.dpi || 0) < f.dpi) return false;
     if (f.texto && !(m.arquivo || "").toLowerCase().includes(f.texto)) return false;
@@ -2748,7 +2781,7 @@ function idsFiltrados(){
   });
 }
 
-async function desenharGrade(){
+function desenharGrade(){
   const ids = idsFiltrados();
   const total = ids.length;
   if (!total){
@@ -2773,27 +2806,13 @@ async function desenharGrade(){
   $("arte-grade").innerHTML = daPagina.map(id => {
     const m = arte.meta[id] || {};
     return `<button class="arte-op ${id === marcado ? "ativa" : ""}" data-arte-id="${escapar(id)}">
-      <img src="https://drive.google.com/thumbnail?id=${escapar(id)}&sz=w300"
+      <img src="${escapar(m.miniatura
+        || "https://drive.google.com/thumbnail?id=" + id + "&sz=w400")}"
         alt="" loading="lazy" referrerpolicy="no-referrer">
       <small>${escapar(m.arquivo || "…")}${m.dpi ? ` · ${m.dpi} DPI` : ""}</small>
     </button>`;
   }).join("");
 
-  // Os metadados só desta página, e só do que ainda não temos.
-  const faltando = daPagina.filter(id => !arte.meta[id]);
-  if (!faltando.length) return;
-  try {
-    const r = await api("/artes/metadados", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ids: faltando}),
-    });
-    Object.assign(arte.meta, r.artes || {});
-    desenharGrade();
-  } catch (e){
-    // A grade já está desenhada com as miniaturas; sem metadados ela perde só
-    // o nome do arquivo e o DPI, e continua servindo pra escolher pela arte.
-  }
 }
 
 async function usarArte(id){
@@ -3922,6 +3941,7 @@ function desenharDeck(){
       </span>
     </button>
     <div class="mana">${manaHTML(c.mana_cost)}</div>
+    ${botaoDeArte(c)}
     <button class="mini sai" data-tirar-cmd="${i}" title="Trocar comandante">${ico("x")}</button>
   `).join('<div style="width:100%;height:1px;background:var(--border)"></div>');
 
@@ -4560,6 +4580,11 @@ function menuDaCarta(ancora, nome, tabuleiro){
   // inteira seria coisa só de quem usa mouse.
   const itens = [{rotulo: "Ver a carta", marca: ico("cards"),
                   aoClicar: () => abrirCarta(entrada.carta)},
+                 // O botão de arte fica nos controles da linha, que só
+                 // aparecem no hover. Este item é a porta de teclado — e a
+                 // porta pra quem procura no menu em vez de caçar o ícone.
+                 {rotulo: "Escolher a arte", marca: ico("image"),
+                  aoClicar: () => abrirEscolhaDeArte(nome)},
                  "risco",
                  {titulo: `Categoria de ${nome}`}];
 
