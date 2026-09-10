@@ -108,7 +108,10 @@ def ligar(*respostas):
 #     `results.sources`, e em camelCase (`sourceType`).
 #   * o `editorSearch` quer as fontes pela **pk numérica**; mandar a `key`
 #     volta 400 "Schema error/s".
-#   * o resultado da busca vem indexado pela query **em minúsculas**.
+#   * o resultado da busca vem indexado pela query **como foi mandada**.
+#   * com a lista de fontes vazia, a busca responde 200 com ZERO artes pra
+#     toda carta — não é erro do lado deles, e por isso tem que ser do nosso.
+#   * carta de duas faces só acha arte pelo nome da frente.
 #   * o `/2/DFCPairs/` devolve em `dfcPairs`, não em `results`.
 FONTES = {"results": {
     "1": {"key": "MrTeferi", "name": "MrTeferi", "pk": 1, "sourceType": "Google Drive"},
@@ -116,8 +119,8 @@ FONTES = {"results": {
 }}
 
 BUSCA = {"results": {
-    "sol ring": {"CARD": ["aaa", "bbb", "ccc"]},
-    "carta inventada": {"CARD": []},
+    "Sol Ring": {"CARD": ["aaa", "bbb", "ccc"]},
+    "Carta Inventada": {"CARD": []},
 }}
 
 CARDS = {"results": {
@@ -179,6 +182,40 @@ try:
     eq("a mesma busca em outra ordem sai do cache", len(sessao.chamadas), antes)
 
     eq("busca vazia não vira requisição", mpcfill.buscar([]), {})
+
+    # Sem fontes a busca devolveria zero artes pra tudo, e a tela diria "não
+    # tem arte" pro deck inteiro. Tem que gritar antes de perguntar.
+    sessao = ligar(RespostaFalsa({}, status=500), RespostaFalsa({}, status=500))
+    try:
+        mpcfill.buscar(["Sol Ring"])
+        check("sem as fontes a busca grita, não sai sem fonte", False, "(passou)")
+    except mpcfill.MPCFillError:
+        check("sem as fontes a busca grita, não sai sem fonte",
+              not any("editorSearch" in url for url, _ in sessao.chamadas))
+
+    # Nenhuma carta com arte não é guardado: senão uma resposta ruim travaria
+    # a grade vazia pela semana inteira do cache.
+    sessao = ligar(RespostaFalsa(FONTES),
+                   RespostaFalsa({"results": {"Sol Ring": {"CARD": []}}}),
+                   RespostaFalsa(BUSCA))
+    mpcfill.buscar(["Sol Ring"])
+    eq("resultado sem arte nenhuma não fica no cache",
+       mpcfill.buscar(["Sol Ring"])["Sol Ring"], ["aaa", "bbb", "ccc"])
+
+    # A base local guarda "Frente // Verso"; lá cada face tem o próprio nome.
+    sessao = ligar(RespostaFalsa(FONTES), RespostaFalsa({"results": {
+        "Delver of Secrets": {"CARD": ["ddd"]}}}))
+    achado = mpcfill.buscar(["Delver of Secrets // Insectile Aberration"])
+    corpo = json.loads(sessao.chamadas[-1][1])
+    eq("dupla face pergunta pelo nome da frente",
+       [q["query"] for q in corpo["queries"]], ["Delver of Secrets"])
+    eq("e devolve chaveado pelo nome que veio do deck",
+       achado, {"Delver of Secrets // Insectile Aberration": ["ddd"]})
+
+    # A versão no nome do arquivo é o que descarta um cache gravado com uma
+    # leitura errada da API, sem ninguém entrar no servidor.
+    check("o arquivo do cache carrega a versão",
+          f"-v{mpcfill.CACHE_VERSAO}-" in mpcfill._caminho("busca", "x"))
 
     try:
         mpcfill.buscar(["x"] * (mpcfill.MAX_NOMES + 1))

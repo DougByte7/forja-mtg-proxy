@@ -57,6 +57,11 @@ DELAY_SEGUNDOS = float(os.environ.get("MPCFILL_DELAY_SEGUNDOS", "1"))
 # arte nova, não.
 CACHE_TTL = float(os.environ.get("MPCFILL_CACHE_TTL", str(7 * 24 * 3600)))
 CACHE_DIR = os.environ.get("MPCFILL_CACHE_DIR", "/app/data/mpcfill-cache")
+# Faz parte do nome de cada arquivo do cache. Subir o número descarta de uma
+# vez tudo o que foi guardado com uma leitura errada da API — sem isso, um
+# parse consertado continuaria servindo o resultado velho por uma semana, e o
+# único jeito de sair seria entrar no servidor e apagar a pasta.
+CACHE_VERSAO = 2
 LIGADO = os.environ.get("MPCFILL", "1") == "1"
 
 # O deck inteiro cabe numa busca. O teto existe pra impedir uma lista sem fim,
@@ -95,7 +100,7 @@ def _sessao() -> requests.Session:
 # ---------------------------------------------------------------------------
 
 def _caminho(prefixo: str, chave: str) -> str:
-    return os.path.join(CACHE_DIR, f"{prefixo}-{chave}.json")
+    return os.path.join(CACHE_DIR, f"{prefixo}-v{CACHE_VERSAO}-{chave}.json")
 
 
 def _do_cache(prefixo: str, chave: str) -> dict | None:
@@ -261,25 +266,42 @@ def buscar(nomes: list[str]) -> dict[str, list[str]]:
     # O formato do `editorSearch` deles: uma "query" por carta, com o tipo de
     # face. `CARD` é a frente; o verso sai do `/2/DFCPairs/`, que é chaveado
     # por nome e não por id.
+    consultas = {nome: _consulta(nome) for nome in nomes}
     corpo = {
         "searchSettings": _busca_padrao(),
-        "queries": [{"query": n, "cardType": "CARD"} for n in nomes],
+        "queries": [{"query": q, "cardType": "CARD"}
+                    for q in dict.fromkeys(consultas.values())],
     }
     bruto = _pedir("2/editorSearch/", corpo)
     resultados = (bruto.get("results") or {})
 
     saida: dict[str, list[str]] = {}
-    for nome in nomes:
-        # A chave da resposta é a query ACHATADA — eles minúsculam antes de
-        # casar. Medido: mandar "Sol Ring" volta indexado por "sol ring".
-        achado = resultados.get(nome.lower()) or resultados.get(nome) or {}
+    for nome, q in consultas.items():
+        # A chave da resposta é a query como foi mandada; o minúsculo fica de
+        # reserva, porque o casamento do lado deles ignora caixa.
+        achado = resultados.get(q) or resultados.get(q.lower()) or {}
         ids = achado.get("CARD") if isinstance(achado, dict) else achado
         saida[nome] = [str(i) for i in (ids or [])]
 
-    _guardar("busca", chave, saida)
-    log.evento("mpcfill", "buscou", cartas=len(nomes),
-               achadas=sum(1 for v in saida.values() if v))
+    achadas = sum(1 for v in saida.values() if v)
+    # Nenhuma carta com arte é quase sempre consulta quebrada, não verdade —
+    # o deck inteiro sem uma arte sequer não acontece. Guardar isso travaria a
+    # grade vazia por uma semana; sem guardar, o próximo clique pergunta de novo.
+    if achadas:
+        _guardar("busca", chave, saida)
+    log.evento("mpcfill", "buscou", cartas=len(nomes), achadas=achadas)
     return saida
+
+
+def _consulta(nome: str) -> str:
+    """O que se pergunta ao MPC Fill por uma carta: o nome da FRENTE.
+
+    A base local guarda carta de duas faces como "Delver of Secrets //
+    Insectile Aberration", e a biblioteca deles indexa cada face pelo próprio
+    nome — o nome inteiro volta com zero artes, e a grade diria que a carta
+    não tem nenhuma.
+    """
+    return nome.split(" // ")[0].strip() or nome
 
 
 def _busca_padrao() -> dict:
@@ -292,10 +314,11 @@ def _busca_padrao() -> dict:
     # Por PK, e não pela `key`: o schema deles pede o número. Mandar a string
     # volta 400 com "Schema error/s" — e um 400 não é retentável, então isso
     # vira 502 na primeira tentativa, sem nada na tela explicando.
-    try:
-        pks = [f["pk"] for f in fontes()]
-    except MPCFillError:
-        pks = []
+    #
+    # Sem as fontes, a busca não sai: com a lista de fontes vazia o MPC Fill
+    # responde 200 com zero artes pra toda carta, e isso se leria como "essa
+    # carta não tem arte". O `MPCFillError` de `fontes()` sobe como está.
+    pks = [f["pk"] for f in fontes()]
     return {
         "searchTypeSettings": {"fuzzySearch": False, "filterCardbacks": False},
         "sourceSettings": {"sources": [[pk, True] for pk in pks]},

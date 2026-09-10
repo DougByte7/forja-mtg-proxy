@@ -2569,7 +2569,8 @@ const arte = {
   ids: [],            // todos os ids de arte dela, na ordem das fontes
   meta: {},           // id -> metadados, preenchido por página
   pagina: 0,
-  filtro: {texto: "", fonte: "", dpi: 0},
+  // `impressao` = {sigla, artista} da impressão clicada na vitrine, ou null.
+  filtro: {texto: "", fonte: "", dpi: 0, impressao: null},
   impressoes: null,   // null = buscando, false = não deu, array = ok
   escolhas: {},       // nome achatado -> {frente:{...}, verso:{...}}
   fontes: [],
@@ -2631,7 +2632,7 @@ async function abrirEscolhaDeArte(nome){
   arte.ids = [];
   arte.meta = {};
   arte.pagina = 0;
-  arte.filtro = {texto: "", fonte: "", dpi: 0};
+  arte.filtro = {texto: "", fonte: "", dpi: 0, impressao: null};
   arte.impressoes = null;
   $("arte-titulo").textContent = carta.nome;
   $("arte-busca").value = "";
@@ -2761,13 +2762,12 @@ function desenharVitrine(){
       </button>`).join("");
 }
 
-/* Os ids que sobram depois dos filtros. Filtrar por metadados só funciona no
-   que já foi carregado — por isso o filtro de fonte e DPI atua sobre a página
-   à vista, e o de texto (nome do arquivo) também. É o preço de não baixar os
-   metadados de 713 artes de uma vez, e é o preço certo. */
+/* Os ids que sobram depois dos filtros. Os três olham os metadados, que
+   `carregarMetadados` traz de todas as artes da carta de uma vez — então o
+   filtro vê o conjunto inteiro, não só a página à vista. */
 function idsFiltrados(){
   const f = arte.filtro;
-  if (!f.texto && !f.fonte && !f.dpi) return arte.ids;
+  if (!f.texto && !f.fonte && !f.dpi && !f.impressao) return arte.ids;
   return arte.ids.filter(id => {
     const m = arte.meta[id];
     // Sem metadado ainda (a requisição está em voo): não esconde o que não
@@ -2777,17 +2777,47 @@ function idsFiltrados(){
     if (f.fonte && m.fonte !== f.fonte) return false;
     if (f.dpi && (m.dpi || 0) < f.dpi) return false;
     if (f.texto && !(m.arquivo || "").toLowerCase().includes(f.texto)) return false;
+    if (f.impressao && !casaImpressao(m.arquivo, f.impressao)) return false;
     return true;
   });
+}
+
+function semAcento(s){
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/* Se um arquivo do MPC Fill é daquela impressão oficial. Não há campo de
+   edição nos metadados deles — só o nome do arquivo, escrito à mão por quem
+   subiu —, então isto lê as convenções que aparecem de fato:
+
+     "Sol Ring [MSC] {214}.png"      sigla entre colchetes, número em chaves
+     "Sol Ring (SLD1696).png"        sigla colada ao número de 4 dígitos
+     "Sol Ring (ECC, Lorwyn).png"    sigla solta entre separadores
+     "Sol Ring (Mark Tedin 1).png"   o artista, sem edição nenhuma
+
+   A sigla só casa como palavra inteira: "SOC" não pode achar "Social", e
+   "CC" não pode achar "(CC10007)", que é CC1 nº 0007. O artista cobre as
+   edições antigas, cujos scans quase nunca levam sigla. */
+function casaImpressao(arquivo, imp){
+  const nome = semAcento(arquivo);
+  const sigla = semAcento(imp.sigla).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (sigla && new RegExp(`(^|[^a-z0-9])${sigla}(\\d{4}\\)|[^a-z0-9]|$)`).test(nome))
+    return true;
+  return !!imp.artista && nome.includes(semAcento(imp.artista));
 }
 
 function desenharGrade(){
   const ids = idsFiltrados();
   const total = ids.length;
   if (!total){
-    $("arte-conta").textContent = arte.ids.length
-      ? "Nenhuma arte com esses filtros."
-      : "O MPC Fill não tem arte pra esta carta.";
+    const imp = arte.filtro.impressao;
+    $("arte-conta").textContent = !arte.ids.length
+      ? "O MPC Fill não tem arte pra esta carta."
+      : imp
+        ? `Nenhum arquivo do MPC Fill identificado como ${imp.sigla}${
+            imp.artista ? " ou de " + imp.artista : ""} — clique de novo na ` +
+          "impressão pra ver todas."
+        : "Nenhuma arte com esses filtros.";
     $("arte-grade").innerHTML = "";
     return;
   }
@@ -2865,15 +2895,16 @@ function ligarArte(){
     const b = e.target.closest("[data-impressao]");
     if (!b) return;
     // Clicar numa impressão NÃO escolhe nada: ela é da Scryfall, e o que
-    // imprime é o arquivo do MPC Fill. O que ela faz é semear o filtro —
-    // é assim que se acha "a de Kaladesh" entre setecentas.
+    // imprime é o arquivo do MPC Fill. O que ela faz é filtrar a grade pelos
+    // arquivos daquela impressão (ver `casaImpressao`) — é assim que se acha
+    // "a de Kaladesh" entre setecentas. Clicar de novo na mesma tira o filtro.
     const i = arte.impressoes[Number(b.dataset.impressao)];
     if (!i) return;
-    arte.filtro.texto = (i.edicao || "").toLowerCase();
-    $("arte-busca").value = i.edicao || "";
+    const ligar = !b.classList.contains("ativa");
+    arte.filtro.impressao = ligar ? {sigla: i.sigla || "", artista: i.artista || ""} : null;
     arte.pagina = 0;
     for (const outro of $("arte-vitrine").querySelectorAll("[data-impressao]")){
-      outro.classList.toggle("ativa", outro === b);
+      outro.classList.toggle("ativa", ligar && outro === b);
     }
     desenharGrade();
   });
