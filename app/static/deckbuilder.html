@@ -103,14 +103,16 @@
       <div class="resultados" id="res-cmd"></div>
     </div>
 
-    <!-- ---------------- as quatro respostas sobre o deck ----------------
-         Deck, análise, mana base e combos são quatro perguntas sobre a
-         MESMA lista, e só uma está sendo feita de cada vez: uma superfície
-         só, com abas. Abrir a aba já dispara a conta dela. -->
+    <!-- ---------------- as respostas sobre o deck ----------------
+         Deck, artes, análise, mana base, combos, tokens e goldfish são
+         perguntas sobre a MESMA lista, e só uma está sendo feita de cada
+         vez: uma superfície só, com abas. Abrir a aba já dispara a conta
+         dela. -->
     <div id="area-deck" hidden>
       <div class="abas-painel" id="abas-deck" role="tablist">
         <button role="tab" data-painel="deck" class="ativa" aria-selected="true">
           Deck <span class="n" id="aba-deck-n">0</span></button>
+        <button role="tab" data-painel="artes" aria-selected="false">Artes</button>
         <button role="tab" data-painel="analise" aria-selected="false">Análise</button>
         <button role="tab" data-painel="manabase" aria-selected="false">Mana base</button>
         <button role="tab" data-painel="combos" aria-selected="false">
@@ -138,6 +140,18 @@
             "combo principal", "sac outlet". A carta sem categoria fica no grupo
             do tipo dela.</span>
         </div>
+      </div>
+
+      <!-- O deck como ele vai sair do papel. Ao lado do Deck porque é a mesma
+           lista vista de outro jeito, e é daqui que se escolhe arte em série:
+           clicar num quadro abre a escolha dele. -->
+      <div class="painel" id="painel-artes" data-painel="artes" hidden>
+        <h2 class="secao">Artes do deck</h2>
+        <p class="nota">Uma imagem por arte que vai pro papel — carta de duas
+          faces aparece duas vezes, frente e verso. Clique numa pra escolher o
+          arquivo que imprime; as de contorno dourado já têm arte escolhida, as
+          outras saem com a arte padrão.</p>
+        <div id="galeria-resultado" style="margin-top:12px;"></div>
       </div>
 
       <div class="painel" id="painel-analise" data-painel="analise" hidden>
@@ -498,6 +512,12 @@
   <div class="arte-caixa" role="dialog" aria-modal="true" aria-labelledby="arte-titulo">
     <div class="arte-topo">
       <h3 id="arte-titulo">Escolher arte</h3>
+      <!-- Só em carta de duas faces: cada lado é um arquivo no papel. -->
+      <div class="segmento arte-faces" id="arte-faces" hidden
+           role="group" aria-label="Lado da carta">
+        <button type="button" data-face="frente">Frente</button>
+        <button type="button" data-face="verso">Verso</button>
+      </div>
       <span class="gf-espaco"></span>
       <button class="mini sai" id="arte-fechar" title="Fechar"
         aria-label="Fechar">✕</button>
@@ -521,9 +541,12 @@
     <div class="arte-grade" id="arte-grade"></div>
 
     <div class="arte-rodape">
-      <button class="btn" id="arte-anterior">Anterior</button>
-      <button class="btn" id="arte-proxima">Próxima</button>
-      <span class="gf-espaco"></span>
+      <label class="interruptor" title="Lembrado neste navegador">
+        <input type="checkbox" id="arte-fecha">
+        <span class="trilho-int" aria-hidden="true"></span>
+        Fechar ao escolher
+      </label>
+      <nav class="arte-paginas" id="arte-paginas" aria-label="Páginas de artes"></nav>
       <button class="btn" id="arte-padrao">Voltar ao padrão</button>
     </div>
   </div>
@@ -540,8 +563,10 @@
 </div>
 
 <div class="previa" id="previa" aria-hidden="true">
-  <img id="previa-frente" alt="">
-  <img id="previa-verso" alt="">
+  <!-- Sem referrer pelo mesmo motivo da grade de artes: a prévia também
+       mostra miniatura do Google Drive quando a carta tem arte escolhida. -->
+  <img id="previa-frente" alt="" referrerpolicy="no-referrer">
+  <img id="previa-verso" alt="" referrerpolicy="no-referrer">
 </div>
 <div class="toast" id="toast"></div>
 
@@ -554,6 +579,7 @@
 <script src="/deckbuilder/utilidades.js"></script>
 <script src="/deckbuilder/preco.js"></script>
 <script src="/deckbuilder/artes.js"></script>
+<script src="/deckbuilder/galeria.js"></script>
 <script src="/deckbuilder/goldfish.js"></script>
 <script src="/deckbuilder/conta.js"></script>
 <script src="/deckbuilder/orcamento.js"></script>

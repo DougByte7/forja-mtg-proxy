@@ -221,11 +221,14 @@ const PREVIA_VAO = 8;        // o `gap` do CSS entre frente e verso
 
 /* Os atributos que ligam um elemento à prévia. Passar a carta inteira em vez
    de só a URL é o que faz a carta de duas faces aparecer inteira: sem o
-   verso, hover num transform mostra metade da carta e cala sobre a outra. */
+   verso, hover num transform mostra metade da carta e cala sobre a outra.
+
+   Cada lado sai pela `imagemDaFace`: com arte escolhida no deck, a prévia
+   mostra o arquivo que vai pro papel, e não a arte oficial. */
 function ganchosDaPrevia(c){
   if (!c || !c.imagem) return "";
-  let attrs = ` data-arte="${escapar(c.imagem)}"`;
-  if (c.imagem_verso) attrs += ` data-arte-verso="${escapar(c.imagem_verso)}"`;
+  let attrs = ` data-arte="${escapar(imagemDaFace(c, "frente"))}"`;
+  if (c.imagem_verso) attrs += ` data-arte-verso="${escapar(imagemDaFace(c, "verso"))}"`;
   if (c.deitada) attrs += ' data-deitada="1"';
   return attrs;
 }

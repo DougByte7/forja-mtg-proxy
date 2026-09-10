@@ -176,6 +176,29 @@ def rodar(script, deck=None, maybe=None, categorias=None):
     return json.loads(dukpy.evaljs(prova))
 
 
+DELVER = dict(carta("Delver of Secrets // Insectile Aberration",
+                    "Creature — Human Wizard // Creature — Human Insect", "U"),
+              imagem_verso="http://arte/Insectile Aberration")
+ROOM = dict(carta("Porta // Sala", "Enchantment — Room // Enchantment — Room"),
+            deitada=1)
+
+
+def avaliar(script):
+    """Roda `script` sobre o deck de exemplo e devolve o JSON que ele deixar.
+    As cartas de duas faces e partida ficam à mão como DELVER e ROOM."""
+    prova = _DOM + _JS + """
+    estado.comandantes = %s;
+    estado.cartas = %s;
+    estado.maybe = %s;
+    estado.categorias = %s;
+    var SOL_RING = %s, ELVES = %s, DELVER = %s, ROOM = %s;
+    %s
+    """ % (json.dumps([ATRAXA]), json.dumps(DECK), json.dumps(MAYBE),
+           json.dumps(CATEGORIAS), json.dumps(SOL_RING), json.dumps(ELVES),
+           json.dumps(DELVER), json.dumps(ROOM), script)
+    return json.loads(dukpy.evaljs(prova))
+
+
 def nomes_desenhados(html):
     return re.findall(r'data-nome="([^"]+)"', html)
 
@@ -376,6 +399,67 @@ try:
     check("Ctrl+Z devolve a categoria apagada",
           "Sac outlet" in r["categorias"]
           and ["Ashnod's Altar", 1, "Sac outlet"] in r["cartas"])
+
+    # ---------------------------------------------------------------- artes
+    print("\n--- artes ---")
+    # `1 … 3 4 5 6 7 … 10`: a primeira, a última e duas de cada lado da
+    # atual. Cinco no meio sempre, inclusive nas pontas — senão os números
+    # trocam de lugar debaixo do mouse a cada clique.
+    pags = avaliar("JSON.stringify([paginasVisiveis(4, 10), paginasVisiveis(0, 10),"
+                   " paginasVisiveis(9, 10), paginasVisiveis(2, 5)])")
+    eq("no meio: a atual com duas de cada lado, e reticências nos vãos",
+       pags[0], [0, "…", 2, 3, 4, 5, 6, "…", 9])
+    eq("na primeira página a janela encosta no começo",
+       pags[1], [0, 1, 2, 3, 4, 5, "…", 9])
+    eq("na última, no fim", pags[2], [0, "…", 4, 5, 6, 7, 8, 9])
+    eq("até sete páginas cabem todas, sem vão", pags[3], [0, 1, 2, 3, 4])
+    eq("o paginador tem sempre o mesmo número de páginas à vista",
+       avaliar("var n = []; for (var p = 0; p < 30; p++) n.push("
+               "paginasVisiveis(p, 30).filter(function(x){ return x !== '…'; }).length);"
+               " JSON.stringify(n.filter(function(x){ return x !== 7; }))"), [])
+
+    # O MPC Fill indexa cada face pelo próprio nome: o verso se pergunta pelo
+    # nome DELE, e a frente vai inteira (quem corta é o servidor).
+    eq("o verso se busca pelo nome do verso",
+       avaliar('JSON.stringify([nomeDaBusca(DELVER, "verso"),'
+               ' nomeDaBusca(DELVER, "frente")])'),
+       ["Insectile Aberration", "Delver of Secrets // Insectile Aberration"])
+
+    # A prévia do hover mostra o arquivo escolhido, e não a arte oficial.
+    previa = avaliar(
+        'arte.escolhas["sol ring"] = {frente: {drive_id: "id-sol"}};'
+        'arte.escolhas["delver of secrets // insectile aberration"] ='
+        ' {verso: {drive_id: "id-inseto"}};'
+        'JSON.stringify([ganchosDaPrevia(SOL_RING), ganchosDaPrevia(ELVES),'
+        ' ganchosDaPrevia(DELVER)])')
+    check("com arte escolhida, a prévia mostra o arquivo do MPC Fill",
+          "thumbnail?id=id-sol" in previa[0], previa[0])
+    check("sem arte escolhida, a arte oficial", 'data-arte="http://arte/Llanowar Elves"'
+          in previa[1], previa[1])
+    check("em carta de duas faces, cada lado sai pela sua escolha",
+          'data-arte="http://arte/Delver' in previa[2]
+          and "thumbnail?id=id-inseto" in previa[2], previa[2])
+
+    galeria = avaliar(
+        'estado.cartas.push({carta: DELVER, quantidade: 1, categoria: ""},'
+        ' {carta: ROOM, quantidade: 1, categoria: ""});'
+        'arte.escolhas["sol ring"] = {frente: {drive_id: "id-sol"}};'
+        'desenharGaleria(); JSON.stringify($("galeria-resultado").innerHTML)')
+    quadros = re.findall(r'data-arte-carta="([^"]+)" data-arte-face="(\w+)"', galeria)
+    eq("a galeria tem um quadro por arte: frente e verso da carta de duas faces",
+       [f for n, f in quadros if n.startswith("Delver")], ["frente", "verso"])
+    check("o maybeboard não entra na galeria — não vai pro papel",
+          not any(n in ("Rhystic Study", "Lightning Bolt") for n, _ in quadros))
+    check("o sideboard entra", any(n == "Swords to Plowshares" for n, _ in quadros))
+    eq("e o comandante vem primeiro", quadros[0][0], "Atraxa")
+    check("a carta partida sai deitada",
+          re.search(r'class="galeria-carta\s+deitada"\s+data-arte-carta="Porta', galeria)
+          is not None)
+    check("a escolhida se marca", re.search(
+        r'class="galeria-carta tem-arte\s*"\s+data-arte-carta="Sol Ring"', galeria)
+        is not None)
+    # Atraxa, 5 cartas do deck, Delver (2 artes) e o Room: 9 artes, 1 escolhida.
+    check("a conta é por arte, e diz quantas faltam", "<b>1/9</b>" in galeria)
 
     # -------------------------------------------------- o que vai pro servidor
     print("\n--- o que a tela manda pro servidor ---")

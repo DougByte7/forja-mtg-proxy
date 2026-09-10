@@ -191,6 +191,24 @@ try:
     detalhe_carta.impressoes("Sol Ring")
     eq("a segunda chamada sai do cache", len(pedidas), antes)
 
+    # Carta de duas faces não tem arte no topo, só dentro de cada face. Sem
+    # ler as faces, a tira mostraria a impressão sem imagem nenhuma — e a
+    # escolha do verso não teria o que mostrar.
+    scryfall.json_da_api = lambda *a, **k: {"data": [
+        {"set_name": "Innistrad", "set": "isd", "layout": "transform",
+         "card_faces": [{"image_uris": {"normal": "http://arte/delver.jpg"}},
+                        {"image_uris": {"normal": "http://arte/inseto.jpg"}}]},
+        {"set_name": "Duskmourn", "set": "dsk", "layout": "split",
+         "image_uris": {"normal": "http://arte/room.jpg"},
+         "card_faces": [{"name": "Porta"}, {"name": "Sala"}]},
+    ], "has_more": False}
+    duas = detalhe_carta.impressoes("Delver of Secrets")
+    eq("duas faces: a frente sai da primeira face",
+       duas[0]["imagem"], "http://arte/delver.jpg")
+    eq("e o verso vai junto", duas[0]["imagem_verso"], "http://arte/inseto.jpg")
+    eq("carta partida é uma imagem só, sem verso",
+       (duas[1]["imagem"], duas[1]["imagem_verso"]), ("http://arte/room.jpg", ""))
+
     # Zero impressões é `[]`; falha de rede é `None`. A tela diz coisas
     # diferentes pros dois — "essa carta só existe numa edição" e "não
     # consegui perguntar" são respostas opostas.

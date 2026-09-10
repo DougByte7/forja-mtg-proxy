@@ -195,7 +195,16 @@ def detalhe(nome: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def _impressao(card: dict) -> dict:
-    """Uma impressão no formato que a tira da escolha de arte desenha."""
+    """Uma impressão no formato que a tira da escolha de arte desenha.
+
+    Carta de duas faces não tem `image_uris` no topo: a arte mora em cada
+    face. A frente sai da primeira, e o verso vai junto em `imagem_verso` —
+    é o que a tira mostra quando a pessoa está escolhendo o verso. Carta
+    partida tem as duas metades numa imagem só, no topo, e fica sem verso.
+    """
+    faces = card.get("card_faces") or []
+    frente = _arte(card) or (_arte(faces[0]) if faces else "")
+    verso = "" if _arte(card) or len(faces) < 2 else _arte(faces[1])
     return {
         "edicao": card.get("set_name") or "",
         "sigla": (card.get("set") or "").upper(),
@@ -203,7 +212,8 @@ def _impressao(card: dict) -> dict:
         "lancamento": card.get("released_at") or "",
         "artista": card.get("artist") or "",
         "raridade": card.get("rarity") or "",
-        "imagem": _arte(card),
+        "imagem": frente,
+        "imagem_verso": verso,
         "scryfall": card.get("scryfall_uri") or "",
     }
 
@@ -230,7 +240,9 @@ def impressoes(nome: str) -> list[dict] | None:
     if not nome:
         return None
 
-    caminho = _caminho(nome, "-prints")
+    # O "-v2" é o formato com `imagem_verso`: sem ele, o cache de uma semana
+    # continuaria servindo a tira sem a arte das cartas de duas faces.
+    caminho = _caminho(nome, "-prints-v2")
     try:
         if time.time() - os.path.getmtime(caminho) <= TTL_IMPRESSOES:
             with open(caminho, encoding="utf-8") as f:

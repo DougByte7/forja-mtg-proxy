@@ -5,6 +5,7 @@
 function desenharTudo(){
   desenharDeck();
   desenharMaybe();
+  desenharGaleria();
   desenharAnalise();
   desenharContador();
   desenharPreviaOrcamento();

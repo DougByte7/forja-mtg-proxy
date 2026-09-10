@@ -4,9 +4,9 @@
 
    Duas fitas de abas, e as duas funcionam do mesmo jeito: a que está ativa
    ganha a classe, os painéis irmãos somem. Trocar de aba não recalcula nada —
-   os cinco painéis do centro são desenhados a cada mudança do deck, estejam
-   à vista ou não, senão abrir "Análise" mostraria o deck de dois minutos
-   atrás por um quadro. */
+   os painéis do centro são desenhados a cada mudança do deck, estejam à
+   vista ou não, senão abrir "Análise" mostraria o deck de dois minutos atrás
+   por um quadro. */
 /* Abrir a aba é o pedido: quem clica em "Análise" quer a análise inteira,
    nível de poder incluído, não um botão que promete o nível. A conta só sai se
    ainda não houver resposta ou se o deck tiver mudado desde a última — trocar
