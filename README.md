@@ -1212,10 +1212,11 @@ desejado, e é a razão de o fluxo de reclamar existir.
 
 A aba **Goldfish** embaralha o deck e deixa a pessoa jogar sozinha — é o que a
 palavra quer dizer na mesa: jogar contra um peixinho dourado, que não faz nada.
-Compra 7, mulligan, baixa terreno, joga carta pro campo, deita, põe contador,
-ajusta a vida, passa turno e compra. Tudo por clique, com desfazer em Ctrl+Z e
-um botão de tela cheia (que esconde as duas colunas laterais — a mesa quer
-largura).
+Compra 7, mulligan, baixa terreno, joga carta pro campo, deita, põe marcador,
+cria ficha, busca no baralho, ajusta a vida, declara ataque, passa turno e
+compra. Tudo por clique — ou arrastando a carta pra outra zona, que é atalho de
+quem tem mouse e nunca o único caminho —, com desfazer em Ctrl+Z e um botão de
+tela cheia (que esconde as duas colunas laterais: a mesa quer largura).
 
 **Não é motor de regras, e isso é o recurso.** Nada ali impede nada: dá pra
 baixar dois terrenos no mesmo turno, jogar uma carta de 8 manas no turno 1 e
@@ -1225,7 +1226,7 @@ linha fixa no topo do painel diz isso antes do primeiro clique. A alternativa
 projeto inteiro e que erraria justamente nos casos que a pessoa conhece melhor
 do que ele.
 
-Cinco coisas que ele deliberadamente não sabe:
+Seis coisas que ele deliberadamente não sabe:
 
 * **Não soma mana.** Mostra quantos terrenos estão em pé e quantos deitados,
   que é um fato do tabuleiro. No instante em que aparecesse "3 de mana
@@ -1238,6 +1239,10 @@ Cinco coisas que ele deliberadamente não sabe:
   como **um** passo de desfazer: sete cliques pra ir de 40 a 33 comeriam sete
   das vinte fotos, e o Ctrl+Z seguinte devolveria 34, 35, 36… em vez da jogada
   que veio antes.
+* **Não resolve combate.** Atacante e bloqueador são marcas desenhadas na
+  carta, e o par fica dito ("esta bloqueia aquela"). Quem decide o que morre e
+  quanto dano passa é quem joga, nos botões de vida — somar poder e resistência
+  exigiria saber o que cada habilidade faz, que é o motor de regras de novo.
 * **Não cobra o imposto do comandante.** O comandante vai pra zona de comando
   (não pro baralho, senão o goldfish testaria um deck que ninguém joga) e a
   tela diz quanto custaria a próxima vez. Pagar é decisão de quem joga.
@@ -1276,14 +1281,66 @@ Terreno-criatura entra em Terrenos, pela mesma regra de `CATEGORIAS`: a
 primeira que casa ganha, porque pra quem joga ele é o terreno que entrou no
 turno.
 
+**A mesa é uma lista de jogadores**, de um ou de dois, mesmo quando o goldfish
+é solo. Um jogador solto mais um "segundo" opcional faria toda ação existir em
+duas versões — e é justamente aí que uma delas para de acompanhar a outra. O
+botão **Segundo deck** põe um deck salvo seu do outro lado (os deste navegador
+mais os da sua conta, se você entrou), com as zonas, a vida, o mulligan e o
+contador dele próprios. Ele entra na mesa que já está rolando, e não recomeça a
+partida: quem pede um oponente no meio de um goldfish quer ver a mão que está
+na tela contra alguma coisa, não jogar a mão fora.
+
+**Cada carta tem dono, e toda zona é do dono.** Matar a criatura do outro manda
+ela pro cemitério *dele* — que é o que acontece na mesa, e é o que faz as listas
+continuarem fechando por jogador. O arrastar segue a mesma regra: só aceita
+soltar nas zonas do dono da carta. Com dois decks aparece também o **dano de
+comandante**, contado por origem: 21 de um não se soma a 21 do outro, e é essa
+separação que faz o número valer alguma coisa.
+
+**Buscar numa zona** abre a lista inteira do baralho, do cemitério ou do
+exílio, com filtro por nome, e manda a carta escolhida pra qualquer zona. Sair
+da busca do baralho **reembaralha** — olhar a biblioteca e devolvê-la na ordem
+em que estava é a única coisa que este simulador faria por você e que na mesa
+de verdade seria trapaça.
+
+**As fichas** saem de três lugares: as que o próprio deck cria (a aba Tokens já
+leu isso da base local, com arte), as que você montou antes neste navegador, e
+o formulário (nome, tipo, P/T, cores, quantas). Ficha que sai do campo **deixa
+de existir**: um cemitério com três Soldados mentiria sobre o que dá pra
+devolver de lá.
+
+**Os marcadores** são dois: os da carta (+1/+1, −1/−1, lealdade e o que você
+nomear) e os do jogador (veneno, energia, experiência e o que você nomear).
+Quem tem dez de veneno é a pessoa, não a criatura que a envenenou — daí a
+separação. Na carta eles viram sigla no canto ("+2"), com o nome inteiro no
+`title`, porque numa carta de 62px o nome não cabe.
+
+**O log** anota cada jogada com o turno em que aconteceu, e fica fechado: é
+conferência depois do fato ("em que turno eu baixei aquilo?"), não o assunto da
+tela. O botão **Como foi** fecha a conta: em que turno o comandante desceu, a
+curva do deck contra a curva do que de fato desceu (na mesma escala — duas
+escalas desfariam a comparação em silêncio) e quantas cartas nunca foram
+puxadas. A mesa continua de pé depois dele: encerrar é uma leitura, não um fim.
+
 O baralho sai de `cartasContadas()`, a mesma função do contador, da curva e da
 assinatura de cotação: sideboard e maybeboard ficam de fora aqui pelo mesmo
-motivo que ficam lá.
+motivo que ficam lá. O segundo deck passa pela mesma régua, só que sobre a
+resposta do servidor.
+
+**São três módulos**, e a divisão é o que deixa o teste existir:
+`goldfish.js` tem as regras e não toca em DOM nenhum, `goldfish-desenho.js` só
+lê a mesa e escreve HTML, e `goldfish-acoes.js` tem os cliques, o menu de cada
+carta, o arrastar e as quatro modais. Toda ação passa por `guardarMesa()` antes
+— é o que faz o Ctrl+Z valer pra qualquer jogada, e não só pras que alguém
+lembrou de tratar. A fotografia do desfazer guarda o estado **sem as cartas**
+(elas voltam pelo registro de `uid`): uma mesa de dois decks tem 200 cartas
+completas, e reescrevê-las a cada clique é alguns megabytes de JSON por
+jogada.
 
 `tests/test_goldfish.py` persegue a conservação das cartas: depois de uma
-sequência roteirizada (três mulligans, duas pro fundo, três turnos, campo,
-cemitério, exílio, comandante), o multiconjunto das zonas tem que ser o mesmo
-do começo. É a asserção que pega Fisher-Yates escrito errado — que perde ou
+sequência roteirizada **com os dois decks na mesa** (três mulligans, duas pro
+fundo, três turnos, campo, cemitério, exílio, comandante), o multiconjunto das
+zonas de todo mundo tem que ser o mesmo do começo. É a asserção que pega Fisher-Yates escrito errado — que perde ou
 duplica elemento **em silêncio**, e um goldfish que duplica carta mente sobre
 o deck. Foi esse teste que pegou também uma colisão de nome: já existia um
 `mover()` nesta página (o que troca carta entre deck e maybeboard), e duas

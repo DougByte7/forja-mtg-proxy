@@ -83,8 +83,9 @@ export const estado = {
   cambio: null,
   usuario: null,     // quem está logado, ou null pra anônimo (que não é erro)
   dono: null,        // de quem é este deck, ou null pra órfão
-  // A mesa do goldfish. `null` = nunca embaralhou nesta sessão. NÃO entra no
-  // `corpoDoDeck`: mão de goldfish gravada no deck é mão que volta três
+  // A mesa do goldfish: uma lista de jogadores (um, ou dois com o segundo
+  // deck), o turno e o log. `null` = nunca embaralhou nesta sessão. NÃO entra
+  // no `corpoDoDeck`: mão de goldfish gravada no deck é mão que volta três
   // semanas depois, em outra máquina.
   mesa: null,
   mesaDesfazer: [],  // pilha de fotografias do JSON da mesa

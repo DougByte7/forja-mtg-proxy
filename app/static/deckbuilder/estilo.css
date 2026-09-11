@@ -925,9 +925,24 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 /* Só a mão mostra o nome: é onde a decisão acontece, e onde as cartas são
    poucas o bastante pra caber. */
 .gf-fila.gf-mao .gf-carta{width:72px;height:100px;}
-.gf-carta .gf-cont{position:absolute;top:2px;right:2px;min-width:15px;
-  height:15px;border-radius:8px;background:var(--gold);color:var(--sobre-gold);
-  font-size:9px;font-weight:700;display:grid;place-items:center;padding:0 3px;}
+/* Os marcadores da carta, empilhados no canto. Três cabem; o `title` do
+   conjunto lista todos, com o nome inteiro — "+2" é o que se lê de relance,
+   "+1/+1: 2" é o que responde a dúvida. */
+.gf-carta .gf-marcas{position:absolute;top:2px;right:2px;display:flex;
+  flex-direction:column;gap:2px;align-items:flex-end;}
+.gf-carta .gf-marca-b{min-width:15px;height:15px;border-radius:8px;
+  background:var(--gold);color:var(--sobre-gold);font-size:9px;font-weight:700;
+  display:grid;place-items:center;padding:0 3px;
+  font-family:'IBM Plex Mono',monospace;}
+/* Atacante e bloqueador: a marca fica no canto de baixo pra não brigar com os
+   marcadores, e a borda colorida é o que se vê sem ler. */
+.gf-carta .gf-combate{position:absolute;bottom:2px;left:2px;font-size:11px;
+  line-height:1;text-shadow:0 1px 3px #000;}
+.gf-carta.atacando{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
+.gf-carta.bloqueando{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
+/* Ficha não é carta: a borda tracejada diz que ela some quando sair do campo. */
+.gf-carta.ficha{border-style:dashed;}
+.gf-carta.arrastando{opacity:.45;}
 
 .gf-vazio{color:var(--text-muted);font-size:12px;font-style:italic;
   padding:4px 0;}
@@ -942,6 +957,125 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   border-radius:6px;cursor:pointer;}
 .gf-menu button:hover{background:var(--inset);color:var(--gold-light);}
 .gf-menu hr{border:none;border-top:1px solid var(--border);margin:3px 0;}
+
+/* ---- um bloco por jogador ----
+   Empilhados, e não lado a lado: a mesa tem a largura da tela e a carta tem
+   62px, então dividir ao meio cortaria as duas filas de campo pela metade. Com
+   um deck só, o bloco é a mesa inteira e nada disto aparece. */
+.gf-jogadores{display:flex;flex-direction:column;gap:12px;}
+.gf-jogador + .gf-jogador{border-top:1px solid var(--border);padding-top:10px;}
+.gf-jogador.ativo{border-left:2px solid var(--gold);padding-left:10px;
+  margin-left:-12px;}
+.gf-cabeca{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--text-muted);}
+.gf-nome-j{color:var(--text);font-size:13px;}
+.gf-vez{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--sobre-gold);background:var(--gold);border-radius:999px;
+  padding:1px 7px;}
+
+/* Vida, marcadores do jogador e dano de comandante são o mesmo controle: um
+   número entre dois passos. Botões sem sublinhado — o que se clica muda o
+   número ao lado, não abre lista. */
+.gf-vida,.gf-marca,.gf-dano{display:inline-flex;align-items:center;gap:4px;}
+.gf-vida button,.gf-marca button,.gf-dano button,.gf-mais{
+  text-decoration:none;border:1px solid var(--border);border-radius:6px;
+  min-width:22px;padding:1px 5px;text-align:center;background:none;
+  color:inherit;font:inherit;cursor:pointer;}
+.gf-vida button:hover,.gf-marca button:hover,.gf-dano button:hover,
+.gf-mais:hover{border-color:var(--gold);color:var(--gold-light);}
+.gf-vida b{font-size:13px;min-width:24px;text-align:center;}
+.gf-marca b,.gf-dano b{min-width:16px;text-align:center;}
+/* 21 de dano de comandante mata. O número que mata não pode ter a mesma cara
+   do número que não mata. */
+.gf-dano.letal b{color:var(--red);}
+
+/* O resumo fica ENTRE o título da mão e as cartas: é o que se lê antes de
+   decidir manter, e depois do fato (as cartas) ele viraria conferência. */
+.gf-resumo{display:flex;gap:12px;flex-wrap:wrap;align-items:center;
+  font-size:11.5px;color:var(--text-muted);margin:0 0 6px;}
+.gf-resumo b{color:var(--text);font-family:'IBM Plex Mono',monospace;
+  font-weight:600;}
+.gf-cores{display:inline-flex;gap:8px;}
+.gf-cor{display:inline-flex;align-items:center;gap:3px;}
+
+/* Título de fila dentro do campo. Menor que `.gf-secao` de propósito: as três
+   filas são partes de "Campo", não três zonas. */
+.gf-subsecao{font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--text-muted);margin:8px 0 3px;}
+.gf-subsecao b{font-family:'IBM Plex Mono',monospace;color:var(--text);}
+
+.gf-rodape{border-top:1px solid var(--border);padding-top:10px;}
+
+/* ---- log ----
+   Fechado por padrão: é conferência depois do fato, não o assunto da tela. */
+.gf-log{margin-top:12px;border-top:1px solid var(--border);padding-top:8px;}
+.gf-log-cabeca{background:none;border:none;color:var(--text-muted);font:inherit;
+  font-size:11.5px;cursor:pointer;padding:0;}
+.gf-log-cabeca:hover{color:var(--gold-light);}
+.gf-log-cabeca b{font-family:'IBM Plex Mono',monospace;color:var(--text);}
+.gf-log-lista{list-style:none;margin:6px 0 0;padding:0;max-height:220px;
+  overflow-y:auto;font-size:11.5px;color:var(--text-muted);}
+.gf-log-lista li{padding:2px 0;border-bottom:1px solid var(--inset);}
+.gf-log-t{font-family:'IBM Plex Mono',monospace;color:var(--gold-light);
+  margin-right:6px;}
+
+/* ---- menu da carta ----
+   O menu ganhou títulos e linhas de marcador: sem eles, vinte botões seguidos
+   viram uma lista em que não se acha nada. */
+.gf-menu-titulo{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--text-muted);padding:6px 9px 2px;}
+.gf-menu .gf-linha{display:flex;align-items:center;gap:4px;padding:2px 9px;
+  font-size:12.5px;color:var(--text);}
+.gf-menu .gf-linha span{flex:1;}
+.gf-menu .gf-linha button{width:22px;padding:2px 0;text-align:center;
+  border:1px solid var(--border);border-radius:6px;}
+.gf-menu .gf-linha b{min-width:16px;text-align:center;
+  font-family:'IBM Plex Mono',monospace;}
+
+/* ---- modais do goldfish ----
+   Buscar numa zona, criar ficha, pôr o segundo deck e o resumo do fim são a
+   mesma caixa: uma lista ou uma forma curta por cima da mesa, que continua
+   atrás. */
+.gf-modal-fundo{position:fixed;inset:0;background:rgba(15,13,23,.72);
+  display:grid;place-items:center;z-index:80;padding:20px;}
+.gf-modal{background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;width:min(560px,100%);max-height:min(80vh,720px);
+  display:flex;flex-direction:column;overflow:hidden;}
+.gf-modal-topo{display:flex;align-items:center;gap:8px;padding:12px 14px;
+  border-bottom:1px solid var(--border);}
+.gf-modal-topo h3{margin:0;font-size:14px;}
+.gf-modal-corpo{padding:12px 14px;overflow-y:auto;}
+.gf-filtro{width:100%;margin-bottom:8px;}
+.gf-lista{display:flex;flex-direction:column;}
+.gf-lista-linha{display:flex;align-items:center;gap:6px;padding:4px 0;
+  border-bottom:1px solid var(--inset);font-size:12.5px;}
+.gf-lista-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;}
+.gf-lista-de{color:var(--text-muted);font-size:11px;}
+.gf-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+.gf-forma{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0;}
+.gf-forma label{display:flex;flex-direction:column;gap:3px;font-size:11px;
+  color:var(--text-muted);}
+.campo.curto{width:62px;}
+.gf-cores-escolha{display:flex;gap:6px;margin:6px 0;}
+.gf-cor-btn{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:4px 6px;cursor:pointer;opacity:.45;}
+.gf-cor-btn.ativa{opacity:1;border-color:var(--gold);}
+
+/* ---- resumo do fim ----
+   As duas curvas uma embaixo da outra, na mesma escala: é a comparação que a
+   pergunta faz ("o deck prometia isto; a partida entregou aquilo"), e duas
+   escalas diferentes a desfariam em silêncio. */
+.gf-resumo-bloco + .gf-resumo-bloco{margin-top:14px;padding-top:10px;
+  border-top:1px solid var(--border);}
+.gf-fatos{list-style:none;margin:6px 0;padding:0;font-size:12px;
+  color:var(--text-muted);}
+.gf-fatos b{color:var(--text);font-family:'IBM Plex Mono',monospace;}
+.gf-duas-curvas{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+.gf-legenda{font-size:10.5px;color:var(--text-muted);}
+.gf-curva{display:flex;align-items:flex-end;gap:4px;height:70px;margin-top:4px;}
+.gf-nao-puxadas{margin-top:8px;font-size:11.5px;color:var(--text-muted);}
+.gf-nao-puxadas summary{cursor:pointer;}
 
 /* Tela cheia: a mesa quer largura, e as duas colunas laterais não têm o que
    dizer enquanto se joga. Classe no body em vez de modal — a aba continua

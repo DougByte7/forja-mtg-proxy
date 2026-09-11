@@ -9,7 +9,7 @@
 import {$} from "../comum/dom.js";
 import {assinaturaDoDeck, procurarCombos} from "./combos.js";
 import {estado} from "./estado.js";
-import {desenharMesa} from "./goldfish.js";
+import {desenharMesa} from "./goldfish-desenho.js";
 import {analisarManabase} from "./manabase.js";
 import {estimarPoder} from "./poder.js";
 import {buscarSugestoes} from "./sugestoes.js";

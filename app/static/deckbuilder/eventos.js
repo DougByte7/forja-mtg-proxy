@@ -15,7 +15,7 @@ import {estado} from "./estado.js";
 import {abrirGaveta, desenharBarraFiltros, fecharGaveta, gavetaAberta,
         lerGavetaFiltros, limparFiltros, montarGavetaFiltros,
         preencherGavetaFiltros, tirarFiltro} from "./filtros.js";
-import {desfazerMesa} from "./goldfish.js";
+import {desfazerMesa, fecharModalGf, modalGfAberto} from "./goldfish-acoes.js";
 import {exportar, fazerImportar} from "./importar-exportar.js";
 import {adicionarQuantidade, analisarManabase, chamarManabase,
         desenharManabase, fixadoresPlanos} from "./manabase.js";
@@ -54,6 +54,10 @@ export function ligarEventos(){
     if (e.key === "Escape" && gavetaAberta){
       e.preventDefault();
       return fecharGaveta();
+    }
+    if (e.key === "Escape" && modalGfAberto()){
+      e.preventDefault();
+      return fecharModalGf();
     }
     if (e.key === "Escape" && !$("cotacao-caixa").hidden){
       e.preventDefault();

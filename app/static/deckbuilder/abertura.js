@@ -7,7 +7,7 @@ import {carregarConta, ligarOrfao} from "./conta.js";
 import {desenharTudo} from "./desenho.js";
 import {estado} from "./estado.js";
 import {ligarEventos} from "./eventos.js";
-import {ligarGoldfish} from "./goldfish.js";
+import {ligarGoldfish} from "./goldfish-acoes.js";
 import {CHAVE_TALVEZ, recolherTalvez, trocarAba,
         trocarRail} from "./paineis.js";
 import {carregarCambio} from "./preco.js";
