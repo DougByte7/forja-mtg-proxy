@@ -1,5 +1,3 @@
-"use strict";
-
 /* ------------------------------------------- de onde vem o preço de uma carta
 
    Duas origens, e a lista prefere sempre a primeira:
@@ -18,6 +16,12 @@
    ver `cotacao.filtrar_cotaveis`) e carta que a loja não tem volta com `erro`.
    Por isso cada linha diz, no tracejado e no title, qual das duas está
    mostrando — um número que esconde de onde veio é pior que número nenhum. */
+
+import {$, escapar} from "../comum/dom.js";
+import {cotar} from "./cotacao.js";
+import {estado} from "./estado.js";
+import {CARO_BRL, CARO_USD, moeda, notaDoCambio, reais,
+        taxa} from "./preco.js";
 
 function precoDaEntrada(entrada){
   return (entrada.carta?.preco_usd || 0) * entrada.quantidade;
@@ -94,7 +98,7 @@ function ehCaro(p){
    convertido); sem câmbio, tudo em dólar, e aí o que só tem preço em real
    fica DE FORA da soma em vez de ser convertido de volta por uma taxa que a
    tela não tem. O que ficou de fora é contado e vai pro title. */
-function subtotalDoGrupo(itens){
+export function subtotalDoGrupo(itens){
   const emReais = !!taxa();
   let valor = 0, medidas = 0, estimadas = 0, sem = 0, foraDaSoma = 0;
   for (const e of itens){
@@ -112,12 +116,12 @@ function subtotalDoGrupo(itens){
   return {valor, medidas, estimadas, sem, foraDaSoma, emReais};
 }
 
-function subtotalTexto(s){
+export function subtotalTexto(s){
   if (!s.valor) return "";
   return s.emReais ? "R$ " + reais(s.valor) : "US$ " + s.valor.toFixed(2);
 }
 
-function subtotalTitulo(s){
+export function subtotalTitulo(s){
   const partes = [];
   if (s.medidas) partes.push(`${s.medidas} cotada(s) na loja`);
   if (s.estimadas) partes.push(`${s.estimadas} pelo preço da base, convertido`);
@@ -126,7 +130,7 @@ function subtotalTitulo(s){
   return partes.join(" · ");
 }
 
-function valorHTML(entrada){
+export function valorHTML(entrada){
   const p = precoUnitario(entrada.carta);
   // Carta que ninguém sabe quanto custa não vira "R$ 0,00": zero é um preço,
   // e este é o caso de não saber. O travessão diz isso em um caractere.
@@ -181,7 +185,7 @@ function orcamentoLocal(){
    O detalhamento (quantas cartas contam, quantas ficam de fora, quantas não
    têm preço) fica no título: é conferência de uma vez na vida, e não vale uma
    linha permanente do cabeçalho. */
-function desenharPreviaOrcamento(){
+export function desenharPreviaOrcamento(){
   const botao = $("btn-total");
   const caret = $("btn-cotacao");
   const temDeck = estado.comandantes.length || estado.cartas.length;
@@ -238,7 +242,7 @@ function desenharPreviaOrcamento(){
 const ESPERA_COTACAO = 4000;
 let cotacaoTimerAgenda = null;
 
-function assinaturaDeCotacao(){
+export function assinaturaDeCotacao(){
   // O que a cotação cobre (`decks.para_cotacao`): as 99 e o sideboard, sem
   // comandante e sem básico. O maybeboard fica fora — é a razão de ele
   // existir.
@@ -247,7 +251,7 @@ function assinaturaDeCotacao(){
     .map(e => [e.carta.nome, e.quantidade]).sort());
 }
 
-function agendarCotacao(){
+export function agendarCotacao(){
   clearTimeout(cotacaoTimerAgenda);
   if (!estado.id || estado.cotacaoRodando) return;
   if (assinaturaDeCotacao() === estado.cotacaoAssinatura) return;

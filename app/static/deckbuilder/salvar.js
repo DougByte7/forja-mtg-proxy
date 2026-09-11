@@ -1,11 +1,18 @@
-"use strict";
-
 /* ------------------------------------------------------- validação instantânea
 
    Mesmas regras do `decks.validar` no servidor, na versão que roda a cada
    clique. Ela é substituída pela do servidor assim que o autosave responde;
    existe porque esperar a rede pra dizer "essa carta é de outra cor" tornaria
    a tela lenta justamente no momento em que a informação importa. */
+
+import {$} from "../comum/dom.js";
+import {desenharAnalise, desenharContador} from "./desenho.js";
+import {estado} from "./estado.js";
+import {atualizarBotaoPedido} from "./galeria.js";
+import {analisarManabase} from "./manabase.js";
+import {agendarCotacao} from "./orcamento.js";
+import {buscarTokens} from "./tokens.js";
+import {identidadeDoDeck, totalCartas} from "./utilidades.js";
 function validarLocal(){
   const identidade = identidadeDoDeck();
   const apontamentos = [];
@@ -49,13 +56,13 @@ function validarLocal(){
           avisos: apontamentos.length - erros};
 }
 
-function validacaoAtual(){
+export function validacaoAtual(){
   return estado.validacao || validarLocal();
 }
 
 /* ------------------------------------------------------------------ servidor */
 
-async function api(caminho, opcoes){
+export async function api(caminho, opcoes){
   const r = await fetch(caminho, opcoes);
   if (!r.ok){
     let detalhe = r.statusText;
@@ -79,9 +86,10 @@ function corpoDoDeck(){
   };
 }
 
-let salvarTimer = null, salvando = false, salvarDeNovo = false;
+export let salvarTimer = null, salvando = false;
+let salvarDeNovo = false;
 
-function marcarEstado(texto, classe){
+export function marcarEstado(texto, classe){
   const el = $("estado-salvo");
   el.textContent = texto;
   el.className = "estado-salvo" + (classe ? " " + classe : "");
@@ -90,13 +98,13 @@ function marcarEstado(texto, classe){
 /* Autosave: agenda uma gravação pra 900 ms depois da última mudança. Um clique
    em "+" não pode virar uma requisição — quem ajusta quantidade clica várias
    vezes seguidas. */
-function agendarSalvar(){
+export function agendarSalvar(){
   marcarEstado("alterações não salvas");
   clearTimeout(salvarTimer);
   salvarTimer = setTimeout(salvarAgora, 900);
 }
 
-async function salvarAgora(){
+export async function salvarAgora(){
   // Zerado aqui, e não só no `clearTimeout`: é por ele que o `salvarJa`
   // sabe se ainda há gravação esperando a vez.
   salvarTimer = null;
@@ -151,7 +159,7 @@ async function salvarAgora(){
    com a versão da tela. É pra quem sai da página levando o deck — o pedido
    é montado com o que o SERVIDOR tem, e os 900 ms de espera cabem folgados
    entre a última carta e o clique no link. */
-async function salvarJa(){
+export async function salvarJa(){
   if (!salvarTimer && !salvando) return true;
   while (salvando) await new Promise(r => setTimeout(r, 100));
   clearTimeout(salvarTimer);
@@ -166,12 +174,12 @@ async function salvarJa(){
    decks e não sabe de quem são. */
 const CHAVE = "forja.decks";
 
-function lidos(){
+export function lidos(){
   try { return JSON.parse(localStorage.getItem(CHAVE) || "[]"); }
   catch(e){ return []; }
 }
 
-function lembrarDeck(){
+export function lembrarDeck(){
   if (!estado.id) return;
   try {
     const lista = lidos().filter(d => d.id !== estado.id);
@@ -185,4 +193,4 @@ function lembrarDeck(){
 /* "Meus decks" é item do menu do cabeçalho, e o menu se monta no clique: não
    há botão com contagem pra manter em dia. A função continua existindo como
    ponto único caso o cabeçalho volte a mostrar esse número. */
-function atualizarBotaoMeus(){ /* nada a fazer: o menu se monta ao abrir */ }
+export function atualizarBotaoMeus(){ /* nada a fazer: o menu se monta ao abrir */ }

@@ -1,5 +1,3 @@
-"use strict";
-
 /* ------------------------------------------------------- a carta inteira
 
    Clique numa linha do deck ou do maybeboard. A lista responde "o que está no
@@ -11,7 +9,12 @@
    sabe. Esperar a rede pra mostrar uma carta que já está na tela seria fazer
    o clique parecer travado por causa da metade menos urgente da informação. */
 
-let cartaAberta = null;         // nome da carta na modal, ou null
+import {$, escapar} from "../comum/dom.js";
+import {imagemDaFace} from "./artes.js";
+import {api} from "./salvar.js";
+import {ico, manaEmTexto, manaHTML} from "./utilidades.js";
+
+export let cartaAberta = null;         // nome da carta na modal, ou null
 // Por sessão: reabrir a mesma carta é comum (comparar duas, voltar pra
 // conferir um ruling) e a segunda vez não pode custar rede de novo.
 const detalhesVistos = new Map();
@@ -22,7 +25,7 @@ const RARIDADE = {common: "Comum", uncommon: "Incomum", rare: "Rara",
 /* Recebe a CARTA, não o nome: quem abre a modal são três lugares que guardam
    a carta em listas diferentes (deck, maybeboard e a zona de comando), e
    procurar o nome aqui dentro obrigaria esta função a conhecer as três. */
-function abrirCarta(carta){
+export function abrirCarta(carta){
   if (!carta) return;
   cartaAberta = carta.nome;
   // A prévia do hover fica presa embaixo da modal se ela não for dispensada
@@ -36,7 +39,7 @@ function abrirCarta(carta){
   if (!detalhesVistos.has(carta.nome)) buscarDetalhe(carta);
 }
 
-function fecharCarta(){
+export function fecharCarta(){
   if (!cartaAberta) return;
   cartaAberta = null;
   const fundo = $("carta-fundo");
@@ -225,7 +228,7 @@ const PREVIA_VAO = 8;        // o `gap` do CSS entre frente e verso
 
    Cada lado sai pela `imagemDaFace`: com arte escolhida no deck, a prévia
    mostra o arquivo que vai pro papel, e não a arte oficial. */
-function ganchosDaPrevia(c){
+export function ganchosDaPrevia(c){
   if (!c || !c.imagem) return "";
   let attrs = ` data-arte="${escapar(imagemDaFace(c, "frente"))}"`;
   if (c.imagem_verso) attrs += ` data-arte-verso="${escapar(imagemDaFace(c, "verso"))}"`;
@@ -233,7 +236,7 @@ function ganchosDaPrevia(c){
   return attrs;
 }
 
-function ligarPrevia(){
+export function ligarPrevia(){
   const previa = $("previa");
   const frente = $("previa-frente");
   const verso = $("previa-verso");

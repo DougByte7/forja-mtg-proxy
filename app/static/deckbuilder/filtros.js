@@ -1,14 +1,18 @@
-"use strict";
-
 /* ------------------------------------------------------- gaveta e filtros
 
    Uma gaveta por vez, e o fundo escuro é o mesmo pras duas. Fechar por Esc e
    por clique no fundo existe porque uma gaveta modal que só fecha no ✕ é uma
    armadilha em tela de toque, onde o ✕ fica longe do polegar. */
 
-let gavetaAberta = null;
+import {$, escapar} from "../comum/dom.js";
+import {agendarBusca, buscar} from "./busca.js";
+import {estado, FILTROS_VAZIOS, NOME_DO_TIPO, TIPOS} from "./estado.js";
+import {simboloDaTela} from "./preco.js";
+import {ico} from "./utilidades.js";
 
-function abrirGaveta(id){
+export let gavetaAberta = null;
+
+export function abrirGaveta(id){
   fecharGaveta();
   const g = $(id);
   g.hidden = false;
@@ -24,7 +28,7 @@ function abrirGaveta(id){
   if (primeiro) setTimeout(() => primeiro.focus(), 180);
 }
 
-function fecharGaveta(){
+export function fecharGaveta(){
   $("gaveta-fundo").classList.remove("aberta");
   if (!gavetaAberta) return;
   const g = $(gavetaAberta);
@@ -66,7 +70,7 @@ function filtrosLigados(){
   return ligados;
 }
 
-function desenharBarraFiltros(){
+export function desenharBarraFiltros(){
   const ligados = filtrosLigados();
   const conta = $("conta-filtros");
   conta.hidden = ligados.length === 0;
@@ -89,7 +93,7 @@ function desenharBarraFiltros(){
 const CORES_FILTRO = [["W","Branco"],["U","Azul"],["B","Preto"],
                       ["R","Vermelho"],["G","Verde"],["C","Incolor"]];
 
-function montarGavetaFiltros(){
+export function montarGavetaFiltros(){
   $("f-tipo").innerHTML = TIPOS.map(([valor, rotulo]) =>
     `<option value="${valor}">${rotulo}</option>`).join("");
   $("f-cores").innerHTML = CORES_FILTRO.map(([c, nome]) => `
@@ -100,7 +104,7 @@ function montarGavetaFiltros(){
 
 /* Escreve o estado nos controles. Roda ao abrir a gaveta e ao limpar, pra a
    gaveta nunca discordar da fita que está do lado de fora dela. */
-function preencherGavetaFiltros(){
+export function preencherGavetaFiltros(){
   const f = estado.filtros;
   $("f-tipo").value = f.tipo;
   $("f-texto").value = f.texto;
@@ -117,7 +121,7 @@ function preencherGavetaFiltros(){
 
 /* Lê os controles de volta pro estado e rebusca. Passa pela busca com atraso
    (`agendarBusca`) porque o campo de efeito dispara a cada tecla. */
-function lerGavetaFiltros(){
+export function lerGavetaFiltros(){
   const numero = (id) => {
     const v = $(id).value.trim();
     if (v === "") return "";
@@ -139,7 +143,7 @@ function lerGavetaFiltros(){
   agendarBusca();
 }
 
-function tirarFiltro(chave){
+export function tirarFiltro(chave){
   if (chave === "cmc"){
     estado.filtros.cmcMin = "";
     estado.filtros.cmcMax = "";
@@ -153,7 +157,7 @@ function tirarFiltro(chave){
   buscar();
 }
 
-function limparFiltros(){
+export function limparFiltros(){
   estado.filtros = {...FILTROS_VAZIOS};
   preencherGavetaFiltros();
   desenharBarraFiltros();

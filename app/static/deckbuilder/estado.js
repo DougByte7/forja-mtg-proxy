@@ -1,5 +1,3 @@
-"use strict";
-
 /* =========================================================================
    Deckbuilder de Commander.
 
@@ -11,9 +9,8 @@
    que é só a versão instantânea da mesma regra.
    ========================================================================= */
 
-const $ = (id) => document.getElementById(id);
-const CORES = ["W","U","B","R","G"];
-const NOME_COR = {W:"Branco",U:"Azul",B:"Preto",R:"Vermelho",G:"Verde",C:"Incolor"};
+export const CORES = ["W","U","B","R","G"];
+export const NOME_COR = {W:"Branco",U:"Azul",B:"Preto",R:"Vermelho",G:"Verde",C:"Incolor"};
 
 /* -------------------------------------------------------------- categorias
 
@@ -35,14 +32,14 @@ const NOME_COR = {W:"Branco",U:"Azul",B:"Preto",R:"Vermelho",G:"Verde",C:"Incolo
    lista de impressão — é carta que a pessoa quer ter. É o que a separa do
    maybeboard, e o servidor tem a mesma regra em `decks.CATEGORIAS_FORA_DA_CONTA`. */
 
-const CATEGORIA_SIDEBOARD = "Sideboard";
-const CATEGORIAS_FORA_DA_CONTA = new Set([CATEGORIA_SIDEBOARD]);
+export const CATEGORIA_SIDEBOARD = "Sideboard";
+export const CATEGORIAS_FORA_DA_CONTA = new Set([CATEGORIA_SIDEBOARD]);
 
 /* Categorias automáticas, na ordem em que aparecem. A primeira que casar o
    type_line ganha — daí Terreno vir antes de Criatura (terreno-criatura é
    terreno pra quem monta) e Artefato vir depois de Criatura (o Solemn é
    criatura, não artefato, na hora de contar bicho). */
-const CATEGORIAS = [
+export const CATEGORIAS = [
   ["Terrenos",      (t) => t.includes("land")],
   ["Criaturas",     (t) => t.includes("creature")],
   ["Planeswalkers", (t) => t.includes("planeswalker")],
@@ -55,24 +52,24 @@ const CATEGORIAS = [
 /* Os tipos, como seletor dentro da gaveta de filtros. São treze opções, e
    treze controles soltos na coluna de 372px comeriam a lista de resultados
    que eles existem pra filtrar. */
-const TIPOS = [
+export const TIPOS = [
   ["", "Qualquer tipo"],
   ["creature","Criatura"], ["instant","Instantâneo"], ["sorcery","Feitiço"],
   ["artifact","Artefato"], ["enchantment","Encantamento"],
   ["planeswalker","Planeswalker"], ["land","Terreno"], ["battle","Batalha"],
   ["legendary","Lendária"], ["equipment","Equipamento"], ["aura","Aura"],
 ];
-const NOME_DO_TIPO = Object.fromEntries(TIPOS);
+export const NOME_DO_TIPO = Object.fromEntries(TIPOS);
 
 /* O estado neutro da gaveta. Serve pra duas coisas: começar, e comparar —
    `filtrosLigados` conta o que difere daqui, e é essa conta que vira o
    número na bolinha do botão. */
-const FILTROS_VAZIOS = {
+export const FILTROS_VAZIOS = {
   tipo: "", texto: "", cores: "", cmcMin: "", cmcMax: "", precoMax: "",
   ordem: "nome",
 };
 
-const estado = {
+export const estado = {
   id: null,
   nome: "Deck sem nome",
   comandantes: [],   // cartas completas
@@ -125,7 +122,3 @@ const estado = {
   aba: "deck",              // aba do centro
   rail: "buscar",           // aba do painel de adicionar
 };
-
-// As cartas das sugestões, achatadas numa lista só — é o que o clique usa
-// pra adicionar, igual ao `ultimosResultados` da busca.
-let sugestoesPlanas = [];

@@ -1,6 +1,13 @@
-"use strict";
-
 /* ------------------------------------------------------------------- buscar */
+
+import {$, escapar} from "../comum/dom.js";
+import {ganchosDaPrevia} from "./carta.js";
+import {adicionar, escolherComandante, ondeEsta} from "./edicao.js";
+import {CATEGORIA_SIDEBOARD, estado} from "./estado.js";
+import {precoMaxEmUsd} from "./preco.js";
+import {api} from "./salvar.js";
+import {identidadeDoDeck, manaHTML, preco, toast,
+        todasAsCategorias} from "./utilidades.js";
 
 let buscaTimer = null;
 
@@ -41,7 +48,7 @@ function moverDestaque(caixa, passo){
   pintarDestaque(caixa);
 }
 
-function ligarTecladoDaBusca(input, caixa){
+export function ligarTecladoDaBusca(input, caixa){
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp"){
       if (!itensDe(caixa).length) return;
@@ -65,12 +72,17 @@ function ligarTecladoDaBusca(input, caixa){
   });
 }
 
-function agendarBusca(){
+export function agendarBusca(){
   clearTimeout(buscaTimer);
   buscaTimer = setTimeout(buscar, 220);
 }
 
-async function buscar(){
+export function agendarBuscaComandante(){
+  clearTimeout(buscaTimer);
+  buscaTimer = setTimeout(buscarComandante, 220);
+}
+
+export async function buscar(){
   const termo = $("busca").value.trim();
   const identidade = estado.comandantes.length ? identidadeDoDeck() : null;
   const params = new URLSearchParams({q: termo, limite: "24"});
@@ -91,7 +103,7 @@ async function buscar(){
   }
 }
 
-async function buscarComandante(){
+export async function buscarComandante(){
   const termo = $("busca-cmd").value.trim();
   const params = new URLSearchParams({q: termo, comandante: "true", limite: "25"});
   try {
@@ -102,7 +114,7 @@ async function buscarComandante(){
   }
 }
 
-let ultimosResultados = [];
+export let ultimosResultados = [];
 
 /* Cinco resultados, e o resto vira uma frase.
 
@@ -158,7 +170,7 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
    `decks.CATEGORIAS_FORA_DA_CONTA`), então escolhê-lo aqui ocupa a vaga da
    categoria — e o seletor ao lado se desliga em vez de oferecer uma escolha
    que seria ignorada. */
-function adicionarPeloDestino(carta){
+export function adicionarPeloDestino(carta){
   const d = estado.destino;
   if (d === "side"){
     adicionar(carta, "deck", CATEGORIA_SIDEBOARD);
@@ -171,7 +183,7 @@ function adicionarPeloDestino(carta){
   }
 }
 
-function escolherDestino(destino){
+export function escolherDestino(destino){
   estado.destino = destino;
   for (const b of $("seg-destino").children){
     b.classList.toggle("ativa", b.dataset.destino === destino);
@@ -183,7 +195,7 @@ function escolherDestino(destino){
 /* O seletor de categoria acompanha as categorias que existem: uma criada no
    menu de uma carta tem que aparecer aqui na hora, senão a pessoa a criaria duas
    vezes. Sideboard não entra na lista — ele é o segmento ao lado. */
-function atualizarCategoriasDoDestino(){
+export function atualizarCategoriasDoDestino(){
   const sel = $("sel-categoria");
   if (!sel) return;
   const atual = estado.destinoCategoria;

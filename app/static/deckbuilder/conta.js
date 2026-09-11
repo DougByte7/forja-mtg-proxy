@@ -1,5 +1,3 @@
-"use strict";
-
 /* ------------------------------------------------------------------- conta
 
    O login é OPCIONAL. Nada nesta tela depende dele: quem não entra monta,
@@ -8,7 +6,12 @@
 
    `estado.usuario` é null pra anônimo, e null NÃO é erro aqui. */
 
-async function carregarConta(){
+import {$} from "../comum/dom.js";
+import {estado} from "./estado.js";
+import {api} from "./salvar.js";
+import {toast} from "./utilidades.js";
+
+export async function carregarConta(){
   try {
     estado.usuario = (await api("/conta")).usuario || null;
   } catch (e){
@@ -58,7 +61,7 @@ async function reclamarDeck(){
   }
 }
 
-function ligarOrfao(){
+export function ligarOrfao(){
   $("orfao-sim").addEventListener("click", reclamarDeck);
   $("orfao-nao").addEventListener("click", () => {
     $("orfao-fundo").hidden = true;

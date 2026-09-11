@@ -1,6 +1,10 @@
-"use strict";
-
 /* --------------------------------------------------------- nível de poder */
+
+import {$, escapar} from "../comum/dom.js";
+import {assinaturaDoDeck} from "./combos.js";
+import {estado} from "./estado.js";
+import {api, salvarAgora} from "./salvar.js";
+import {toast, totalCartas} from "./utilidades.js";
 
 const BRACKETS = [
   [1, "Exibição",  "Deck de mesa leve: sem combo, sem game changer."],
@@ -11,7 +15,7 @@ const BRACKETS = [
                    "intenção de quem monta, não pela lista de cartas."],
 ];
 
-async function estimarPoder(){
+export async function estimarPoder(){
   if (!estado.comandantes.length && !estado.cartas.length){
     toast("Monte alguma coisa antes de estimar o nível.");
     return;
@@ -31,7 +35,7 @@ async function estimarPoder(){
   desenharPoder();
 }
 
-function desenharPoder(){
+export function desenharPoder(){
   const caixa = $("poder-resultado");
   const p = estado.poder;
   if (!p){ caixa.innerHTML = ""; return; }

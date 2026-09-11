@@ -25,8 +25,9 @@ Quatro coisas que este teste persegue:
    deste tipo de tela.
 
 COMO ELE RODA. Igual ao `test_deckbuilder.py`: o JavaScript da página (os
-arquivos de `app/static/deckbuilder/`, na ordem do HTML) roda num
-interpretador (Duktape, via `dukpy`) sobre um DOM de mentira. Não sobe servidor, não abre navegador e não vai à rede.
+módulos da página, achatados na ordem em que o navegador os avalia) roda num
+interpretador (Duktape, via `dukpy`) sobre um DOM de mentira. Não sobe
+servidor, não abre navegador e não vai à rede.
 
     pip install dukpy
     python tests/test_goldfish.py

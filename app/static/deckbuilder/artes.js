@@ -1,5 +1,3 @@
-"use strict";
-
 /* =========================================================================
    ESCOLHER A ARTE
 
@@ -28,6 +26,14 @@
    busca vai como "t:Nome" (`nomeDaBusca`), e a escolha é guardada pela chave
    da ficha, não pelo nome (`nomeDaArte`).
    ========================================================================= */
+
+import {$, escapar} from "../comum/dom.js";
+import {desenharDeck, desenharMaybe} from "./desenho.js";
+import {estado} from "./estado.js";
+import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
+import {api} from "./salvar.js";
+import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
+import {ico, toast} from "./utilidades.js";
 
 const ARTES_POR_PAGINA = 24;
 // Guardado no navegador pelo mesmo motivo da coluna do maybeboard: é jeito de
@@ -75,11 +81,11 @@ function chaveDaArte(nome){
 /* O nome sob o qual a arte é guardada no servidor. A carta é o próprio nome;
    a ficha é a `chave_arte` que o servidor devolve com ela, porque nome não
    identifica ficha (ver `artes.chave_da_ficha`). */
-function nomeDaArte(carta){
+export function nomeDaArte(carta){
   return carta.chaveArte || carta.nome;
 }
 
-function arteEscolhida(carta, face){
+export function arteEscolhida(carta, face){
   if (!carta) return null;
   return (arte.escolhas[chaveDaArte(nomeDaArte(carta))] || {})[face || "frente"] || null;
 }
@@ -87,7 +93,7 @@ function arteEscolhida(carta, face){
 /* Duas faces DE PAPEL, e não de texto: carta partida e aventura têm duas
    metades numa imagem só, e a base local já devolve o verso vazio pra elas
    (ver `cartas._imagem_verso`). */
-function temVerso(carta){
+export function temVerso(carta){
   return !!(carta && carta.imagem_verso);
 }
 
@@ -113,7 +119,7 @@ function miniaturaDoDrive(id, largura){
    e a arte padrão da Scryfall quando não. É o que a prévia do hover e a
    galeria mostram — ver a arte oficial no lugar da que se escolheu faria a
    escolha parecer não ter pegado. */
-function imagemDaFace(carta, face, largura){
+export function imagemDaFace(carta, face, largura){
   const escolha = arteEscolhida(carta, face);
   if (escolha) return miniaturaDoDrive(escolha.drive_id, largura || 500);
   return (face === "verso" ? carta.imagem_verso : carta.imagem) || "";
@@ -123,7 +129,7 @@ function imagemDaFace(carta, face, largura){
    ícone quando está no padrão: ver de relance o que já foi customizado é
    metade do valor. É o botão da FRENTE; o verso se escolhe dentro da modal,
    ou pelo quadro dele na aba Artes. */
-function botaoDeArte(carta){
+export function botaoDeArte(carta){
   const escolha = arteEscolhida(carta);
   const nome = escapar(carta.nome);
   const fundo = escolha
@@ -147,7 +153,7 @@ function redesenharArtes(){
 
 /* As escolhas do deck inteiro, uma vez, ao abrir. Sem rede por linha: a lista
    desenha 100 botões e uma consulta por botão seria 100 requisições. */
-async function carregarArtes(){
+export async function carregarArtes(){
   if (!estado.id) return;
   try {
     const r = await api(`/decks/${estado.id}/artes`);
@@ -167,7 +173,7 @@ function acharCartaDaArte(nome){
     fichasDoDeck().find(f => f.chaveArte === nome) || null;
 }
 
-async function abrirEscolhaDeArte(nome, face){
+export async function abrirEscolhaDeArte(nome, face){
   const carta = acharCartaDaArte(nome);
   if (!carta) return;
   if (!estado.id) return toast("Salve o deck antes de escolher artes.");
@@ -341,7 +347,7 @@ function montarFiltroDeFonte(){
    Fire // Ice) é impressa de lado e a imagem vem em pé, com o texto de lado:
    a moldura toma a proporção da carta DEITADA e a imagem gira dentro dela —
    o mesmo giro da prévia e da modal da carta. */
-function quadroHTML(src, deitada, extra){
+export function quadroHTML(src, deitada, extra){
   return `<span class="quadro ${deitada ? "deitada" : ""}">${src
     ? `<img src="${escapar(src)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
     : ""}${extra || ""}</span>`;
@@ -577,14 +583,14 @@ function travarRolagem(ligar){
   raiz.classList.toggle("sem-rolar", ligar);
 }
 
-function fecharArte(){
+export function fecharArte(){
   $("arte-fundo").hidden = true;
   arte.carta = null;
   arte.busca = "";
   travarRolagem(false);
 }
 
-function ligarArte(){
+export function ligarArte(){
   $("arte-fechar").addEventListener("click", fecharArte);
   $("arte-fundo").addEventListener("click", (e) => {
     if (e.target.id === "arte-fundo") fecharArte();

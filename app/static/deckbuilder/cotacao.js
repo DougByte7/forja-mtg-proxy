@@ -1,10 +1,15 @@
-"use strict";
-
 /* --------------------------------------------------------------- orçamento */
+
+import {$, escapar} from "../comum/dom.js";
+import {desenharDeck} from "./desenho.js";
+import {estado} from "./estado.js";
+import {agendarCotacao, assinaturaDeCotacao,
+        desenharPreviaOrcamento} from "./orcamento.js";
+import {api, salvarAgora} from "./salvar.js";
 
 let cotacaoTimer = null;
 
-async function cotar(){
+export async function cotar(){
   if (estado.cotacaoRodando) return;
   if (!estado.id) await salvarAgora();
   if (!estado.id) return;
@@ -116,7 +121,7 @@ function desenharCotacao(){
 
 /* ------------------------------------------------- popover da cotação */
 
-function alternarCotacao(){
+export function alternarCotacao(){
   const caixa = $("cotacao-caixa");
   if (!caixa.hidden) return fecharCotacao();
   caixa.hidden = false;
@@ -129,7 +134,7 @@ function alternarCotacao(){
   $("btn-cotacao").setAttribute("aria-expanded", "true");
 }
 
-function fecharCotacao(){
+export function fecharCotacao(){
   $("cotacao-caixa").hidden = true;
   $("btn-cotacao").setAttribute("aria-expanded", "false");
 }

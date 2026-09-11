@@ -1,5 +1,3 @@
-"use strict";
-
 /* ------------------------------------------------------------------ tokens
 
    A aba responde uma pergunta que só aparece no fim da montagem: "o que eu
@@ -13,7 +11,15 @@
    Agrupado por carta que cria, e não numa lista única: a mesma ficha pedida
    por duas cartas continua sendo duas linhas da conta, porque tirar uma das
    duas do deck não tira a ficha da caixa. */
-async function buscarTokens(){
+
+import {$, escapar} from "../comum/dom.js";
+import {ganchosDaPrevia} from "./carta.js";
+import {assinaturaDoDeck} from "./combos.js";
+import {estado} from "./estado.js";
+import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
+import {api, salvarAgora} from "./salvar.js";
+import {toast} from "./utilidades.js";
+export async function buscarTokens(){
   if (!estado.comandantes.length) return;
   if (!estado.id) await salvarAgora();
   if (!estado.id){
@@ -54,7 +60,7 @@ async function buscarTokens(){
    a cada desenho, e o autosave redesenha a cada carta. */
 const fichasMontadas = {de: null, lista: []};
 
-function fichasDoDeck(){
+export function fichasDoDeck(){
   const dados = estado.tokens;
   if (dados && fichasMontadas.de === dados) return fichasMontadas.lista;
   const vistas = new Map();
@@ -77,7 +83,7 @@ function fichasDoDeck(){
 /* "Wurm 3/3": o nome sozinho não distingue ficha, e o corpo é o que se
    reconhece de relance. O resto (tipo, texto) mora no título do quadro e na
    vitrine da modal. */
-function rotuloDaFicha(f){
+export function rotuloDaFicha(f){
   return f.nome + (f.poder && f.resistencia ? ` ${f.poder}/${f.resistencia}` : "");
 }
 

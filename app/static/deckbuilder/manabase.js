@@ -1,8 +1,16 @@
-"use strict";
-
 /* ------------------------------------------------------------- mana base */
 
-async function analisarManabase(){
+import {$, escapar} from "../comum/dom.js";
+import {ganchosDaPrevia} from "./carta.js";
+import {desenharTudo} from "./desenho.js";
+import {acharEntrada, guardarDesfazer} from "./edicao.js";
+import {estado, NOME_COR} from "./estado.js";
+import {trocarAba} from "./paineis.js";
+import {moeda, notaDoCambio} from "./preco.js";
+import {agendarSalvar, api, salvarAgora} from "./salvar.js";
+import {ico, preco, toast} from "./utilidades.js";
+
+export async function analisarManabase(){
   if (!estado.comandantes.length){
     toast("Escolha o comandante primeiro: é a identidade dele que define as cores.");
     return;
@@ -28,7 +36,7 @@ async function analisarManabase(){
   desenharManabase();
 }
 
-function desenharManabase(){
+export function desenharManabase(){
   const caixa = $("mb-resultado");
   const m = estado.manabase;
   if (!m){ $("mb-nota").hidden = false; caixa.innerHTML = ""; return; }
@@ -145,11 +153,11 @@ function desenharManabase(){
   caixa.innerHTML = html;
 }
 
-let fixadoresPlanos = [];
+export let fixadoresPlanos = [];
 
 /* Põe N cópias de uma vez — é o que "+3 Forest" faz. Uma entrada só de
    desfazer, senão Ctrl+Z tiraria uma floresta por vez. */
-function adicionarQuantidade(carta, n){
+export function adicionarQuantidade(carta, n){
   guardarDesfazer();
   const entrada = acharEntrada(carta.nome);
   if (entrada) entrada.quantidade += n;
@@ -162,7 +170,7 @@ function adicionarQuantidade(carta, n){
 /* O atalho no cabeçalho de Terrenos. Ele não abre painel nenhum: rola até o
    que já existe embaixo do deck e o faz piscar, porque duas mana bases na
    mesma tela seriam duas respostas pra mesma pergunta. */
-function chamarManabase(){
+export function chamarManabase(){
   trocarAba("manabase");
   const painel = $("painel-manabase");
   painel.scrollIntoView({behavior: "smooth", block: "nearest"});

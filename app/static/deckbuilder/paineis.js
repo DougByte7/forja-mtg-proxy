@@ -1,5 +1,3 @@
-"use strict";
-
 /* ------------------------------------------------------------------- abas
 
    Duas fitas de abas, e as duas funcionam do mesmo jeito: a que está ativa
@@ -7,6 +5,16 @@
    os painéis do centro são desenhados a cada mudança do deck, estejam à
    vista ou não, senão abrir "Análise" mostraria o deck de dois minutos atrás
    por um quadro. */
+
+import {$} from "../comum/dom.js";
+import {assinaturaDoDeck, procurarCombos} from "./combos.js";
+import {estado} from "./estado.js";
+import {desenharMesa} from "./goldfish.js";
+import {analisarManabase} from "./manabase.js";
+import {estimarPoder} from "./poder.js";
+import {buscarSugestoes} from "./sugestoes.js";
+import {buscarTokens} from "./tokens.js";
+import {ico} from "./utilidades.js";
 /* Abrir a aba é o pedido: quem clica em "Análise" quer a análise inteira,
    nível de poder incluído, não um botão que promete o nível. A conta só sai se
    ainda não houver resposta ou se o deck tiver mudado desde a última — trocar
@@ -36,7 +44,7 @@ function rodarAoAbrir(nome){
   if (nome === "goldfish") return desenharMesa();
 }
 
-function trocarAba(nome){
+export function trocarAba(nome){
   estado.aba = nome;
   const fita = $("abas-deck");
   for (const b of fita.children){
@@ -50,7 +58,7 @@ function trocarAba(nome){
   rodarAoAbrir(nome);
 }
 
-function trocarRail(nome){
+export function trocarRail(nome){
   estado.rail = nome;
   const fita = $("abas-rail");
   for (const b of fita.children){
@@ -73,19 +81,19 @@ function trocarRail(nome){
    A busca não é uma coluna no telefone: é uma tarefa que se abre por cima do
    deck, se usa e se fecha. O `inert` do resto da página não é enfeite — sem
    ele o Tab sai da folha e vai parar na lista do deck por baixo dela. */
-function abrirFolha(){
+export function abrirFolha(){
   $("lateral").classList.add("aberta");
   $("folha-fundo").classList.add("aberta");
   trocarRail(estado.rail);
   setTimeout(() => $("busca").focus(), 220);
 }
 
-function fecharFolha(){
+export function fecharFolha(){
   $("lateral").classList.remove("aberta");
   $("folha-fundo").classList.remove("aberta");
 }
 
-function folhaAberta(){
+export function folhaAberta(){
   return $("lateral").classList.contains("aberta");
 }
 
@@ -94,9 +102,9 @@ function folhaAberta(){
    Recolher fica guardado no navegador: quem não usa maybeboard recolhe uma
    vez e recupera a coluna pra sempre, e quem usa não recolhe nunca. Refazer
    essa escolha a cada visita seria cobrar por uma decisão já tomada. */
-const CHAVE_TALVEZ = "forja.deck.talvez-aberto";
+export const CHAVE_TALVEZ = "forja.deck.talvez-aberto";
 
-function recolherTalvez(forcar){
+export function recolherTalvez(forcar){
   const corpo = $("corpo");
   const fechado = forcar !== undefined ? forcar
     : !corpo.classList.contains("talvez-fechado");

@@ -1,5 +1,3 @@
-"use strict";
-
 /* -------------------------------------------------------------- arrastar
 
    Atalho de quem tem mouse, nunca o único caminho: no toque não existe
@@ -7,9 +5,13 @@
    grupo (muda a categoria, e o tabuleiro se for o outro) ou em cima da
    coluna do maybeboard (que aceita a carta na categoria em que ela já
    estava). */
+
+import {acharEntrada, definirCategoria, mover} from "./edicao.js";
+import {CATEGORIAS_FORA_DA_CONTA} from "./estado.js";
+import {categoriaAutomatica, ehPropria} from "./utilidades.js";
 let arrastando = null;
 
-function ligarArrastar(){
+export function ligarArrastar(){
   document.addEventListener("dragstart", (e) => {
     const linha = e.target.closest?.(".linha");
     if (!linha){ return; }

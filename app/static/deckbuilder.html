@@ -610,37 +610,11 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<!-- A ordem das tags é a ordem de carga, e ela importa numa direção só:
-     o código que roda na carga (constantes, o `abrir()` do fim) só enxerga o
-     que os arquivos ANTERIORES já declararam. Dentro das funções não há
-     ordem — quando elas rodam, a página inteira já carregou. Os testes de JS
-     leem esta mesma lista, nesta ordem. -->
-<script src="/deckbuilder/estado.js"></script>
-<script src="/deckbuilder/utilidades.js"></script>
-<script src="/deckbuilder/preco.js"></script>
-<script src="/deckbuilder/artes.js"></script>
-<script src="/deckbuilder/galeria.js"></script>
-<script src="/deckbuilder/goldfish.js"></script>
-<script src="/deckbuilder/conta.js"></script>
-<script src="/deckbuilder/orcamento.js"></script>
-<script src="/deckbuilder/salvar.js"></script>
-<script src="/deckbuilder/desenho.js"></script>
-<script src="/deckbuilder/paineis.js"></script>
-<script src="/deckbuilder/edicao.js"></script>
-<script src="/deckbuilder/menus.js"></script>
-<script src="/deckbuilder/arrastar.js"></script>
-<script src="/deckbuilder/busca.js"></script>
-<script src="/deckbuilder/filtros.js"></script>
-<script src="/deckbuilder/cotacao.js"></script>
-<script src="/deckbuilder/sugestoes.js"></script>
-<script src="/deckbuilder/chances.js"></script>
-<script src="/deckbuilder/manabase.js"></script>
-<script src="/deckbuilder/poder.js"></script>
-<script src="/deckbuilder/tokens.js"></script>
-<script src="/deckbuilder/combos.js"></script>
-<script src="/deckbuilder/importar-exportar.js"></script>
-<script src="/deckbuilder/eventos.js"></script>
-<script src="/deckbuilder/carta.js"></script>
-<script src="/deckbuilder/abertura.js"></script>
+<!-- O JavaScript é um grafo de módulos ES: a página carrega só a entrada, e
+     cada arquivo importa o que usa. O importmap vazio é onde a rota
+     /deckbuilder põe a versão de cada arquivo (ver `main.py`); servida como
+     arquivo estático, a página funciona igual, só que sem as versões. -->
+<script type="importmap">{"imports": {}}</script>
+<script type="module" src="/deckbuilder/abertura.js"></script>
 </body>
 </html>

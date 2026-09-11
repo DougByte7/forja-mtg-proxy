@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import os
 import re
 import threading
@@ -788,19 +789,39 @@ def get_cotacao(job_id: str):
 # `cartas.py`), porque busca-a-cada-tecla contra a API de fora seria o jeito
 # mais rápido de levar 429 em cima de quem só está digitando.
 #
-# O CSS e os scripts moram em `app/static/deckbuilder/`, e a página sai daqui
-# com o hash de cada um na URL (`?v=`) e com `no-cache`. É esse par que impede
-# um deploy de misturar HTML novo com JS velho: o navegador sempre confere a
-# página, e ela aponta pra versão exata de cada arquivo — que, com o hash na
-# URL, pode ficar no cache à vontade.
+# O CSS e os módulos JS moram em `app/static/deckbuilder/` e
+# `app/static/comum/`, e a página sai daqui com a versão de cada arquivo
+# (`?v=` + hash do conteúdo) e com `no-cache`. É esse par que impede um deploy
+# de misturar HTML novo com JS velho: o navegador sempre confere a página, e
+# ela aponta pra versão exata de cada arquivo — que, com o hash na URL, pode
+# ficar no cache à vontade.
+#
+# O `src` e o `href` da página ganham a versão direto. Os `import` de dentro
+# dos módulos não passam por aqui: quem os versiona é o importmap, que leva a
+# URL de cada módulo pra URL com versão. O `modulepreload` vai junto pra o
+# navegador pedir os módulos todos de uma vez, e não um nível do grafo por
+# viagem de rede.
 
-_ARQUIVO_DO_DECKBUILDER = re.compile(r'(src|href)="/(deckbuilder/[^"?]+)"')
+_PASTAS_DO_DECKBUILDER = ("deckbuilder", "comum")
+_ARQUIVO_DO_DECKBUILDER = re.compile(
+    r'(src|href)="(/(?:deckbuilder|comum)/[^"?]+)"')
+_IMPORTMAP_VAZIO = '<script type="importmap">{"imports": {}}</script>'
 
 
-def _com_versao(m):
-    with open(os.path.join("app/static", m[2]), "rb") as f:
-        versao = hashlib.sha256(f.read()).hexdigest()[:12]
-    return f'{m[1]}="/{m[2]}?v={versao}"'
+def _versionada(url):
+    """`/deckbuilder/x.js` → `/deckbuilder/x.js?v=<hash do conteúdo>`."""
+    with open(os.path.join("app/static", url.lstrip("/")), "rb") as f:
+        return f"{url}?v={hashlib.sha256(f.read()).hexdigest()[:12]}"
+
+
+def _importmap_do_deckbuilder():
+    versoes = {url: _versionada(url) for url in sorted(
+        f"/{pasta}/{nome}" for pasta in _PASTAS_DO_DECKBUILDER
+        for nome in os.listdir(os.path.join("app/static", pasta))
+        if nome.endswith(".js"))}
+    return "\n".join(
+        [f'<script type="importmap">{json.dumps({"imports": versoes})}</script>']
+        + [f'<link rel="modulepreload" href="{v}">' for v in versoes.values()])
 
 
 @app.get("/deckbuilder", response_class=HTMLResponse)
@@ -808,7 +829,10 @@ def deckbuilder_page():
     """A página do deckbuilder. Igual ao /admin: fica antes do mount estático
     pra a URL ser /deckbuilder, sem o .html."""
     with open("app/static/deckbuilder.html", encoding="utf-8") as f:
-        html = _ARQUIVO_DO_DECKBUILDER.sub(_com_versao, f.read())
+        html = f.read()
+    html = _ARQUIVO_DO_DECKBUILDER.sub(
+        lambda m: f'{m[1]}="{_versionada(m[2])}"', html)
+    html = html.replace(_IMPORTMAP_VAZIO, _importmap_do_deckbuilder())
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 

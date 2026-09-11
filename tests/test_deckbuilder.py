@@ -21,8 +21,9 @@ Três divergências custam caro, e são as três que este teste persegue:
    não desenha continua no deck, no contador e na cotação — invisível e
    paga. É o pior estrago possível aqui, e o mais silencioso.
 
-COMO ELE RODA. O JavaScript da página — os arquivos de
-`app/static/deckbuilder/`, na ordem em que o HTML os carrega — é executado num
+COMO ELE RODA. O JavaScript da página — os módulos de
+`app/static/deckbuilder/` e `app/static/comum/`, achatados na ordem em que o
+navegador os avalia (ver `js_do_deckbuilder.py`) — é executado num
 interpretador (Duktape, via `dukpy`) sobre um DOM de mentira: as funções de
 desenho e de estado não tocam em nada além do que este arquivo lhes dá. Não
 abre navegador e não vai à rede. Com o `fastapi` instalado, confere também a
@@ -42,7 +43,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from js_do_deckbuilder import ESTATICO, arquivos, js_da_pagina, sem_abrir
+from js_do_deckbuilder import (ESTATICO, PAGINA, arquivos, js_da_pagina,
+                               sem_abrir, sem_modulo)
 
 RAIZ = Path(__file__).resolve().parents[1]
 
@@ -210,15 +212,16 @@ def grupos_desenhados(html):
 
 
 def carregar_um_por_um():
-    """Carrega os scripts do jeito do navegador: um de cada vez, todos no
-    mesmo escopo global. Devolve `(arquivo, erro)` do primeiro que quebrar, ou
-    None. É o que pega a função chamada na carga por um arquivo que vem ANTES
-    do que a declara — com tudo emendado num script só, esse erro não existe."""
+    """Avalia os módulos um de cada vez, na ordem em que o navegador os
+    avalia, cada um enxergando só o que os anteriores já declararam. Devolve
+    `(arquivo, erro)` do primeiro que quebrar, ou None. É o que pega o módulo
+    que usa, na carga, um nome de outro que ainda não foi avaliado — com o
+    grafo achatado num script só, esse erro não existe."""
     interpretador = dukpy.JSInterpreter()
     interpretador.evaljs(_DOM)
     lista = arquivos()
     for i, caminho in enumerate(lista):
-        codigo = caminho.read_text(encoding="utf-8")
+        codigo = '"use strict";\n' + sem_modulo(caminho.read_text(encoding="utf-8"))
         if i == len(lista) - 1:
             codigo = sem_abrir(codigo)
         try:
@@ -230,25 +233,23 @@ def carregar_um_por_um():
 
 try:
     # ---------------------------------------------------- a página em partes
-    print("\n--- a página, arquivo por arquivo ---")
+    print("\n--- a página, módulo por módulo ---")
+    # A página carrega a entrada e só: o resto chega pelos `import`. Um
+    # `<script src>` comum a mais rodaria fora do grafo, num escopo que os
+    # módulos não enxergam.
+    eq("a página carrega o JS só pela entrada, como módulo",
+       re.findall(r'<script type="([^"]+)"',
+                  PAGINA.read_text(encoding="utf-8")),
+       ["importmap", "module"])
     lista = arquivos()
-    check("a página carrega os scripts por arquivo", len(lista) > 1, len(lista))
-    faltando = [p.name for p in lista if not p.exists()]
-    eq("todo script que a página pede existe", faltando, [])
-    # Um arquivo na pasta que a página não pede é código que não roda — e que
-    # nenhum teste roda, porque a lista dos testes sai da página.
-    fora = sorted({p.name for p in (ESTATICO / "deckbuilder").glob("*.js")}
-                  - {p.name for p in lista})
-    eq("todo script da pasta está na página", fora, [])
-    if not faltando:
-        # O "use strict" vale só pro arquivo em que está. Sem ele, atribuir a
-        # um nome não declarado cria uma global calada em vez de dar erro.
-        eq("todo script liga o modo estrito",
-           [p.name for p in lista
-            if not p.read_text(encoding="utf-8").startswith('"use strict";')],
-           [])
-        eq("carregados um de cada vez, como no navegador, nenhum quebra",
-           carregar_um_por_um(), None)
+    check("a entrada leva ao grafo inteiro", len(lista) > 1, len(lista))
+    # Um arquivo na pasta que nenhum `import` alcança é código que não roda —
+    # e que nenhum teste roda, porque a lista dos testes sai do grafo.
+    fora = sorted(p.name for p in (ESTATICO / "deckbuilder").glob("*.js")
+                  if p.resolve() not in lista)
+    eq("todo módulo da pasta é alcançado pela entrada", fora, [])
+    eq("avaliados um de cada vez, na ordem do navegador, nenhum quebra",
+       carregar_um_por_um(), None)
 
     # ------------------------------------------------------- o que aparece
     print("\n--- a lista, agrupada ---")
@@ -586,12 +587,25 @@ try:
         check("a página sai com no-cache",
               "no-cache" in r.headers.get("cache-control", ""),
               r.headers.get("cache-control"))
-        urls = re.findall(r'(?:src|href)="(/deckbuilder/[^"]+)"', r.text)
-        eq("pede o CSS e todos os scripts", len(urls), len(arquivos()) + 1)
-        eq("cada arquivo sai com a versão na URL",
+        urls = re.findall(r'(?:src|href)="(/(?:deckbuilder|comum)/[^"]+)"',
+                          r.text)
+        eq("cada arquivo que a página pede sai com a versão na URL",
            [u for u in urls if not re.search(r"\?v=[0-9a-f]{12}$", u)], [])
+        # Os `import` de dentro dos módulos não passam pela página: quem os
+        # versiona é o importmap. Módulo fora dele é pedido sem versão, e o
+        # navegador pode responder com um velho do cache.
+        mapa = json.loads(re.search(r'<script type="importmap">(.*?)</script>',
+                                    r.text, re.S)[1])["imports"]
+        modulos = ["/" + p.relative_to(ESTATICO).as_posix() for p in lista]
+        eq("todo módulo do grafo está no importmap, com a versão",
+           [m for m in modulos if not re.fullmatch(
+               re.escape(m) + r"\?v=[0-9a-f]{12}", mapa.get(m, ""))], [])
+        eq("e cada um é pré-carregado, pra não descobrir o grafo aos poucos",
+           sorted(re.findall(r'<link rel="modulepreload" href="([^"]+)">',
+                             r.text)), sorted(mapa.values()))
         eq("e cada URL versionada responde",
-           [u for u in urls if cliente.get(u).status_code != 200], [])
+           sorted(u for u in set(urls) | set(mapa.values())
+                  if cliente.get(u).status_code != 200), [])
 
 except Exception as e:      # noqa: BLE001 — o erro é o resultado do teste
     import traceback

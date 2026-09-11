@@ -232,14 +232,17 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   `/deckbuilder`. Três colunas (maybeboard, deck, busca), categorias próprias
   e as análises embaixo do deck. Ver *Deckbuilder de Commander*. A página
   guarda só a marcação; o CSS e o JavaScript moram em
-  `app/static/deckbuilder/`, um script por assunto (`estado.js`, `busca.js`,
-  `goldfish.js`, `combos.js`…). São scripts comuns, sem módulo e sem build:
-  todos dividem o mesmo escopo global, e a ordem das tags `<script>` na
-  página é a ordem de carga. A rota `/deckbuilder` serve a página com o hash
-  de cada arquivo na URL e com `no-cache`, pra que um deploy nunca misture
-  HTML novo com JS velho. Arquivo novo entra na lista de tags da página — os
-  testes de JS leem essa mesma lista, e acusam arquivo na pasta que ela não
-  pede.
+  `app/static/deckbuilder/`, um módulo ES por assunto (`estado.js`,
+  `busca.js`, `goldfish.js`, `combos.js`…), sem build. A página carrega só a
+  entrada (`abertura.js`), e cada módulo importa o que usa e exporta só o que
+  outro módulo importa — o resto é privado dele. O que é igual em todas as
+  páginas mora em `app/static/comum/` (hoje, `$` e `escapar`). A rota
+  `/deckbuilder` serve a página com `no-cache` e com a versão de cada
+  arquivo: direto no `src`/`href`, e num importmap pros `import` de dentro
+  dos módulos, pra que um deploy nunca misture HTML novo com JS velho.
+  Módulo novo só precisa ser importado por alguém; os testes seguem o mesmo
+  grafo a partir da entrada, e acusam arquivo na pasta que nenhum `import`
+  alcança.
 - `app/cartas.py` — a cópia local do bulk data da Scryfall (busca instantânea
   sem tocar na API deles) e a sincronização diária que a mantém.
 - `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
@@ -337,15 +340,27 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `tests/test_deckbuilder.py` — as mesmas regras do outro lado: as de
   categoria, sideboard e maybeboard existem DUAS vezes, porque a tela responde
   ao clique sem esperar a rede. Este teste roda o JavaScript da página (os
-  arquivos de `app/static/deckbuilder/`, na ordem em que o HTML os carrega)
-  num interpretador, sobre um DOM de mentira, pra que as duas
-  implementações não divirjam calado — e confere que nenhuma carta pode ficar
-  invisível na lista por causa de uma categoria que não foi desenhada. Também
-  carrega os arquivos um de cada vez, como o navegador, pra pegar código que
-  na carga chama o que só um arquivo posterior declara; e, com o `fastapi`
-  instalado, confere que a rota serve cada arquivo com a versão na URL. Precisa
-  do `dukpy` (`pip install dukpy`; ele não está no `requirements.txt` porque
-  não é dependência do serviço): `python tests/test_deckbuilder.py`.
+  módulos, achatados num script só na ordem em que o navegador os avalia —
+  ver `tests/js_do_deckbuilder.py`) num interpretador, sobre um DOM de
+  mentira, pra que as duas implementações não divirjam calado — e confere que
+  nenhuma carta pode ficar invisível na lista por causa de uma categoria que
+  não foi desenhada. Também avalia os módulos um de cada vez, como o
+  navegador, pra pegar módulo que na carga usa um nome de outro que ainda não
+  foi avaliado; e, com o `fastapi` instalado, confere que a rota serve cada
+  arquivo com a versão, no `src`/`href` e no importmap. Precisa do `dukpy`
+  (`pip install dukpy`; ele não está no `requirements.txt` porque não é
+  dependência do serviço): `python tests/test_deckbuilder.py`.
+- `tests/test_modulos.py` — o que o navegador só confere no clique: que cada
+  módulo do deckbuilder importa o que usa, só importa o que o outro exporta e
+  não atribui a nome importado. Um `import` esquecido não impede o módulo de
+  carregar; ele vira `ReferenceError` quando a função roda, e os testes de JS
+  não o veem, porque rodam o grafo achatado. Confere também a forma estreita
+  (`import {a, b} from "./x.js";`, `export` na frente da declaração, nenhum
+  nome de topo repetido entre módulos) que deixa esse achatamento ser fiel,
+  e a sobra: import sem uso e export que ninguém importa. Lê os módulos com o
+  tree-sitter, sem executar nada (`pip install tree-sitter
+  tree-sitter-javascript`; fora do `requirements.txt` pelo mesmo motivo do
+  `dukpy`): `python tests/test_modulos.py`.
 - `tests/test_spellbook.py` — o cliente do Commander Spellbook contra uma
   resposta sintética no formato real: o `GET` com corpo, a leitura do
   camelCase dentro de `results`, a conta de qual peça está faltando e o que

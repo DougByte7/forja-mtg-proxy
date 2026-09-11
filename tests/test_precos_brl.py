@@ -22,8 +22,9 @@ persegue:
    vezes mais (ou menos) do que a pessoa pediu, e nada na tela denuncia.
 
 COMO ELE RODA. Igual ao `test_deckbuilder.py`: o JavaScript da página (os
-arquivos de `app/static/deckbuilder/`, na ordem do HTML) roda num
-interpretador (Duktape, via `dukpy`) sobre um DOM de mentira. Não sobe servidor, não abre navegador e não vai à rede.
+módulos da página, achatados na ordem em que o navegador os avalia) roda num
+interpretador (Duktape, via `dukpy`) sobre um DOM de mentira. Não sobe
+servidor, não abre navegador e não vai à rede.
 
     pip install dukpy
     python tests/test_precos_brl.py

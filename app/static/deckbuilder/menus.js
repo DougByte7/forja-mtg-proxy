@@ -1,5 +1,3 @@
-"use strict";
-
 /* ----------------------------------------------------------------- menus
 
    Um menu ancorado no botão que o abriu, ou no ponto do clique direito. O
@@ -11,9 +9,17 @@
    de categorias muda a cada carta, e um menu guardado teria que ser
    sincronizado — que é o mesmo trabalho, feito duas vezes. */
 
-let menuAberto = null;
+import {escapar} from "../comum/dom.js";
+import {abrirEscolhaDeArte} from "./artes.js";
+import {abrirCarta} from "./carta.js";
+import {acharEntrada, apagarCategoria, criarCategoria, definirCategoria, mover,
+        moverCategoria, renomearCategoria, tirar} from "./edicao.js";
+import {CATEGORIA_SIDEBOARD, estado} from "./estado.js";
+import {categoriaAutomatica, ico} from "./utilidades.js";
 
-function fecharMenu(){
+export let menuAberto = null;
+
+export function fecharMenu(){
   if (!menuAberto) return;
   menuAberto.remove();
   menuAberto = null;
@@ -27,7 +33,7 @@ function fecharMenu(){
    Ctrl+clique e mostra o destino no hover, como qualquer link. O `aoClicar`
    dele é opcional e recebe o evento — pra desistir da ida com
    `preventDefault`. */
-function abrirMenu(ancora, itens){
+export function abrirMenu(ancora, itens){
   fecharMenu();
   const menu = document.createElement("div");
   menu.className = "menu";
@@ -73,7 +79,7 @@ function abrirMenu(ancora, itens){
 /* O menu de uma carta: categoria, tabuleiro e sair. Nesta ordem porque é a
    ordem da frequência — trocar de categoria é o que se faz o tempo todo,
    tirar do deck é o que se faz uma vez. */
-function menuDaCarta(ancora, nome, tabuleiro){
+export function menuDaCarta(ancora, nome, tabuleiro){
   const entrada = acharEntrada(nome, tabuleiro);
   if (!entrada) return;
   const atual = entrada.categoria || "";
@@ -123,7 +129,7 @@ function menuDaCarta(ancora, nome, tabuleiro){
 
 /* O menu de uma categoria própria. Só as próprias têm: renomear "Criaturas"
    não faria sentido — ela não é um nome, é o tipo da carta. */
-function menuDoGrupo(ancora, cat){
+export function menuDoGrupo(ancora, cat){
   const i = estado.categorias.indexOf(cat);
   const itens = [
     {titulo: cat},

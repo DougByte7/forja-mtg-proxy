@@ -1,5 +1,3 @@
-"use strict";
-
 /* =========================================================================
    GOLDFISH
 
@@ -29,6 +27,11 @@
    de goldfish gravada no deck é uma mão que volta três semanas depois, em outra
    máquina, no meio de uma edição.
    ========================================================================= */
+
+import {$, escapar} from "../comum/dom.js";
+import {abrirCarta, ganchosDaPrevia} from "./carta.js";
+import {estado} from "./estado.js";
+import {cartasContadas, toast} from "./utilidades.js";
 
 const MAO_INICIAL = 7;
 
@@ -190,7 +193,7 @@ function gfGuardar(){
   if (estado.mesaDesfazer.length > 20) estado.mesaDesfazer.shift();
 }
 
-function desfazerMesa(){
+export function desfazerMesa(){
   const foto = estado.mesaDesfazer.pop();
   if (!foto) return;
   estado.mesa = JSON.parse(foto);
@@ -220,7 +223,7 @@ function gfFilaHTML(lista, zona, vazio){
     lista.map(c => gfCartaHTML(c, zona)).join("")}</div>`;
 }
 
-function desenharMesa(){
+export function desenharMesa(){
   const alvo = $("gf-mesa");
   const m = estado.mesa;
   if (!m){
@@ -359,7 +362,7 @@ function gfVerZona(zona){
   toast(lista.map(c => (c.carta && c.carta.nome) || "?").join(", "));
 }
 
-function ligarGoldfish(){
+export function ligarGoldfish(){
   $("gf-embaralhar").addEventListener("click", () => {
     if (!cartasContadas().length && !estado.comandantes.length){
       return toast("Monte o deck primeiro.");

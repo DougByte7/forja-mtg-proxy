@@ -1,5 +1,3 @@
-"use strict";
-
 /* ------------------------------------------------------------- sugestões
 
    As cartas vêm do EDHREC já filtradas pelo servidor (sem o que o deck tem,
@@ -15,7 +13,20 @@
    nenhuma carta listada denuncia de qual das duas veio — por isso a resposta
    traz `alvo` e o cabeçalho o diz por extenso. */
 
-async function buscarSugestoes({tema = null, carta = null} = {}){
+import {$, escapar} from "../comum/dom.js";
+import {ganchosDaPrevia} from "./carta.js";
+import {estado} from "./estado.js";
+import {aplicarImportado,
+        mostrarResultadoImportacao} from "./importar-exportar.js";
+import {abrirFolha, folhaAberta, trocarRail} from "./paineis.js";
+import {api, salvarAgora, salvarJa} from "./salvar.js";
+import {ico, manaHTML, preco, toast} from "./utilidades.js";
+
+// As cartas das sugestões, achatadas numa lista só — é o que o clique usa
+// pra adicionar, igual ao `ultimosResultados` da busca.
+export let sugestoesPlanas = [];
+
+export async function buscarSugestoes({tema = null, carta = null} = {}){
   if (!estado.comandantes.length){
     toast("Escolha o comandante primeiro: é ele que define o que combina.");
     return;
@@ -58,13 +69,13 @@ async function buscarSugestoes({tema = null, carta = null} = {}){
    depois, porque `trocarRail` também busca sugestão quando a aba chega vazia:
    com o pedido já em voo ele vê a bandeira e não pergunta a mesma coisa duas
    vezes pra dois alvos diferentes. */
-function sugerirPelaCarta(nome){
+export function sugerirPelaCarta(nome){
   buscarSugestoes({carta: nome});
   trocarRail("sugestoes");
   if (window.innerWidth <= 900 && !folhaAberta()) abrirFolha();
 }
 
-function desenharSugestoes(){
+export function desenharSugestoes(){
   const caixa = $("sug-resultado");
   const s = estado.sugestoes;
   if (!s){ caixa.innerHTML = ""; return; }
@@ -170,7 +181,7 @@ function desenharSugestoes(){
    Deck só com o comandante recebe a lista nele mesmo: não há carta pra
    perder. Com carta no deck, vale a regra do importar — pergunta antes, e o
    resultado vira um deck novo, com o de agora intacto em Meus decks. */
-async function importarDeckMedio(){
+export async function importarDeckMedio(){
   if (!estado.comandantes.length){
     toast("Escolha o comandante primeiro: o deck médio é dele.");
     return;

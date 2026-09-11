@@ -1,5 +1,3 @@
-"use strict";
-
 /* ----------------------------------------------------------------- combos
 
    Uma consulta só ao Commander Spellbook, e só no clique: o deck muda a cada
@@ -7,19 +5,27 @@
    serviço gratuito. Por isso a tela guarda a assinatura do deck de quando a
    busca rodou e, quando ela deixa de bater, avisa em vez de rebuscar. */
 
+import {$, escapar} from "../comum/dom.js";
+import {ganchosDaPrevia} from "./carta.js";
+import {adicionar} from "./edicao.js";
+import {estado} from "./estado.js";
+import {moeda, notaDoCambio} from "./preco.js";
+import {api, salvarAgora} from "./salvar.js";
+import {cartasContadas, ico, manaEmTexto, toast} from "./utilidades.js";
+
 /* O deck como o servidor o viu quando a busca rodou. Só o que conta: mexer
    no maybeboard ou no sideboard não muda combo nem bracket, e avisar "o deck
    mudou" por causa disso ensinaria a ignorar o aviso. */
 let combosRodando = false;
 
-function assinaturaDoDeck(){
+export function assinaturaDoDeck(){
   return JSON.stringify([
     estado.comandantes.map(c => c.nome).sort(),
     cartasContadas().map(e => [e.carta.nome, e.quantidade]).sort(),
   ]);
 }
 
-async function procurarCombos(){
+export async function procurarCombos(){
   if (!estado.comandantes.length && !estado.cartas.length){
     toast("Monte alguma coisa antes de procurar combos.");
     return;
@@ -64,7 +70,7 @@ async function procurarCombos(){
 
    Eram os dois na mesma coluna, um embaixo do outro, e a segunda lista (a
    longa, a de doze itens) empurrava a primeira pra fora da vista. */
-function desenharCombos(){
+export function desenharCombos(){
   const dados = estado.combos;
   const noDeck = dados?.no_deck || [];
   const faltando = dados?.faltando_uma || [];
@@ -238,7 +244,7 @@ function custoHTML(combo, ehSugestao){
 /* Adiciona a carta que falta pra fechar um combo. O nome vem do Spellbook,
    que usa o nome canônico da Scryfall — o mesmo que a base local guarda —,
    então a resolução é por nome exato e não por busca difusa. */
-async function adicionarPeca(nome, botao){
+export async function adicionarPeca(nome, botao){
   botao.disabled = true;
   try {
     const r = await api("/cartas/busca?" + new URLSearchParams({q: nome, limite: "5"}));

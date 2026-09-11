@@ -1,5 +1,3 @@
-"use strict";
-
 /* ----------------------------------------------------------------- galeria
 
    O deck como ele vai sair do papel: uma imagem por arte a imprimir, com o
@@ -19,6 +17,13 @@
 
    As fichas entram no fim, uma de cada (ver `fichasDoDeck`): vão pro papel
    junto com o deck, e são a parte que se esquece de escolher. */
+
+import {$, escapar} from "../comum/dom.js";
+import {arteEscolhida, imagemDaFace, nomeDaArte, quadroHTML,
+        temVerso} from "./artes.js";
+import {estado} from "./estado.js";
+import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
+import {categoriaDe, ico, ordemDasCategorias} from "./utilidades.js";
 
 // O HTML da última pintura. O autosave redesenha a tela a cada carta, e
 // reescrever cem <img> iguais faria a galeria piscar inteira a cada clique.
@@ -79,7 +84,7 @@ function contaDaGaleria(){
    a arte padrão é imagem da Scryfall, e o PDF só baixa arquivo do Drive.
    Sem id não há deck no servidor pra levar, e ele some junto com o
    Compartilhar. */
-function atualizarBotaoPedido(){
+export function atualizarBotaoPedido(){
   const link = $("btn-pedido");
   link.hidden = !estado.id;
   const {total, escolhidas} = contaDaGaleria();
@@ -92,7 +97,7 @@ function atualizarBotaoPedido(){
     : "O deck ainda não tem carta";
 }
 
-function desenharGaleria(){
+export function desenharGaleria(){
   const caixa = $("galeria-resultado");
   if (!estado.comandantes.length){
     galeriaDesenhada = caixa.innerHTML = "";

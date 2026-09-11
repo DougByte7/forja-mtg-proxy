@@ -1,8 +1,23 @@
-"use strict";
-
 /* ------------------------------------------------------------------- desenhar */
 
-function desenharTudo(){
+import {$, escapar} from "../comum/dom.js";
+import {botaoDeArte} from "./artes.js";
+import {atualizarCategoriasDoDestino} from "./busca.js";
+import {ganchosDaPrevia} from "./carta.js";
+import {desenharChances} from "./chances.js";
+import {desenharCombos} from "./combos.js";
+import {CATEGORIAS_FORA_DA_CONTA, CORES, estado, NOME_COR} from "./estado.js";
+import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
+import {agendarCotacao, desenharPreviaOrcamento, subtotalDoGrupo,
+        subtotalTexto, subtotalTitulo, valorHTML} from "./orcamento.js";
+import {desenharPoder} from "./poder.js";
+import {simboloDaTela} from "./preco.js";
+import {validacaoAtual} from "./salvar.js";
+import {cartasContadas, categoriaAutomatica, categoriaDe, ehPropria, ico,
+        identidadeDoDeck, manaHTML, ordemDasCategorias,
+        totalCartas} from "./utilidades.js";
+
+export function desenharTudo(){
   desenharDeck();
   desenharMaybe();
   desenharGaleria();
@@ -27,7 +42,7 @@ function desenharTudo(){
    fora da identidade, singleton quebrado, banida), cinza é "ainda montando" —
    que não é erro nenhum e por isso não é vermelho. O título diz o que o ponto
    resume, pra quem quiser a frase. */
-function desenharContador(){
+export function desenharContador(){
   const total = totalCartas();
   const v = validacaoAtual();
   const graves = (v.apontamentos || []).filter(
@@ -47,7 +62,7 @@ function desenharContador(){
         : `Faltam ${100 - total} carta(s) pras 100`;
 }
 
-function desenharDeck(){
+export function desenharDeck(){
   const temComandante = estado.comandantes.length > 0;
   $("heroi").hidden = temComandante;
   $("area-deck").hidden = !temComandante;
@@ -87,7 +102,7 @@ function desenharDeck(){
    propósito. Mover uma carta pra cá não pode parecer mudar de programa: é a
    mesma carta, no mesmo deck, com a decisão adiada. O que muda é uma coluna
    só (a área é estreita) e o fato de nada aqui contar em lugar nenhum. */
-function desenharMaybe(){
+export function desenharMaybe(){
   const n = estado.maybe.reduce((soma, e) => soma + e.quantidade, 0);
   $("talvez-n").hidden = !n;
   $("talvez-n").textContent = n;
@@ -242,7 +257,7 @@ function desenharAlertasDoDeck(){
   }).join("");
 }
 
-function desenharAnalise(){
+export function desenharAnalise(){
   const v = validacaoAtual();
   const caixa = $("apontamentos");
   desenharAlertasDoDeck();

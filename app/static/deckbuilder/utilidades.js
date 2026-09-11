@@ -1,8 +1,11 @@
-"use strict";
-
 /* ---------------------------------------------------------------- utilidades */
 
-function toast(msg){
+import {$, escapar} from "../comum/dom.js";
+import {CATEGORIA_SIDEBOARD, CATEGORIAS, CATEGORIAS_FORA_DA_CONTA, CORES,
+        estado, NOME_COR} from "./estado.js";
+import {moeda} from "./preco.js";
+
+export function toast(msg){
   const t = $("toast");
   t.textContent = msg;
   t.classList.add("mostra");
@@ -10,7 +13,7 @@ function toast(msg){
   toast._t = setTimeout(() => t.classList.remove("mostra"), 2200);
 }
 
-function identidadeDoDeck(){
+export function identidadeDoDeck(){
   const cores = new Set();
   estado.comandantes.forEach(c => (c.identidade||"").split("").forEach(x => cores.add(x)));
   return CORES.filter(c => cores.has(c)).join("");
@@ -19,7 +22,7 @@ function identidadeDoDeck(){
 /* As cartas que valem pras 100. Toda conta sobre "o deck" passa por aqui:
    contador, curva, distribuição, assinatura pros combos. O sideboard fica de
    fora, e o maybeboard nem está nesta lista. */
-function cartasContadas(){
+export function cartasContadas(){
   return estado.cartas.filter(e => !foraDaConta(e));
 }
 
@@ -27,13 +30,13 @@ function foraDaConta(entrada){
   return CATEGORIAS_FORA_DA_CONTA.has(entrada.categoria || "");
 }
 
-function totalCartas(){
+export function totalCartas(){
   return estado.comandantes.length +
          cartasContadas().reduce((n, e) => n + e.quantidade, 0);
 }
 
 /* A categoria automática, a que sai do tipo da carta. */
-function categoriaAutomatica(carta){
+export function categoriaAutomatica(carta){
   const t = ((carta && carta.tipo) || "").toLowerCase();
   for (const [nome, casa] of CATEGORIAS) if (casa(t)) return nome;
   return "Outros";
@@ -42,7 +45,7 @@ function categoriaAutomatica(carta){
 /* Onde a carta é desenhada. A escolhida à mão ganha da automática — é o
    único jeito de "combo principal" existir, já que nenhum type_line diz
    isso. */
-function categoriaDe(entrada){
+export function categoriaDe(entrada){
   return (entrada && entrada.categoria) || categoriaAutomatica(entrada?.carta);
 }
 
@@ -51,7 +54,7 @@ function categoriaDe(entrada){
    depois o que a carta é (os tipos), e por último o que está fora da conta.
    O contrário — tipos primeiro — enterraria a organização que ela fez no
    meio de nove grupos automáticos. */
-function ordemDasCategorias(entradas){
+export function ordemDasCategorias(entradas){
   const usadas = new Set(entradas.map(categoriaDe));
   const automaticas = CATEGORIAS.map(c => c[0]).concat(["Outros"]);
   const proprias = estado.categorias.filter(c => !automaticas.includes(c));
@@ -71,17 +74,17 @@ function ordemDasCategorias(entradas){
 }
 
 /* Toda categoria que a tela sabe oferecer no menu, própria ou não. */
-function todasAsCategorias(){
+export function todasAsCategorias(){
   return [...estado.categorias,
           ...CATEGORIAS.map(c => c[0]), "Outros", CATEGORIA_SIDEBOARD];
 }
 
-function ehPropria(cat){
+export function ehPropria(cat){
   return estado.categorias.includes(cat);
 }
 
 /* As duas listas pelo nome que o resto do código usa pra falar delas. */
-function lista(tabuleiro){
+export function lista(tabuleiro){
   return tabuleiro === "talvez" ? estado.maybe : estado.cartas;
 }
 
@@ -91,7 +94,7 @@ function lista(tabuleiro){
    Varrer os símbolos direto colava as duas metades numa fileira contínua de
    bolinhas, que lê como um custo só de cinco manas — caro e errado. Cada lado
    vira um grupo, e o espaço entre eles é o que diz que são dois. */
-function manaHTML(custo){
+export function manaHTML(custo){
   if (!custo) return "";
   const lados = String(custo).split("//").map(pipsHTMLdoCusto).filter(Boolean);
   if (!lados.length) return "";
@@ -133,17 +136,11 @@ function pipsHTMLdoCusto(custo){
    direto pela `manaHTML` desenhava as bolinhas e jogava fora a frase — que
    é a metade que diz o que a mana é PRA quê. Aqui os símbolos viram pip e o
    resto do texto continua texto. */
-function manaEmTexto(txt){
+export function manaEmTexto(txt){
   return String(txt == null ? "" : txt)
     .split(/((?:\{[^}]+\})+)/)
     .map(parte => parte.startsWith("{") ? manaHTML(parte) : escapar(parte))
     .join("");
-}
-
-function escapar(txt){
-  return String(txt == null ? "" : txt)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;");
 }
 
 /* Um ícone do sprite. Sai `aria-hidden` porque quase todo botão daqui já se
@@ -151,12 +148,12 @@ function escapar(txt){
    sozinho faria o leitor de tela dizer o nome do botão duas vezes. Quando o
    ícone é a ÚNICA informação (a seta que diz a direção da ordenação), passe
    `rotulo` e ele vira imagem com nome. */
-function ico(nome, rotulo){
+export function ico(nome, rotulo){
   return `<svg class="ico" ${rotulo
     ? `role="img" aria-label="${escapar(rotulo)}"` : `aria-hidden="true"`
   }><use href="#i-${nome}"/></svg>`;
 }
 
-function preco(carta){
+export function preco(carta){
   return carta.preco_usd ? moeda(carta.preco_usd) : "";
 }

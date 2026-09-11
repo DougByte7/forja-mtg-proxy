@@ -1,20 +1,25 @@
-"use strict";
-
 /* --------------------------------------------------------------- mexer no deck */
 
-function acharEntrada(nome, tabuleiro){
+import {$} from "../comum/dom.js";
+import {buscar} from "./busca.js";
+import {desenharTudo} from "./desenho.js";
+import {CATEGORIAS_FORA_DA_CONTA, estado} from "./estado.js";
+import {agendarSalvar} from "./salvar.js";
+import {ehPropria, lista, toast, todasAsCategorias} from "./utilidades.js";
+
+export function acharEntrada(nome, tabuleiro){
   return lista(tabuleiro || "deck").find(e => e.carta.nome === nome);
 }
 
 /* Onde a carta está — deck, maybeboard ou lugar nenhum. É o que os cliques
    usam pra não precisarem carregar o tabuleiro em cada botão. */
-function ondeEsta(nome){
+export function ondeEsta(nome){
   if (estado.cartas.some(e => e.carta.nome === nome)) return "deck";
   if (estado.maybe.some(e => e.carta.nome === nome)) return "talvez";
   return null;
 }
 
-function guardarDesfazer(){
+export function guardarDesfazer(){
   estado.desfazer.push(JSON.stringify({
     comandantes: estado.comandantes,
     cartas: estado.cartas,
@@ -24,7 +29,7 @@ function guardarDesfazer(){
   if (estado.desfazer.length > 40) estado.desfazer.shift();
 }
 
-function desfazer(){
+export function desfazer(){
   const anterior = estado.desfazer.pop();
   if (!anterior){ toast("Nada pra desfazer."); return; }
   const dados = JSON.parse(anterior);
@@ -44,7 +49,7 @@ function desfazer(){
 /* Adicionar num tabuleiro. A categoria só é dita quando quem chama tem
    opinião (o menu, ao criar categoria com a carta junto); no caminho normal
    ela nasce vazia e o grupo sai do tipo da carta. */
-function adicionar(carta, tabuleiro, categoria){
+export function adicionar(carta, tabuleiro, categoria){
   tabuleiro = tabuleiro || "deck";
   guardarDesfazer();
   const entrada = acharEntrada(carta.nome, tabuleiro);
@@ -77,7 +82,7 @@ function mudarQuantidade(nome, delta, tabuleiro){
 
 /* A quantidade digitada no número da linha. Zero é o mesmo que o ✕, com o
    mesmo toast — é ele que avisa que o Ctrl+Z devolve a carta. */
-function definirQuantidade(nome, quantidade, tabuleiro){
+export function definirQuantidade(nome, quantidade, tabuleiro){
   const entrada = acharEntrada(nome, tabuleiro);
   if (!entrada) return;
   if (quantidade <= 0) return tirar(nome, tabuleiro);
@@ -85,7 +90,7 @@ function definirQuantidade(nome, quantidade, tabuleiro){
   mudarQuantidade(nome, quantidade - entrada.quantidade, tabuleiro);
 }
 
-function tirar(nome, tabuleiro){
+export function tirar(nome, tabuleiro){
   tabuleiro = tabuleiro || ondeEsta(nome) || "deck";
   guardarDesfazer();
   if (tabuleiro === "talvez"){
@@ -108,7 +113,7 @@ function tirar(nome, tabuleiro){
 
    Quando a carta já existe no destino (dá pra ter a mesma no deck e em
    dúvida), as quantidades somam em vez de uma sobrescrever a outra. */
-function mover(nome, de, para){
+export function mover(nome, de, para){
   if (de === para) return;
   const entrada = acharEntrada(nome, de);
   if (!entrada) return;
@@ -137,7 +142,7 @@ function mover(nome, de, para){
    nem mexe em quantidade. A única exceção é o Sideboard, que muda a conta
    das 100 — e por isso o toast diz isso em voz alta quando ela entra ou
    sai de lá. */
-function definirCategoria(nome, tabuleiro, categoria){
+export function definirCategoria(nome, tabuleiro, categoria){
   const entrada = acharEntrada(nome, tabuleiro);
   if (!entrada) return;
   guardarDesfazer();
@@ -164,7 +169,7 @@ function definirCategoria(nome, tabuleiro, categoria){
 /* Cria uma categoria. `carta` opcional: criar a partir do menu de uma linha já
    põe aquela carta dentro, senão o caminho seria criar, fechar, reabrir o
    menu e escolher. */
-function criarCategoria(nome, carta, tabuleiro){
+export function criarCategoria(nome, carta, tabuleiro){
   nome = (nome || "").trim().slice(0, 40);
   if (!nome) return null;
   const jaExiste = todasAsCategorias()
@@ -194,7 +199,7 @@ function criarCategoria(nome, carta, tabuleiro){
   return nome;
 }
 
-function renomearCategoria(antiga, nova){
+export function renomearCategoria(antiga, nova){
   nova = (nova || "").trim().slice(0, 40);
   if (!nova || nova === antiga) return;
   if (todasAsCategorias().some(c => c.toLowerCase() === nova.toLowerCase())){
@@ -216,7 +221,7 @@ function renomearCategoria(antiga, nova){
 /* Apagar a categoria NÃO apaga carta: elas voltam pro grupo do tipo delas.
    Uma categoria é uma forma de olhar a lista, e desfazer uma forma de olhar
    não pode custar 12 cartas. */
-function apagarCategoria(cat){
+export function apagarCategoria(cat){
   guardarDesfazer();
   estado.categorias = estado.categorias.filter(c => c !== cat);
   let soltas = 0;
@@ -230,7 +235,7 @@ function apagarCategoria(cat){
     : `Categoria "${cat}" apagada.`);
 }
 
-function moverCategoria(cat, passo){
+export function moverCategoria(cat, passo){
   const i = estado.categorias.indexOf(cat);
   const destino = i + passo;
   if (i < 0 || destino < 0 || destino >= estado.categorias.length) return;
@@ -241,7 +246,7 @@ function moverCategoria(cat, passo){
   agendarSalvar();
 }
 
-function escolherComandante(carta){
+export function escolherComandante(carta){
   guardarDesfazer();
   if (escolherComandante.parceiro && estado.comandantes.length === 1){
     estado.comandantes.push(carta);
@@ -259,7 +264,7 @@ function escolherComandante(carta){
   agendarSalvar();
 }
 
-function tirarComandante(indice){
+export function tirarComandante(indice){
   guardarDesfazer();
   estado.comandantes.splice(indice, 1);
   estado.validacao = null;

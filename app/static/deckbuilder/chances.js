@@ -1,5 +1,3 @@
-"use strict";
-
 /* ------------------------------------------------------ chances de comprar
 
    A conta da urna, hipergeométrica: a biblioteca tem N cartas, K delas são da
@@ -10,6 +8,9 @@
    Todas as janelas assumem quem JOGA PRIMEIRO, que é o lado sem a compra do
    turno 1: é o caso pior, e é sobre o caso pior que se decide quantos terrenos
    o deck leva. */
+
+import {$} from "../comum/dom.js";
+import {cartasContadas, categoriaAutomatica} from "./utilidades.js";
 
 const VISTAS_MAO = 7;       // a mão inicial
 const VISTAS_T3 = 9;        // a mão mais as compras dos turnos 2 e 3
@@ -65,7 +66,7 @@ function riscoDaMana(p){
   return ESTADO_DO_RISCO.find(([teto]) => p <= teto);
 }
 
-function desenharChances(){
+export function desenharChances(){
   const caixa = $("chances");
   const entradas = cartasContadas();
   const N = entradas.reduce((n, e) => n + e.quantidade, 0);

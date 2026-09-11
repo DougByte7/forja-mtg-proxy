@@ -1,5 +1,3 @@
-"use strict";
-
 /* --------------------------------------------------------------- importar
 
    Quem chega aqui quase nunca chega do zero: chega com um deck que já mantém
@@ -11,7 +9,15 @@
    mesa, pergunta — perder duas horas de montagem por um clique errado num
    botão de importar seria o pior estrago que esta tela sabe fazer. */
 
-async function fazerImportar(){
+import {$, escapar} from "../comum/dom.js";
+import {buscar} from "./busca.js";
+import {desenharTudo} from "./desenho.js";
+import {guardarDesfazer} from "./edicao.js";
+import {CATEGORIA_SIDEBOARD, estado} from "./estado.js";
+import {agendarSalvar, api} from "./salvar.js";
+import {toast} from "./utilidades.js";
+
+export async function fazerImportar(){
   const url = $("i-url").value.trim();
   const texto = $("i-texto").value.trim();
   if (!url && !texto){
@@ -64,7 +70,7 @@ async function fazerImportar(){
    `mesmoDeck` é a exceção, pra quem chama sabendo que o deck aberto não tem
    o que perder: só o comandante, nenhuma carta (ver `importarDeckMedio`). Aí
    o id novo é que faria estrago — deixaria em Meus decks um deck vazio. */
-function aplicarImportado(trazido, {mesmoDeck = false} = {}){
+export function aplicarImportado(trazido, {mesmoDeck = false} = {}){
   guardarDesfazer();
   if (!mesmoDeck) estado.id = null;
   estado.validacao = null;
@@ -104,7 +110,7 @@ function aplicarImportado(trazido, {mesmoDeck = false} = {}){
 
 /* `caixa` é onde o recado aparece: a gaveta de importar, ou o bloco do deck
    médio na aba de sugestões. */
-function mostrarResultadoImportacao(trazido, caixa = $("i-resultado")){
+export function mostrarResultadoImportacao(trazido, caixa = $("i-resultado")){
   const total = trazido.cartas_completas.reduce((n, e) => n + e.quantidade, 0)
               + trazido.comandantes_completos.length;
   const talvez = (trazido.maybeboard_completo || [])
@@ -158,7 +164,7 @@ function listaTexto(){
   return linhas.join("\n");
 }
 
-async function exportar(){
+export async function exportar(){
   const texto = listaTexto();
   if (!texto){ toast("Deck vazio."); return; }
   try {

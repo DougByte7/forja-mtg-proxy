@@ -1,13 +1,37 @@
-"use strict";
-
 /* ------------------------------------------------------------------ eventos */
 
-function ligarEventos(){
+import {$} from "../comum/dom.js";
+import {ligarArrastar} from "./arrastar.js";
+import {abrirEscolhaDeArte, fecharArte} from "./artes.js";
+import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,
+        atualizarCategoriasDoDestino, buscarComandante, escolherDestino,
+        ligarTecladoDaBusca, ultimosResultados} from "./busca.js";
+import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
+import {adicionarPeca} from "./combos.js";
+import {alternarCotacao, fecharCotacao} from "./cotacao.js";
+import {acharEntrada, adicionar, criarCategoria, definirQuantidade, desfazer,
+        escolherComandante, tirar, tirarComandante} from "./edicao.js";
+import {estado} from "./estado.js";
+import {abrirGaveta, desenharBarraFiltros, fecharGaveta, gavetaAberta,
+        lerGavetaFiltros, limparFiltros, montarGavetaFiltros,
+        preencherGavetaFiltros, tirarFiltro} from "./filtros.js";
+import {desfazerMesa} from "./goldfish.js";
+import {exportar, fazerImportar} from "./importar-exportar.js";
+import {adicionarQuantidade, analisarManabase, chamarManabase,
+        desenharManabase, fixadoresPlanos} from "./manabase.js";
+import {abrirMenu, fecharMenu, menuAberto, menuDaCarta,
+        menuDoGrupo} from "./menus.js";
+import {abrirFolha, fecharFolha, folhaAberta, recolherTalvez, trocarAba,
+        trocarRail} from "./paineis.js";
+import {agendarSalvar, lidos, salvando, salvarJa,
+        salvarTimer} from "./salvar.js";
+import {buscarSugestoes, desenharSugestoes, importarDeckMedio,
+        sugerirPelaCarta, sugestoesPlanas} from "./sugestoes.js";
+import {toast} from "./utilidades.js";
+
+export function ligarEventos(){
   $("busca").addEventListener("input", agendarBusca);
-  $("busca-cmd").addEventListener("input", () => {
-    clearTimeout(buscaTimer);
-    buscaTimer = setTimeout(buscarComandante, 220);
-  });
+  $("busca-cmd").addEventListener("input", agendarBuscaComandante);
 
   ligarTecladoDaBusca($("busca"), $("res"));
   ligarTecladoDaBusca($("busca-cmd"), $("res-cmd"));
