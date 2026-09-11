@@ -17,9 +17,10 @@ Quatro coisas que este teste persegue:
    comando) e sem sideboard nem maybeboard — as mesmas 100 do contador, da
    curva e da cotação. Outra regra aqui faria a mesa discordar do resto da
    tela sobre o que é o deck.
-3. **O primeiro mulligan é grátis**, que é a regra do Commander. Um off-by-one
-   aqui ninguém percebe olhando a tela: a mão simplesmente vem com uma carta a
-   menos, e parece que foi assim que o formato mandou.
+3. **As duas regras do formato que mudam a mão**: o primeiro mulligan é grátis
+   e quem começa jogando compra no turno 1. Um off-by-one em qualquer uma
+   ninguém percebe olhando a tela: a mão simplesmente vem com uma carta a mais
+   ou a menos, e parece que foi assim que o formato mandou.
 4. **Cada cópia tem identidade própria.** Trinta Florestas são trinta objetos.
    Se forem a mesma referência, deitar uma deita as trinta — o bug clássico
    deste tipo de tela.
@@ -115,6 +116,7 @@ SOL_RING = carta("Sol Ring", "Artifact", "", "{1}", 1.0)
 ELVES = carta("Llanowar Elves", "Creature — Elf Druid", "G", "{G}", 1.0)
 SWORDS = carta("Swords to Plowshares", "Instant", "W", "{W}", 1.0)
 BOLT = carta("Lightning Bolt", "Instant", "R", "{R}", 1.0)
+FINKS = carta("Kitchen Finks", "Creature — Ouphe", "GW", "{1}{G/W}", 3.0)
 
 # 1 Sol Ring + 10 Forest + 4 Elves = 15 no baralho. O sideboard e o maybeboard
 # ficam de fora, e o comandante vai pra zona de comando.
@@ -218,17 +220,19 @@ eq("começa na fase de mulligan",
 print("\n--- mulligan London, primeiro grátis (regra do Commander) ---")
 
 # É o off-by-one que ninguém percebe olhando a tela.
-eq("manter sem mulligan nenhum: mão de 7, nada pro fundo",
+# A mão fica com 8: as 7 mais a compra do turno 1, que é a outra regra do
+# formato (ver a seção da compra do turno 1, mais abaixo).
+eq("manter sem mulligan nenhum: mão de 8, nada pro fundo",
    rodar("montarMesa(); manterMao(); [estado.mesa.mao.length, estado.mesa.aFundo];"),
-   [7, 0])
+   [8, 0])
 eq("e vai direto pro jogo, sem pedir escolha",
    rodar("montarMesa(); manterMao(); estado.mesa.fase;"), "jogo")
 
-eq("1 mulligan: ainda 7 na mão e nada pro fundo — o primeiro é grátis",
+eq("1 mulligan: ainda 8 na mão e nada pro fundo — o primeiro é grátis",
    rodar("""
      montarMesa(); mulliganLondon(); manterMao();
      [estado.mesa.mao.length, estado.mesa.aFundo];
-   """), [7, 0])
+   """), [8, 0])
 eq("e também vai direto pro jogo",
    rodar("montarMesa(); mulliganLondon(); manterMao(); estado.mesa.fase;"), "jogo")
 
@@ -243,7 +247,7 @@ eq("3 mulligans: devolve 2",
      manterMao(); estado.mesa.aFundo;
    """), 2)
 
-eq("depois de mandar as escolhidas pro fundo, a mão fica com 5",
+eq("depois de mandar as escolhidas pro fundo, a mão fica com 6 — 5 mais a do turno 1",
    rodar("""
      montarMesa();
      mulliganLondon(); mulliganLondon(); mulliganLondon();
@@ -251,7 +255,45 @@ eq("depois de mandar as escolhidas pro fundo, a mão fica com 5",
      mandarPraFundo(estado.mesa.mao[0].uid);
      mandarPraFundo(estado.mesa.mao[0].uid);
      [estado.mesa.mao.length, estado.mesa.fase];
-   """), [5, "jogo"])
+   """), [6, "jogo"])
+
+# Deck pequeno é o caso deste teste, mas também o de quem está montando: pedir
+# pra devolver mais cartas do que a mão tem deixaria a fase de fundo sem fim.
+eq("nunca pede pro fundo mais do que a mão tem",
+   rodar("""
+     montarMesa();
+     for (var i = 0; i < 12; i++) mulliganLondon();
+     estado.mesa.mao = estado.mesa.mao.slice(0, 3);
+     manterMao();
+     [estado.mesa.aFundo, estado.mesa.mao.length];
+   """), [3, 3])
+
+
+print("\n--- a compra do turno 1 (regra do Commander) ---")
+
+# No Commander quem começa jogando COMPRA — é o duelo de dois que tira essa
+# compra do primeiro jogador. A mesa adianta essa compra pro fim do mulligan.
+eq("a mão confirmada traz a carta do turno 1, e ela sai do baralho",
+   rodar("""
+     montarMesa(); manterMao();
+     [estado.mesa.mao.length, estado.mesa.baralho.length];
+   """), [8, NO_BARALHO - 8])
+
+eq("a carta extra vem DEPOIS das que voltam pro fundo",
+   rodar("""
+     montarMesa(); mulliganLondon(); mulliganLondon();
+     manterMao();
+     var devolvida = estado.mesa.mao[0].uid;
+     mandarPraFundo(devolvida);
+     [estado.mesa.mao.length,
+      estado.mesa.mao.filter(function(c){ return c.uid === devolvida; }).length];
+   """), [7, 0])
+
+eq("e ela é uma só: o turno 2 compra mais uma, não duas",
+   rodar("""
+     montarMesa(); manterMao(); passarTurno();
+     estado.mesa.mao.length;
+   """), 9)
 
 eq("e elas foram pro FUNDO, não pro topo",
    rodar("""
@@ -308,6 +350,82 @@ eq("baixar dois terrenos no mesmo turno é permitido, e contado",
    """), [2, 2])
 
 
+print("\n--- resumo da mão ---")
+
+# A conta que a pessoa faria de cabeça a cada mulligan. Terreno fica de fora da
+# média pelo mesmo motivo que fica de fora da curva: custa zero e puxaria o
+# número pra baixo sem dizer nada sobre o que dá pra lançar.
+eq("terrenos, média do que não é terreno e as cores pedidas",
+   rodar("""
+     var r = resumoDaMao([{carta: %s}, {carta: %s}, {carta: %s}, {carta: %s}]);
+     [r.terrenos, r.feiticos, r.custoMedio, r.cores.G || 0, r.cores.W || 0];
+   """ % (json.dumps(FOREST), json.dumps(FOREST), json.dumps(SOL_RING),
+          json.dumps(ELVES))),
+   [2, 2, 1, 1, 0])
+
+eq("mão só de terreno não divide por zero",
+   rodar("""
+     var r = resumoDaMao([{carta: %s}]);
+     [r.terrenos, r.feiticos, r.custoMedio];
+   """ % json.dumps(FOREST)), [1, 0, 0])
+
+eq("híbrido conta pras duas cores",
+   rodar("""
+     var r = resumoDaMao([{carta: %s}]);
+     [r.cores.G || 0, r.cores.W || 0];
+   """ % json.dumps(FINKS)), [1, 1])
+
+
+print("\n--- o campo em três filas ---")
+
+# A ordem das regras é a de `CATEGORIAS`: a primeira que casa ganha, e pra quem
+# joga o terreno-criatura é o terreno que entrou no turno.
+eq("terreno-criatura conta como terreno",
+   rodar('grupoDoCampo({carta: {tipo: "Land Creature — Dryad Arbor"}});'),
+   "Terrenos")
+eq("criatura é criatura",
+   rodar("grupoDoCampo({carta: %s});" % json.dumps(ELVES)), "Criaturas")
+eq("o que não é nem um nem outro cai em Outros",
+   rodar("grupoDoCampo({carta: %s});" % json.dumps(SOL_RING)), "Outros")
+eq("carta que a base não conhece não fica sem fila",
+   rodar("grupoDoCampo({carta: null});"), "Outros")
+
+
+print("\n--- vida ---")
+
+eq("começa em 40, que é a do formato",
+   rodar("montarMesa(); estado.mesa.vida;"), 40)
+eq("os botões somam e subtraem",
+   rodar("montarMesa(); ajustarVida(-5); ajustarVida(1); estado.mesa.vida;"), 36)
+
+# Sete cliques pra ir de 40 a 33 não podem comer sete das vinte fotos: o Ctrl+Z
+# seguinte devolveria 34, 35, 36… em vez da jogada que veio antes.
+eq("cliques seguidos de vida são UM passo de desfazer",
+   rodar("""
+     montarMesa(); manterMao();
+     estado.mesaDesfazer = [];
+     for (var i = 0; i < 3; i++){ gfGuardar("vida"); ajustarVida(-1); }
+     [estado.mesaDesfazer.length, estado.mesa.vida];
+   """), [1, 37])
+eq("e o desfazer volta pra antes da sequência inteira",
+   rodar("""
+     montarMesa(); manterMao();
+     estado.mesaDesfazer = [];
+     for (var i = 0; i < 3; i++){ gfGuardar("vida"); ajustarVida(-1); }
+     desfazerMesa();
+     estado.mesa.vida;
+   """), 40)
+eq("qualquer outra jogada fecha a sequência",
+   rodar("""
+     montarMesa(); manterMao();
+     estado.mesaDesfazer = [];
+     gfGuardar("vida"); ajustarVida(-1);
+     gfGuardar(); comprar(1);
+     gfGuardar("vida"); ajustarVida(-1);
+     estado.mesaDesfazer.length;
+   """), 3)
+
+
 print("\n--- conservação: nenhuma carta some nem duplica ---")
 
 # A asserção central do arquivo. Sequência roteirizada, do mulligan ao
@@ -321,6 +439,7 @@ resultado = rodar(TODAS + """
   manterMao();
   mandarPraFundo(estado.mesa.mao[0].uid);
   mandarPraFundo(estado.mesa.mao[0].uid);
+  ajustarVida(-7);
   passarTurno();
   gfMover(estado.mesa.mao[0].uid, "campo");
   passarTurno();
@@ -362,7 +481,7 @@ eq("desfazer devolve a carta pra mão",
      gfMover(estado.mesa.mao[0].uid, "cemiterio");
      desfazerMesa();
      [estado.mesa.mao.length, estado.mesa.cemiterio.length, antes];
-   """), [7, 0, 7])
+   """), [8, 0, 8])
 eq("desfazer com a pilha vazia não quebra",
    rodar("montarMesa(); estado.mesaDesfazer = []; desfazerMesa(); estado.mesa !== null;"),
    True)

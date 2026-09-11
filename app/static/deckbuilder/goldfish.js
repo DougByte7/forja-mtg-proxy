@@ -11,7 +11,7 @@
    que é um projeto inteiro, e que erraria em casos que a pessoa conhece melhor
    do que ele.
 
-   Três consequências desenhadas de propósito:
+   Quatro consequências desenhadas de propósito:
 
    * A MANA NÃO É SOMADA. A tela mostra quantos terrenos estão em pé e quantos
      deitados, que é um fato do tabuleiro. No instante em que aparecesse "3 de
@@ -19,9 +19,14 @@
      fazer coisa errada — e aí é motor de regras pela porta dos fundos.
    * O "terreno baixado neste turno" CONTA, não impede. Vira informação, não
      trava.
+   * A VIDA É UM NÚMERO QUE SE AJUSTA, não uma conta. Começa em 40 e anda pelos
+     botões: ninguém aqui sabe quanto uma criatura bate.
    * O COMANDANTE VAI PRA ZONA DE COMANDO, não pro baralho. Sem isso o goldfish
      estaria testando um deck de 99 cartas que ninguém joga. O imposto aparece
      como número; pagar ou não é decisão de quem joga.
+
+   O que ele SABE são as regras do formato que mudam a mão: o primeiro mulligan
+   é grátis e quem começa jogando compra no turno 1.
 
    NADA DISSO É SALVO. `corpoDoDeck` não sabe que `estado.mesa` existe: uma mão
    de goldfish gravada no deck é uma mão que volta três semanas depois, em outra
@@ -30,10 +35,11 @@
 
 import {$, escapar} from "../comum/dom.js";
 import {abrirCarta, ganchosDaPrevia} from "./carta.js";
-import {estado} from "./estado.js";
+import {CORES, estado, NOME_COR} from "./estado.js";
 import {cartasContadas, toast} from "./utilidades.js";
 
 const MAO_INICIAL = 7;
+const VIDA_INICIAL = 40;
 
 /* Cada carta na mesa é uma CÓPIA com identidade própria (`uid`), e não a
    entrada do deck. Três Florestas são três objetos: uma pode estar deitada e as
@@ -83,9 +89,10 @@ function montarMesa(){
     mao: [], campo: [], cemiterio: [], exilio: [],
     comando: estado.comandantes.filter(Boolean).map(gfCopia),
     turno: 1, terrenosBaixados: 0, mulligans: 0, aFundo: 0,
-    fase: "mulligan", impostoPago: 0,
+    fase: "mulligan", impostoPago: 0, vida: VIDA_INICIAL,
   };
   estado.mesaDesfazer = [];
+  gfUltimoGesto = null;
   comprar(MAO_INICIAL);
 }
 
@@ -115,10 +122,14 @@ function mulliganLondon(){
 
 function manterMao(){
   const m = estado.mesa;
-  m.aFundo = devolveAoManter();
+  // Nunca mais do que a mão tem: pedir pra devolver 3 de uma mão de 2 deixaria
+  // a fase de fundo sem como terminar, e a mesa travada numa escolha
+  // impossível. Só acontece em deck pequeno, que é justamente onde se testa.
+  m.aFundo = Math.min(devolveAoManter(), m.mao.length);
   // Com zero a devolver a tela pula direto pro jogo: pedir "escolha 0 cartas"
   // é uma etapa que só existe pra ser fechada.
-  m.fase = m.aFundo ? "fundo" : "jogo";
+  if (m.aFundo) m.fase = "fundo";
+  else confirmarMao();
 }
 
 function mandarPraFundo(uid){
@@ -127,7 +138,19 @@ function mandarPraFundo(uid){
   if (i < 0 || !m.aFundo) return;
   m.baralho.push(m.mao.splice(i, 1)[0]);     // fundo, na ordem escolhida
   m.aFundo--;
-  if (!m.aFundo) m.fase = "jogo";
+  if (!m.aFundo) confirmarMao();
+}
+
+/* A mão fechada — e com ela a COMPRA DO TURNO 1. No Commander quem começa
+   jogando compra: é o duelo de dois que tira essa compra do primeiro jogador,
+   e a mesa deste deckbuilder é multiplayer.
+
+   Ela vem depois das cartas que voltam pro fundo, e é uma só: o que se
+   devolve é a mão de sete que se viu, e a carta a mais é a do turno, não
+   parte da escolha. Daí `passarTurno` comprar do turno 2 em diante. */
+function confirmarMao(){
+  estado.mesa.fase = "jogo";
+  comprar(1);
 }
 
 function passarTurno(){
@@ -136,10 +159,13 @@ function passarTurno(){
   m.terrenosBaixados = 0;
   // Endireita tudo, como o desendireitar de verdade.
   for (const c of m.campo) c.deitada = false;
-  // Turno 1 de quem começa jogando não compra. O goldfish assume o PIOR caso
-  // (jogando primeiro) pelo mesmo motivo que o painel de chances assume: é o
-  // lado em que a mão precisa se sustentar sozinha.
+  // A compra do turno 1 saiu na confirmação da mão; daqui pra frente é uma
+  // por turno.
   comprar(1);
+}
+
+function ajustarVida(n){
+  estado.mesa.vida += n;
 }
 
 const GF_ZONAS = ["baralho", "mao", "campo", "cemiterio", "exilio", "comando"];
@@ -171,7 +197,11 @@ function gfMover(uid, para, aoTopo){
 }
 
 function ehTerreno(carta){
-  return ((carta && carta.tipo) || "").toLowerCase().includes("land");
+  return ehTipo(carta, "land");
+}
+
+function ehTipo(carta, tipo){
+  return ((carta && carta.tipo) || "").toLowerCase().includes(tipo);
 }
 
 function cartaPorUid(uid){
@@ -187,8 +217,16 @@ function cartaPorUid(uid){
    sem regras, o inverso de uma jogada não é definido — mandar uma carta do
    cemitério pro campo não "desfaz" nada, é outra jogada. Vinte fotos de uma
    mesa de 100 cartas é barato. */
-function gfGuardar(){
+/* Gesto repetido é UM passo de desfazer: baixar a vida de 40 pra 33 são sete
+   cliques, e sem isto eles comeriam sete das vinte fotos — o Ctrl+Z seguinte
+   devolveria 34, 35, 36… em vez da jogada que veio antes. Qualquer outra ação
+   fecha a sequência, porque ela guarda sem nome. */
+let gfUltimoGesto = null;
+
+function gfGuardar(gesto){
   if (!estado.mesa) return;
+  if (gesto && gesto === gfUltimoGesto) return;
+  gfUltimoGesto = gesto || null;
   estado.mesaDesfazer.push(JSON.stringify(estado.mesa));
   if (estado.mesaDesfazer.length > 20) estado.mesaDesfazer.shift();
 }
@@ -197,6 +235,7 @@ export function desfazerMesa(){
   const foto = estado.mesaDesfazer.pop();
   if (!foto) return;
   estado.mesa = JSON.parse(foto);
+  gfUltimoGesto = null;
   desenharMesa();
 }
 
@@ -221,6 +260,86 @@ function gfFilaHTML(lista, zona, vazio){
   if (!lista.length) return `<div class="gf-vazio">${escapar(vazio)}</div>`;
   return `<div class="gf-fila ${zona === "mao" ? "gf-mao" : ""}">${
     lista.map(c => gfCartaHTML(c, zona)).join("")}</div>`;
+}
+
+/* O resumo da mão, do lado das cartas: quantos terrenos, quanto custa em
+   média o que não é terreno, e que cores ela pede. É a conta que se faz de
+   cabeça a cada mulligan — sete cartas, três perguntas, toda vez — e é com
+   ela que se decide manter.
+
+   Duas escolhas acompanham o resto da tela. O custo médio IGNORA terreno,
+   como a curva da análise: terreno custa zero e puxaria a média pra um número
+   que não diz o que dá pra lançar. E as cores são o que a mão PEDE, lidas dos
+   símbolos do custo, como a distribuição da análise — não o que ela produz. */
+function resumoDaMao(mao){
+  const feiticos = mao.filter(c => !ehTerreno(c.carta));
+  const soma = feiticos.reduce((n, c) => n + (((c.carta || {}).cmc) || 0), 0);
+  const cores = {};
+  for (const c of mao){
+    const custo = ((c.carta || {}).mana_cost) || "";
+    for (const simbolo of custo.match(/\{[^}]+\}/g) || []){
+      // Híbrido conta pras duas cores: "{G/W}" é uma carta que cabe nas duas.
+      for (const parte of simbolo.slice(1, -1).split("/")){
+        if (CORES.includes(parte)) cores[parte] = (cores[parte] || 0) + 1;
+      }
+    }
+  }
+  return {terrenos: mao.length - feiticos.length, feiticos: feiticos.length,
+          custoMedio: feiticos.length ? soma / feiticos.length : 0, cores};
+}
+
+function resumoHTML(mao){
+  if (!mao.length) return "";
+  const r = resumoDaMao(mao);
+  // `title` em cada cor porque bolinha colorida sozinha não é informação
+  // acessível — a mesma regra dos pips do resto da página.
+  const pips = CORES.filter(c => r.cores[c]).map(c =>
+    `<span class="gf-cor" title="${NOME_COR[c]}"><span class="pip ${c}"></span>${
+      r.cores[c]}</span>`).join("");
+  return `<div class="gf-resumo">
+    <span><b>${r.terrenos}</b> terreno(s) em ${mao.length}</span>
+    ${r.feiticos ? `<span title="Média de custo do que não é terreno"><b>${
+      r.custoMedio.toFixed(1).replace(".", ",")}</b> de custo médio</span>` : ""}
+    ${pips ? `<span class="gf-cores" title="Símbolos de cor que a mão pede"
+      >${pips}</span>` : ""}
+  </div>`;
+}
+
+/* O campo em três filas: terrenos, criaturas e o resto. Quem olha um tabuleiro
+   procura uma coisa de cada vez ("tenho mana? tenho bicho?"), e numa fila só
+   de trinta cartas cada pergunta dessas vira busca visual.
+
+   Terreno-criatura entra em Terrenos, e pela mesma razão de `CATEGORIAS`: a
+   primeira regra que casa ganha, porque pra quem joga ele é o terreno que
+   entrou no turno. */
+const GRUPOS_DO_CAMPO = [
+  ["Terrenos",  (c) => ehTerreno(c.carta)],
+  ["Criaturas", (c) => ehTipo(c.carta, "creature")],
+  ["Outros",    () => true],
+];
+
+function grupoDoCampo(c){
+  return GRUPOS_DO_CAMPO.find(([, casa]) => casa(c))[0];
+}
+
+function campoHTML(campo){
+  if (!campo.length) return `<div class="gf-vazio">nada em jogo</div>`;
+  return GRUPOS_DO_CAMPO.map(([nome]) => {
+    const lista = campo.filter(c => grupoDoCampo(c) === nome);
+    if (!lista.length) return "";
+    return `<div class="gf-subsecao">${nome} <b>${lista.length}</b></div>` +
+      gfFilaHTML(lista, "campo", "");
+  }).join("");
+}
+
+function vidaHTML(vida){
+  return `<span class="gf-vida">Vida
+    <button data-gf-vida="-5" aria-label="Menos 5 de vida">−5</button>
+    <button data-gf-vida="-1" aria-label="Menos 1 de vida">−1</button>
+    <b>${vida}</b>
+    <button data-gf-vida="1" aria-label="Mais 1 de vida">+1</button>
+    <button data-gf-vida="5" aria-label="Mais 5 de vida">+5</button>
+  </span>`;
 }
 
 export function desenharMesa(){
@@ -250,6 +369,7 @@ export function desenharMesa(){
   }
 
   const zonas = `<div class="gf-zonas">
+    ${vidaHTML(m.vida)}
     <span>Baralho <b>${m.baralho.length}</b></span>
     <span>Mão <b>${m.mao.length}</b></span>
     <span>Terrenos <b>${emPe}</b> em pé${
@@ -265,14 +385,16 @@ export function desenharMesa(){
     const devolve = devolveAoManter();
     const explica = m.fase === "fundo"
       ? `<p class="nota">Escolha <b>${m.aFundo}</b> carta(s) pra mandar pro
-         fundo do baralho — clique nelas, na ordem que quiser.</p>`
+         fundo do baralho — clique nelas, na ordem que quiser. Depois delas
+         vem a compra do turno 1.</p>`
       : `<p class="nota">${m.mulligans === 0
           ? "Mão de abertura."
           : `${m.mulligans}º mulligan.`} Se manter agora, ${devolve
-          ? `devolve <b>${devolve}</b> carta(s) pro fundo`
-          : "fica com as <b>7</b>"}.</p>`;
+          ? `devolve <b>${devolve}</b> carta(s) pro fundo e compra a do turno 1`
+          : `compra a do turno 1 e fica com <b>${m.mao.length + 1}</b>`}.</p>`;
     alvo.innerHTML = zonas + explica +
       `<div class="gf-secao">Mão</div>` +
+      resumoHTML(m.mao) +
       gfFilaHTML(m.mao, "mao", "sem cartas") +
       (m.fase === "fundo" ? "" : `<div class="gf-acoes">
         <button class="btn ouro" id="gf-manter">Manter esta mão</button>
@@ -283,11 +405,12 @@ export function desenharMesa(){
 
   alvo.innerHTML = zonas +
     `<div class="gf-secao">Campo</div>` +
-    gfFilaHTML(m.campo, "campo", "nada em jogo") +
+    campoHTML(m.campo) +
     (m.comando.length ? `<div class="gf-secao">Comando${m.impostoPago
       ? ` — próxima vez custa +${m.impostoPago * 2}` : ""}</div>`
       + gfFilaHTML(m.comando, "comando", "") : "") +
     `<div class="gf-secao">Mão (${m.mao.length})</div>` +
+    resumoHTML(m.mao) +
     gfFilaHTML(m.mao, "mao", "mão vazia") +
     `<div class="gf-acoes">
       <button class="btn ouro" id="gf-turno-btn">Passar turno (compra 1)</button>
@@ -382,6 +505,13 @@ export function ligarGoldfish(){
   $("gf-mesa").addEventListener("click", (e) => {
     const ver = e.target.closest("[data-gf-ver]");
     if (ver) return gfVerZona(ver.dataset.gfVer);
+
+    const vida = e.target.closest("[data-gf-vida]");
+    if (vida){
+      gfGuardar("vida");
+      ajustarVida(Number(vida.dataset.gfVida));
+      return desenharMesa();
+    }
 
     if (e.target.closest("#gf-manter")){ gfGuardar(); manterMao(); return desenharMesa(); }
     if (e.target.closest("#gf-mulligan")){ gfGuardar(); mulliganLondon(); return desenharMesa(); }

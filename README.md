@@ -1213,8 +1213,9 @@ desejado, e é a razão de o fluxo de reclamar existir.
 A aba **Goldfish** embaralha o deck e deixa a pessoa jogar sozinha — é o que a
 palavra quer dizer na mesa: jogar contra um peixinho dourado, que não faz nada.
 Compra 7, mulligan, baixa terreno, joga carta pro campo, deita, põe contador,
-passa turno e compra. Tudo por clique, com desfazer em Ctrl+Z e um botão de
-tela cheia (que esconde as duas colunas laterais — a mesa quer largura).
+ajusta a vida, passa turno e compra. Tudo por clique, com desfazer em Ctrl+Z e
+um botão de tela cheia (que esconde as duas colunas laterais — a mesa quer
+largura).
 
 **Não é motor de regras, e isso é o recurso.** Nada ali impede nada: dá pra
 baixar dois terrenos no mesmo turno, jogar uma carta de 8 manas no turno 1 e
@@ -1224,7 +1225,7 @@ linha fixa no topo do painel diz isso antes do primeiro clique. A alternativa
 projeto inteiro e que erraria justamente nos casos que a pessoa conhece melhor
 do que ele.
 
-Quatro coisas que ele deliberadamente não sabe:
+Cinco coisas que ele deliberadamente não sabe:
 
 * **Não soma mana.** Mostra quantos terrenos estão em pé e quantos deitados,
   que é um fato do tabuleiro. No instante em que aparecesse "3 de mana
@@ -1232,6 +1233,11 @@ Quatro coisas que ele deliberadamente não sabe:
   coisa errada — e aí é motor de regras pela porta dos fundos.
 * **Não impede o segundo terreno do turno.** Conta, e mostra a contagem. Vira
   informação, não trava.
+* **Não conta dano.** A vida começa em 40 e anda pelos botões de 1 e de 5 —
+  ninguém ali sabe quanto uma criatura bate. Cliques seguidos de vida contam
+  como **um** passo de desfazer: sete cliques pra ir de 40 a 33 comeriam sete
+  das vinte fotos, e o Ctrl+Z seguinte devolveria 34, 35, 36… em vez da jogada
+  que veio antes.
 * **Não cobra o imposto do comandante.** O comandante vai pra zona de comando
   (não pro baralho, senão o goldfish testaria um deck que ninguém joga) e a
   tela diz quanto custaria a próxima vez. Pagar é decisão de quem joga.
@@ -1239,12 +1245,36 @@ Quatro coisas que ele deliberadamente não sabe:
   de goldfish gravada no deck é uma mão que volta três semanas depois, em outra
   máquina, no meio de uma edição.
 
-O que ele **sabe** é a regra do formato: **o primeiro mulligan é grátis.**
-Sempre se compram 7; o que muda é quantas voltam pro fundo ao manter, e o
-número é `mulligans − 1`. Com zero a devolver, a tela pula direto pro jogo em
-vez de pedir "escolha 0 cartas". Cobrar já a primeira seria testar um deck de
-60, não um de Commander — e é o tipo de off-by-one que ninguém percebe olhando
-a tela, porque a mão só vem com uma carta a menos e parece que o formato mandou.
+O que ele **sabe** são as duas regras do formato que mudam a mão. A primeira:
+**o primeiro mulligan é grátis.** Sempre se compram 7; o que muda é quantas
+voltam pro fundo ao manter, e o número é `mulligans − 1`. Com zero a devolver,
+a tela pula direto pro jogo em vez de pedir "escolha 0 cartas". Cobrar já a
+primeira seria testar um deck de 60, não um de Commander — e é o tipo de
+off-by-one que ninguém percebe olhando a tela, porque a mão só vem com uma
+carta a menos e parece que o formato mandou.
+
+A segunda: **quem começa jogando compra no turno 1**, que é o duelo de dois que
+não faz. A mesa adianta essa compra pro fim do mulligan — manter uma mão limpa
+deixa 8 cartas na mão —, e ela vem **depois** das que voltam pro fundo: o que
+se devolve é a mão de sete que se viu, e a carta a mais é a do turno, não parte
+da escolha. Daí `passarTurno` comprar do turno 2 em diante. O painel de
+**chances**, ao lado, continua contando 7: lá a pergunta é de construção, e a
+régua é o caso pior.
+
+**O resumo da mão** aparece junto com ela, antes das cartas: quantos terrenos,
+o custo médio e as cores pedidas. É a conta que se faria de cabeça a cada
+mulligan — sete cartas, três perguntas, toda vez —, e é com ela que se decide
+manter. Duas escolhas acompanham o resto da tela: o custo médio ignora terreno
+(como a curva; terreno custa zero e puxaria a média pra um número que não diz o
+que dá pra lançar) e as cores são o que a mão **pede**, lidas dos símbolos do
+custo, como a distribuição da análise — não o que ela produz.
+
+**O campo sai em três filas** — terrenos, criaturas, o resto —, porque quem
+olha um tabuleiro procura uma coisa de cada vez ("tenho mana? tenho bicho?") e
+numa fila só de trinta cartas cada pergunta dessas vira busca visual.
+Terreno-criatura entra em Terrenos, pela mesma regra de `CATEGORIAS`: a
+primeira que casa ganha, porque pra quem joga ele é o terreno que entrou no
+turno.
 
 O baralho sai de `cartasContadas()`, a mesma função do contador, da curva e da
 assinatura de cotação: sideboard e maybeboard ficam de fora aqui pelo mesmo
