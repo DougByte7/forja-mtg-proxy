@@ -1466,7 +1466,7 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 .distrib .num{font-family:'IBM Plex Mono',monospace;font-size:10px;width:20px;text-align:right;}
 
 /* ---------------- chances de comprar ---------------- */
-/* Tabela e não gráfico: são oito ou nove categorias que todas carregam
+/* Tabela e não gráfico: são as categorias do deck, todas carregando
    significado, com três números cada — barra nenhuma responde "quantos por
    cento" melhor do que o número escrito. */
 .chances{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}
@@ -1487,6 +1487,14 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 }
 .chances .qt{color:var(--text-muted);font-family:'IBM Plex Mono',monospace;
   font-size:10px;}
+/* A categoria feita à mão vem marcada como no cabeçalho do grupo, na lista: é
+   a mesma distinção de lá — decisão de quem monta contra fato da carta —, e
+   sem a marca as duas viriam na mesma tabela parecendo a mesma coisa. */
+.chances tr.propria td:first-child{color:var(--gold-light);}
+.chances tr.propria td:first-child::before{
+  content:"";display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:var(--gold);margin-right:6px;vertical-align:middle;
+}
 /* As duas pontas da mesma mana base: terreno de menos perde o turno, terreno
    demais saca terreno no lugar de carta. Ficam fora da tabela porque só
    valem pra uma linha dela. */
