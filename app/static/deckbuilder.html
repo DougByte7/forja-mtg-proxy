@@ -133,6 +133,29 @@
              lembrar de conferir. O resto da análise (curva, cores, progresso)
              mora na aba, porque é conferência, não alarme. -->
         <div id="alertas-deck"></div>
+
+        <!-- Achar e ordenar o que JÁ está no deck — outra pergunta que a
+             busca da esquerda, que procura o que ainda não entrou. Aparece só
+             quando a lista fica grande o bastante pra se perder nela (ver
+             `atualizarFerramentasDaLista`). -->
+        <div class="ferramentas-lista" id="ferramentas-deck" hidden>
+          <input class="campo campo-lista" id="busca-deck" type="search"
+                 autocomplete="off" spellcheck="false"
+                 placeholder="Achar no deck…"
+                 aria-label="Achar uma carta que já está no deck">
+          <!-- A ordem vale pras duas listas: o maybeboard é a mesma lista
+               lida noutro canto, e ordená-lo diferente seria ler duas. -->
+          <select class="campo campo-ordem" id="ordem-lista"
+                  title="Ordem das cartas dentro de cada categoria — vale também no maybeboard"
+                  aria-label="Ordenar as cartas dentro de cada categoria">
+            <option value="cmc">Custo — menor primeiro</option>
+            <option value="cmc_desc">Custo — maior primeiro</option>
+            <option value="nome">Nome — A a Z</option>
+            <option value="preco_desc">Preço — mais cara primeiro</option>
+            <option value="preco">Preço — mais barata primeiro</option>
+          </select>
+        </div>
+
         <div id="lista-deck"></div>
         <div class="vazio" id="deck-vazio">
           As 99 cartas entram pela busca. Comece pelas que o comandante pede —
@@ -391,6 +414,10 @@
         <p class="nota talvez-nota">Cartas em dúvida. Não contam pras 100, não
           entram na cotação e não aparecem em análise nenhuma — ficam aqui até
           você decidir.</p>
+        <input class="campo campo-lista" id="busca-talvez" type="search"
+               autocomplete="off" spellcheck="false" hidden
+               placeholder="Achar aqui…"
+               aria-label="Achar uma carta que já está no maybeboard">
         <div class="talvez-lista" id="talvez-lista"></div>
         <div class="talvez-vazio" id="talvez-vazio">Arraste uma carta do deck pra
           cá — ou mande direto, pelo <b>Vai para</b> da busca.</div>

@@ -116,10 +116,13 @@ export function menuDaCarta(ancora, nome, tabuleiro){
   }});
 
   itens.push("risco");
+  // A seta aponta pro lado em que a carta vai PARAR na tela: o maybeboard é a
+  // coluna da direita, o deck é o meio. Apontar ao contrário faria o menu
+  // discordar do que os olhos veem acontecer.
   itens.push(tabuleiro === "talvez"
-    ? {rotulo: "Mover pro deck", marca: ico("arrow-right"),
+    ? {rotulo: "Mover pro deck", marca: ico("arrow-left"),
        aoClicar: () => mover(nome, "talvez", "deck")}
-    : {rotulo: "Mover pro maybeboard", marca: ico("arrow-left"),
+    : {rotulo: "Mover pro maybeboard", marca: ico("arrow-right"),
        aoClicar: () => mover(nome, "deck", "talvez")});
   itens.push({rotulo: tabuleiro === "talvez" ? "Tirar do maybeboard" : "Tirar do deck",
               marca: ico("x"), classe: "perigo",

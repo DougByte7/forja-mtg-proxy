@@ -1214,6 +1214,24 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
    fim. */
 .grupo h3 .traco{flex:1;border-top:1px dashed var(--border);min-width:10px;}
 .grupo h3 .n{font-family:'IBM Plex Mono',monospace;color:var(--gold-light);}
+/* O título INTEIRO recolhe o grupo: num cabeçalho de lista, o alvo esperado é
+   a linha toda, não um triângulo de 12px. Ele se veste do h3 (herda fonte,
+   caixa alta e cor) pra continuar lendo como título — o que mudou foi o que
+   ele faz, não o que ele é. */
+.grupo h3 .grupo-titulo{
+  display:flex;align-items:center;gap:8px;flex:none;min-width:0;
+  background:none;border:none;padding:0;margin:0;cursor:pointer;
+  font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;
+}
+.grupo h3 .grupo-titulo:hover{color:var(--gold-light);}
+.grupo h3 .grupo-titulo .ico{
+  width:11px;height:11px;flex:none;color:var(--text-muted);
+}
+.grupo h3 .grupo-titulo:hover .ico{color:var(--gold-light);}
+/* Recolhido, o cabeçalho é a única coisa que sobrou do grupo: o espaço de
+   baixo iria virar um vão entre um título e outro. */
+.grupo.fechado h3{margin-bottom:0;}
+.grupo.fechado{margin-bottom:9px;}
 /* A categoria feita à mão se distingue da que sai do tipo da carta: uma é
    decisão de quem monta e a outra é fato da carta — e só a primeira pode
    ser renomeada, movida ou apagada. */
@@ -1253,6 +1271,29 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
   font-size:11.5px;color:var(--text-muted);border:1px dashed var(--border);
   border-radius:9px;padding:9px 11px;line-height:1.5;
 }
+
+/* Achar e ordenar o que JÁ está na lista. Discreto de propósito: é ferramenta
+   de quem já tem deck grande, e uma barra chamativa em cima de toda lista
+   competiria com as cartas — que são o assunto. */
+.ferramentas-lista{display:flex;gap:8px;align-items:center;margin:0 0 12px;}
+.campo-lista{
+  flex:1;min-width:0;border-radius:999px;padding:7px 13px;font-size:12.5px;
+}
+/* O ✕ nativo do `type=search` no WebKit sai cinza-claro sobre fundo escuro e
+   quase some; este devolve o contraste sem trocar o desenho por um botão
+   nosso. */
+.campo-lista::-webkit-search-cancel-button{
+  filter:invert(1) opacity(.55);cursor:pointer;
+}
+.campo-lista::-webkit-search-cancel-button:hover{filter:invert(1) opacity(1);}
+.campo-ordem{
+  flex:none;width:auto;max-width:44%;font-size:12px;padding:7px 10px;
+  border-radius:999px;
+}
+/* Na coluna estreita ele é o único controle, e não divide a linha com
+   ninguém: volta a ocupar a largura toda. */
+.painel-talvez .campo-lista{margin:0 0 8px;flex:none;width:100%;font-size:12px;}
+.lista-sem-achado{padding:14px 0;font-size:12.5px;}
 
 /* ---------------- menu de categoria ----------------
    Um menu ancorado, e não arrastar-e-soltar como único caminho: arrastar
@@ -1844,6 +1885,14 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
    tela. Nome truncado, não. */
 @media (max-width:480px){
   .linha .valor{display:none;}
+}
+
+/* Lado a lado num telefone, o seletor de ordem só cabe truncado — e
+   "Custo — menor pri…" não diz qual das duas ordens de custo está valendo,
+   que é a única coisa que ele existe pra dizer. Uma linha pra cada. */
+@media (max-width:560px){
+  .ferramentas-lista{flex-wrap:wrap;}
+  .campo-ordem{max-width:100%;width:100%;}
 }
 
 /* Entre 900 e 1200 não cabem três colunas com o deck em duas: o trilho da

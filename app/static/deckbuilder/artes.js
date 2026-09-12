@@ -33,7 +33,7 @@ import {estado} from "./estado.js";
 import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
 import {api} from "./salvar.js";
 import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
-import {ico, toast} from "./utilidades.js";
+import {ico, semAcento, toast} from "./utilidades.js";
 
 const ARTES_POR_PAGINA = 24;
 // Guardado no navegador pelo mesmo motivo da coluna do maybeboard: é jeito de
@@ -418,10 +418,6 @@ function idsFiltrados(){
     if (f.impressao && !casaImpressao(m.arquivo, f.impressao)) return false;
     return true;
   });
-}
-
-function semAcento(s){
-  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 /* Se um arquivo do MPC Fill é daquela impressão oficial. Não há campo de

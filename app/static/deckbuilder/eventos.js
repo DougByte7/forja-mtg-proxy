@@ -8,6 +8,7 @@ import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,
         ligarTecladoDaBusca, ultimosResultados} from "./busca.js";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
 import {adicionarPeca} from "./combos.js";
+import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
 import {alternarCotacao, fecharCotacao} from "./cotacao.js";
 import {acharEntrada, adicionar, criarCategoria, definirQuantidade, desfazer,
         escolherComandante, tirar, tirarComandante} from "./edicao.js";
@@ -32,6 +33,26 @@ import {toast} from "./utilidades.js";
 export function ligarEventos(){
   $("busca").addEventListener("input", agendarBusca);
   $("busca-cmd").addEventListener("input", agendarBuscaComandante);
+
+  // Achar no que já está montado. Sem atraso, ao contrário da busca da
+  // esquerda: aqui não há rede nenhuma — é filtrar uma lista de 100 que já
+  // está na memória, e esperar 200ms pra isso só faria a tela parecer lenta.
+  $("busca-deck").addEventListener("input", (e) =>
+    procurarNaLista("deck", e.target.value));
+  $("busca-talvez").addEventListener("input", (e) =>
+    procurarNaLista("talvez", e.target.value));
+  $("ordem-lista").addEventListener("change", (e) => ordenarLista(e.target.value));
+
+  // Esc num campo cheio limpa o campo, e só isso: sem o `stopPropagation` o
+  // mesmo Esc chegaria ao documento e fecharia a gaveta ou a modal atrás —
+  // duas coisas num toque, e a que a pessoa queria era a de perto.
+  for (const [id, tabuleiro] of [["busca-deck", "deck"], ["busca-talvez", "talvez"]]){
+    $(id).addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !e.target.value) return;
+      e.stopPropagation();
+      procurarNaLista(tabuleiro, "");
+    });
+  }
 
   ligarTecladoDaBusca($("busca"), $("res"));
   ligarTecladoDaBusca($("busca-cmd"), $("res-cmd"));
@@ -220,6 +241,11 @@ export function ligarEventos(){
                                       doTabuleiro(menuCarta));
     const menuGrupo = e.target.closest("[data-menu-grupo]");
     if (menuGrupo) return menuDoGrupo(menuGrupo, menuGrupo.dataset.menuGrupo);
+    // O título do grupo é o botão de recolher: é o alvo grande, e recolher é
+    // o que se faz num cabeçalho de lista.
+    const recolhe = e.target.closest("[data-recolher-grupo]");
+    if (recolhe) return alternarGrupo(recolhe.dataset.recolherGrupo,
+                                      doTabuleiro(recolhe));
     // A linha inteira abre a carta — depois dos botões dela, que já
     // devolveram acima. Clicar no nome é o gesto óbvio pra "me conta mais
     // sobre esta carta", e o "Ver a carta" do menu é o caminho do teclado.

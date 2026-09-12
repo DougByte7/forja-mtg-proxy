@@ -157,3 +157,11 @@ export function ico(nome, rotulo){
 export function preco(carta){
   return carta.preco_usd ? moeda(carta.preco_usd) : "";
 }
+
+/* Texto reduzido ao que se digita de fato: minúsculo e sem acento. Quem
+   procura "jotun" no deck quer achar o Jötun Grunt — o trema está no nome da
+   carta, não no teclado de quem busca. */
+export function semAcento(s){
+  return String(s || "").toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}

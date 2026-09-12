@@ -122,4 +122,22 @@ export const estado = {
 
   aba: "deck",              // aba do centro
   rail: "buscar",           // aba do painel de adicionar
+
+  // ------------------------------------------------- a lente das duas listas
+  //
+  // Como o deck e o maybeboard estão sendo OLHADOS agora: um texto que
+  // esconde o que não casa, a ordem das cartas dentro de cada grupo e os
+  // grupos recolhidos. Nada disto é o deck — não entra no `corpoDoDeck`, não
+  // é salvo e o Ctrl+Z não mexe nisso. É por isso que vive aqui e não na
+  // entrada de cada carta: mudar de ordem não pode marcar o deck como
+  // alterado.
+  //
+  // Cada lista tem a SUA busca (procurar no deck não pode filtrar o
+  // maybeboard junto), mas a ordem é uma só pras duas: são a mesma lista
+  // lida em dois lugares, e ordená-las diferente seria ler duas listas.
+  listaBusca: {deck: "", talvez: ""},
+  listaOrdem: "cmc",        // ver `ORDENS_DA_LISTA` em desenho.js
+  // Chaves "<tabuleiro>:<categoria>" — o mesmo nome de categoria pode estar
+  // aberto de um lado e recolhido do outro.
+  gruposFechados: new Set(),
 };

@@ -151,6 +151,25 @@ export function valorHTML(entrada){
     title="${escapar(titulo)}">${precoTexto(p, entrada.quantidade)}</span>`;
 }
 
+/* O preço de uma linha como NÚMERO, pra ordenar a lista por ele.
+
+   É o mesmo valor que a linha ESCREVE — com a quantidade dentro, porque é o
+   que está na tela: quem ordena por "mais cara primeiro" está olhando uma
+   coluna de valores e espera que ela desça. E é reduzido a uma moeda só pelo
+   mesmo caminho do subtotal: com câmbio, tudo em real; sem câmbio, o que só
+   tem preço em real fica fora da comparação — não há régua pra convertê-lo.
+
+   `null` é "ninguém sabe o preço desta carta", e quem ordena a resolve pro
+   fim da lista nos dois sentidos: não saber não é ser barato nem ser cara. */
+export function valorComparavel(entrada){
+  const p = precoUnitario(entrada.carta);
+  if (!p) return null;
+  const t = taxa();
+  if (!t && p.moeda === "BRL") return null;
+  const unidade = (t && p.moeda === "USD") ? p.valor * t : p.valor;
+  return unidade * entrada.quantidade;
+}
+
 /* O total do deck, pelo mesmo critério do Commander 500 que a cotação usa
    (`cotacao.filtrar_cotaveis`): comandante e terreno básico ficam de fora.
    Duas contas diferentes pro mesmo deck na mesma tela seriam pior do que
