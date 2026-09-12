@@ -968,7 +968,7 @@ def cartas_busca(q: str = "", identidade: str | None = None, tipo: str = "",
                  comandante: bool = False, limite: int = 40, texto: str = "",
                  cmc_min: float | None = None, cmc_max: float | None = None,
                  cores: str | None = None, preco_max: float | None = None,
-                 ordem: str = ""):
+                 ordem: str = "", pular: int = 0, com_total: bool = False):
     """Busca na base local. Sem token: é catálogo público de carta de Magic.
 
     `identidade` é a do comandante já escolhido — quando vem, some da lista
@@ -980,12 +980,20 @@ def cartas_busca(q: str = "", identidade: str | None = None, tipo: str = "",
     carta (em inglês, que é como o bulk data vem). O resto — `cmc_min`,
     `cmc_max`, `cores`, `preco_max`, `ordem` — são os filtros avançados da
     gaveta da tela; todos opcionais, e todos combinam entre si e com o nome.
+
+    `pular` e `com_total` são a paginação do painel de adicionar, que aparece
+    quando há filtro ligado: `pular` é o começo da página e `com_total` pede o
+    tamanho do bolo inteiro, que vira o "1 / 8" do paginador. O total custa
+    uma varredura a mais, então só vem quando pedido.
     """
-    return {"cartas": cartas.buscar(termo=q, identidade=identidade, tipo=tipo,
-                                    comandante=comandante, limite=limite,
-                                    texto=texto, cmc_min=cmc_min,
-                                    cmc_max=cmc_max, cores=cores,
-                                    preco_max=preco_max, ordem=ordem)}
+    filtros = dict(termo=q, identidade=identidade, tipo=tipo,
+                   comandante=comandante, texto=texto, cmc_min=cmc_min,
+                   cmc_max=cmc_max, cores=cores, preco_max=preco_max)
+    resposta = {"cartas": cartas.buscar(limite=limite, ordem=ordem,
+                                        pular=pular, **filtros)}
+    if com_total:
+        resposta["total"] = cartas.contar(**filtros)
+    return resposta
 
 
 @app.get("/cartas/detalhe")

@@ -5,7 +5,7 @@
    armadilha em tela de toque, onde o ✕ fica longe do polegar. */
 
 import {$, escapar} from "../comum/dom.js";
-import {agendarBusca, buscar} from "./busca.js";
+import {agendarBusca, buscarDoComeco} from "./busca.js";
 import {estado, FILTROS_VAZIOS, NOME_DO_TIPO, TIPOS} from "./estado.js";
 import {simboloDaTela} from "./preco.js";
 import {ico} from "./utilidades.js";
@@ -154,12 +154,12 @@ export function tirarFiltro(chave){
   }
   preencherGavetaFiltros();
   desenharBarraFiltros();
-  buscar();
+  buscarDoComeco();
 }
 
 export function limparFiltros(){
   estado.filtros = {...FILTROS_VAZIOS};
   preencherGavetaFiltros();
   desenharBarraFiltros();
-  buscar();
+  buscarDoComeco();
 }

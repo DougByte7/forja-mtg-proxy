@@ -422,6 +422,41 @@ try:
        [c["nome"] for c in cartas.buscar("sol ring", ordem="preco_desc")][0],
        "Sol Ring")
 
+    # ------------------------------------------------------------- páginas
+    print("\n--- páginas (o paginador da tela) ---")
+
+    # A página é um corte da MESMA lista. Coladas, as páginas têm que dar a
+    # lista inteira na mesma ordem: onde a ordenação não é total, uma carta
+    # aparece em duas páginas e outra em nenhuma — e aí a lista mente sem
+    # errar nenhuma consulta.
+    todas = [c["nome"] for c in cartas.buscar(ordem="nome", limite=200)]
+    coladas = []
+    for inicio in range(0, len(todas), 3):
+        coladas += [c["nome"] for c in cartas.buscar(ordem="nome", limite=3,
+                                                     pular=inicio)]
+    eq("as páginas coladas dão a lista inteira, na mesma ordem", coladas, todas)
+    eq("página depois do fim vem vazia", cartas.buscar(limite=3, pular=999), [])
+    eq("pular negativo é a primeira página",
+       [c["nome"] for c in cartas.buscar(ordem="nome", limite=3, pular=-5)],
+       todas[:3])
+    eq("a página obedece aos filtros junto do resto",
+       [c["nome"] for c in cartas.buscar(tipo="enchantment", ordem="nome",
+                                         limite=1, pular=1)],
+       ["Sylvan Library"])
+
+    # O total é o denominador do "1 / 8" da tela: conta a lista inteira, com
+    # os mesmos filtros e sem o teto da página. Um total que discordasse da
+    # busca daria página vazia no fim, ou esconderia carta que existe.
+    eq("contar não obedece ao limite da página", cartas.contar(), len(todas))
+    eq("contar obedece aos filtros",
+       cartas.contar(tipo="enchantment"),
+       len(cartas.buscar(tipo="enchantment", limite=200)))
+    eq("contar e buscar concordam com filtros combinados",
+       cartas.contar(texto="draw", cmc_max=2),
+       len(cartas.buscar(texto="draw", cmc_max=2, limite=200)))
+    eq("contar conta o que a busca acha pelo nome",
+       cartas.contar("sol"), len(cartas.buscar("sol", limite=200)))
+
     # ------------------------------------------------------------- por_nomes
     print("\n--- resolver nomes ---")
 

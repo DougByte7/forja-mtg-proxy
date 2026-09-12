@@ -964,28 +964,15 @@ def _filtro_cores(cores: str | None, onde: list, params: list):
     params.extend(locais)
 
 
-def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
-           comandante: bool = False, so_legais: bool = True,
-           limite: int = 40, texto: str = "", cmc_min: float | None = None,
-           cmc_max: float | None = None, cores: str | None = None,
-           preco_max: float | None = None, ordem: str = "") -> list[dict]:
-    """Busca por nome, com os filtros da tela.
+def _condicoes(termo: str, identidade: str | None, tipo: str,
+               comandante: bool, so_legais: bool, texto: str,
+               cmc_min: float | None, cmc_max: float | None,
+               cores: str | None,
+               preco_max: float | None) -> tuple[str, list[str], list]:
+    """O WHERE da busca, num lugar só: `buscar` e `contar` pedem o mesmo.
 
-    `identidade` é a do comandante já escolhido: passando `"WG"`, some da
-    lista toda carta que o deck não poderia jogar. Passar `None` não filtra —
-    é o estado de antes de escolher comandante.
-
-    `texto` é a busca por EFEITO — ver `_filtro_texto`. Ela é o único filtro
-    daqui que varre coluna sem índice; o custo é uma varredura de ~35 mil
-    linhas curtas, que o SQLite faz em poucos milissegundos, e por isso não
-    vale um índice de texto completo com a manutenção que ele pediria a cada
-    sincronização.
-
-    A ordenação põe primeiro quem casa o nome inteiro, depois quem começa com
-    o termo, depois o resto: quem digita "sol ring" quer o Sol Ring na
-    primeira linha, não o "Solemn Simulacrum". `ordem` só é obedecida quando
-    NÃO há nome digitado — com termo na caixa, relevância ganha de qualquer
-    outra ordenação, senão "sol" ordenado por preço não mostraria o Sol Ring.
+    Devolve `(alvo, onde, params)`. O `alvo` é o nome normalizado, e volta
+    junto porque a `buscar` ainda o usa na ordenação por relevância.
     """
     alvo = normalizar(termo)
     onde, params = [], []
@@ -1018,6 +1005,67 @@ def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
         params.append(float(preco_max))
     _filtro_identidade(identidade, onde, params)
 
+    return alvo, onde, params
+
+
+def contar(termo: str = "", identidade: str | None = None, tipo: str = "",
+           comandante: bool = False, so_legais: bool = True, texto: str = "",
+           cmc_min: float | None = None, cmc_max: float | None = None,
+           cores: str | None = None, preco_max: float | None = None) -> int:
+    """Quantas cartas a mesma busca acha — sem teto e sem página.
+
+    É o denominador do paginador da tela ("1 / 8") e o total que ela escreve
+    ao lado do seletor de quantos por página. Fica fora da `buscar` porque é
+    uma varredura a mais, e só quem pagina precisa dela: sem filtro ligado a
+    lista é curta por escolha, e não paga esse preço a cada tecla digitada.
+    """
+    _, onde, params = _condicoes(termo, identidade, tipo, comandante,
+                                 so_legais, texto, cmc_min, cmc_max, cores,
+                                 preco_max)
+    sql = "SELECT COUNT(*) FROM cartas"
+    if onde:
+        sql += " WHERE " + " AND ".join(onde)
+    conn = _conn()
+    try:
+        return int(conn.execute(sql, params).fetchone()[0])
+    except sqlite3.OperationalError:
+        return 0  # base ainda não montada
+    finally:
+        conn.close()
+
+
+def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
+           comandante: bool = False, so_legais: bool = True,
+           limite: int = 40, texto: str = "", cmc_min: float | None = None,
+           cmc_max: float | None = None, cores: str | None = None,
+           preco_max: float | None = None, ordem: str = "",
+           pular: int = 0) -> list[dict]:
+    """Busca por nome, com os filtros da tela.
+
+    `identidade` é a do comandante já escolhido: passando `"WG"`, some da
+    lista toda carta que o deck não poderia jogar. Passar `None` não filtra —
+    é o estado de antes de escolher comandante.
+
+    `texto` é a busca por EFEITO — ver `_filtro_texto`. Ela é o único filtro
+    daqui que varre coluna sem índice; o custo é uma varredura de ~35 mil
+    linhas curtas, que o SQLite faz em poucos milissegundos, e por isso não
+    vale um índice de texto completo com a manutenção que ele pediria a cada
+    sincronização.
+
+    A ordenação põe primeiro quem casa o nome inteiro, depois quem começa com
+    o termo, depois o resto: quem digita "sol ring" quer o Sol Ring na
+    primeira linha, não o "Solemn Simulacrum". `ordem` só é obedecida quando
+    NÃO há nome digitado — com termo na caixa, relevância ganha de qualquer
+    outra ordenação, senão "sol" ordenado por preço não mostraria o Sol Ring.
+
+    `pular` é o começo da página, na mesma ordem: com `limite=10`, `pular=20`
+    é a terceira página. Quem pagina pede a `contar` junto, que é quem sabe
+    quantas páginas existem.
+    """
+    alvo, onde, params = _condicoes(termo, identidade, tipo, comandante,
+                                    so_legais, texto, cmc_min, cmc_max,
+                                    cores, preco_max)
+
     sql = f"SELECT {_COLUNAS} FROM cartas"
     if onde:
         sql += " WHERE " + " AND ".join(onde)
@@ -1029,8 +1077,9 @@ def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
         # busca): vai pela ordem que os filtros pedirem e, sem pedido, por
         # nome, que ao menos é estável entre chamadas.
         sql += " ORDER BY " + ORDENS.get(ordem, ORDENS["nome"])
-    sql += " LIMIT ?"
+    sql += " LIMIT ? OFFSET ?"
     params.append(max(1, min(int(limite), 200)))
+    params.append(max(0, int(pular)))
 
     conn = _conn()
     try:

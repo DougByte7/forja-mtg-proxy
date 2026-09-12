@@ -5,7 +5,8 @@ import {ligarArrastar} from "./arrastar.js";
 import {abrirEscolhaDeArte, fecharArte} from "./artes.js";
 import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,
         atualizarCategoriasDoDestino, buscarComandante, escolherDestino,
-        ligarTecladoDaBusca, ultimosResultados} from "./busca.js";
+        escolherPorPagina, ligarTecladoDaBusca, ultimosResultados,
+        virarPagina} from "./busca.js";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
 import {adicionarPeca} from "./combos.js";
 import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
@@ -211,6 +212,10 @@ export function ligarEventos(){
       return desenharManabase();
     }
 
+    // As setas do paginador da busca, que só existe com filtro ligado.
+    const resPag = e.target.closest("[data-res-pag]");
+    if (resPag) return virarPagina(Number(resPag.dataset.resPag));
+
     const achado = e.target.closest(".achado");
     if (achado){
       const caixa = achado.closest(".resultados");
@@ -318,6 +323,13 @@ export function ligarEventos(){
     const novo = [...document.querySelectorAll("[data-qtd]")].find(el =>
       el.dataset.qtd === nome && el.closest(".linha").dataset.tabuleiro === tabuleiro);
     novo?.focus();
+  });
+
+  // Quantos resultados por página. Delegado no `#res` porque o seletor é
+  // redesenhado a cada busca — um listener no próprio `<select>` morreria
+  // junto com ele na primeira troca de página.
+  $("res").addEventListener("change", (e) => {
+    if (e.target.id === "res-por-pagina") escolherPorPagina(Number(e.target.value));
   });
 
   $("nome-deck").addEventListener("input", () => {

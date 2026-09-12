@@ -69,6 +69,17 @@ export const FILTROS_VAZIOS = {
   ordem: "nome",
 };
 
+/* Tem algum filtro ligado? É a mesma pergunta que a bolinha do botão
+   responde com um número (ver `filtrosLigados`, em `filtros.js`), e a que
+   decide se a lista de resultados é paginada: sem filtro ela é uma vitrine
+   curta de cinco, com filtro é um recorte que a pessoa pediu e quer ver
+   inteiro. Mora aqui, e não lá, porque quem pergunta é a busca — e a busca
+   já é importada por `filtros.js`. */
+export function algumFiltro(){
+  return Object.keys(FILTROS_VAZIOS)
+    .some(k => estado.filtros[k] !== FILTROS_VAZIOS[k]);
+}
+
 export const estado = {
   id: null,
   nome: "Deck sem nome",
@@ -90,6 +101,12 @@ export const estado = {
   mesa: null,
   mesaDesfazer: [],  // pilha de fotografias do JSON da mesa
   filtros: {...FILTROS_VAZIOS},
+  // A paginação da busca, que só existe com filtro ligado. `buscaTotal` é o
+  // que o servidor contou na última resposta paginada — sem ele o paginador
+  // não saberia quantas páginas tem.
+  buscaPagina: 0,
+  buscaPorPagina: 5,
+  buscaTotal: 0,
   desfazer: [],
   combos: null,             // a última resposta do Spellbook
   combosAssinatura: null,   // como o deck estava quando ela foi buscada

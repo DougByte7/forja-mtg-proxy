@@ -421,7 +421,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
 | `GET /deckbuilder` | você, no navegador | a tela de montar deck de Commander — ver *Deckbuilder de Commander* |
-| `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta |
+| `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta. `pular` e `com_total` paginam o painel de adicionar, que só pagina com filtro ligado |
 | `GET /cartas/impressoes?nome=` | escolha de arte | as impressões oficiais da Scryfall (edição, ano, artista) — a vitrine. **Não** é o que vai pro papel |
 | `POST /artes/metadados` | escolha de arte | nome do arquivo, DPI e fonte de um punhado de ids do MPC Fill — só da página à vista |
 | `GET/PUT/DELETE /decks/{id}/artes` | escolha de arte | o que já foi escolhido; grava; volta ao padrão |

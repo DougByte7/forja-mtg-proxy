@@ -3,10 +3,10 @@
 import {$, escapar} from "../comum/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {adicionar, escolherComandante, ondeEsta} from "./edicao.js";
-import {CATEGORIA_SIDEBOARD, estado} from "./estado.js";
+import {algumFiltro, CATEGORIA_SIDEBOARD, estado} from "./estado.js";
 import {precoMaxEmUsd} from "./preco.js";
 import {api} from "./salvar.js";
-import {identidadeDoDeck, manaHTML, preco, toast,
+import {ico, identidadeDoDeck, manaHTML, preco, toast,
         todasAsCategorias} from "./utilidades.js";
 
 let buscaTimer = null;
@@ -74,7 +74,18 @@ export function ligarTecladoDaBusca(input, caixa){
 
 export function agendarBusca(){
   clearTimeout(buscaTimer);
+  // Quem digitou uma letra ou mexeu num filtro está fazendo outra pergunta:
+  // continuar na página 4 da pergunta anterior seria cair no meio de uma
+  // lista que ninguém viu começar.
+  estado.buscaPagina = 0;
   buscaTimer = setTimeout(buscar, 220);
+}
+
+/* A busca de novo, do começo. É o que os filtros chamam quando mudam sem
+   passar pelo atraso do teclado — tirar um chip, limpar tudo. */
+export function buscarDoComeco(){
+  estado.buscaPagina = 0;
+  return buscar();
 }
 
 export function agendarBuscaComandante(){
@@ -85,7 +96,17 @@ export function agendarBuscaComandante(){
 export async function buscar(){
   const termo = $("busca").value.trim();
   const identidade = estado.comandantes.length ? identidadeDoDeck() : null;
-  const params = new URLSearchParams({q: termo, limite: "24"});
+  // Com filtro ligado a lista vira página; sem filtro continua a vitrine de
+  // cinco com a frase no fim. Ver `algumFiltro`, em `estado.js`.
+  const paginada = algumFiltro();
+  const params = new URLSearchParams({
+    q: termo,
+    limite: paginada ? String(estado.buscaPorPagina) : "24",
+  });
+  if (paginada){
+    params.set("pular", String(estado.buscaPagina * estado.buscaPorPagina));
+    params.set("com_total", "true");
+  }
   if (identidade !== null) params.set("identidade", identidade);
   const f = estado.filtros;
   if (f.tipo) params.set("tipo", f.tipo);
@@ -97,7 +118,16 @@ export async function buscar(){
   if (f.ordem && f.ordem !== "nome") params.set("ordem", f.ordem);
   try {
     const r = await api("/cartas/busca?" + params);
-    mostrarResultados($("res"), r.cartas, adicionarPeloDestino);
+    estado.buscaTotal = paginada ? (r.total ?? r.cartas.length) : 0;
+    // A página em que se estava pode ter deixado de existir por baixo — um
+    // comandante escolhido depois encurta a lista sem ninguém tocar no
+    // filtro. Voltar pro começo é mais honesto do que mostrar nada.
+    if (paginada && !r.cartas.length && estado.buscaPagina > 0){
+      estado.buscaPagina = 0;
+      return buscar();
+    }
+    mostrarResultados($("res"), r.cartas, adicionarPeloDestino,
+                      {rodape: paginada ? paginadorDaBusca() : ""});
   } catch (e){
     $("res").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
   }
@@ -108,7 +138,8 @@ export async function buscarComandante(){
   const params = new URLSearchParams({q: termo, comandante: "true", limite: "25"});
   try {
     const r = await api("/cartas/busca?" + params);
-    mostrarResultados($("res-cmd"), r.cartas, escolherComandante, true);
+    mostrarResultados($("res-cmd"), r.cartas, escolherComandante,
+                      {comandantes: true});
   } catch (e){
     $("res-cmd").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
   }
@@ -125,7 +156,8 @@ export let ultimosResultados = [];
    sobraram, pra que a lista curta não pareça acervo acabado. */
 const TETO_RESULTADOS = 5;
 
-function mostrarResultados(caixa, cartas, aoClicar, comandantes){
+function mostrarResultados(caixa, cartas, aoClicar,
+                           {comandantes = false, rodape = ""} = {}){
   ultimosResultados = cartas;
   caixa.aoClicar = aoClicar;
   // A lista trocou: o índice destacado apontava pra outra carta.
@@ -135,16 +167,20 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
       comandantes ? " Lembre: comandante é criatura lendária." : ""}</div>`;
     return;
   }
-  const sobrando = cartas.length - TETO_RESULTADOS;
-  const resto = sobrando > 0
+  // Paginada, a lista já veio do tamanho da página: o teto seria um segundo
+  // corte por cima do que a pessoa pediu, e o rodapé é o paginador em vez da
+  // frase que manda usar os filtros — que ela já está usando.
+  const teto = rodape ? cartas.length : TETO_RESULTADOS;
+  const sobrando = cartas.length - teto;
+  const resto = rodape || (sobrando > 0
     ? `<div class="demais">E mais ${sobrando}${
         cartas.length >= 24 ? "+" : ""} carta(s) casam. Escreva mais uma letra
        ou use os filtros pra chegar na certa.</div>`
-    : "";
+    : "");
   // Três estados, não dois: uma carta que já está no maybeboard não é uma
   // carta nova nem uma carta do deck, e mostrá-la como qualquer um dos dois
   // faria a pessoa adicionar de novo o que ela mesma pôs em dúvida.
-  caixa.innerHTML = cartas.slice(0, TETO_RESULTADOS).map((c, i) => {
+  caixa.innerHTML = cartas.slice(0, teto).map((c, i) => {
     const onde = ondeEsta(c.nome);
     return `
     <button class="achado ${onde === "deck" ? "no-deck" : ""} ${
@@ -158,6 +194,60 @@ function mostrarResultados(caixa, cartas, aoClicar, comandantes){
       <span class="preco">${preco(c)}</span>
     </button>`;
   }).join("") + resto;
+}
+
+/* ------------------------------------------------------ o paginador
+
+   Ele só existe com filtro ligado, e é por isso que ele existe: sem filtro a
+   lista é uma vitrine de cinco e passar página nela seria folhear a base
+   inteira de carta em carta. Com filtro, a lista é um recorte que a pessoa
+   pediu — "criatura verde de até 3 por menos de 5 reais" — e aí ver as 37 que
+   casam é o ponto, não um consolo.
+
+   Quantos por página é escolha de quem olha: cinco cabem sem rolagem na
+   coluna, quinze pedem rolagem mas mostram o recorte quase inteiro de uma
+   vez. */
+const POR_PAGINA = [5, 10, 15];
+
+function paginadorDaBusca(){
+  const por = estado.buscaPorPagina;
+  const paginas = Math.max(1, Math.ceil(estado.buscaTotal / por));
+  const pagina = Math.min(estado.buscaPagina, paginas - 1);
+  return `<div class="paginador res-paginador">
+    <label class="por-pagina" title="Quantos resultados por página">
+      <select id="res-por-pagina" aria-label="Resultados por página">${
+        POR_PAGINA.map(n => `<option value="${n}"${
+          n === por ? " selected" : ""}>${n}</option>`).join("")}</select>
+      <span>de ${estado.buscaTotal}</span>
+    </label>
+    <span class="pag-passos">
+      <button class="mini" data-res-pag="-1" title="Página anterior"
+              aria-label="Página anterior"${pagina === 0 ? " disabled" : ""}>${
+        ico("caret-left")}</button>
+      <span>${pagina + 1} / ${paginas}</span>
+      <button class="mini" data-res-pag="1" title="Próxima página"
+              aria-label="Próxima página"${
+                pagina >= paginas - 1 ? " disabled" : ""}>${
+        ico("caret-right")}</button>
+    </span>
+  </div>`;
+}
+
+export function virarPagina(passo){
+  const paginas = Math.max(1, Math.ceil(estado.buscaTotal / estado.buscaPorPagina));
+  const nova = Math.min(Math.max(estado.buscaPagina + passo, 0), paginas - 1);
+  if (nova === estado.buscaPagina) return;
+  estado.buscaPagina = nova;
+  buscar();
+}
+
+/* Mudar o tamanho da página volta pro começo: a carta que estava na tela
+   está em outra página agora, e fingir que a página 4 de cinco em cinco é a
+   página 4 de quinze em quinze levaria pra um lugar que ninguém pediu. */
+export function escolherPorPagina(quantos){
+  estado.buscaPorPagina = quantos;
+  estado.buscaPagina = 0;
+  buscar();
 }
 
 /* ------------------------------------------------------- destino da carta

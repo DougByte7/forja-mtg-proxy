@@ -106,6 +106,20 @@ var location = {search:"", pathname:"/deckbuilder", origin:"http://x", href:""};
 var history = {replaceState:function(){}};
 var localStorage = {getItem:function(){return null;}, setItem:function(){}};
 var navigator = {clipboard:{writeText:function(){}}};
+function URLSearchParams(inicial){
+  this._p = [];
+  for (var k in inicial) if (Object.prototype.hasOwnProperty.call(inicial, k))
+    this._p.push([k, String(inicial[k])]);
+  this.set = function(k, v){
+    for (var i = 0; i < this._p.length; i++)
+      if (this._p[i][0] === k){ this._p[i][1] = String(v); return; }
+    this._p.push([k, String(v)]);
+  };
+  this.toString = function(){
+    return this._p.map(function(par){
+      return par[0] + "=" + encodeURIComponent(par[1]); }).join("&");
+  };
+}
 var fetch = function(){ throw new Error("este teste não vai à rede"); };
 var requestAnimationFrame = function(){};
 var setTimeout = function(){return 0;};    var clearTimeout = function(){};
@@ -543,6 +557,80 @@ try:
     eq("com uma ficha no padrão, o pedido não sai",
        fichas["antes"], "Faltam 1 arte(s) — escolha na aba Artes")
     eq("com as fichas escolhidas, sai", fichas["depois"], "/?deck=abc123")
+
+    # --------------------------------------------- o paginador da busca
+    print("\n--- o paginador da busca ---")
+
+    # Ele só existe com filtro ligado, e essa é a decisão inteira: sem filtro
+    # a lista é uma vitrine de cinco, e passar página nela seria folhear a
+    # base de carta em carta. A pergunta "tem filtro?" mora no `estado.js`, e
+    # tem que dar a mesma resposta que a bolinha do botão dá em número — daí
+    # `cmcMin: "0"` contar como filtro: ele também vira chip na fita.
+    pag = avaliar("""
+    var vazio = {tipo:"", texto:"", cores:"", cmcMin:"", cmcMax:"",
+                 precoMax:"", ordem:"nome"};
+    function com(mudanca){
+      estado.filtros = Object.assign({}, vazio, mudanca);
+      return algumFiltro();
+    }
+    JSON.stringify({
+      semNada: com({}),
+      tipo: com({tipo:"creature"}),
+      cor: com({cores:"G"}),
+      cmcZero: com({cmcMin:"0"}),
+      ordem: com({ordem:"preco_desc"})
+    });
+    """)
+    eq("sem filtro, a lista não pagina", pag["semNada"], False)
+    eq("cada filtro ligado liga o paginador",
+       [pag["tipo"], pag["cor"], pag["cmcZero"], pag["ordem"]],
+       [True, True, True, True])
+
+    # O denominador vem do total que o servidor contou, e não do tamanho da
+    # página: 37 cartas de 5 em 5 são 8 páginas, e a oitava tem duas.
+    passos = avaliar("""
+    estado.buscaTotal = 37; estado.buscaPorPagina = 5;
+    estado.buscaPagina = 0; var primeira = paginadorDaBusca();
+    estado.buscaPagina = 7; var ultima = paginadorDaBusca();
+    estado.buscaPorPagina = 15; var quinze = paginadorDaBusca();
+    JSON.stringify({primeira: primeira, ultima: ultima, quinze: quinze});
+    """)
+    check("o paginador conta as páginas pelo total",
+          "1 / 8" in passos["primeira"], passos["primeira"])
+    check("na primeira página, voltar está desligado",
+          'data-res-pag="-1" title="Página anterior"' in passos["primeira"]
+          and "disabled" in passos["primeira"].split('data-res-pag="1"')[0])
+    check("na última, avançar está desligado",
+          "disabled" in passos["ultima"].split('data-res-pag="1"')[1],
+          passos["ultima"])
+    check("o tamanho escolhido vem marcado no seletor",
+          '<option value="15" selected>' in passos["quinze"], passos["quinze"])
+    # A página vira com o total novo: 37 de 15 em 15 são 3, e a página 7 não
+    # existe mais — o paginador mostra a última que existe em vez de um
+    # número solto.
+    check("o número da página não passa do fim",
+          "3 / 3" in passos["quinze"], passos["quinze"])
+
+    # Trocar o tamanho da página volta pro começo: a carta que estava na tela
+    # está em outra página agora, e "página 4" de 5 em 5 não é a mesma coisa
+    # que "página 4" de 15 em 15. As setas, essas, param nas pontas.
+    andar = avaliar("""
+    estado.filtros.tipo = "creature";
+    estado.buscaTotal = 37; estado.buscaPorPagina = 5; estado.buscaPagina = 0;
+    virarPagina(-1); var naPrimeira = estado.buscaPagina;
+    virarPagina(1); var depoisDeUma = estado.buscaPagina;
+    estado.buscaPagina = 7; virarPagina(1); var naUltima = estado.buscaPagina;
+    escolherPorPagina(15);
+    JSON.stringify({naPrimeira: naPrimeira, depoisDeUma: depoisDeUma,
+                    naUltima: naUltima, porPagina: estado.buscaPorPagina,
+                    depoisDeTrocar: estado.buscaPagina});
+    """)
+    eq("voltar da primeira página não vai pra página -1", andar["naPrimeira"], 0)
+    eq("a seta anda uma página", andar["depoisDeUma"], 1)
+    eq("avançar da última não passa do fim", andar["naUltima"], 7)
+    eq("o tamanho escolhido vale", andar["porPagina"], 15)
+    eq("e trocar de tamanho volta pra primeira página",
+       andar["depoisDeTrocar"], 0)
 
     # -------------------------------------------------- o que vai pro servidor
     print("\n--- o que a tela manda pro servidor ---")

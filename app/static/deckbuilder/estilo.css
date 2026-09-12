@@ -1639,6 +1639,26 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
   color:var(--text-muted);
 }
 .paginador .mini:disabled{opacity:.3;cursor:not-allowed;}
+/* O paginador da busca tem duas metades, e elas respondem perguntas
+   diferentes: à esquerda, quantos resultados por página e quantos existem ao
+   todo — que é sobre a lista inteira; à direita, em que página estou dela.
+   Separadas pelas pontas, nenhuma das duas é lida como continuação da
+   outra. */
+.res-paginador{justify-content:space-between;gap:6px;padding-top:2px;}
+.res-paginador .por-pagina,
+.res-paginador .pag-passos{display:flex;align-items:center;gap:6px;}
+.res-paginador .por-pagina{cursor:pointer;}
+.res-paginador select{
+  font-family:inherit;font-size:11px;color:var(--text);cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:6px;padding:2px 18px 2px 7px;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--text-muted) 50%),
+                   linear-gradient(135deg,var(--text-muted) 50%,transparent 50%);
+  background-position:calc(100% - 11px) 50%, calc(100% - 7px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;
+}
+.res-paginador select:hover{border-color:var(--gold);color:var(--gold-light);}
+.res-paginador select option{background:var(--surface-2);color:var(--text);}
 
 /* ---------------- nível de poder (brackets) ---------------- */
 .escala{display:flex;gap:5px;margin:4px 0 12px;}
