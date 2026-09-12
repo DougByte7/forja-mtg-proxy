@@ -258,7 +258,7 @@ button.medidor:hover b{color:var(--gold);}
 .talvez-lista{overflow-y:auto;margin:0 -4px;padding:0 4px;min-height:0;}
 /* Uma coluna, não duas: a área é estreita de propósito. É a margem do
    caderno, não uma segunda lista de deck. */
-.talvez-lista .colunas{grid-template-columns:minmax(0,1fr);}
+.talvez-lista .colunas{column-width:auto;column-count:1;}
 .talvez-lista .grupo{margin-bottom:11px;}
 .talvez-lista .linha{gap:6px;padding:4px 4px;}
 .talvez-lista .grupo h3{font-size:11px;}
@@ -1332,15 +1332,23 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 /* `.separador`, e não `.risco`: esse nome já é o cartão de risco das
    chances de comprar, e o estilo dele vazaria pra cá. */
 .menu .separador{height:1px;background:var(--border);margin:5px 4px;}
-/* 352px é o mínimo em que o nome da carta não trunca com a coluna de preço
+/* Colunas de jornal, e não grade: a lista DESCE a primeira coluna inteira
+   antes de começar a segunda. Numa grade, que preenche linha por linha, a
+   ordem cai em ziguezague — 1ª carta à esquerda, 2ª à direita, 3ª de volta à
+   esquerda — e ordenar por preço ou por nome não serve de nada se ler a
+   ordem exige varrer os olhos de um lado pro outro a cada carta.
+
+   352px é o mínimo em que o nome da carta não trunca com a coluna de preço
    (~46px) ao lado. Medido: abaixo disso o corte pega quase um terço das
    cartas nas larguras de tablet; acima, não melhora nada e só custa uma
-   coluna inteira. O `min(…, 100%)` é o telefone: lá o painel tem menos de
-   352px, e o mínimo cheio empurraria o fim da linha — o ⋯ — pra fora dele. */
-.colunas{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(min(352px,100%),1fr));
-  gap:2px 16px;
-}
+   coluna inteira. Não precisa do `min(…, 100%)` que a grade precisava: um
+   `column-width` maior que o espaço vira uma coluna só da largura que há —
+   o telefone se resolve sozinho. */
+.colunas{column-width:352px;column-gap:16px;}
+/* O vão entre as linhas era o `row-gap` da grade; aqui ele é margem de cada
+   uma. E nenhuma linha pode ser partida no pé da coluna: metade de uma carta
+   embaixo e metade em cima da próxima não é uma linha, são duas erradas. */
+.colunas .linha{break-inside:avoid;margin-bottom:2px;}
 
 /* A linha inteira é clicável: ela abre a carta em tela cheia. */
 .linha{
