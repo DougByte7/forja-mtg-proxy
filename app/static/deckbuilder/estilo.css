@@ -1388,9 +1388,15 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 /* Os botões do fim da linha flutuam por cima dela em vez de ocuparem uma
    coluna fixa: reservados no fluxo, eles tirariam espaço do nome da carta
    o tempo todo pra aparecerem só no hover. O degradê à esquerda separa os
-   botões do texto que passa por baixo. */
+   botões do texto que passa por baixo.
+
+   Centrados esticando de cima a baixo, e não com `top:50%` + `transform`: o
+   transform só move o desenho, e a caixa de layout, começando no meio da
+   linha, sobra pra baixo dela. Na linha do pé de uma coluna essa sobra é
+   empurrada pra coluna seguinte, e a caixa partida nas duas desenha os
+   botões esticados por cima de ambas, longe da linha. */
 .linha .ctrl{
-  position:absolute;top:50%;right:5px;transform:translateY(-50%);
+  position:absolute;top:0;bottom:0;right:5px;align-items:center;
   display:flex;gap:2px;opacity:0;transition:opacity .12s;
   padding-left:18px;border-radius:7px;
   background:linear-gradient(to right,
@@ -1421,7 +1427,7 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
    fluxo — flutuando eles cobririam o fim de todo nome, o tempo todo. */
 @media (hover:none){
   .linha .ctrl{
-    position:static;transform:none;opacity:1;
+    position:static;opacity:1;
     flex:none;padding-left:0;background:none;
   }
   .linha .so-celular{display:flex;}
@@ -2160,7 +2166,7 @@ button.mb-base-grupo:hover{border-color:var(--gold);color:var(--gold-light);}
   /* Sem hover em toque: o ✕ e os controles da linha ficam sempre à vista,
      senão não haveria como tirar a carta. */
   .linha .ctrl{
-    position:static;transform:none;opacity:1;
+    position:static;opacity:1;
     flex:none;padding-left:0;background:none;
   }
   .linha .so-celular{display:flex;}
