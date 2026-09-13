@@ -34,15 +34,8 @@ function arteNaMesa(c){
   return imagemDaFace(c.carta || {}, face, 0, artesDoJogador(c.dono));
 }
 
-/* Um marcador na carta cabe em duas ou três letras, e não no nome: o canto
-   da carta é o espaço de um selo. A sigla é o que se reconhece de relance
-   ("+2" de +1/+1), e o nome inteiro fica no `title`. */
-function siglaDaMarca(nome){
-  if (nome === "+1/+1") return "+";
-  if (nome === "-1/-1") return "−";
-  return nome.slice(0, 1).toUpperCase();
-}
-
+/* Cada selo diz a quantidade e o nome ("5: +1/+1"): marcador de Magic é
+   lista aberta, e uma sigla de uma letra confunde "tempo" com "tesouro". */
 function marcasDaCartaHTML(c){
   const nomes = Object.keys(c.marcas || {});
   if (!nomes.length) return "";
@@ -50,7 +43,7 @@ function marcasDaCartaHTML(c){
   const titulo = nomes.map(n => `${n}: ${c.marcas[n]}`).join(", ");
   return `<span class="gf-marcas" title="${escapar(titulo)}">${
     nomes.slice(0, 3).map(n => `<span class="gf-marca-b">${
-      escapar(siglaDaMarca(n))}${c.marcas[n]}</span>`).join("")}</span>`;
+      c.marcas[n]}: ${escapar(n)}</span>`).join("")}</span>`;
 }
 
 /* Nenhuma carta da mesa usa a prévia que segue o mouse: a carta aparece no

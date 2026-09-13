@@ -942,7 +942,7 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .gf-area-titulo{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--text-muted);text-align:center;margin-bottom:6px;}
 .gf-area-titulo b{font-family:'IBM Plex Mono',monospace;color:var(--text);}
-.gf-area-corpo{min-height:200px;display:flex;flex-direction:column;
+.gf-area-corpo{min-height:126px;display:flex;flex-direction:column;
   justify-content:center;gap:8px;}
 /* Comando e mão numa linha só; quando a largura não dá, o comando sobe. */
 .gf-linha-mao{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;}
@@ -956,18 +956,19 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .gf-carta.solta-antes{box-shadow:-6px 0 0 -2px var(--gold);}
 .gf-carta.solta-depois{box-shadow:6px 0 0 -2px var(--gold);}
 
-/* A carta da mesa é a arte inteira, em 144x200 — a proporção da carta, num
-   tamanho em que o nome e o corpo impressos se leem sem abrir nada. O nome
-   fica no `title` e no painel da carta: num tabuleiro de 40 cartas, texto
-   embaixo de cada uma faria a mesa não caber. */
-.gf-carta{width:144px;height:200px;border-radius:8px;border:1px solid var(--border);
-  background:var(--inset) center/cover no-repeat;cursor:pointer;flex:none;
+/* A carta da mesa é o topo da arte, em 144x126: o nome impresso e a
+   ilustração, que é o que identifica a carta de relance, numa altura que
+   deixa a mesa compacta. O texto inteiro fica no painel da carta: num
+   tabuleiro de 40 cartas, a carta inteira faria a mesa não caber. */
+.gf-carta{width:144px;height:126px;border-radius:8px;border:1px solid var(--border);
+  background:var(--inset) top/cover no-repeat;cursor:pointer;flex:none;
   position:relative;padding:0;transition:transform .12s;}
 .gf-carta:hover{border-color:var(--purple);transform:translateY(-6px);}
 /* Deitada gira 90°, e girar não muda a caixa do layout: a carta continua
-   ocupando 144 de largura enquanto DESENHA 200. A margem lateral cobre essa
-   diferença — (200-144)/2 = 28px de cada lado — senão ela invade as vizinhas. */
-.gf-carta.deitada{transform:rotate(90deg);margin:0 28px;}
+   ocupando 126 de altura enquanto DESENHA 144. A margem vertical cobre essa
+   diferença — (144-126)/2 = 9px em cima e embaixo — senão ela invade a fila
+   de baixo. A opacidade é o que se vê de longe: essa já foi usada. */
+.gf-carta.deitada{transform:rotate(90deg);margin:9px 0;opacity:.5;}
 .gf-carta.deitada:hover{transform:rotate(90deg) translateY(-6px);}
 .gf-carta.virada{background-image:none;
   background:repeating-linear-gradient(45deg,var(--surface-2),
@@ -981,13 +982,14 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   word-break:break-word;}
 /* Os marcadores da carta, empilhados no canto. Três cabem; o `title` do
-   conjunto lista todos, com o nome inteiro — "+2" é o que se lê de relance,
-   "+1/+1: 2" é o que responde a dúvida. */
+   conjunto lista todos. Nome longo corta com reticências na largura da
+   carta, e o `title` traz o nome inteiro. */
 .gf-carta .gf-marcas{position:absolute;top:4px;right:4px;display:flex;
   flex-direction:column;gap:3px;align-items:flex-end;}
-.gf-carta .gf-marca-b{min-width:20px;height:20px;border-radius:10px;
+.gf-carta .gf-marca-b{min-width:20px;max-width:126px;height:20px;border-radius:10px;
   background:var(--gold);color:var(--sobre-gold);font-size:11px;font-weight:700;
-  display:grid;place-items:center;padding:0 5px;
+  display:block;line-height:20px;text-align:center;padding:0 5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font-family:'IBM Plex Mono',monospace;}
 /* Atacante e bloqueador: a marca fica no canto de baixo pra não brigar com os
    marcadores, e a borda colorida é o que se vê sem ler. */
