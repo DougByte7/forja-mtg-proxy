@@ -930,6 +930,16 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   color:var(--text-muted);margin:12px 0 5px;}
 .gf-fila{display:flex;gap:8px;flex-wrap:wrap;min-height:8px;}
 
+/* A mesa é centralizada: o campo, o comando e a mão ficam no eixo da área de
+   jogo, como num tabuleiro, e os controles de cada jogador acompanham o
+   mesmo eixo pra não ficar uma coluna torta à esquerda. Só dentro de
+   `#gf-mesa` — as modais usam as mesmas classes e são listas, que se leem
+   alinhadas à esquerda. O log também fica à esquerda: é texto corrido. */
+#gf-mesa .gf-fila,#gf-mesa .gf-cabeca,#gf-mesa .gf-zonas,#gf-mesa .gf-resumo,
+#gf-mesa .gf-acoes{justify-content:center;}
+#gf-mesa .gf-secao,#gf-mesa .gf-subsecao,#gf-mesa .gf-vazio,
+#gf-mesa .nota{text-align:center;}
+
 /* A carta da mesa é a arte inteira, em 144x200 — a proporção da carta, num
    tamanho em que o nome e o corpo impressos se leem sem abrir nada. O nome
    fica no `title` e na prévia do hover (a mesma de todo o resto da tela):
@@ -978,10 +988,11 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   padding:4px 0;}
 .gf-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
 
-/* O painel da carta na mão: à esquerda da mesa, na altura das colunas fixas
-   da tela. `left` sai do script (`mostrarPainel`), que mede a mesa. Não pega
-   o mouse: ele é leitura, e um painel que pega o ponteiro roubaria o hover
-   da carta que o abriu. */
+/* O painel da carta na mão: flutua à esquerda da mesa, na altura das colunas
+   fixas da tela, com o `left` medido pelo script (`mostrarPainel`). Na tela
+   cheia ele ganha uma coluna dentro da área de jogo (abaixo). Não pega o
+   mouse: ele é leitura, e um painel que pega o ponteiro roubaria o hover da
+   carta que o abriu. */
 .gf-detalhe{position:fixed;top:74px;left:16px;z-index:60;width:288px;
   max-height:calc(100vh - 92px);overflow:hidden;pointer-events:none;
   display:flex;flex-direction:column;gap:8px;padding:12px;
@@ -1006,11 +1017,23 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;}
 .gf-detalhe-face + .gf-detalhe-face{border-top:1px solid var(--border);
   margin-top:4px;padding-top:8px;}
-/* Na tela cheia a mesa começa na borda da janela, e o painel cobriria a
-   própria mão: a coluna dele fica reservada. Fora dela o painel cai por cima
-   da busca, que é o que está à esquerda da mesa. */
+/* Na tela cheia a mesa começa na borda do painel, e o painel da carta
+   cobriria a própria mão: a área de jogo reserva a coluna dele, e ele fica
+   preso nela enquanto a mesa rola. O fundo da coluna aparece mesmo sem carta
+   sob o mouse, pra o espaço ler como lugar da carta e não como sobra. Fora
+   da tela cheia a coluna central é estreita demais pra dividir, e o painel
+   cai por cima da busca, que é o que está à esquerda da mesa. */
 @media (hover:hover) and (min-width:1100px){
-  body.gf-cheia .corpo{padding-left:320px;}
+  body.gf-cheia .gf-area{display:grid;grid-template-columns:288px minmax(0,1fr);
+    gap:20px;align-items:start;}
+  body.gf-cheia .gf-area::before{content:"";grid-column:1;grid-row:1;
+    align-self:stretch;border-radius:14px;background:var(--inset);
+    border:1px dashed var(--border);}
+  body.gf-cheia #gf-mesa{grid-column:2;grid-row:1;min-width:0;}
+  /* A coluna já é a moldura: fundo, borda e sombra próprias fariam uma caixa
+     dentro da outra. */
+  body.gf-cheia .gf-detalhe{position:sticky;grid-column:1;grid-row:1;
+    left:auto;background:none;border-color:transparent;box-shadow:none;}
 }
 @media (hover:none){
   .gf-detalhe{display:none;}

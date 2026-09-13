@@ -582,6 +582,39 @@ eq("a ficha não entra na conta do resumo do fim",
    """), NO_BARALHO - 10)   # 15 menos as 10 florestas
 
 
+print("\n--- carta de duas faces ---")
+
+DFC = carta("Delver of Secrets // Insectile Aberration",
+            "Creature — Human Wizard // Creature — Human Insect", "U", "{U}", 1.0)
+DFC["imagem_verso"] = "http://arte/verso"
+
+eq("virar mostra o verso, e virar de novo volta pra frente",
+   rodar("""
+     __mesa(); manterMao(0);
+     var c = {uid: 999, dono: 0, carta: %s, verso: false, marcas: {}};
+     __j().campo.push(c);
+     alternarFace(999); var um = cartaPorUid(999).verso;
+     alternarFace(999);
+     [um, cartaPorUid(999).verso];
+   """ % json.dumps(DFC)), [True, False])
+eq("carta sem verso de papel não vira",
+   rodar("""
+     __mesa(); manterMao(0);
+     var uid = __j().mao[0].uid;
+     gfMover(uid, "campo"); alternarFace(uid);
+     cartaPorUid(uid).verso;
+   """), False)
+eq("e ao sair do campo ela volta pra frente",
+   rodar("""
+     __mesa(); manterMao(0);
+     var c = {uid: 999, dono: 0, carta: %s, verso: false, marcas: {}};
+     __j().campo.push(c);
+     alternarFace(999);
+     gfMover(999, "mao");
+     cartaPorUid(999).verso;
+   """ % json.dumps(DFC)), False)
+
+
 print("\n--- combate ---")
 
 eq("atacar e bloquear são marcas na carta",

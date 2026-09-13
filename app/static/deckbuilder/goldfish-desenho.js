@@ -20,9 +20,11 @@ import {manaEmTexto, manaHTML} from "./utilidades.js";
 
 /* A arte de uma carta da mesa: a escolhida no deck DO DONO, e a padrão quando
    não há. O dono importa com dois decks na mesa — o Sol Ring de um não pode
-   aparecer com a arte que o outro escolheu. */
+   aparecer com a arte que o outro escolheu. A face é a que está pra cima
+   (ver `alternarFace`). */
 export function arteNaMesa(c){
-  return imagemDaFace(c.carta || {}, "frente", 0, artesDoJogador(c.dono));
+  const face = c.verso ? "verso" : "frente";
+  return imagemDaFace(c.carta || {}, face, 0, artesDoJogador(c.dono));
 }
 
 /* Um marcador na carta cabe em duas ou três letras, e não no nome: o canto

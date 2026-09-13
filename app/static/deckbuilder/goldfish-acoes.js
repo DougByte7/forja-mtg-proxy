@@ -9,10 +9,12 @@
    que numa partida de verdade seria absurdo: aqui não tem juiz. */
 
 import {$, escapar} from "../comum/dom.js";
+import {temVerso} from "./artes.js";
 import {abrirCarta, detalheDaCarta} from "./carta.js";
 import {estado} from "./estado.js";
 import {ajustarDanoCmd, ajustarMarca, ajustarMarcaCarta, ajustarVida,
-        alternarAtaque, alternarDeitada, alternarVirada, atacantes, cartaPorUid,
+        alternarAtaque, alternarDeitada, alternarFace, alternarVirada, atacantes,
+        cartaPorUid,
         comprar, criarFicha, deckDaResposta, deckDaTela, definirBloqueio,
         desfazerUmPasso, embaralharBaralho, gfMover, guardarMesa,
         lancarComandante, limparCombate, mandarPraFundo, manterMao,
@@ -64,10 +66,15 @@ async function mostrarPainel(uid){
   img.classList.toggle("vazia", !src);
   $("gf-detalhe-corpo").innerHTML = painelDaCartaHTML(c, null);
 
-  // À esquerda da mesa, onde houver espaço; na tela cheia a coluna é
-  // reservada no CSS (`body.gf-cheia .corpo`).
-  const mesa = $("gf-mesa").getBoundingClientRect();
-  painel.style.left = Math.max(8, mesa.left - PAINEL_LARGO - PAINEL_VAO) + "px";
+  // Na tela cheia o painel mora na coluna reservada da área de jogo e o CSS
+  // o posiciona (`body.gf-cheia .gf-area`). Fora dela ele flutua à esquerda
+  // da mesa, onde houver espaço.
+  if (getComputedStyle(painel).position === "fixed"){
+    const mesa = $("gf-mesa").getBoundingClientRect();
+    painel.style.left = Math.max(8, mesa.left - PAINEL_LARGO - PAINEL_VAO) + "px";
+  } else {
+    painel.style.left = "";
+  }
   painel.classList.add("mostra");
 
   // Ficha inventada na hora não existe na Scryfall.
@@ -114,6 +121,10 @@ function abrirMenuDaCarta(uid, x, y){
 
   if (zona === "campo"){
     html += item(c.deitada ? "Endireitar" : "Deitar", () => alternarDeitada(uid));
+    if (temVerso(c.carta)){
+      html += item(c.verso ? "Virar pra frente" : "Virar pro verso",
+                   () => alternarFace(uid));
+    }
     html += item(c.atacando ? "Não atacar" : "Atacar", () => alternarAtaque(uid));
     const inimigos = atacantes().filter(a => a.dono !== c.dono);
     if (inimigos.length){

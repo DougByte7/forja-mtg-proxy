@@ -83,7 +83,7 @@ const gfCartas = new Map();
 
 function gfCopia(carta, dono, extra){
   const c = {
-    uid: gfProximoUid++, dono, carta, virada: false, deitada: false,
+    uid: gfProximoUid++, dono, carta, virada: false, deitada: false, verso: false,
     marcas: {}, atacando: false, bloqueando: null, ficha: false, cmd: false,
     ...(extra || {}),
   };
@@ -396,7 +396,8 @@ export function gfMover(uid, para, aoTopo){
     if (carta.cmd && dono.turnoDoComandante === null) dono.turnoDoComandante = m.turno;
   }
   if (para !== "campo"){
-    carta.deitada = false; carta.marcas = {};
+    // Carta de duas faces que sai do campo volta a ser a frente, como na mesa.
+    carta.deitada = false; carta.marcas = {}; carta.verso = false;
     carta.atacando = false; carta.bloqueando = null;
   }
   if (para === "baralho" && !aoTopo) dono.baralho.push(carta);
@@ -469,6 +470,16 @@ export function alternarVirada(uid){
   if (!c) return;
   c.virada = !c.virada;
   registrar(`${nomeDaCarta(c)}: ${c.virada ? "virada pra baixo" : "desvirada"}`);
+}
+
+/* A face que está pra cima numa carta de duas faces (transformar, MDFC). Só
+   existe pra carta com verso de PAPEL: carta partida e aventura têm as duas
+   metades numa imagem só, e a base as devolve sem `imagem_verso`. */
+export function alternarFace(uid){
+  const c = cartaPorUid(uid);
+  if (!c || !(c.carta && c.carta.imagem_verso)) return;
+  c.verso = !c.verso;
+  registrar(`${nomeDaCarta(c)}: ${c.verso ? "virada pro verso" : "virada pra frente"}`);
 }
 
 export function alternarAtaque(uid){
