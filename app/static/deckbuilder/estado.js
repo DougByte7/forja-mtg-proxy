@@ -123,7 +123,7 @@ export const estado = {
   manabaseTeto: null,       // teto de preço escolhido (null = o padrão)
   tokens: null,             // as fichas que o deck cria
   tokensAssinatura: null,   // o deck de quando elas foram listadas
-  mbPagina: 0,              // página da lista de terrenos que fixam
+  mbCategoria: "",          // ciclo de terreno aberto na mana base ("" = todos)
   combosMexidos: 0,         // combos fechados aqui na tela desde a busca
 
   // Pra onde vai a próxima carta escolhida na busca. Fica no estado, e não

@@ -1604,42 +1604,177 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 #dm-resultado:empty{display:none;}
 
 /* ---------------- mana base ---------------- */
-/* Duas leituras independentes: à esquerda a conta do deck que já existe,
-   à direita a lista de terrenos pra comprar. Empilhadas, a lista de compra
-   ficava a uma rolagem inteira do número que a justifica. */
-.mb-duo{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-  gap:14px 20px;align-items:start;
+/* De cima pra baixo, na ordem das perguntas: quantos terrenos e de que cores
+   (o resumo), o que fecha a conta de graça (os básicos) e o que comprar (os
+   terrenos que fixam, por ciclo). O painel mora na coluna do deck, que vai
+   de 540px a 820px no computador e à tela inteira no celular — por isso as
+   quebras são por largura do próprio painel, não da janela. */
+#mb-resultado{container-type:inline-size;}
+
+.mb-resumo{
+  display:grid;grid-template-columns:minmax(170px,.8fr) minmax(0,2fr);gap:10px;
 }
-.mb-duo > div{min-width:0;}
-.mb-terrenos{
-  display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-  margin-bottom:4px;font-size:12px;color:var(--text-muted);
+.mb-cartao{
+  background:var(--inset);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;min-width:0;
 }
-.mb-terrenos b{font-family:'IBM Plex Mono',monospace;font-size:18px;
-  color:var(--gold-light);font-weight:600;}
-.mb-terrenos b.falta{color:var(--red);}
-.mb-terrenos b.ok{color:var(--green);}
+.mb-rotulo{
+  font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--text-muted);
+}
+.mb-numero{display:flex;align-items:baseline;gap:6px;margin:8px 0 6px;}
+.mb-numero b{font-family:'IBM Plex Mono',monospace;font-size:32px;line-height:1;
+  font-weight:600;color:var(--gold-light);}
+.mb-numero span{font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--text-muted);}
+.mb-veredito{
+  display:inline-block;font-size:11px;font-weight:600;border-radius:999px;
+  padding:2px 9px;border:1px solid var(--border);color:var(--gold-light);
+  background:rgba(233,199,101,.10);
+}
+.mb-conta.ok .mb-numero b{color:var(--green);}
+.mb-conta.ok .mb-veredito{border-color:rgba(76,154,107,.45);color:#A8D8BC;
+  background:rgba(76,154,107,.10);}
+.mb-conta.falta .mb-numero b{color:#F2AFA1;}
+.mb-conta.falta .mb-veredito{border-color:rgba(217,99,74,.5);color:#F2AFA1;
+  background:rgba(217,99,74,.12);}
+.mb-conta .nota{margin:8px 0 0;}
+
+.mb-cartao-cab{display:flex;align-items:center;justify-content:space-between;
+  gap:8px;margin-bottom:6px;}
+.mb-legenda{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--text-muted);}
+.mb-legenda i{display:inline-block;}
+.mb-legenda .barra{width:14px;height:6px;border-radius:3px;background:var(--text-muted);}
+.mb-legenda .marca{width:2px;height:11px;background:var(--gold-light);margin-left:6px;}
 .mb-cor{
-  display:grid;grid-template-columns:13px 56px 1fr auto;align-items:center;
-  gap:7px;font-size:11.5px;color:var(--text-muted);padding:3px 0;
+  display:grid;grid-template-columns:13px 62px minmax(0,1fr) 44px 70px;
+  align-items:center;gap:8px;font-size:12px;color:var(--text);padding:4px 0;
 }
-.mb-cor .trilho{display:block;height:6px;border-radius:3px;
+.mb-cor .trilho{display:block;height:8px;border-radius:4px;
   background:var(--surface-2);position:relative;}
-.mb-cor .cheio{display:block;height:100%;border-radius:3px;}
+.mb-cor .cheio{display:block;height:100%;border-radius:4px;}
 /* A marca é o que o deck PEDE; a barra é o que ele TEM. Barra que não
    chega na marca é fonte faltando — dá pra ver sem ler número. */
-.mb-cor .marca{position:absolute;top:-2px;bottom:-2px;width:2px;
+.mb-cor .marca{position:absolute;top:-3px;bottom:-3px;width:2px;border-radius:1px;
   background:var(--gold-light);}
-.mb-cor .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;
-  white-space:nowrap;}
-.mb-cor .num.falta{color:#F2AFA1;}
-.mb-basico{
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
-  padding:6px 8px;border:1px dashed var(--border);border-radius:8px;
-  margin-top:5px;font-size:12px;
+.mb-cor .num{font-family:'IBM Plex Mono',monospace;font-size:11px;
+  text-align:right;color:var(--text-muted);white-space:nowrap;}
+.mb-cor .num b{color:var(--text);font-weight:600;}
+.mb-cor .dif{display:inline-flex;align-items:center;justify-content:flex-end;gap:3px;
+  font-size:10.5px;white-space:nowrap;color:#A8D8BC;}
+.mb-cor .dif .ico{width:11px;height:11px;}
+.mb-cor .dif.falta{color:#F2AFA1;font-weight:600;}
+
+.mb-basicos{
+  display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:10px;
+  padding:9px 12px;border:1px dashed var(--border);border-radius:12px;
 }
-.mb-basico .add-peca{margin-left:0;}
+.mb-basicos-lista{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0;}
+.mb-basico{
+  display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text);border-radius:999px;
+  padding:4px 10px 4px 6px;font-size:12px;cursor:pointer;
+  transition:border-color .15s,color .15s;
+}
+.mb-basico:hover{border-color:var(--gold);color:var(--gold-light);}
+.mb-basico .ico{width:12px;height:12px;color:var(--gold-light);}
+.mb-basico:disabled{opacity:.45;cursor:not-allowed;}
+.mb-basicos .add-peca{margin-left:0;display:inline-flex;align-items:center;gap:4px;}
+.mb-basicos .add-peca .ico{width:12px;height:12px;}
+
+.mb-fixacao{margin-top:20px;scroll-margin-top:84px;}
+.mb-fix-cab{display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:8px 12px;margin-bottom:12px;}
+.mb-fix-cab h2.secao{margin:0;}
+.mb-teto{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.mb-teto > span{font-size:11px;color:var(--text-muted);margin-right:2px;}
+.mb-mono{margin:-4px 0 10px;}
+
+/* A lista dos ciclos gruda no topo enquanto a visão geral rola: ela é o
+   índice, e índice que some na segunda tela de rolagem não serve de
+   índice. */
+.mb-navegador{display:grid;grid-template-columns:184px minmax(0,1fr);
+  gap:16px;align-items:start;}
+.mb-ciclos{
+  display:flex;flex-direction:column;gap:1px;position:sticky;top:84px;
+  max-height:calc(100vh - 100px);overflow-y:auto;padding-right:4px;
+}
+.mb-grupo-rot{
+  font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:#6F6490;padding:12px 8px 3px;
+}
+.mb-ciclo-btn{
+  display:flex;align-items:center;gap:6px;width:100%;text-align:left;
+  background:transparent;border:0;border-radius:8px;padding:5px 8px;
+  font-size:12px;color:var(--text-muted);cursor:pointer;
+}
+.mb-ciclo-btn:hover{background:var(--surface-2);color:var(--text);}
+.mb-ciclo-btn.ativo{background:rgba(233,199,101,.12);color:var(--gold-light);
+  box-shadow:inset 2px 0 0 var(--gold);}
+.mb-ciclo-btn .rot{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mb-ciclo-btn .n{font-family:'IBM Plex Mono',monospace;font-size:10.5px;flex:none;}
+.mb-ciclo-btn .tem{display:inline-flex;align-items:center;gap:1px;flex:none;
+  font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--green);}
+.mb-ciclo-btn .tem .ico{width:10px;height:10px;}
+.mb-ciclo-btn.sem-terreno .rot,.mb-ciclo-btn.sem-terreno .n{opacity:.5;}
+
+.mb-lista{min-width:0;}
+.mb-ciclo + .mb-ciclo{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
+.mb-ciclo-cab{display:flex;align-items:flex-start;justify-content:space-between;
+  gap:10px;margin-bottom:6px;}
+.mb-ciclo-cab h3{margin:0;font-size:13.5px;font-weight:600;color:var(--text);}
+.mb-ciclo-cab p{margin:2px 0 0;font-size:11.5px;color:var(--text-muted);line-height:1.45;}
+.mb-ver{
+  flex:none;display:inline-flex;align-items:center;gap:4px;
+  border:1px solid var(--border);background:var(--surface);color:var(--text-muted);
+  border-radius:999px;padding:3px 10px;font-size:11px;cursor:pointer;
+  font-family:'Inter',sans-serif;white-space:nowrap;
+}
+.mb-ver:hover{border-color:var(--gold);color:var(--gold-light);}
+.mb-ver .ico{width:11px;height:11px;}
+.mb-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));
+  gap:2px 6px;margin:0 -8px;}
+/* Anel dourado: cor que o deck ainda pede. Um terreno com dois anéis cobre
+   dois buracos de uma vez. */
+.mb-terreno .pip.cobre{box-shadow:0 0 0 1.5px var(--surface),0 0 0 3px var(--gold);}
+.mb-terreno .mana{gap:5px;padding:0 3px;}
+.mb-terreno[aria-disabled="true"]{cursor:default;}
+.mb-terreno[aria-disabled="true"]:hover{background:transparent;border-color:transparent;}
+.mb-chegando{margin:8px 0 0;}
+.mb-de-fora{margin:16px 0 0;padding-top:12px;border-top:1px solid var(--border);}
+.mb-acima{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;
+  font-size:11.5px;color:var(--text-muted);}
+
+/* A explicação da conta fica recolhida: é pra quem desconfia do número, não
+   pra quem está fechando a lista. */
+.mb-como summary{cursor:pointer;color:var(--text);font-weight:600;list-style:none;
+  display:flex;align-items:center;gap:6px;}
+.mb-como summary::-webkit-details-marker{display:none;}
+.mb-como summary::before{content:"";width:0;height:0;border-left:5px solid currentColor;
+  border-top:4px solid transparent;border-bottom:4px solid transparent;transition:transform .15s;}
+.mb-como[open] summary::before{transform:rotate(90deg);}
+.mb-como p{margin:8px 0 0;}
+
+/* Painel estreito (a coluna do deck abaixo de 1200px, e o celular): os
+   ciclos viram uma fita de pílulas que rola de lado, em cima da lista. */
+@container (max-width:640px){
+  .mb-resumo{grid-template-columns:minmax(0,1fr);}
+  .mb-navegador{grid-template-columns:minmax(0,1fr);gap:10px;}
+  .mb-ciclos{
+    flex-direction:row;position:static;max-height:none;overflow-x:auto;
+    gap:5px;padding:0 0 6px;scrollbar-width:thin;
+  }
+  .mb-grupo-rot{display:none;}
+  .mb-ciclo-btn{width:auto;flex:none;border:1px solid var(--border);
+    border-radius:999px;background:var(--surface-2);padding:4px 10px;}
+  .mb-ciclo-btn .rot{overflow:visible;}
+  .mb-ciclo-btn.ativo{box-shadow:none;border-color:var(--gold);}
+}
+@container (max-width:420px){
+  .mb-cor{grid-template-columns:13px minmax(0,1fr) 44px 64px;}
+  .mb-cor .mb-cor-nome{display:none;}
+  .mb-teto > span{display:none;}
+}
+
 .paginador{
   display:flex;align-items:center;justify-content:flex-end;gap:8px;
   margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;

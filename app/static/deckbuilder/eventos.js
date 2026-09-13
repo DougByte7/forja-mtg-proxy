@@ -19,8 +19,8 @@ import {abrirGaveta, desenharBarraFiltros, fecharGaveta, gavetaAberta,
         preencherGavetaFiltros, tirarFiltro} from "./filtros.js";
 import {desfazerMesa, fecharModalGf, modalGfAberto} from "./goldfish-acoes.js";
 import {exportar, fazerImportar} from "./importar-exportar.js";
-import {adicionarQuantidade, analisarManabase, chamarManabase,
-        desenharManabase, fixadoresPlanos} from "./manabase.js";
+import {abrirCiclo, adicionarLote, analisarManabase, chamarManabase,
+        fixadoresPlanos} from "./manabase.js";
 import {abrirMenu, fecharMenu, menuAberto, menuDaCarta,
         menuDoGrupo} from "./menus.js";
 import {abrirFolha, fecharFolha, folhaAberta, recolherTalvez, trocarAba,
@@ -197,33 +197,41 @@ export function ligarEventos(){
     // outro momento (ver `buscarSugestoes`).
     if (e.target.closest("[data-sug-comandante]")) return buscarSugestoes();
 
-    // Mana base: básicos em lote, fixadores um a um, e o teto de preço.
+    // Mana base: básicos em lote, fixadores um a um, o teto de preço e o
+    // ciclo aberto.
     const basico = e.target.closest("[data-basico]");
     if (basico){
       const b = estado.manabase?.basicos[Number(basico.dataset.basico)];
       if (b?.carta){
-        adicionarQuantidade(b.carta, b.quantidade);
+        adicionarLote([{carta: b.carta, quantidade: b.quantidade}]);
         toast(`${b.quantidade}× ${b.carta.nome} no deck.`);
+      }
+      return;
+    }
+    if (e.target.closest("[data-basicos-todos]")){
+      const lote = (estado.manabase?.basicos || []).filter(b => b.carta);
+      if (lote.length){
+        adicionarLote(lote);
+        toast(`${lote.reduce((s, b) => s + b.quantidade, 0)} básicos no deck.`);
       }
       return;
     }
     const fix = e.target.closest("[data-fix]");
     if (fix){
       const terreno = fixadoresPlanos[Number(fix.dataset.fix)];
-      if (terreno){ adicionar(terreno); toast(`${terreno.nome} entrou no deck.`); }
+      if (terreno && !terreno.no_deck){
+        adicionar(terreno);
+        toast(`${terreno.nome} entrou no deck.`);
+      }
       return;
     }
     const teto = e.target.closest("[data-teto]");
     if (teto){
       estado.manabaseTeto = Number(teto.dataset.teto);
-      estado.mbPagina = 0;
       return analisarManabase();
     }
-    const pag = e.target.closest("[data-mb-pag]");
-    if (pag){
-      estado.mbPagina += Number(pag.dataset.mbPag);
-      return desenharManabase();
-    }
+    const ciclo = e.target.closest("[data-mb-cat]");
+    if (ciclo) return abrirCiclo(ciclo.dataset.mbCat);
 
     // As setas do paginador da busca, que só existe com filtro ligado.
     const resPag = e.target.closest("[data-res-pag]");

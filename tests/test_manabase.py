@@ -15,8 +15,12 @@ Três lugares onde isso mora:
 2. **As duas regras da heurística** (terrenos pela curva, fontes pelos
    símbolos), com os pisos e os limites onde elas param de subir.
 3. **As sugestões**: básico só da cor que falta e só até a vaga que sobra;
-   fixador só dentro da identidade, só com duas cores que o deck pede, e
-   nunca um que já está no deck.
+   fixador só dentro da identidade e só com duas cores que o deck pede; o
+   que já está no deck vem marcado, e o que passa do teto sai da lista.
+4. **O ciclo de cada terreno.** Sai do texto de regras, e a ordem dos testes
+   decide: a Mana Confluence é "qualquer cor" antes de ser dor, a Zagoth
+   Triome é tri-land antes de ser ciclagem. Um ciclo errado põe a Watery
+   Grave junto dos pure tap.
 
 Não precisa de rede nem de pytest. Rode de dentro da raiz do projeto:
 
@@ -161,7 +165,8 @@ try:
             bulk("Swamp", "Basic Land — Swamp", "({T}: Add {B}.)", ident="B"),
             bulk("Breeding Pool", "Land — Forest Island", "", ident="GU", preco="14"),
             bulk("Hinterland Harbor", "Land",
-                 "{T}: Add {G} or {U}.", ident="GU", preco="2.5"),
+                 "This land enters tapped unless you control a Forest or an "
+                 "Island.\n{T}: Add {G} or {U}.", ident="GU", preco="2.5"),
             bulk("Command Tower", "Land",
                  "{T}: Add one mana of any color in your commander's color identity.",
                  ident="", preco="0.5"),
@@ -169,6 +174,9 @@ try:
             bulk("Sunpetal Grove", "Land", "{T}: Add {G} or {W}.", ident="GW",
                  preco="3"),
             bulk("Tomb of Yawgmoth", "Land", "{T}: Add {C}.", ident="", preco="1"),
+            bulk("Flooded Grove", "Land",
+                 "{T}: Add {C}.\n{G/U}, {T}: Add {G}{G}, {G}{U}, or {U}{U}.",
+                 ident="GU", preco="8"),
         ]])
     conn.commit()
     conn.close()
@@ -231,30 +239,125 @@ try:
        manabase.analisar(cheio, "GU")["basicos"], [])
 
     print("\n--- fixadores ---")
-    baratos = [f["nome"] for f in a["fixadores"]["baratos"]]
-    caros = [f["nome"] for f in a["fixadores"]["caros"]]
-    check("dual barata da identidade entra em 'baratos'",
-          "Hinterland Harbor" in baratos, f"({baratos})")
-    check("dual cara vai pra 'caros'", "Breeding Pool" not in baratos + caros
-          or "Breeding Pool" in caros, f"({caros})")
-    check("o que já está no deck não é sugerido",
-          "Breeding Pool" not in baratos + caros and
-          "Command Tower" not in baratos + caros, f"({baratos + caros})")
+    ciclos = {c["id"]: c for c in a["fixadores"]}
+    nomes = lambda cid: [t["nome"] for t in ciclos.get(cid, {}).get("terrenos", [])]  # noqa: E731
+    todos = [t["nome"] for c in a["fixadores"] for t in c["terrenos"]]
+    check("check land barata entra no seu ciclo",
+          "Hinterland Harbor" in nomes("check"), f"({ciclos.keys()})")
+    eq("o que já está no deck vem marcado, não some",
+       [t["no_deck"] for t in ciclos["qualquer"]["terrenos"]
+        if t["nome"] == "Command Tower"], [True])
+    eq("e não conta no total do ciclo", ciclos["qualquer"]["total"], 0)
     check("terreno fora da identidade não entra",
-          "Watery Grave" not in baratos + caros and
-          "Sunpetal Grove" not in baratos + caros, f"({baratos + caros})")
-    check("terreno de uma cor só não é fixador",
-          "Tomb of Yawgmoth" not in baratos + caros)
+          "Watery Grave" not in todos and "Sunpetal Grove" not in todos, f"({todos})")
+    check("terreno de uma cor só não é fixador", "Tomb of Yawgmoth" not in todos)
     check("o que produz vai junto",
-          all(len(f["produz"]) >= 2 for f in a["fixadores"]["baratos"]))
+          all(len(t["produz"]) >= 2 for c in a["fixadores"] for t in c["terrenos"]))
 
-    eq("teto alto joga tudo em 'baratos'",
-       [f["nome"] for f in manabase.analisar(deck, "GU", teto_usd=999)
-        ["fixadores"]["caros"]], [])
+    eq("acima do teto sai da lista",
+       ciclos.get("filter", {}).get("terrenos"), [])
+    eq("e o ciclo conta quantos passaram dele",
+       ciclos.get("filter", {}).get("acima_do_teto"), 1)
+    sem_teto = {c["id"]: c for c in
+                manabase.analisar(deck, "GU", teto_usd=999)["fixadores"]}
+    eq("sem teto ele volta",
+       [t["nome"] for t in sem_teto["filter"]["terrenos"]], ["Flooded Grove"])
+
+    print("\n--- o ciclo aberto vem inteiro ---")
+    for i in range(6):
+        conn = cartas._conn()
+        conn.execute(
+            f"INSERT OR REPLACE INTO cartas ({cartas._COLUNAS}) "
+            f"VALUES ({cartas._INTERROGACOES})",
+            cartas._linha(bulk(f"Check {i}", "Land", "This land enters tapped "
+                               "unless you control a Forest or an Island.\n"
+                               "{T}: Add {G} or {U}.", ident="GU", preco="1")))
+        conn.close()
+    fechado = {c["id"]: c for c in manabase.analisar(deck, "GU")["fixadores"]}
+    aberto = {c["id"]: c for c in
+              manabase.analisar(deck, "GU", categoria="check")["fixadores"]}
+    eq("fechado, o ciclo traz só os primeiros",
+       len(fechado["check"]["terrenos"]), manabase.POR_CICLO)
+    eq("mas o total conta todos", fechado["check"]["total"], 7)
+    eq("aberto, traz todos", len(aberto["check"]["terrenos"]), 7)
 
     mono = manabase.analisar(deck, "G")
     eq("deck de uma cor é marcado", mono["monocolor"], True)
-    eq("e não recebe fixador", mono["fixadores"], {"baratos": [], "caros": []})
+    eq("e não recebe fixador de duas cores", mono["fixadores"], [])
+
+    # ------------------------------------------------------------- ciclos
+    print("\n--- o ciclo de cada terreno ---")
+
+    def ciclo(tipo, texto="", layout="normal", produz="UB"):
+        return manabase.categoria_de(
+            {"tipo": tipo, "texto": texto, "layout": layout}, set(produz))
+
+    eq("dual original", ciclo("Land — Island Swamp", "({T}: Add {U} or {B}.)"), "duais")
+    eq("shock", ciclo("Land — Island Swamp", "({T}: Add {U} or {B}.)\nAs this land "
+       "enters, you may pay 2 life. If you don't, it enters tapped."), "shock")
+    eq("fetch", ciclo("Land", "{T}, Pay 1 life, Sacrifice this land: Search your "
+       "library for an Island or Swamp card, put it onto the battlefield, then "
+       "shuffle."), "fetch")
+    eq("fetch que põe virado é lenta", ciclo("Land", "{T}, Sacrifice this land: "
+       "Search your library for a basic land card, put it onto the battlefield "
+       "tapped, then shuffle."), "fetch_lenta")
+    eq("quem busca pro oponente não é fetch", ciclo("Land", "{T}: Add {C}.\n{2}, "
+       "{T}, Sacrifice this land: Destroy target nonbasic land an opponent "
+       "controls. That land's controller may search their library for a basic "
+       "land card."), "outros")
+    eq("pain", ciclo("Land", "{T}: Add {C}.\n{T}: Add {U} or {B}. This land deals "
+       "1 damage to you."), "pain")
+    eq("qualquer cor vem antes de dor", ciclo("Land", "{T}, Pay 1 life: Add one "
+       "mana of any color."), "qualquer")
+    eq("qualquer cor que custa mana não é 'qualquer cor'", ciclo("Land",
+       "{T}: Add {C}.\n{1}, {T}: Add one mana of any color."), "outros")
+    eq("mana restrita", ciclo("Land", "{T}: Add {C}.\n{T}: Add one mana of any "
+       "color. Spend this mana only to cast a creature spell of the chosen "
+       "type."), "restrita")
+    eq("check", ciclo("Land", "This land enters tapped unless you control an "
+       "Island or a Swamp.\n{T}: Add {U} or {B}."), "check")
+    eq("fast", ciclo("Land", "This land enters tapped unless you control two or "
+       "fewer other lands.\n{T}: Add {U} or {B}."), "fast")
+    eq("slow", ciclo("Land", "This land enters tapped unless you control two or "
+       "more other lands.\n{T}: Add {U} or {B}."), "slow")
+    eq("bond", ciclo("Land", "This land enters tapped unless you have two or more "
+       "opponents.\n{T}: Add {U} or {B}."), "bond")
+    eq("battle", ciclo("Land — Island Swamp", "({T}: Add {U} or {B}.)\nThis land "
+       "enters tapped unless you control two or more basic lands."), "battle")
+    eq("reveal", ciclo("Land", "As this land enters, you may reveal an Island or "
+       "Swamp card from your hand. If you don't, this land enters tapped.\n{T}: "
+       "Add {U} or {B}."), "snarl")
+    eq("filter", ciclo("Land", "{T}: Add {C}.\n{U/B}, {T}: Add {U}{U}, {U}{B}, or "
+       "{B}{B}."), "filter")
+    eq("horizon", ciclo("Land", "{T}, Pay 1 life: Add {G} or {U}.\n{1}, {T}, "
+       "Sacrifice this land: Draw a card."), "horizon")
+    eq("verge", ciclo("Land", "{T}: Add {U}.\n{T}: Add {B}. Activate only if you "
+       "control an Island or a Swamp."), "verge")
+    eq("pathway", ciclo("Land // Land", "{T}: Add {U}.\n//\n{T}: Add {B}.",
+       layout="modal_dfc"), "pathway")
+    eq("mdfc", ciclo("Sorcery // Land", "Return creatures.\n//\nAs this land "
+       "enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {B}.",
+       layout="modal_dfc", produz="B"), "mdfc")
+    eq("bounce", ciclo("Land", "This land enters tapped.\nWhen this land enters, "
+       "return a land you control to its owner's hand.\n{T}: Add {U}{B}."), "bounce")
+    eq("triome é tri-land antes de ser ciclagem", ciclo(
+       "Land — Swamp Forest Island", "({T}: Add {B}, {G}, or {U}.)\nThis land "
+       "enters tapped.\nCycling {3}", produz="BGU"), "tri")
+    eq("scry", ciclo("Land", "This land enters tapped.\nWhen this land enters, "
+       "scry 1.\n{T}: Add {U} or {B}."), "scry")
+    eq("gain", ciclo("Land", "This land enters tapped.\nWhen this land enters, "
+       "you gain 1 life.\n{T}: Add {U} or {B}."), "gain")
+    eq("pure tap", ciclo("Land — Gate", "This land enters tapped.\n{T}: Add {U} "
+       "or {B}."), "pure")
+    eq("virado com outra regra não é pure tap", ciclo("Land", "This land enters "
+       "tapped.\n{T}: Add {U}.\n{T}, Sacrifice this land: Add {W}{B}.",
+       produz="UWB"), "outros")
+
+    entra = lambda texto: manabase.entrada_de({"tipo": "Land", "texto": texto})  # noqa: E731
+    eq("sem 'enters tapped' entra desvirada", entra("{T}: Add {U} or {B}."), "desvirada")
+    eq("shock entra condicional", entra("As this land enters, you may pay 2 life. "
+       "If you don't, it enters tapped."), "condicional")
+    eq("pure tap entra virada", entra("This land enters tapped."), "virada")
 
     vazio = manabase.analisar({"cartas_completas": [], "comandantes_completos": []}, "GU")
     eq("deck vazio não explode",

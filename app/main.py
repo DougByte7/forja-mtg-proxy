@@ -1542,13 +1542,15 @@ def sugestoes_do_deck(deck_id: str, corpo: dict = Body(default={})):
 
 
 @app.get("/decks/{deck_id}/manabase")
-def manabase_do_deck(deck_id: str, teto: float | None = None):
+def manabase_do_deck(deck_id: str, teto: float | None = None,
+                     categoria: str | None = None):
     """Quantos terrenos o deck pede, de que cores, e o que falta.
 
     É a única análise que não sai daqui: conta sobre o próprio deck e a base
     local, sem rede. Por isso é GET e por isso a tela pode chamar a cada
-    autosave em vez de esperar um botão. `teto` (em dólar da Scryfall) separa
-    os terrenos de fixação em "baratos" e "se o orçamento deixar".
+    autosave em vez de esperar um botão. `teto` (em dólar da Scryfall) tira
+    da lista de fixação os terrenos mais caros; `categoria` é o ciclo aberto
+    na tela, que vem com todos os terrenos em vez de só os primeiros.
     """
     deck = _deck_ou_404(deck_id)
     completo = decks.com_cartas(deck)
@@ -1563,7 +1565,8 @@ def manabase_do_deck(deck_id: str, teto: float | None = None):
         if (e.get("categoria") or "") not in fora]}
     return manabase.analisar(completo, identidade,
                              teto_usd=teto if teto is not None
-                             else manabase.TETO_USD)
+                             else manabase.TETO_USD,
+                             categoria=categoria or None)
 
 
 @app.get("/decks/{deck_id}/tokens")
