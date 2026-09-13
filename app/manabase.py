@@ -368,6 +368,43 @@ def fixadores(identidade: str, cores: list[dict], no_deck: set[str],
     return resposta
 
 
+def base_atual(terrenos_no_deck: list[tuple[dict, int]],
+               identidade: str) -> dict:
+    """Os terrenos que o deck já tem, contados por ciclo e por como entram.
+
+    Usa a mesma régua dos fixadores (`categoria_de`), pra que "2 shock lands"
+    aqui seja o mesmo "Shock lands" da lista de compra. Terreno não básico
+    que produz menos de duas cores da identidade não fixa nada e vai pra
+    "Utilitários" — Reliquary Tower, Castle Vantress; a MDFC é a exceção,
+    como na lista de compra.
+    """
+    nomes = {c[0]: c[1] for c in CATEGORIAS}
+    grupos: dict[str, dict] = {}
+    entrada = {"desvirada": 0, "condicional": 0, "virada": 0}
+    for carta, q in terrenos_no_deck:
+        if carta.get("basico"):
+            ciclo = "basicos"
+            entrada["desvirada"] += q
+        else:
+            produz = (cores_que_produz(carta, identidade)
+                      | cores_que_busca(carta, identidade))
+            ciclo = categoria_de(carta, produz)
+            if len(produz) < (1 if ciclo == "mdfc" else 2):
+                ciclo = "utilitarios"
+            entrada[entrada_de(carta)] += q
+        grupo = grupos.setdefault(ciclo, {"quantidade": 0, "cartas": []})
+        grupo["quantidade"] += q
+        grupo["cartas"].append(carta["nome"])
+
+    ordem = ["basicos"] + [c[0] for c in CATEGORIAS] + ["utilitarios"]
+    nomes.update({"basicos": "Básicos", "utilitarios": "Utilitários"})
+    return {
+        "entrada": entrada,
+        "grupos": [{"id": id_, "nome": nomes[id_], **grupos[id_]}
+                   for id_ in ordem if id_ in grupos],
+    }
+
+
 def analisar(deck_completo: dict, identidade: str,
              teto_usd: float = TETO_USD, categoria: str | None = None) -> dict:
     """A análise inteira, no formato que a tela desenha.
@@ -449,6 +486,7 @@ def analisar(deck_completo: dict, identidade: str,
         "identidade": identidade,
         "cores": cores,
         "basicos": basicos,
+        "base_atual": base_atual(terrenos_no_deck, identidade),
         "fixadores": fixadores(identidade, cores, no_deck, teto_usd, categoria),
         "categoria": categoria,
         "teto_usd": teto_usd,

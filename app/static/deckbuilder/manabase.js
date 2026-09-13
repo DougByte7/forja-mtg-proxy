@@ -67,7 +67,8 @@ function desenharManabase(){
   // dela.
   $("mb-nota").hidden = true;
   fixadoresPlanos = [];
-  caixa.innerHTML = htmlResumo(m) + htmlBasicos(m) + htmlFixacao(m) + `
+  caixa.innerHTML = htmlResumo(m) + htmlBaseAtual(m) + htmlBasicos(m)
+    + htmlFixacao(m) + `
     <details class="rodape-conta mb-como">
       <summary>Como a conta é feita</summary>
       <p>Parte de 36 terrenos numa curva média de 3,20: um terreno a mais a
@@ -129,6 +130,44 @@ function htmlResumo(m){
       </div>
       ${linhas}
     </div>
+  </div>`;
+}
+
+/* Os terrenos que o deck já tem, por como entram e por ciclo. A barra
+   responde "quanto da base chega virada"; as pílulas, "de que é feita" — e
+   a pílula de um ciclo que tem o que comprar abre esse ciclo na lista de
+   baixo. */
+const ENTRADAS = [["desvirada", "entram desviradas"],
+                  ["condicional", "às vezes viradas"],
+                  ["virada", "entram viradas"]];
+
+function htmlBaseAtual(m){
+  const b = m.base_atual;
+  if (!b || !b.grupos.length) return "";
+  const total = m.terrenos.tem;
+  const partes = ENTRADAS.filter(([k]) => b.entrada[k]);
+  const barra = partes.map(([k, rotulo]) => `<span class="seg ${k}"
+    style="flex-grow:${b.entrada[k]}" title="${b.entrada[k]} ${rotulo}"></span>`).join("");
+  const legenda = partes.map(([k, rotulo]) =>
+    `<span><i class="${k}"></i><b>${b.entrada[k]}</b> ${rotulo}</span>`).join("");
+  const abriveis = new Set(m.fixadores.map(c => c.id));
+  const pilulas = b.grupos.map(g => {
+    const miolo = `<b>${g.quantidade}</b>${escapar(g.nome)}`;
+    const nomes = escapar(g.cartas.join(", "));
+    return abriveis.has(g.id)
+      ? `<button class="mb-base-grupo" data-mb-cat="${escapar(g.id)}"
+           title="${nomes}">${miolo}${ico("caret-right")}</button>`
+      : `<span class="mb-base-grupo" title="${nomes}">${miolo}</span>`;
+  }).join("");
+  return `<div class="mb-cartao mb-base">
+    <div class="mb-cartao-cab">
+      <span class="mb-rotulo">Sua base</span>
+      <span class="mb-legenda">${total} ${total === 1 ? "terreno" : "terrenos"}</span>
+    </div>
+    <div class="mb-base-barra" role="img"
+      aria-label="${partes.map(([k, rotulo]) => `${b.entrada[k]} ${rotulo}`).join(", ")}">${barra}</div>
+    <div class="mb-base-legenda">${legenda}</div>
+    <div class="mb-base-grupos">${pilulas}</div>
   </div>`;
 }
 
@@ -292,13 +331,15 @@ function htmlTerreno(t, ciclo, faltando){
 
 /* Abrir um ciclo desenha na hora com os terrenos que já estão na tela e
    pede o ciclo inteiro por trás. Quem clicou em "Ver todos" no fim da visão
-   geral fica olhando pro vazio se a lista encolhe embaixo dele, então a tela
-   volta pro começo da seção. */
+   geral fica olhando pro vazio se a lista encolhe embaixo dele, e quem
+   clicou numa pílula de "Sua base" abriu algo que está abaixo da dobra —
+   nos dois casos a tela vai até o começo da seção. */
 export function abrirCiclo(id){
   estado.mbCategoria = id || "";
   desenharManabase();
   const secao = document.querySelector("#mb-resultado .mb-fixacao");
-  if (secao && secao.getBoundingClientRect().top < 0){
+  const topo = secao ? secao.getBoundingClientRect().top : 0;
+  if (secao && (topo < 0 || topo > window.innerHeight - 160)){
     secao.scrollIntoView({behavior: "smooth", block: "start"});
   }
   const ciclo = (estado.manabase?.fixadores || []).find(c => c.id === id);

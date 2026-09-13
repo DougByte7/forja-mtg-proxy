@@ -1664,6 +1664,28 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 .mb-cor .dif .ico{width:11px;height:11px;}
 .mb-cor .dif.falta{color:#F2AFA1;font-weight:600;}
 
+.mb-base{margin-top:10px;}
+/* Três segmentos com vão de 2px entre eles, na ordem de melhor pra pior. A
+   legenda repete os números por escrito: a cor sozinha não diz qual é qual. */
+.mb-base-barra{display:flex;gap:2px;height:8px;margin:2px 0 8px;}
+.mb-base-barra .seg{flex-basis:0;min-width:4px;border-radius:4px;}
+.mb-base .desvirada{background:var(--green);}
+.mb-base .condicional{background:var(--gold);}
+.mb-base .virada{background:var(--mana-R);}
+.mb-base-legenda{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px;color:var(--text-muted);}
+.mb-base-legenda i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;}
+.mb-base-legenda b{font-family:'IBM Plex Mono',monospace;color:var(--text);font-weight:600;}
+.mb-base-grupos{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;}
+.mb-base-grupo{
+  display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text-muted);border-radius:999px;
+  padding:3px 10px;font-size:11.5px;font-family:'Inter',sans-serif;
+}
+.mb-base-grupo b{font-family:'IBM Plex Mono',monospace;color:var(--text);font-weight:600;}
+button.mb-base-grupo{cursor:pointer;}
+button.mb-base-grupo:hover{border-color:var(--gold);color:var(--gold-light);}
+.mb-base-grupo .ico{width:10px;height:10px;}
+
 .mb-basicos{
   display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:10px;
   padding:9px 12px;border:1px dashed var(--border);border-radius:12px;

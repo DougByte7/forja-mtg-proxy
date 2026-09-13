@@ -198,7 +198,9 @@ try:
                             cmc=1, custo="{1}", ident=""), "quantidade": 1},
             terreno("Forest", "Basic Land — Forest", q=5),
             terreno("Island", "Basic Land — Island", q=2),
-            terreno("Breeding Pool", "Land — Forest Island"),
+            terreno("Breeding Pool", "Land — Forest Island",
+                    "({T}: Add {G} or {U}.)\nAs this land enters, you may pay "
+                    "2 life. If you don't, it enters tapped."),
             terreno("Command Tower", "Land",
                     "{T}: Add one mana of any color in your commander's color identity."),
         ],
@@ -220,6 +222,23 @@ try:
     eq("os símbolos do comandante entram", por_cor["G"]["pips"], 4.0)
     check("déficit é pedidas menos fontes",
           por_cor["U"]["faltam"] == max(0, por_cor["U"]["pedidas"] - 4))
+
+    print("\n--- a base que o deck já tem ---")
+    base = {g["id"]: g for g in a["base_atual"]["grupos"]}
+    eq("básicos somam as cópias", base["basicos"]["quantidade"], 7)
+    eq("a shock conta no seu ciclo", base["shock"]["cartas"], ["Breeding Pool"])
+    eq("o Command Tower é 'qualquer cor'", base["qualquer"]["quantidade"], 1)
+    eq("os grupos somam os terrenos do deck",
+       sum(g["quantidade"] for g in a["base_atual"]["grupos"]), a["terrenos"]["tem"])
+    eq("a shock entra 'às vezes virada'; básicos e tower, desvirados",
+       a["base_atual"]["entrada"], {"desvirada": 8, "condicional": 1, "virada": 0})
+    eq("básicos vêm primeiro", a["base_atual"]["grupos"][0]["id"], "basicos")
+    so_uma = manabase.base_atual(
+        [(carta("Castle Vantress", "Land", "This land enters tapped unless you "
+                "control an Island.\n{T}: Add {U}.", cmc=0, custo=""), 1)], "GU")
+    eq("terreno de uma cor só é utilitário",
+       [g["id"] for g in so_uma["grupos"]], ["utilitarios"])
+    eq("e conta como entra", so_uma["entrada"]["condicional"], 1)
 
     print("\n--- básicos sugeridos ---")
     nomes_basicos = {b["nome"]: b["quantidade"] for b in a["basicos"]}
