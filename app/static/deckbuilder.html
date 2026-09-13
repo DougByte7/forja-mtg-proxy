@@ -40,8 +40,16 @@
   <div class="topo-in">
     <div class="rune"><span>⌘</span></div>
     <div class="titulo-deck">
-      <input id="nome-deck" value="Deck sem nome" maxlength="80"
-             aria-label="Nome do deck" spellcheck="false">
+      <!-- A versão é um atributo do nome ("Atraxa v3"), e por isso mora
+           colada nele. Ela é o estado e a porta: o clique abre o menu que
+           conclui a próxima versão (ver `versoes.js`). -->
+      <div class="titulo-linha">
+        <input id="nome-deck" value="Deck sem nome" maxlength="80"
+               aria-label="Nome do deck" spellcheck="false">
+        <button class="versao-pilula wip" id="btn-versao" type="button"
+                aria-haspopup="menu" title="Trabalho em progresso"
+                aria-label="Trabalho em progresso">WIP</button>
+      </div>
       <div class="estado-salvo" id="estado-salvo"></div>
     </div>
 
@@ -129,6 +137,8 @@
         <button role="tab" data-painel="tokens" aria-selected="false">
           Tokens <span class="n" id="aba-tokens-n"></span></button>
         <button role="tab" data-painel="goldfish" aria-selected="false">Goldfish</button>
+        <button role="tab" data-painel="historico" id="aba-historico"
+                aria-selected="false" hidden>Histórico</button>
       </div>
 
       <div class="painel" id="painel-deck" data-painel="deck">
@@ -249,6 +259,13 @@
            Jogar sozinho pra ver se a mão anda. NÃO é motor de regras: nada
            aqui impede nada, e a linha fixa abaixo diz isso antes do primeiro
            clique — a pessoa precisa saber que o juiz é ela. -->
+      <!-- A aba só aparece a partir da v1: com uma versão só não há o que
+           comparar (ver `desenharVersao`). -->
+      <div class="painel" id="painel-historico" data-painel="historico" hidden>
+        <h2 class="secao">Histórico</h2>
+        <div id="historico-resultado" style="margin-top:12px;"></div>
+      </div>
+
       <div class="painel" id="painel-goldfish" data-painel="goldfish" hidden>
         <div class="gf-topo">
           <h2 class="secao" style="margin:0">Goldfish</h2>

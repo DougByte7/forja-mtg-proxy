@@ -447,6 +447,8 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `PUT /decks/{id}` | deckbuilder | grava o deck por cima, com os mesmos campos do POST. É o autosave — a validação vai na resposta mas não impede de gravar |
 | `POST /decks/{id}/duplicar` | deckbuilder | cópia com id novo (o "salvar como" de um sistema sem login) |
 | `DELETE /decks/{id}` | deckbuilder | apaga o deck. Não tem volta |
+| `POST /decks/{id}/versoes` | pílula da versão | conclui a próxima versão com a lista gravada (comandantes, deck e sideboard). WIP só vira v0 com a lista válida; depois, cada versão precisa de lista diferente da anterior. 409 com o motivo quando não cabe |
+| `GET /decks/{id}/versoes` | aba **Histórico** | as versões da mais nova pra mais antiga, cada uma com o que entrou e saiu, e em `pendente` o que mudou desde a última |
 | `GET /decks/{id}/lista` | deckbuilder | a decklist em texto, comandante primeiro — é o que se cola no MPC Fill. Leva o sideboard, não leva o maybeboard |
 | `POST /decks/{id}/cotacao` | botão **Cotar preços** | cota o deck montado, sem precisar de XML. O andamento sai no `GET /cotacao/{job_id}` de sempre |
 | `POST /decks/{id}/combos` | botão **Procurar combos** | pergunta ao Commander Spellbook os combos do deck e os que faltam uma carta. Uma consulta só, e só no clique |

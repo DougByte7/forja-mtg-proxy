@@ -57,6 +57,7 @@ async function abrir(){
       estado.id = r.deck.id;
       estado.nome = r.deck.nome;
       estado.validacao = r.validacao;
+      estado.versao = r.versao;
       estado.comandantes = (r.deck.comandantes_completos || []).filter(Boolean);
       const entrada = (e) => ({carta: e.carta, quantidade: e.quantidade,
                                categoria: e.categoria || ""});

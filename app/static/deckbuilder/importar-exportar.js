@@ -72,7 +72,11 @@ export async function fazerImportar(){
    o id novo é que faria estrago — deixaria em Meus decks um deck vazio. */
 export function aplicarImportado(trazido, {mesmoDeck = false} = {}){
   guardarDesfazer();
-  if (!mesmoDeck) estado.id = null;
+  // Deck novo nasce WIP, e o histórico era do deck que ficou pra trás.
+  if (!mesmoDeck){
+    estado.id = null;
+    estado.versao = estado.historico = null;
+  }
   estado.validacao = null;
   estado.comandantes = trazido.comandantes_completos;
   const entrada = (e) => ({carta: e.carta, quantidade: e.quantidade,

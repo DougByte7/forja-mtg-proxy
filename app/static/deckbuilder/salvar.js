@@ -13,6 +13,7 @@ import {analisarManabase} from "./manabase.js";
 import {agendarCotacao} from "./orcamento.js";
 import {buscarTokens} from "./tokens.js";
 import {identidadeDoDeck, totalCartas} from "./utilidades.js";
+import {buscarHistorico, desenharVersao} from "./versoes.js";
 function validarLocal(){
   const identidade = identidadeDoDeck();
   const apontamentos = [];
@@ -122,6 +123,7 @@ export async function salvarAgora(){
     const novo = !estado.id;
     estado.id = resposta.deck.id;
     estado.validacao = resposta.validacao;
+    estado.versao = resposta.versao;
     if (novo){
       estado.dono = resposta.deck.dono || null;
       history.replaceState(null, "", `?deck=${estado.id}`);
@@ -136,6 +138,10 @@ export async function salvarAgora(){
     // cabeçalho é desenhado a partir dela: sem isto o ponto ficaria contando
     // a versão instantânea até a próxima carta entrar.
     desenharContador();
+    // A pílula da versão ganha o ponto de "a lista mudou" quando o servidor
+    // confirma a mudança, e o histórico aberto acompanha a lista gravada.
+    desenharVersao();
+    if (estado.aba === "historico") buscarHistorico();
     // O primeiro salvamento é o instante em que o deck ganha id — e é só com
     // id que dá pra cotar. Sem esta chamada, um deck de uma carta só nunca
     // seria cotado: a cotação esperaria uma segunda mudança que não vem.

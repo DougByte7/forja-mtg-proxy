@@ -92,8 +92,16 @@
 
   .cartao .miolo{padding:11px 13px 13px;display:flex;flex-direction:column;
     gap:7px;flex:1;}
+  .cartao .titulo{display:flex;align-items:flex-start;gap:8px;}
   .cartao h2{font-size:15px;margin:0;font-weight:600;line-height:1.25;
-    overflow-wrap:anywhere;}
+    overflow-wrap:anywhere;flex:1;min-width:0;}
+  /* A mesma pílula do deckbuilder, ao lado do nome como lá. */
+  .versao{flex:none;font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    font-weight:600;letter-spacing:.05em;line-height:1;padding:4px 8px;
+    border-radius:999px;border:1px solid var(--gold);color:var(--gold-light);
+    margin-top:1px;}
+  .versao.wip{border-style:dashed;border-color:var(--text-muted);
+    color:var(--text-muted);}
   .cartao .cmd{color:var(--text-muted);font-size:12px;line-height:1.35;
     overflow-wrap:anywhere;}
   .cartao .linha-info{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
@@ -393,7 +401,12 @@ function cartaoHTML(d){
   return `<article class="cartao" data-deck="${escapar(d.id)}">
     ${capaHTML(d)}
     <div class="miolo">
-      <h2>${escapar(d.nome)}</h2>
+      <div class="titulo">
+        <h2>${escapar(d.nome)}</h2>
+        ${d.versao == null
+          ? `<span class="versao wip" title="Trabalho em progresso">WIP</span>`
+          : `<span class="versao" title="Versão ${d.versao}">v${d.versao}</span>`}
+      </div>
       <div class="cmd">${d.comandantes.length
         ? escapar(d.comandantes.join(" + ")) : "Sem comandante"}</div>
       <div class="linha-info">

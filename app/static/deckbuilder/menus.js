@@ -26,8 +26,9 @@ export function fecharMenu(){
 }
 
 /* `ancora` é um elemento ou um DOMRect (o ponto do clique direito). `itens`
-   é uma lista de `{rotulo, marca, aoClicar, classe}` ou `"risco"` pra uma
-   linha divisória, ou `{titulo}` pra um cabeçalho.
+   é uma lista de `{rotulo, marca, aoClicar, classe, desabilitado}` ou
+   `"risco"` pra uma linha divisória, `{titulo}` pra um cabeçalho ou `{nota}`
+   pra uma frase solta — o motivo de um item desabilitado, por exemplo.
 
    Item com `href` vira link: o que leva a outra página abre em aba nova no
    Ctrl+clique e mostra o destino no hover, como qualquer link. O `aoClicar`
@@ -47,9 +48,15 @@ export function abrirMenu(ancora, itens){
       menu.insertAdjacentHTML("beforeend", `<h4>${escapar(item.titulo)}</h4>`);
       continue;
     }
+    if (item.nota){
+      menu.insertAdjacentHTML("beforeend",
+        `<p class="nota-menu">${escapar(item.nota)}</p>`);
+      continue;
+    }
     const el = document.createElement(item.href ? "a" : "button");
     if (item.href) el.href = item.href;
     else el.type = "button";
+    if (item.desabilitado) el.disabled = true;
     el.setAttribute("role", "menuitem");
     el.className = item.classe || "";
     el.innerHTML = `<span class="marca">${item.marca || ""}</span>
@@ -73,7 +80,7 @@ export function abrirMenu(ancora, itens){
   menu.style.left = Math.max(8, x) + "px";
   menu.style.top = y + "px";
   menuAberto = menu;
-  menu.querySelector("[role=menuitem]")?.focus();
+  menu.querySelector("[role=menuitem]:not(:disabled)")?.focus();
 }
 
 /* O menu de uma carta: categoria, tabuleiro e sair. Nesta ordem porque é a

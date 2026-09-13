@@ -94,6 +94,10 @@ export const estado = {
   cambio: null,
   usuario: null,     // quem está logado, ou null pra anônimo (que não é erro)
   dono: null,        // de quem é este deck, ou null pra órfão
+  // Onde o deck está no histórico, como a última resposta do servidor contou:
+  // {atual, concluida_em, mudou, entraram, sairam}. `atual` nulo é WIP.
+  versao: null,
+  historico: null,   // a última resposta de `GET /decks/{id}/versoes`
   // A mesa do goldfish: uma lista de jogadores (um, ou dois com o segundo
   // deck), o turno e o log. `null` = nunca embaralhou nesta sessão. NÃO entra
   // no `corpoDoDeck`: mão de goldfish gravada no deck é mão que volta três

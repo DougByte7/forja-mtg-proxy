@@ -1072,11 +1072,13 @@ def cartas_sync(x_admin_token: str | None = Header(default=None),
 
 
 def _deck_completo(deck: dict) -> dict:
-    """O deck do jeito que a tela consome: cartas resolvidas + validação."""
+    """O deck do jeito que a tela consome: cartas resolvidas, validação e onde
+    ele está no histórico de versões."""
     return {
         "deck": decks.com_cartas(deck),
         "validacao": decks.validar(deck.get("comandantes"),
                                    deck.get("cartas")),
+        "versao": decks.situacao_da_versao(deck),
     }
 
 
@@ -1434,6 +1436,40 @@ def lista_do_deck(deck_id: str):
     pronto do `GET /decks/{id}/pedido`.
     """
     return decks.lista_texto(_deck_ou_404(deck_id))
+
+
+@app.get("/decks/{deck_id}/versoes")
+def versoes_do_deck(deck_id: str):
+    """O histórico: cada versão com o que entrou e saiu em relação à anterior,
+    e o que a lista gravada mudou desde a última (ver `decks.historico`)."""
+    return decks.historico(_deck_ou_404(deck_id))
+
+
+@app.post("/decks/{deck_id}/versoes")
+def concluir_versao_do_deck(deck_id: str, quem: dict | None = Depends(quem_e)):
+    """Conclui a próxima versão com a lista que o servidor tem gravada.
+
+    Quem chama grava antes o que estiver esperando o autosave: a fotografia é
+    do banco, não da tela. Passa pela regra de dono do autosave — concluir
+    versão é editar o deck.
+
+    409 quando o deck como está não aceita versão nova (WIP com lista
+    inválida, ou lista igual à última): não é "você não pode", é "ainda não
+    há o que concluir", com a mensagem dizendo o porquê.
+    """
+    _deck_ou_404(deck_id)
+    existe, dono = decks.dono_de(deck_id)
+    if not _pode_mexer(dono, quem):
+        raise _proibido()
+    try:
+        numero = decks.concluir_versao(deck_id)
+    except decks.VersaoRecusada as e:
+        raise HTTPException(409, str(e))
+    if numero is None:
+        raise HTTPException(404, "Deck não encontrado.")
+    log.evento("deck", "versao", deck=deck_id, numero=numero)
+    deck = decks.obter(deck_id)
+    return {**_deck_completo(deck), "historico": decks.historico(deck)}
 
 
 @app.post("/decks/{deck_id}/cotacao")

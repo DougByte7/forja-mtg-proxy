@@ -29,6 +29,7 @@ Sai com código 1 se qualquer checagem falhar.
 """
 import os
 import shutil
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -521,6 +522,168 @@ try:
            cliente.get("/decks/resumo").status_code, 404)
 
         eq("a página /meus-decks é servida", cliente.get("/meus-decks").status_code, 200)
+
+    # ------------------------------------------------------------- versões
+    print("\n--- versões ---")
+
+    # Um banco de antes das versões: a tabela sem a coluna `versao` e sem a
+    # tabela de fotografias. O deck que já existia tem que abrir WIP.
+    antigo = os.path.join(TMP, "antigo.db")
+    conn = sqlite3.connect(antigo)
+    conn.execute("CREATE TABLE decks (id TEXT PRIMARY KEY, nome TEXT, "
+                 "comandantes TEXT, cartas TEXT, maybeboard TEXT, categorias "
+                 "TEXT, criado_em REAL, atualizado_em REAL, dono TEXT)")
+    conn.execute("INSERT INTO decks VALUES ('velho0000001', 'Velho', "
+                 "'[\"Atraxa\"]', '[]', '[]', '[]', 1, 1, NULL)")
+    conn.commit()
+    conn.close()
+    caminho_de_verdade = decks.DB_PATH
+    decks.DB_PATH = antigo
+    try:
+        eq("banco antigo: deck lido antes da migração é WIP",
+           decks.obter("velho0000001")["versao"], None)
+        eq("e a situação dele também",
+           decks.situacao_da_versao(decks.obter("velho0000001"))["atual"], None)
+        decks.init_db()
+        eq("depois da migração continua WIP",
+           decks.resumo(["velho0000001"])[0]["versao"], None)
+    finally:
+        decks.DB_PATH = caminho_de_verdade
+
+    def cem(**trocas):
+        """Atraxa + 99 cartas legais: 99 Forest, menos o que `trocas` põe."""
+        cartas_ = [{"nome": nome, "quantidade": q, "categoria": cat}
+                   for nome, (q, cat) in trocas.items()]
+        usadas = sum(q for q, cat in trocas.values() if cat != "Sideboard")
+        return [{"nome": "Forest", "quantidade": 99 - usadas}] + cartas_
+
+    wip = decks.criar("WIP", ["Atraxa"], [{"nome": "Forest", "quantidade": 40}])
+    eq("deck novo nasce WIP", wip["versao"], None)
+    eq("a situação do WIP não tem versão", decks.situacao_da_versao(wip)["atual"], None)
+    try:
+        decks.concluir_versao(wip["id"])
+        check("WIP com lista inválida não vira v0", False, "(concluiu)")
+    except decks.VersaoRecusada as e:
+        check("WIP com lista inválida não vira v0", True)
+        check("e a recusa diz o que falta", "Faltam 59" in str(e), str(e))
+    eq("recusada, não sobra versão nenhuma", decks.historico(wip)["versoes"], [])
+    eq("concluir deck que não existe devolve None",
+       decks.concluir_versao("naoexiste123"), None)
+
+    vd = decks.criar("Versionado", ["Atraxa"], cem(), maybeboard=[
+        {"nome": "Sol Ring", "quantidade": 1}])
+    eq("lista válida vira v0", decks.concluir_versao(vd["id"]), 0)
+    eq("o deck guarda o número", decks.obter(vd["id"])["versao"], 0)
+    eq("o cartão da lista também", decks.resumo([vd["id"]])[0]["versao"], 0)
+    situ = decks.situacao_da_versao(decks.obter(vd["id"]))
+    eq("logo depois de concluir, nada mudou",
+       (situ["atual"], situ["mudou"]), (0, False))
+
+    try:
+        decks.concluir_versao(vd["id"])
+        check("lista igual à última não vira versão", False, "(concluiu)")
+    except decks.VersaoRecusada as e:
+        check("lista igual à última não vira versão", "v0" in str(e), str(e))
+
+    # O que não é a lista da mesa: categoria própria, maybeboard, ordem.
+    decks.salvar(vd["id"], "Renomeado", ["Atraxa"],
+                 list(reversed(cem(**{"Llanowar Elves": (1, "Ramp")}))),
+                 maybeboard=[], categorias=["Ramp"])
+    decks.salvar(vd["id"], "Renomeado", ["Atraxa"],
+                 cem(**{"Llanowar Elves": (1, "Outra categoria")}),
+                 maybeboard=[{"nome": "Island", "quantidade": 3}])
+    situ = decks.situacao_da_versao(decks.obter(vd["id"]))
+    eq("trocar uma Forest por Elves conta 1 entrou e 1 saiu",
+       (situ["mudou"], situ["entraram"], situ["sairam"]), (True, 1, 1))
+    decks.concluir_versao(vd["id"])
+    decks.salvar(vd["id"], "Renomeado", ["Atraxa"],
+                 list(reversed(cem(**{"Llanowar Elves": (1, "Ramp")}))),
+                 maybeboard=[])
+    check("categoria própria, maybeboard e ordem não mudam a lista",
+          not decks.situacao_da_versao(decks.obter(vd["id"]))["mudou"])
+
+    # Sol Ring entra no sideboard e Elves vai pra lá também.
+    decks.salvar(vd["id"], "Renomeado", ["Atraxa"],
+                 cem(**{"Llanowar Elves": (1, "Sideboard"),
+                        "Sol Ring": (1, "Sideboard")}))
+    hist = decks.historico(decks.obter(vd["id"]))
+    pend = hist["pendente"]
+    eq("pendente: o que entrou, por zona",
+       [(c["zona"], c["nome"], c["quantidade"]) for c in pend["entraram"]],
+       [("deck", "Forest", 1), ("side", "Llanowar Elves", 1),
+        ("side", "Sol Ring", 1)])
+    eq("pendente: o que saiu",
+       [(c["zona"], c["nome"], c["quantidade"]) for c in pend["sairam"]],
+       [("deck", "Llanowar Elves", 1)])
+    check("cada linha traz a carta pra prévia",
+          pend["entraram"][2]["carta"]["nome"] == "Sol Ring")
+    eq("v2 sai da lista nova", decks.concluir_versao(vd["id"]), 2)
+
+    # Depois da v0 a validação não trava: só o WIP precisa de lista válida.
+    decks.salvar(vd["id"], "Renomeado", ["Atraxa"],
+                 [{"nome": "Forest", "quantidade": 50}])
+    eq("depois da v0, lista incompleta ainda vira versão",
+       decks.concluir_versao(vd["id"]), 3)
+
+    hist = decks.historico(decks.obter(vd["id"]))
+    eq("histórico da mais nova pra mais antiga",
+       [v["numero"] for v in hist["versoes"]], [3, 2, 1, 0])
+    eq("atual é a última", hist["atual"], 3)
+    eq("a v0 não tem diferença", hist["versoes"][-1]["diferenca"], None)
+    eq("o total da versão é o das 100", hist["versoes"][-1]["total"], 100)
+    eq("a v1 diz o que trocou",
+       ([c["nome"] for c in hist["versoes"][2]["diferenca"]["entraram"]],
+        [c["nome"] for c in hist["versoes"][2]["diferenca"]["sairam"]]),
+       (["Llanowar Elves"], ["Forest"]))
+    eq("sem mudança desde a última, nada pendente", hist["pendente"], None)
+
+    copia = decks.duplicar(vd["id"])
+    eq("a cópia nasce WIP", copia["versao"], None)
+    eq("e sem histórico", decks.historico(copia)["versoes"], [])
+
+    decks.apagar(vd["id"])
+    conn = sqlite3.connect(decks.DB_PATH)
+    eq("apagar o deck leva as versões junto",
+       conn.execute("SELECT COUNT(*) FROM deck_versoes WHERE deck_id=?",
+                    (vd["id"],)).fetchone()[0], 0)
+    conn.close()
+
+    print("\n--- as rotas das versões ---")
+    try:
+        from fastapi.testclient import TestClient
+    except ImportError:
+        print("PULADO: fastapi não está instalado")
+    else:
+        os.chdir(RAIZ)
+        from app.main import app
+
+        cliente = TestClient(app)
+        rd = decks.criar("Pela rota", ["Atraxa"], cem())
+        resp = cliente.put(f"/decks/{rd['id']}", json={
+            "nome": "Pela rota", "comandantes": ["Atraxa"], "cartas": cem()})
+        eq("o autosave diz que o deck é WIP", resp.json()["versao"]["atual"], None)
+
+        resp = cliente.post(f"/decks/{rd['id']}/versoes")
+        eq("concluir responde 200", resp.status_code, 200)
+        corpo = resp.json()
+        eq("com a situação nova", corpo["versao"]["atual"], 0)
+        eq("e o histórico junto", [v["numero"] for v in corpo["historico"]["versoes"]], [0])
+        eq("o deck da resposta traz o número", corpo["deck"]["versao"], 0)
+
+        resp = cliente.post(f"/decks/{rd['id']}/versoes")
+        eq("lista igual vira 409", resp.status_code, 409)
+        check("com o motivo", "igual" in resp.json()["detail"], resp.json())
+
+        eq("GET do histórico", cliente.get(f"/decks/{rd['id']}/versoes")
+           .json()["atual"], 0)
+        eq("histórico de deck que não existe é 404",
+           cliente.get("/decks/naoexiste123/versoes").status_code, 404)
+        eq("concluir deck que não existe é 404",
+           cliente.post("/decks/naoexiste123/versoes").status_code, 404)
+
+        decks.definir_dono(rd["id"], "alguem")
+        eq("deck com dono: anônimo não conclui versão",
+           cliente.post(f"/decks/{rd['id']}/versoes").status_code, 403)
 
 finally:
     shutil.rmtree(TMP, ignore_errors=True)

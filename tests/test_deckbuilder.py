@@ -632,6 +632,70 @@ try:
     eq("e trocar de tamanho volta pra primeira página",
        andar["depoisDeTrocar"], 0)
 
+    # ------------------------------------------------------------- versões
+    print("\n--- versões ---")
+    # O clique de concluir só é oferecido quando o servidor o aceitaria. Errar
+    # pra menos esconde o botão de quem pode concluir; errar pra mais vira um
+    # clique que sempre volta com "não".
+    versao = avaliar("""
+    var r = {};
+    estado.versao = null;
+    r.wipInvalido = bloqueioDeConcluir();
+    desenharVersao();
+    r.pilulaWip = [$("btn-versao").textContent, $("btn-versao").className,
+                   $("aba-historico").hidden];
+    estado.versao = {atual: 0, concluida_em: 1, mudou: false, entraram: 0, sairam: 0};
+    r.igual = bloqueioDeConcluir();
+    desenharVersao();
+    r.abaNaV0 = $("aba-historico").hidden;
+    estado.versao = {atual: 2, concluida_em: 1, mudou: true, entraram: 3, sairam: 1};
+    r.mudou = bloqueioDeConcluir();
+    desenharVersao();
+    r.pilulaMudou = [$("btn-versao").textContent, $("btn-versao").className,
+                     $("aba-historico").hidden];
+    estado.dono = "outra-pessoa";
+    r.semDono = bloqueioDeConcluir();
+    estado.usuario = {id: "outra-pessoa", perfil: "comum"};
+    r.dono = bloqueioDeConcluir();
+    estado.historico = {atual: 2, pendente: {
+        entraram: [{nome: "Sol Ring", zona: "side", quantidade: 1, carta: SOL_RING}],
+        sairam: [], n_entraram: 1, n_sairam: 0},
+      versoes: [
+        {numero: 2, criado_em: 1, total: 100, diferenca: {
+          entraram: [{nome: "Llanowar Elves", zona: "deck", quantidade: 1, carta: ELVES}],
+          sairam: [{nome: "Forest", zona: "deck", quantidade: 1, carta: null}],
+          n_entraram: 1, n_sairam: 1}},
+        {numero: 0, criado_em: 1, total: 100, diferenca: null}]};
+    desenharHistorico();
+    r.historico = $("historico-resultado").innerHTML;
+    JSON.stringify(r);
+    """)
+    check("WIP com lista incompleta diz quantas faltam",
+          "Faltam" in versao["wipInvalido"], versao["wipInvalido"])
+    eq("deck sem versão é WIP, sem aba de histórico",
+       versao["pilulaWip"], ["WIP", "versao-pilula wip", True])
+    check("lista igual à última bloqueia", "igual à v0" in versao["igual"],
+          versao["igual"])
+    eq("na v0 ainda não há aba de histórico", versao["abaNaV0"], True)
+    eq("lista mudada libera o clique", versao["mudou"], "")
+    eq("a pílula ganha o ponto e a aba aparece",
+       versao["pilulaMudou"], ["v2", "versao-pilula mudou", False])
+    check("deck de outra pessoa não conclui", "dono" in versao["semDono"],
+          versao["semDono"])
+    eq("o dono conclui", versao["dono"], "")
+    hist = versao["historico"]
+    check("o que mudou desde a última oferece a próxima versão",
+          "Concluir v3" in hist, hist)
+    check("a carta que foi pro sideboard diz a zona",
+          '<span class="zona">sideboard</span>' in hist, hist)
+    check("cada linha mostra a arte no hover",
+          'data-arte="http://arte/Sol Ring"' in hist, hist)
+    check("a v0 aparece como a primeira versão",
+          "primeira versão · 100 cartas" in hist, hist)
+    eq("as versões saem na ordem que o servidor mandou",
+       re.findall(r'<span class="versao-pilula">(v\d+)</span>', hist),
+       ["v2", "v0"])
+
     # -------------------------------------------------- o que vai pro servidor
     print("\n--- o que a tela manda pro servidor ---")
     r = rodar("")

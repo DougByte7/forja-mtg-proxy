@@ -123,6 +123,30 @@ html.sem-rolar.com-barra{scrollbar-gutter:stable;}
 .estado-salvo.erro{color:var(--red);}
 .estado-salvo.ok{color:var(--green);}
 
+/* ---------------- versão do deck ----------------
+   A pílula divide a linha com o nome, e o campo encolhe até o texto pra ela
+   ficar logo depois dele e não no fim de 420px. Onde `field-sizing` não
+   existe, o campo fica na largura padrão de um input e a pílula vem depois.
+   WIP é tracejado e apagado; versão concluída é dourada; o ponto depois do
+   número diz que a lista já não é a daquela versão. */
+.titulo-linha{display:flex;align-items:center;gap:6px;min-width:0;}
+.titulo-deck .titulo-linha input{
+  flex:0 1 auto;width:auto;min-width:0;field-sizing:content;min-inline-size:8ch;
+}
+.versao-pilula{
+  flex:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+  font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;
+  letter-spacing:.05em;line-height:1;padding:4px 8px;border-radius:999px;
+  border:1px solid var(--gold);color:var(--gold-light);background:transparent;
+}
+button.versao-pilula{cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+button.versao-pilula:hover{background:rgba(233,199,101,.12);}
+.versao-pilula.wip{border-style:dashed;border-color:var(--text-muted);color:var(--text-muted);}
+button.versao-pilula.wip:hover{border-color:var(--gold);color:var(--gold-light);background:transparent;}
+.versao-pilula.mudou::after{
+  content:"";width:6px;height:6px;border-radius:50%;background:var(--gold);
+}
+
 .btn{
   background:transparent;border:1px solid var(--border);color:var(--text-muted);
   border-radius:999px;padding:8px 14px;font-size:12px;cursor:pointer;
@@ -1339,6 +1363,48 @@ body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
 /* `.separador`, e não `.risco`: esse nome já é o cartão de risco das
    chances de comprar, e o estilo dele vazaria pra cá. */
 .menu .separador{height:1px;background:var(--border);margin:5px 4px;}
+.menu .nota-menu{
+  font-size:11.5px;color:var(--text-muted);line-height:1.45;margin:0 9px 6px;
+}
+.menu [role="menuitem"]:disabled{opacity:.45;cursor:not-allowed;}
+.menu [role="menuitem"]:disabled:hover{background:transparent;border-color:transparent;}
+
+/* ---------------- histórico de versões ----------------
+   Uma linha do tempo da mais nova pra mais antiga. Cada versão diz o que
+   entrou e o que saiu em duas colunas lado a lado, porque troca de carta se
+   lê em par: "saiu Cultivate, entrou Three Visits". O bloco tracejado no
+   topo é a versão que ainda não foi concluída. */
+.hist-linha{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
+.hist-bloco{
+  background:var(--inset);border:1px solid var(--border);border-radius:11px;
+  padding:11px 13px;
+}
+.hist-bloco.pendente{
+  background:transparent;border-color:var(--gold);border-style:dashed;margin-bottom:14px;
+}
+.hist-cab{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+.hist-cab b{font-size:13px;}
+.hist-quando{font-size:12px;color:var(--text-muted);}
+.hist-saldo{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-muted);}
+.hist-saldo .entrou{color:var(--green);}
+.hist-saldo .saiu{color:var(--red);}
+.hist-diferenca{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-top:10px;}
+.hist-coluna h4{
+  font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);margin:0 0 5px;font-weight:600;
+}
+.hist-coluna ul{list-style:none;margin:0;padding:0;}
+.hist-coluna li{display:flex;align-items:baseline;gap:7px;font-size:12.5px;padding:2px 0;min-width:0;}
+.hist-coluna .q{font-family:'IBM Plex Mono',monospace;font-size:11.5px;flex:none;min-width:3ch;}
+.hist-coluna.entrou .q{color:var(--green);}
+.hist-coluna.saiu .q{color:var(--red);}
+.hist-coluna .nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hist-coluna .zona{
+  flex:none;font-size:10px;color:var(--text-muted);border:1px solid var(--border);
+  border-radius:999px;padding:0 6px;
+}
+.hist-coluna .nota{margin:0;}
+@media (max-width:600px){ .hist-diferenca{grid-template-columns:1fr;} }
 /* Colunas de jornal, e não grade: a lista DESCE a primeira coluna inteira
    antes de começar a segunda. Numa grade, que preenche linha por linha, a
    ordem cai em ziguezague — 1ª carta à esquerda, 2ª à direita, 3ª de volta à

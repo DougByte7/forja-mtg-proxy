@@ -36,6 +36,18 @@ está montando: um deck de 40 cartas não é um erro, é terça-feira. Por isso
 `validar` DESCREVE o que está fora da regra, e é a tela que decide o tom —
 "faltam 43 cartas" é barra de progresso, não mensagem de erro. Quem chama
 nunca é impedido de gravar.
+
+VERSÕES SÃO FOTOGRAFIAS QUE A PESSOA TIRA. O autosave grava por cima a cada
+clique, e isso não é histórico: é o deck. Versão é outra coisa — o momento em
+que quem monta diz "esta lista está pronta". Todo deck nasce WIP (`versao`
+nula) e só sai disso pela mão da pessoa, com a lista válida: a v0 é a
+primeira lista que se pode levar pra mesa. Depois dela cada conclusão vira a
+versão seguinte, desde que a lista seja outra — duas versões iguais seriam
+uma entrada no histórico dizendo que nada aconteceu.
+
+A fotografia guarda só o que decide o jogo: comandantes, deck e sideboard, por
+nome e quantidade. Categoria própria e maybeboard ficam de fora, porque mover
+Sol Ring de "Ramp" pra "Combo" não muda a lista que vai pra mesa.
 """
 import json
 import os
@@ -105,6 +117,22 @@ def init_db():
         # eles são órfãos até alguém reclamar. O índice serve à única consulta
         # que filtra por dono ("os meus"), que roda a cada abertura da lista.
         conn.execute("CREATE INDEX IF NOT EXISTS idx_decks_dono ON decks(dono)")
+        # `versao` é o número da última versão concluída, e NULL é WIP — que é
+        # o que todo deck anterior a esta coluna é. Ela repete o MAX(numero)
+        # de `deck_versoes` de propósito: a lista de decks mostra a versão de
+        # cada cartão, e um SELECT * que já traz o número dispensa uma
+        # subconsulta por deck nas três leituras que montam cartão.
+        if "versao" not in colunas:
+            conn.execute("ALTER TABLE decks ADD COLUMN versao INTEGER")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS deck_versoes (
+                deck_id TEXT NOT NULL,
+                numero INTEGER NOT NULL,
+                lista TEXT NOT NULL,
+                criado_em REAL NOT NULL,
+                PRIMARY KEY (deck_id, numero)
+            )
+        """)
         conn.commit()
     finally:
         conn.close()
@@ -256,6 +284,12 @@ def _tem_coluna(conn, nome: str) -> bool:
     return nome in {l["name"] for l in conn.execute("PRAGMA table_info(decks)")}
 
 
+def _tem_tabela(conn, nome: str) -> bool:
+    """O mesmo cuidado do `_tem_coluna`, pra tabela que chega por migração."""
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                        "AND name=?", (nome,)).fetchone() is not None
+
+
 def _linha_para_deck(linha: sqlite3.Row) -> dict:
     # `linha.keys()` e não acesso direto: um banco que ainda não passou pela
     # migração do `init_db` (um teste que chama `criar` antes dela, por
@@ -276,6 +310,8 @@ def _linha_para_deck(linha: sqlite3.Row) -> dict:
         # A coluna só nasce com o login. Enquanto não existe, todo deck é
         # órfão — que é a verdade sobre eles, não um campo faltando.
         "dono": (linha["dono"] if "dono" in tem else None),
+        # Sem a coluna, o deck é WIP: ninguém concluiu versão nenhuma dele.
+        "versao": (linha["versao"] if "versao" in tem else None),
     }
 
 
@@ -372,6 +408,8 @@ def apagar(deck_id: str) -> bool:
     try:
         apagados = conn.execute("DELETE FROM decks WHERE id=?",
                                 (deck_id,)).rowcount
+        if _tem_tabela(conn, "deck_versoes"):
+            conn.execute("DELETE FROM deck_versoes WHERE deck_id=?", (deck_id,))
         conn.commit()
     finally:
         conn.close()
@@ -544,6 +582,220 @@ def com_cartas(deck: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Versões
+# ---------------------------------------------------------------------------
+
+# As zonas da fotografia, na ordem em que o histórico as lista.
+ZONAS_DA_VERSAO = ("comandantes", "deck", "side")
+
+
+class VersaoRecusada(ValueError):
+    """Concluir versão não cabe no deck como ele está gravado: WIP com lista
+    inválida, ou lista igual à da última versão. É o estado do deck que
+    recusa, não a permissão de quem pediu."""
+
+
+def lista_da_versao(comandantes, cartas) -> dict:
+    """A fotografia que uma versão guarda: comandantes, deck e sideboard.
+
+    Cada zona sai ordenada pelo nome achatado, pra duas fotografias da mesma
+    lista serem iguais no JSON — a ordem em que as cartas entraram e a
+    categoria própria de cada uma não fazem parte da lista.
+    """
+    limpas = limpar_cartas(cartas or [])
+    ordem = lambda c: base_cartas.normalizar(c["nome"])
+    zona = lambda fora: sorted(
+        ({"nome": c["nome"], "quantidade": c["quantidade"]} for c in limpas
+         if (c["categoria"] in CATEGORIAS_FORA_DA_CONTA) == fora), key=ordem)
+    return {
+        "comandantes": sorted(limpar_comandantes(comandantes),
+                              key=base_cartas.normalizar),
+        "deck": zona(False),
+        "side": zona(True),
+    }
+
+
+def _por_zona(lista: dict) -> dict:
+    """`{zona: {nome achatado: (nome, quantidade)}}` — o formato que se subtrai."""
+    saida = {"comandantes": {base_cartas.normalizar(n): (n, 1)
+                             for n in lista.get("comandantes") or []}}
+    for zona in ("deck", "side"):
+        saida[zona] = {base_cartas.normalizar(c["nome"]): (c["nome"], c["quantidade"])
+                       for c in lista.get(zona) or []}
+    return saida
+
+
+def diferenca(antes: dict, depois: dict) -> dict:
+    """O que entrou e o que saiu de uma fotografia pra outra, zona por zona.
+
+    Quantidade conta: 30 Forest que viram 28 são duas Forest que saíram. A
+    carta que passa do deck pro sideboard aparece dos dois lados — saiu do
+    deck, entrou no side —, porque é isso que muda na mesa.
+    """
+    a, d = _por_zona(antes), _por_zona(depois)
+    entraram, sairam = [], []
+    for zona in ZONAS_DA_VERSAO:
+        for chave in sorted(set(a[zona]) | set(d[zona])):
+            nome_antes, qtd_antes = a[zona].get(chave, (None, 0))
+            nome_depois, qtd_depois = d[zona].get(chave, (None, 0))
+            if qtd_depois > qtd_antes:
+                entraram.append({"nome": nome_depois, "zona": zona,
+                                 "quantidade": qtd_depois - qtd_antes})
+            elif qtd_antes > qtd_depois:
+                sairam.append({"nome": nome_antes, "zona": zona,
+                               "quantidade": qtd_antes - qtd_depois})
+    return {
+        "entraram": entraram,
+        "sairam": sairam,
+        "n_entraram": sum(c["quantidade"] for c in entraram),
+        "n_sairam": sum(c["quantidade"] for c in sairam),
+    }
+
+
+def _mudou(dif: dict) -> bool:
+    return bool(dif["entraram"] or dif["sairam"])
+
+
+def _total_da_lista(lista: dict) -> int:
+    """A mesma conta do `validar`: comandantes mais o deck, sem o sideboard."""
+    return len(lista.get("comandantes") or []) + \
+        sum(c["quantidade"] for c in lista.get("deck") or [])
+
+
+def _versoes_guardadas(conn, deck_id: str, so_a_ultima: bool = False) -> list[dict]:
+    """As versões de um deck, da v0 em diante (ou só a última)."""
+    if not _tem_tabela(conn, "deck_versoes"):
+        return []
+    linhas = conn.execute(
+        "SELECT numero, lista, criado_em FROM deck_versoes WHERE deck_id=? "
+        f"ORDER BY numero {'DESC LIMIT 1' if so_a_ultima else 'ASC'}",
+        (deck_id,)).fetchall()
+    return [{"numero": l["numero"], "lista": json.loads(l["lista"]),
+             "criado_em": l["criado_em"]} for l in linhas]
+
+
+def situacao_da_versao(deck: dict) -> dict:
+    """Onde o deck está no histórico: a última versão (`atual` nulo é WIP),
+    quando ela foi concluída e quanto a lista gravada mudou desde então.
+
+    Vai em toda resposta de deck, autosave incluído: é o que diz à tela se já
+    existe o que concluir. No WIP `mudou` é sempre falso — sem versão não há
+    com o que comparar, e o que decide a v0 é a lista ser válida.
+    """
+    conn = _conn()
+    try:
+        ultimas = _versoes_guardadas(conn, deck["id"], so_a_ultima=True)
+    finally:
+        conn.close()
+    if not ultimas:
+        return {"atual": None, "concluida_em": None, "mudou": False,
+                "entraram": 0, "sairam": 0}
+    ultima = ultimas[0]
+    dif = diferenca(ultima["lista"],
+                    lista_da_versao(deck["comandantes"], deck["cartas"]))
+    return {"atual": ultima["numero"], "concluida_em": ultima["criado_em"],
+            "mudou": _mudou(dif), "entraram": dif["n_entraram"],
+            "sairam": dif["n_sairam"]}
+
+
+def concluir_versao(deck_id: str) -> int | None:
+    """Fotografa a lista gravada como a próxima versão e devolve o número dela.
+    `None` se o deck não existe.
+
+    Levanta `VersaoRecusada` quando o deck é WIP e a lista não é válida (a v0
+    é a primeira lista que se pode levar pra mesa), e quando a lista é igual
+    à da última versão.
+
+    Lê a última versão e grava a nova numa transação `IMMEDIATE`: dois
+    cliques quase juntos não podem ler a mesma v2 e disputar a v3.
+    """
+    conn = _conn()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        linha = conn.execute("SELECT * FROM decks WHERE id=?",
+                             (deck_id,)).fetchone()
+        if linha is None:
+            conn.rollback()
+            return None
+        deck = _linha_para_deck(linha)
+        lista = lista_da_versao(deck["comandantes"], deck["cartas"])
+        ultimas = _versoes_guardadas(conn, deck_id, so_a_ultima=True)
+        if not ultimas:
+            validacao = validar(deck["comandantes"], deck["cartas"])
+            if not validacao["ok"]:
+                erros = [a["mensagem"] for a in validacao["apontamentos"]
+                         if a["nivel"] == "erro"]
+                resto = f" (e mais {len(erros) - 1} problema(s))" \
+                    if len(erros) > 1 else ""
+                raise VersaoRecusada(
+                    f"A lista precisa estar válida pra virar a v0. "
+                    f"{erros[0]}{resto}")
+            numero = 0
+        else:
+            ultima = ultimas[0]
+            if not _mudou(diferenca(ultima["lista"], lista)):
+                raise VersaoRecusada(
+                    f"A lista está igual à v{ultima['numero']}.")
+            numero = ultima["numero"] + 1
+        conn.execute(
+            "INSERT INTO deck_versoes (deck_id, numero, lista, criado_em) "
+            "VALUES (?,?,?,?)", (deck_id, numero, json.dumps(lista), time.time()))
+        conn.execute("UPDATE decks SET versao=? WHERE id=?", (numero, deck_id))
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return numero
+
+
+def historico(deck: dict) -> dict:
+    """As versões do deck, da mais nova pra mais antiga, cada uma com o que
+    entrou e saiu em relação à anterior — e, em `pendente`, o que a lista
+    gravada tem de diferente da última versão.
+
+    A v0 vem sem `diferenca`: não há anterior, e listar as 100 cartas como
+    "entraram" diria nada com muito barulho. A carta completa vai grudada em
+    cada linha pra tela mostrar a arte no hover, e uma consulta à base local
+    cobre as linhas de todas as versões.
+    """
+    conn = _conn()
+    try:
+        guardadas = _versoes_guardadas(conn, deck["id"])
+    finally:
+        conn.close()
+
+    versoes, anterior = [], None
+    for v in guardadas:
+        versoes.append({
+            "numero": v["numero"],
+            "criado_em": v["criado_em"],
+            "total": _total_da_lista(v["lista"]),
+            "diferenca": diferenca(anterior, v["lista"])
+            if anterior is not None else None,
+        })
+        anterior = v["lista"]
+
+    pendente = None
+    if anterior is not None:
+        dif = diferenca(anterior,
+                        lista_da_versao(deck["comandantes"], deck["cartas"]))
+        pendente = dif if _mudou(dif) else None
+
+    linhas = [c for dif in [pendente] + [v["diferenca"] for v in versoes] if dif
+              for c in dif["entraram"] + dif["sairam"]]
+    conhecidas = base_cartas.por_nomes([c["nome"] for c in linhas]) \
+        if linhas else {}
+    for c in linhas:
+        c["carta"] = conhecidas.get(c["nome"])
+
+    versoes.reverse()
+    return {"atual": guardadas[-1]["numero"] if guardadas else None,
+            "versoes": versoes, "pendente": pendente}
+
+
+# ---------------------------------------------------------------------------
 # Resumo (a página de decks)
 # ---------------------------------------------------------------------------
 
@@ -631,6 +883,7 @@ def _cartoes(lista: list[dict]) -> list[dict]:
             # e pra "sem dono" ser um estado visível desde já, que é o que
             # todo deck de hoje é.
             "dono": deck.get("dono"),
+            "versao": deck.get("versao"),
         })
     return saida
 

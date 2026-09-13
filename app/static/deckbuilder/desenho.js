@@ -17,6 +17,7 @@ import {validacaoAtual} from "./salvar.js";
 import {cartasContadas, categoriaAutomatica, categoriaDe, ehPropria, ico,
         identidadeDoDeck, manaHTML, ordemDasCategorias, semAcento,
         totalCartas} from "./utilidades.js";
+import {desenharVersao} from "./versoes.js";
 
 export function desenharTudo(){
   desenharDeck();
@@ -25,6 +26,7 @@ export function desenharTudo(){
   atualizarBotaoPedido();
   desenharAnalise();
   desenharContador();
+  desenharVersao();
   desenharPreviaOrcamento();
   $("rot-preco-moeda").textContent = simboloDaTela();
   atualizarNotaIdentidade();

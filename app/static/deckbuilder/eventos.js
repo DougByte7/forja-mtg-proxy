@@ -30,6 +30,7 @@ import {agendarSalvar, lidos, salvando, salvarJa,
 import {buscarSugestoes, desenharSugestoes, importarDeckMedio,
         sugerirPelaCarta, sugestoesPlanas} from "./sugestoes.js";
 import {fonteDoLink, toast} from "./utilidades.js";
+import {concluirVersao, menuDaVersao} from "./versoes.js";
 
 export function ligarEventos(){
   $("busca").addEventListener("input", agendarBusca);
@@ -285,6 +286,9 @@ export function ligarEventos(){
     if (e.target.closest("#btn-mais")){
       return abrirMenu($("btn-mais"), menuDoCabecalho());
     }
+    // A pílula da versão abre daqui pelo mesmo motivo do "···".
+    if (e.target.closest("#btn-versao")) return menuDaVersao();
+    if (e.target.closest("[data-concluir-versao]")) return concluirVersao();
     if (e.target.closest("[data-abrir-manabase]")) return chamarManabase();
     const verCmd = e.target.closest("[data-ver-cmd]");
     if (verCmd) return abrirCarta(estado.comandantes[Number(verCmd.dataset.verCmd)]);
