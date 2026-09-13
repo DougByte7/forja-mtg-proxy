@@ -928,46 +928,45 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 
 .gf-secao{font-size:11px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--text-muted);margin:12px 0 5px;}
-.gf-fila{display:flex;gap:6px;flex-wrap:wrap;min-height:8px;}
+.gf-fila{display:flex;gap:8px;flex-wrap:wrap;min-height:8px;}
 
-/* A carta da mesa é a arte inteira, pequena. O nome fica no `title` e na
-   prévia do hover (a mesma de todo o resto da tela): num tabuleiro de 40
-   cartas, texto embaixo de cada uma faria a mesa não caber. */
-.gf-carta{width:62px;height:87px;border-radius:5px;border:1px solid var(--border);
+/* A carta da mesa é a arte inteira, em 144x200 — a proporção da carta, num
+   tamanho em que o nome e o corpo impressos se leem sem abrir nada. O nome
+   fica no `title` e na prévia do hover (a mesma de todo o resto da tela):
+   num tabuleiro de 40 cartas, texto embaixo de cada uma faria a mesa não
+   caber. */
+.gf-carta{width:144px;height:200px;border-radius:8px;border:1px solid var(--border);
   background:var(--inset) center/cover no-repeat;cursor:pointer;flex:none;
   position:relative;padding:0;transition:transform .12s;}
-.gf-carta:hover{border-color:var(--purple);transform:translateY(-3px);}
+.gf-carta:hover{border-color:var(--purple);transform:translateY(-6px);}
 /* Deitada gira 90°, e girar não muda a caixa do layout: a carta continua
-   ocupando 62 de largura enquanto DESENHA 87. A margem lateral cobre essa
-   diferença — (87-62)/2 = 13px de cada lado — senão ela invade as vizinhas. */
-.gf-carta.deitada{transform:rotate(90deg);margin:0 13px;}
-.gf-carta.deitada:hover{transform:rotate(90deg) translateY(-3px);}
+   ocupando 144 de largura enquanto DESENHA 200. A margem lateral cobre essa
+   diferença — (200-144)/2 = 28px de cada lado — senão ela invade as vizinhas. */
+.gf-carta.deitada{transform:rotate(90deg);margin:0 28px;}
+.gf-carta.deitada:hover{transform:rotate(90deg) translateY(-6px);}
 .gf-carta.virada{background-image:none;
   background:repeating-linear-gradient(45deg,var(--surface-2),
     var(--surface-2) 4px,var(--inset) 4px,var(--inset) 8px);}
-/* Nome de carta de Magic é longo ("Hanna, Ship's Navigator"), e a carta tem
-   72px. Duas linhas com reticências: cortar no meio da palavra sem aviso faz
-   duas cartas diferentes parecerem a mesma. */
-.gf-carta .gf-nome{position:absolute;inset:auto 0 0 0;font-size:8.5px;
-  line-height:1.2;padding:2px 3px;background:rgba(15,13,23,.86);
-  color:var(--text);border-radius:0 0 4px 4px;overflow:hidden;
+/* Nome de carta de Magic é longo ("Hanna, Ship's Navigator"). Duas linhas com
+   reticências: cortar no meio da palavra sem aviso faz duas cartas diferentes
+   parecerem a mesma. */
+.gf-carta .gf-nome{position:absolute;inset:auto 0 0 0;font-size:11px;
+  line-height:1.25;padding:3px 6px;background:rgba(15,13,23,.86);
+  color:var(--text);border-radius:0 0 7px 7px;overflow:hidden;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   word-break:break-word;}
-/* Só a mão mostra o nome: é onde a decisão acontece, e onde as cartas são
-   poucas o bastante pra caber. */
-.gf-fila.gf-mao .gf-carta{width:72px;height:100px;}
 /* Os marcadores da carta, empilhados no canto. Três cabem; o `title` do
    conjunto lista todos, com o nome inteiro — "+2" é o que se lê de relance,
    "+1/+1: 2" é o que responde a dúvida. */
-.gf-carta .gf-marcas{position:absolute;top:2px;right:2px;display:flex;
-  flex-direction:column;gap:2px;align-items:flex-end;}
-.gf-carta .gf-marca-b{min-width:15px;height:15px;border-radius:8px;
-  background:var(--gold);color:var(--sobre-gold);font-size:9px;font-weight:700;
-  display:grid;place-items:center;padding:0 3px;
+.gf-carta .gf-marcas{position:absolute;top:4px;right:4px;display:flex;
+  flex-direction:column;gap:3px;align-items:flex-end;}
+.gf-carta .gf-marca-b{min-width:20px;height:20px;border-radius:10px;
+  background:var(--gold);color:var(--sobre-gold);font-size:11px;font-weight:700;
+  display:grid;place-items:center;padding:0 5px;
   font-family:'IBM Plex Mono',monospace;}
 /* Atacante e bloqueador: a marca fica no canto de baixo pra não brigar com os
    marcadores, e a borda colorida é o que se vê sem ler. */
-.gf-carta .gf-combate{position:absolute;bottom:2px;left:2px;font-size:11px;
+.gf-carta .gf-combate{position:absolute;bottom:4px;left:4px;font-size:18px;
   line-height:1;text-shadow:0 1px 3px #000;}
 .gf-carta.atacando{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
 .gf-carta.bloqueando{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
@@ -978,6 +977,44 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .gf-vazio{color:var(--text-muted);font-size:12px;font-style:italic;
   padding:4px 0;}
 .gf-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+
+/* O painel da carta na mão: à esquerda da mesa, na altura das colunas fixas
+   da tela. `left` sai do script (`mostrarPainel`), que mede a mesa. Não pega
+   o mouse: ele é leitura, e um painel que pega o ponteiro roubaria o hover
+   da carta que o abriu. */
+.gf-detalhe{position:fixed;top:74px;left:16px;z-index:60;width:288px;
+  max-height:calc(100vh - 92px);overflow:hidden;pointer-events:none;
+  display:flex;flex-direction:column;gap:8px;padding:12px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 22px 44px -14px rgba(0,0,0,.85);
+  opacity:0;visibility:hidden;transition:opacity .12s;}
+.gf-detalhe.mostra{opacity:1;visibility:visible;}
+/* A proporção reserva a altura antes de a imagem chegar: sem ela o texto
+   começaria no topo e pularia pra baixo quando a arte carregasse. */
+#gf-detalhe-arte{display:block;width:100%;aspect-ratio:488/680;flex:none;
+  border-radius:10px;background:var(--inset);}
+#gf-detalhe-arte.vazia{display:none;}
+.gf-detalhe-topo,.gf-detalhe-nome{display:flex;align-items:center;gap:6px;
+  justify-content:space-between;color:var(--text);}
+.gf-detalhe-topo{font-size:14px;}
+.gf-detalhe-nome{font-size:12.5px;}
+.gf-detalhe-tipo{font-size:12px;color:var(--text-muted);margin-top:2px;}
+.gf-detalhe-texto{margin:6px 0 0;font-size:12.5px;line-height:1.45;
+  white-space:pre-line;color:var(--text);}
+.gf-detalhe-pt{width:fit-content;margin:6px 0 0 auto;padding:1px 8px;
+  border:1px solid var(--border);border-radius:6px;color:var(--text);
+  font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;}
+.gf-detalhe-face + .gf-detalhe-face{border-top:1px solid var(--border);
+  margin-top:4px;padding-top:8px;}
+/* Na tela cheia a mesa começa na borda da janela, e o painel cobriria a
+   própria mão: a coluna dele fica reservada. Fora dela o painel cai por cima
+   da busca, que é o que está à esquerda da mesa. */
+@media (hover:hover) and (min-width:1100px){
+  body.gf-cheia .corpo{padding-left:320px;}
+}
+@media (hover:none){
+  .gf-detalhe{display:none;}
+}
 
 /* Menu de uma carta da mesa: pra onde ela vai. */
 .gf-menu{position:fixed;background:var(--surface-2);border:1px solid var(--border);
@@ -991,7 +1028,7 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 
 /* ---- um bloco por jogador ----
    Empilhados, e não lado a lado: a mesa tem a largura da tela e a carta tem
-   62px, então dividir ao meio cortaria as duas filas de campo pela metade. Com
+   144px, então dividir ao meio cortaria as duas filas de campo pela metade. Com
    um deck só, o bloco é a mesa inteira e nada disto aparece. */
 .gf-jogadores{display:flex;flex-direction:column;gap:12px;}
 .gf-jogador + .gf-jogador{border-top:1px solid var(--border);padding-top:10px;}

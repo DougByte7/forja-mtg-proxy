@@ -11,14 +11,23 @@
    nenhum por perto. */
 
 import {$, escapar} from "../comum/dom.js";
+import {imagemDaFace} from "./artes.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {CORES, estado, NOME_COR} from "./estado.js";
-import {atacantes, cartaPorUid, devolveAoManterDe, ehTerreno, GRUPOS_DO_CAMPO,
-        grupoDoCampo, nomeDaCarta, resumoDaMao} from "./goldfish.js";
+import {artesDoJogador, atacantes, cartaPorUid, devolveAoManterDe, ehTerreno,
+        GRUPOS_DO_CAMPO, grupoDoCampo, nomeDaCarta, resumoDaMao} from "./goldfish.js";
+import {manaEmTexto, manaHTML} from "./utilidades.js";
 
-/* Um marcador na carta cabe em duas ou três letras, e não no nome: a carta
-   tem 62px. A sigla é o que se reconhece de relance ("+2" de +1/+1), e o nome
-   inteiro fica no `title`. */
+/* A arte de uma carta da mesa: a escolhida no deck DO DONO, e a padrão quando
+   não há. O dono importa com dois decks na mesa — o Sol Ring de um não pode
+   aparecer com a arte que o outro escolheu. */
+export function arteNaMesa(c){
+  return imagemDaFace(c.carta || {}, "frente", 0, artesDoJogador(c.dono));
+}
+
+/* Um marcador na carta cabe em duas ou três letras, e não no nome: o canto
+   da carta é o espaço de um selo. A sigla é o que se reconhece de relance
+   ("+2" de +1/+1), e o nome inteiro fica no `title`. */
 function siglaDaMarca(nome){
   if (nome === "+1/+1") return "+";
   if (nome === "-1/-1") return "−";
@@ -37,7 +46,7 @@ function marcasDaCartaHTML(c){
 
 function gfCartaHTML(c, zona){
   const carta = c.carta || {};
-  const arte = c.virada ? "" : (carta.imagem || "");
+  const arte = c.virada ? "" : arteNaMesa(c);
   const classes = ["gf-carta"];
   if (c.deitada) classes.push("deitada");
   if (c.virada) classes.push("virada");
@@ -48,16 +57,21 @@ function gfCartaHTML(c, zona){
   const marca = c.atacando ? `<span class="gf-combate" title="Atacando">⚔</span>`
     : c.bloqueando ? `<span class="gf-combate" title="Bloqueia ${
         escapar(nomeDaCarta(bloqueado))}">🛡</span>` : "";
-  // Ficha não tem arte da Scryfall se foi inventada na hora: o nome dentro do
-  // quadro é tudo o que ela tem pra se identificar.
+  // Só a mão leva o nome: é onde a decisão acontece. Ficha não tem arte da
+  // Scryfall se foi inventada na hora: o nome dentro do quadro é tudo o que
+  // ela tem pra se identificar.
   const rotulo = zona === "mao" || (c.ficha && !arte)
     ? `<span class="gf-nome">${escapar(carta.nome || "")}${
         c.ficha && carta.poder ? ` ${carta.poder}/${carta.resistencia}` : ""}</span>`
     : "";
+  // A mão não usa a prévia que segue o mouse: ela tem o painel à esquerda da
+  // mesa (ver `mostrarPainel`), e as duas juntas mostrariam a carta duas vezes.
+  const previa = c.virada || c.ficha || zona === "mao"
+    ? "" : ganchosDaPrevia(carta, artesDoJogador(c.dono));
   return `<button class="${classes.join(" ")}" data-gf-uid="${c.uid}" draggable="true"
     title="${escapar(carta.nome || "")}"
     ${arte ? `style="background-image:url('${escapar(arte)}')"` : ""}
-    ${c.virada || c.ficha ? "" : ganchosDaPrevia(carta)}>
+    ${previa}>
     ${marcasDaCartaHTML(c)}${marca}${rotulo}
   </button>`;
 }
@@ -69,6 +83,48 @@ function filaHTML(lista, zona, ij, vazio){
   }
   return `<div class="gf-fila ${zona === "mao" ? "gf-mao" : ""}" ${solta}>${
     lista.map(c => gfCartaHTML(c, zona)).join("")}</div>`;
+}
+
+/* ------------------------------------------- o painel da carta na mão */
+
+function corpoDaFace(f){
+  if (f.poder != null && f.resistencia != null) return `${f.poder}/${f.resistencia}`;
+  if (f.lealdade != null) return `Lealdade ${f.lealdade}`;
+  if (f.defesa != null) return `Defesa ${f.defesa}`;
+  return "";
+}
+
+function faceDoPainelHTML(f, comNome){
+  const corpo = corpoDaFace(f);
+  return `<div class="gf-detalhe-face">
+    ${comNome ? `<div class="gf-detalhe-nome"><b>${escapar(f.nome)}</b>${
+      manaHTML(f.mana_cost)}</div>` : ""}
+    ${f.tipo ? `<div class="gf-detalhe-tipo">${escapar(f.tipo)}</div>` : ""}
+    ${f.texto ? `<p class="gf-detalhe-texto">${manaEmTexto(f.texto)}</p>` : ""}
+    ${corpo ? `<div class="gf-detalhe-pt">${escapar(corpo)}</div>` : ""}
+  </div>`;
+}
+
+/* O texto do painel: o que decide a jogada — custo, tipo, oracle e corpo.
+   Edição, preço e ambientação ficam na modal "Ver a carta".
+
+   `d` é o detalhe da Scryfall quando já chegou, e é dele que saem poder,
+   resistência, lealdade e defesa, que a base local não guarda. Antes dele o
+   painel mostra o que a carta já traz; carta de duas faces vem da base com o
+   texto emendado por "//", e com o detalhe ganha uma face por bloco. A arte
+   não passa por aqui: ela é um `img` fixo do painel, trocado só quando muda,
+   pra a chegada do detalhe não fazer a carta piscar. */
+export function painelDaCartaHTML(c, d){
+  const carta = c.carta || {};
+  const faces = d && d.faces && d.faces.length ? d.faces : [{
+    nome: carta.nome, mana_cost: carta.mana_cost, tipo: carta.tipo,
+    texto: carta.texto, poder: carta.poder || null,
+    resistencia: carta.resistencia || null,
+  }];
+  const duas = faces.length > 1;
+  return `<div class="gf-detalhe-topo"><b>${escapar(carta.nome || "")}</b>${
+      manaHTML(carta.mana_cost)}</div>
+    ${faces.map(f => faceDoPainelHTML(f, duas)).join("")}`;
 }
 
 /* ------------------------------------------------------------- o resumo */
@@ -171,15 +227,19 @@ function zonasHTML(j, ij){
 
 function mulliganHTML(j, ij){
   const devolve = devolveAoManterDe(ij);
+  // A compra do turno só vem pra quem está na vez (ver `confirmarMao`).
+  const naVez = estado.mesa.ativo === ij;
+  const depois = naVez ? "" : " A compra do turno vem quando chegar a vez.";
   const explica = j.fase === "fundo"
     ? `<p class="nota">Escolha <b>${j.aFundo}</b> carta(s) pra mandar pro
-       fundo do baralho — clique nelas, na ordem que quiser. Depois delas
-       vem a compra do turno 1.</p>`
+       fundo do baralho — clique nelas, na ordem que quiser.${naVez
+        ? " Depois delas vem a compra do turno." : depois}</p>`
     : `<p class="nota">${j.mulligans === 0
         ? "Mão de abertura."
         : `${j.mulligans}º mulligan.`} Se manter agora, ${devolve
-        ? `devolve <b>${devolve}</b> carta(s) pro fundo e compra a do turno 1`
-        : `compra a do turno 1 e fica com <b>${j.mao.length + 1}</b>`}.</p>`;
+        ? `devolve <b>${devolve}</b> carta(s) pro fundo${naVez ? " e compra a do turno" : ""}`
+        : naVez ? `compra a do turno e fica com <b>${j.mao.length + 1}</b>`
+        : `fica com <b>${j.mao.length}</b>`}.${depois}</p>`;
   return explica +
     `<div class="gf-secao">Mão</div>` +
     resumoHTML(j.mao) +
@@ -263,6 +323,9 @@ export function desenharMesa(){
   $("gf-desfazer").disabled = !estado.mesaDesfazer.length;
   $("gf-segundo").disabled = !m;
   $("gf-encerrar").disabled = !m;
+  // A carta sob o painel pode ter acabado de sair da mão, e o HTML da mesa
+  // é todo reescrito: o próximo movimento do mouse o abre de novo.
+  $("gf-detalhe").classList.remove("mostra");
   if (!m){
     $("gf-turno").textContent = "";
     alvo.innerHTML = `<div class="gf-vazio">Clique em <b>Embaralhar</b> pra

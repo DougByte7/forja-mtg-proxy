@@ -91,6 +91,22 @@ function gfCopia(carta, dono, extra){
   return c;
 }
 
+/* As artes escolhidas dos decks que vieram de fora da tela, pelo id do deck.
+   Moram fora da mesa pelo mesmo motivo das cartas: não mudam durante a
+   partida, e a foto do desfazer não precisa carregá-las. A chave é o id e não
+   a posição do jogador porque o desfazer pode trazer de volta um segundo deck
+   que já saiu da mesa depois de outro ter entrado no lugar dele.
+
+   O deck da tela não entra aqui: as escolhas dele são as da aba Artes, lidas
+   na hora do desenho, e uma arte trocada no meio da partida aparece na mesa. */
+const gfArtes = new Map();
+
+/* `null` é "use as do deck da tela" (ver `imagemDaFace`). */
+export function artesDoJogador(ij){
+  const j = estado.mesa && estado.mesa.jogadores[ij];
+  return j && j.deck ? (gfArtes.get(j.deck) || {}) : null;
+}
+
 export function nomeDaCarta(c){
   return ((c && c.carta && c.carta.nome) || "carta");
 }
@@ -112,10 +128,15 @@ export function deckDaTela(){
 
 /* O mesmo formato, vindo de `GET /decks/{id}`: é como o segundo deck entra. A
    regra do que conta é a do servidor e a da tela ao mesmo tempo — as
-   categorias fora da conta são as mesmas dos dois lados. */
-export function deckDaResposta(resposta){
+   categorias fora da conta são as mesmas dos dois lados.
+
+   `escolhas` são as artes escolhidas nele (`GET /decks/{id}/artes`): o deck
+   da tela usa as da aba Artes, e este traz as suas. */
+export function deckDaResposta(resposta, id, escolhas){
   const deck = resposta.deck || {};
   return {
+    id: id || null,
+    escolhas: escolhas || {},
     nome: deck.nome || "Segundo deck",
     comandantes: (deck.comandantes_completos || []).filter(Boolean),
     entradas: (deck.cartas_completas || []).filter(
@@ -156,8 +177,10 @@ export function embaralharBaralho(ij){
 /* --------------------------------------------------------------- a mesa */
 
 function novoJogador(deck, indice){
+  if (deck.id) gfArtes.set(deck.id, deck.escolhas || {});
   return {
     nome: deck.nome, indice,
+    deck: deck.id || null,     // de onde vêm as artes (ver `artesDoJogador`)
     baralho: embaralhar(baralhoDoDeck(deck, indice)),
     mao: [], campo: [], cemiterio: [], exilio: [],
     comando: deck.comandantes.map(c => gfCopia(c, indice, {cmd: true})),
@@ -174,6 +197,7 @@ function novoJogador(deck, indice){
 export function montarMesa(decks){
   gfProximoUid = 1;
   gfCartas.clear();
+  gfArtes.clear();
   estado.mesa = {
     jogadores: decks.map((d, i) => novoJogador(d, i)),
     ativo: 0, turno: 1, log: [], logAberto: false,
@@ -276,17 +300,23 @@ export function mandarPraFundo(uid){
   if (!j.aFundo) confirmarMao(j);
 }
 
-/* A mão fechada — e com ela a COMPRA DO TURNO 1. No Commander quem começa
-   jogando compra: é o duelo de dois que tira essa compra do primeiro jogador,
-   e a mesa deste deckbuilder é multiplayer.
+/* A mão fechada — e com ela a COMPRA DO TURNO, se a vez for de quem manteve.
+   No Commander quem começa jogando compra: é o duelo de dois que tira essa
+   compra do primeiro jogador, e a mesa deste deckbuilder é multiplayer.
+
+   Quem mantém FORA DA VEZ fica com a mão que escolheu. A carta a mais é a do
+   turno dele, e ela chega em `passarTurno` quando a vez chegar — comprá-la
+   aqui adiantaria um turno que ele ainda não jogou.
 
    Ela vem depois das cartas que voltam pro fundo, e é uma só: o que se
    devolve é a mão de sete que se viu, e a carta a mais é a do turno, não
-   parte da escolha. Daí `passarTurno` comprar do turno 2 em diante. */
+   parte da escolha. */
 function confirmarMao(j){
   j.fase = "jogo";
-  comprarPara(j, 1);
-  registrar(`${j.nome}: manteve com ${j.mao.length} (a do turno 1 incluída)`);
+  const naVez = estado.mesa.jogadores[estado.mesa.ativo] === j;
+  if (naVez) comprarPara(j, 1);
+  registrar(`${j.nome}: manteve com ${j.mao.length}${
+    naVez ? " (a do turno incluída)" : ""}`);
 }
 
 /* --------------------------------------------------------------- turnos */
@@ -303,9 +333,9 @@ export function passarTurno(){
   // Endireita tudo de quem está jogando, como o desendireitar de verdade.
   for (const c of j.campo) c.deitada = false;
   registrar(`— turno ${m.turno}, vez de ${j.nome}`);
-  // A compra do turno 1 saiu na confirmação da mão; daqui pra frente é uma
-  // por turno.
-  comprarPara(j, 1);
+  // Quem ainda está no mulligan não compra aqui: a compra deste turno vem
+  // junto com a mão confirmada (ver `confirmarMao`).
+  if (j.fase === "jogo") comprarPara(j, 1);
 }
 
 /* ---------------------------------------------------------------- zonas */
@@ -487,6 +517,9 @@ export function criarFicha(ij, modelo, quantas){
     mana_cost: "", cmc: 0,
     poder: modelo.poder || "", resistencia: modelo.resistencia || "",
     imagem: modelo.imagem || "", ficha: true,
+    // A ficha do deck traz a chave dela, que é por onde a arte escolhida é
+    // achada (ver `nomeDaArte`).
+    chaveArte: modelo.chaveArte || "",
   };
   const n = Math.max(1, Math.min(20, Number(quantas) || 1));
   for (let i = 0; i < n; i++) j.campo.unshift(gfCopia(carta, ij, {ficha: true}));

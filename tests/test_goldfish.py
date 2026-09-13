@@ -366,6 +366,57 @@ eq("o segundo deck entra com a mão dele, sem mexer no primeiro",
       __j(0).mao.length === antes];
    """ % DECK2), [2, 7, "mulligan", True])
 
+# A carta a mais é a do turno. Quem mantém fora da vez ainda não jogou turno
+# nenhum, e comprar ali adiantaria a compra de um turno que não chegou.
+eq("quem mantém fora da vez fica com 7, sem a compra do turno",
+   rodar("""
+     __mesa(); manterMao(0); porSegundoDeck(%s); manterMao(1);
+     [__j(1).mao.length, __j(1).baralho.length, __j(1).fase];
+   """ % DECK2), [7, NO_BARALHO2 - 7, "jogo"])
+eq("e compra quando a vez chega",
+   rodar("""
+     __mesa(); manterMao(0); porSegundoDeck(%s); manterMao(1);
+     passarTurno();
+     __j(1).mao.length;
+   """ % DECK2), 8)
+eq("a vez que chega no meio do mulligan não compra; a compra vem ao manter",
+   rodar("""
+     __mesa(); manterMao(0); porSegundoDeck(%s);
+     passarTurno();
+     var noMulligan = __j(1).mao.length;
+     manterMao(1);
+     [noMulligan, __j(1).mao.length];
+   """ % DECK2), [7, 8])
+eq("e quem está na vez segue comprando ao manter depois de mulligans",
+   rodar("""
+     __mesa(); porSegundoDeck(%s);
+     passarTurno();
+     mulliganLondon(1); manterMao(1);
+     __j(1).mao.length;
+   """ % DECK2), 8)
+
+# O Sol Ring de um deck não pode aparecer com a arte que o outro escolheu.
+eq("o segundo deck traz as artes dele; o da tela usa as da aba Artes",
+   rodar("""
+     __mesa();
+     var d = %s;
+     d.id = "d2"; d.escolhas = {krenko: {frente: {drive_id: "abc"}}};
+     porSegundoDeck(d);
+     [artesDoJogador(0) === null, artesDoJogador(1).krenko.frente.drive_id];
+   """ % DECK2), [True, "abc"])
+eq("e elas voltam com o desfazer, que não as leva na foto",
+   rodar("""
+     __mesa();
+     var d = %s;
+     d.id = "d2"; d.escolhas = {krenko: {frente: {drive_id: "abc"}}};
+     porSegundoDeck(d);
+     guardarMesa();
+     tirarSegundoDeck();
+     var foto = estado.mesaDesfazer[0].indexOf("abc") >= 0;
+     desfazerUmPasso();
+     [foto, artesDoJogador(1).krenko.frente.drive_id];
+   """ % DECK2), [False, "abc"])
+
 eq("cada um tem o seu contador de mulligan",
    rodar("""
      __mesa(); porSegundoDeck(%s);

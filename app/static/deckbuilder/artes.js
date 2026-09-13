@@ -85,9 +85,12 @@ export function nomeDaArte(carta){
   return carta.chaveArte || carta.nome;
 }
 
-export function arteEscolhida(carta, face){
+/* `escolhas` é o mapa de outro deck — o segundo deck do goldfish, que tem as
+   artes dele. Sem ela, valem as do deck aberto. */
+export function arteEscolhida(carta, face, escolhas){
   if (!carta) return null;
-  return (arte.escolhas[chaveDaArte(nomeDaArte(carta))] || {})[face || "frente"] || null;
+  const mapa = escolhas || arte.escolhas;
+  return (mapa[chaveDaArte(nomeDaArte(carta))] || {})[face || "frente"] || null;
 }
 
 /* Duas faces DE PAPEL, e não de texto: carta partida e aventura têm duas
@@ -119,8 +122,8 @@ function miniaturaDoDrive(id, largura){
    e a arte padrão da Scryfall quando não. É o que a prévia do hover e a
    galeria mostram — ver a arte oficial no lugar da que se escolheu faria a
    escolha parecer não ter pegado. */
-export function imagemDaFace(carta, face, largura){
-  const escolha = arteEscolhida(carta, face);
+export function imagemDaFace(carta, face, largura, escolhas){
+  const escolha = arteEscolhida(carta, face, escolhas);
   if (escolha) return miniaturaDoDrive(escolha.drive_id, largura || 500);
   return (face === "verso" ? carta.imagem_verso : carta.imagem) || "";
 }

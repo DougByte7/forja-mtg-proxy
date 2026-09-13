@@ -58,10 +58,29 @@ async function buscarDetalhe(carta){
   const nome = carta.nome;
   let dados = false;
   try {
-    dados = await api("/cartas/detalhe?nome=" + encodeURIComponent(nome));
-    detalhesVistos.set(nome, dados);
+    dados = await detalheDaCarta(nome);
   } catch (e){ /* a própria modal avisa; não vale um toast por cima dela */ }
   if (cartaAberta === nome) desenharCarta(carta, dados);
+}
+
+/* O detalhe da Scryfall de uma carta, uma vez por sessão. Também é quem
+   alimenta o painel da mão do goldfish, que passa o mouse por sete cartas em
+   seguida e volta nelas: o pedido em voo fica guardado pra o segundo hover
+   esperar o primeiro em vez de pedir de novo. */
+const detalhesEmVoo = new Map();
+
+export async function detalheDaCarta(nome){
+  if (detalhesVistos.has(nome)) return detalhesVistos.get(nome);
+  if (!detalhesEmVoo.has(nome)){
+    detalhesEmVoo.set(nome, api("/cartas/detalhe?nome=" + encodeURIComponent(nome)));
+  }
+  try {
+    const dados = await detalhesEmVoo.get(nome);
+    detalhesVistos.set(nome, dados);
+    return dados;
+  } finally {
+    detalhesEmVoo.delete(nome);
+  }
 }
 
 /* As artes, sem repetição. Carta partida e aventura têm duas faces de TEXTO
@@ -227,11 +246,14 @@ const PREVIA_VAO = 8;        // o `gap` do CSS entre frente e verso
    verso, hover num transform mostra metade da carta e cala sobre a outra.
 
    Cada lado sai pela `imagemDaFace`: com arte escolhida no deck, a prévia
-   mostra o arquivo que vai pro papel, e não a arte oficial. */
-export function ganchosDaPrevia(c){
+   mostra o arquivo que vai pro papel, e não a arte oficial. `escolhas` é o
+   mapa de outro deck (ver `arteEscolhida`). */
+export function ganchosDaPrevia(c, escolhas){
   if (!c || !c.imagem) return "";
-  let attrs = ` data-arte="${escapar(imagemDaFace(c, "frente"))}"`;
-  if (c.imagem_verso) attrs += ` data-arte-verso="${escapar(imagemDaFace(c, "verso"))}"`;
+  let attrs = ` data-arte="${escapar(imagemDaFace(c, "frente", 0, escolhas))}"`;
+  if (c.imagem_verso){
+    attrs += ` data-arte-verso="${escapar(imagemDaFace(c, "verso", 0, escolhas))}"`;
+  }
   if (c.deitada) attrs += ' data-deitada="1"';
   return attrs;
 }
