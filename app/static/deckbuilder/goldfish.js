@@ -400,9 +400,39 @@ export function gfMover(uid, para, aoTopo){
     carta.deitada = false; carta.marcas = {}; carta.verso = false;
     carta.atacando = false; carta.bloqueando = null;
   }
-  if (para === "baralho" && !aoTopo) dono.baralho.push(carta);
+  // No campo a carta entra no FIM da fila: lá a ordem é a que a pessoa
+  // arrumou (ver `reposicionar`), e entrar no começo empurraria todas.
+  if ((para === "baralho" && !aoTopo) || para === "campo") dono[para].push(carta);
   else dono[para].unshift(carta);
   registrar(`${dono.nome}: ${nomeDaCarta(carta)} — ${NOME_DA_ZONA[zona]} → ${NOME_DA_ZONA[para]}`);
+}
+
+/* Arrumar o campo: uma carta vai pra antes ou depois de outra da MESMA fila —
+   mesmo dono e mesmo grupo (Terrenos, Criaturas, Outros). A fila de uma carta
+   é o tipo dela, e não onde ela foi solta: soltar um artefato entre as
+   criaturas não o torna criatura, e aceitar isso faria a fila mentir sobre o
+   que ela contém.
+
+   `encaixaNaFila` aceita a arrastada de qualquer zona (a carta da mão pode
+   descer já no lugar); `reposicionar` só mexe no que já está no campo. A
+   ordem mora na própria lista `campo` do jogador — o desenho filtra por
+   grupo mantendo a ordem dela. Não vai pro log: arrumar a mesa não é jogada. */
+export function encaixaNaFila(uid, alvo){
+  if (uid === alvo) return false;
+  const a = acharCarta(uid);
+  const b = acharCarta(alvo);
+  return !!(a && b && b.zona === "campo" && a.carta.dono === b.carta.dono &&
+            grupoDoCampo(a.carta) === grupoDoCampo(b.carta));
+}
+
+export function reposicionar(uid, alvo, depois){
+  const a = acharCarta(uid);
+  if (!a || a.zona !== "campo" || !encaixaNaFila(uid, alvo)) return false;
+  const lista = a.jogador.campo;
+  lista.splice(a.indice, 1);
+  const i = lista.findIndex(c => c.uid === alvo);
+  lista.splice(depois ? i + 1 : i, 0, a.carta);
+  return true;
 }
 
 /* O comandante indo pro campo pela zona de comando: o imposto é INFORMAÇÃO. A
@@ -533,7 +563,7 @@ export function criarFicha(ij, modelo, quantas){
     chaveArte: modelo.chaveArte || "",
   };
   const n = Math.max(1, Math.min(20, Number(quantas) || 1));
-  for (let i = 0; i < n; i++) j.campo.unshift(gfCopia(carta, ij, {ficha: true}));
+  for (let i = 0; i < n; i++) j.campo.push(gfCopia(carta, ij, {ficha: true}));
   registrar(`${j.nome}: criou ${n} × ${carta.nome}`);
 }
 
@@ -611,14 +641,15 @@ export function resumoDaMao(mao){
           custoMedio: feiticos.length ? soma / feiticos.length : 0, cores};
 }
 
-/* O campo em três filas: terrenos, criaturas e o resto. Quem olha um tabuleiro
+/* As filas do campo: terrenos, criaturas e o resto. Quem olha um tabuleiro
    procura uma coisa de cada vez ("tenho mana? tenho bicho?"), e numa fila só
-   de trinta cartas cada pergunta dessas vira busca visual.
+   de trinta cartas cada pergunta dessas vira busca visual. Na tela, os
+   terrenos são uma área e as outras duas filas formam o campo de batalha.
 
    Terreno-criatura entra em Terrenos, e pela mesma razão de `CATEGORIAS`: a
    primeira regra que casa ganha, porque pra quem joga ele é o terreno que
    entrou no turno. */
-export const GRUPOS_DO_CAMPO = [
+const GRUPOS_DO_CAMPO = [
   ["Terrenos",  (c) => ehTerreno(c.carta)],
   ["Criaturas", (c) => ehTipo(c.carta, "creature")],
   ["Outros",    () => true],

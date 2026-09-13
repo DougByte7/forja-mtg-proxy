@@ -509,6 +509,86 @@ eq("carta que a base não conhece não fica sem fila",
    rodar("grupoDoCampo({carta: null});"), "Outros")
 
 
+print("\n--- arrumar o campo ---")
+
+# A ordem do campo é a que a pessoa arrumou: carta nova entra no fim, e não no
+# começo empurrando as outras.
+FLORESTAS = """
+  function __florestas(n){
+    return __j().baralho.filter(function(c){ return c.carta.nome === "Forest"; })
+      .slice(0, n);
+  }
+  function __ordem(){ return __j().campo.map(function(c){ return c.uid; }).join(","); }
+"""
+
+eq("a carta entra no fim da fila do campo",
+   rodar(FLORESTAS + """
+     __mesa(); manterMao(0);
+     var f = __florestas(2);
+     gfMover(f[0].uid, "campo"); gfMover(f[1].uid, "campo");
+     __ordem() === [f[0].uid, f[1].uid].join(",");
+   """), True)
+eq("reposicionar põe a carta antes da outra",
+   rodar(FLORESTAS + """
+     __mesa(); manterMao(0);
+     var f = __florestas(3);
+     f.forEach(function(c){ gfMover(c.uid, "campo"); });
+     reposicionar(f[2].uid, f[0].uid, false);
+     __ordem() === [f[2].uid, f[0].uid, f[1].uid].join(",");
+   """), True)
+eq("ou depois dela",
+   rodar(FLORESTAS + """
+     __mesa(); manterMao(0);
+     var f = __florestas(3);
+     f.forEach(function(c){ gfMover(c.uid, "campo"); });
+     reposicionar(f[0].uid, f[2].uid, true);
+     __ordem() === [f[1].uid, f[2].uid, f[0].uid].join(",");
+   """), True)
+eq("e não troca carta de fila: terreno não entra entre as criaturas",
+   rodar(FLORESTAS + """
+     __mesa(); manterMao(0);
+     var flor = __florestas(1)[0];
+     var elfo = __j().baralho.filter(function(c){
+       return c.carta.nome === "Llanowar Elves"; })[0];
+     gfMover(flor.uid, "campo"); gfMover(elfo.uid, "campo");
+     var antes = __ordem();
+     [encaixaNaFila(flor.uid, elfo.uid), reposicionar(flor.uid, elfo.uid, false),
+      __ordem() === antes];
+   """), [False, False, True])
+eq("nem entre as cartas do outro jogador",
+   rodar(FLORESTAS + """
+     __mesa(); manterMao(0); porSegundoDeck(%s); manterMao(1);
+     var meu = __florestas(1)[0];
+     var dele = __j(1).mao.concat(__j(1).baralho).filter(function(c){
+       return c.carta.nome === "Mountain"; })[0];
+     gfMover(meu.uid, "campo"); gfMover(dele.uid, "campo");
+     [encaixaNaFila(dele.uid, meu.uid), reposicionar(dele.uid, meu.uid, false)];
+   """ % DECK2), [False, False])
+eq("a carta da mão pode encaixar, mas só se move pro lugar depois de descer",
+   rodar(FLORESTAS + """
+     __mesa(); manterMao(0);
+     var f = __florestas(2);
+     gfMover(f[0].uid, "campo");
+     gfMover(f[1].uid, "mao");
+     var encaixa = encaixaNaFila(f[1].uid, f[0].uid);
+     var antesDeDescer = reposicionar(f[1].uid, f[0].uid, false);
+     gfMover(f[1].uid, "campo");
+     reposicionar(f[1].uid, f[0].uid, false);
+     [encaixa, antesDeDescer, __ordem() === [f[1].uid, f[0].uid].join(",")];
+   """), [True, False, True])
+eq("arrumar não perde nem duplica carta",
+   rodar(TODAS + FLORESTAS + """
+     __mesa(); manterMao(0);
+     var antes = __todas().join(",");
+     var f = __florestas(4);
+     f.forEach(function(c){ gfMover(c.uid, "campo"); });
+     reposicionar(f[3].uid, f[0].uid, false);
+     reposicionar(f[0].uid, f[3].uid, true);
+     reposicionar(f[1].uid, f[1].uid, true);
+     antes === __todas().join(",");
+   """), True)
+
+
 print("\n--- vida, marcadores e dano de comandante ---")
 
 eq("a vida começa em 40, que é a do formato", rodar("__mesa(); __j().vida;"), 40)

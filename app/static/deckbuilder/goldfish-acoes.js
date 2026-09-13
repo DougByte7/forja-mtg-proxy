@@ -10,83 +10,24 @@
 
 import {$, escapar} from "../comum/dom.js";
 import {temVerso} from "./artes.js";
-import {abrirCarta, detalheDaCarta} from "./carta.js";
+import {abrirCarta} from "./carta.js";
 import {estado} from "./estado.js";
 import {ajustarDanoCmd, ajustarMarca, ajustarMarcaCarta, ajustarVida,
         alternarAtaque, alternarDeitada, alternarFace, alternarVirada, atacantes,
-        cartaPorUid,
-        comprar, criarFicha, deckDaResposta, deckDaTela, definirBloqueio,
-        desfazerUmPasso, embaralharBaralho, gfMover, guardarMesa,
-        lancarComandante, limparCombate, mandarPraFundo, manterMao,
-        MARCAS_DE_CARTA, MARCAS_DE_JOGADOR, montarMesa, mulliganLondon,
-        nomeDaCarta, NOME_DA_ZONA, passarTurno, porSegundoDeck,
-        resumoDaPartida, tirarSegundoDeck, zonaDaCarta} from "./goldfish.js";
-import {arteNaMesa, desenharMesa, painelDaCartaHTML} from "./goldfish-desenho.js";
+        cartaPorUid, comprar, criarFicha, deckDaResposta, deckDaTela,
+        definirBloqueio, desfazerUmPasso, embaralharBaralho, encaixaNaFila,
+        gfMover, guardarMesa, lancarComandante, limparCombate, mandarPraFundo,
+        manterMao, MARCAS_DE_CARTA, MARCAS_DE_JOGADOR, montarMesa,
+        mulliganLondon, nomeDaCarta, NOME_DA_ZONA, passarTurno, porSegundoDeck,
+        reposicionar, resumoDaPartida, tirarSegundoDeck, zonaDaCarta} from "./goldfish.js";
+import {desenharMesa, esconderPainel, mostrarPainel,
+        painelFlutua} from "./goldfish-desenho.js";
 import {api, lidos} from "./salvar.js";
 import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
 import {cartasContadas, toast} from "./utilidades.js";
 
 export function desfazerMesa(){
   if (desfazerUmPasso()) desenharMesa();
-}
-
-/* ------------------------------------------- o painel da carta na mão */
-
-/* Hover numa carta da mão abre, à esquerda da mesa, a carta grande com o que
-   decide a jogada. Só a mão: é onde se escolhe o que lançar, e no campo a
-   prévia de sempre já mostra a arte. O painel fica preso à mesa, e não ao
-   cursor, porque a mão é uma fila de cartas grandes — seguindo o mouse, ele
-   cobriria as vizinhas que a pessoa está comparando. */
-const PAINEL_LARGO = 288;   // o `width` de `.gf-detalhe` no CSS
-const PAINEL_VAO = 16;
-let painelUid = null;
-
-function esconderPainel(){
-  painelUid = null;
-  $("gf-detalhe").classList.remove("mostra");
-}
-
-async function mostrarPainel(uid){
-  const painel = $("gf-detalhe");
-  // O mouseover dispara de novo a cada filho da carta (o nome, um marcador):
-  // redesenhar ali pediria o detalhe e trocaria o texto por nada.
-  if (painelUid === uid && painel.classList.contains("mostra")) return;
-  const c = cartaPorUid(uid);
-  if (!c) return esconderPainel();
-  painelUid = uid;
-
-  // A arte só é trocada quando muda: reatribuir o mesmo `src` faz o navegador
-  // repintar a imagem, e o painel piscaria a cada carta vizinha.
-  const img = $("gf-detalhe-arte");
-  const src = arteNaMesa(c);
-  if (img.dataset.src !== src){
-    img.dataset.src = src;
-    if (src) img.src = src; else img.removeAttribute("src");
-  }
-  img.classList.toggle("vazia", !src);
-  $("gf-detalhe-corpo").innerHTML = painelDaCartaHTML(c, null);
-
-  // Na tela cheia o painel mora na coluna reservada da área de jogo e o CSS
-  // o posiciona (`body.gf-cheia .gf-area`). Fora dela ele flutua à esquerda
-  // da mesa, onde houver espaço.
-  if (getComputedStyle(painel).position === "fixed"){
-    const mesa = $("gf-mesa").getBoundingClientRect();
-    painel.style.left = Math.max(8, mesa.left - PAINEL_LARGO - PAINEL_VAO) + "px";
-  } else {
-    painel.style.left = "";
-  }
-  painel.classList.add("mostra");
-
-  // Ficha inventada na hora não existe na Scryfall.
-  const nome = c.ficha ? "" : (c.carta || {}).nome;
-  if (!nome) return;
-  let d;
-  try {
-    d = await detalheDaCarta(nome);
-  } catch (e){
-    return;   // fica o que a base local sabe, que é o que já está na tela
-  }
-  if (painelUid === uid) $("gf-detalhe-corpo").innerHTML = painelDaCartaHTML(c, d);
 }
 
 /* ------------------------------------------------------ menu de uma carta */
@@ -506,7 +447,11 @@ function abrirResumo(){
 /* Atalho de quem tem mouse, nunca o único caminho: no toque não existe
    `dragstart`, e a mesma carta se move pelo menu dela. Só aceita a zona do
    DONO da carta — a criatura do outro que morre vai pro cemitério dele, e
-   deixar soltá-la no meu faria a mesa mentir sobre de quem é a carta. */
+   deixar soltá-la no meu faria a mesa mentir sobre de quem é a carta.
+
+   Soltar SOBRE uma carta do campo arruma a fila: a arrastada entra do lado
+   dela em que o ponteiro está (ver `reposicionar`). Vale também pra carta que
+   chega da mão, que desce já no lugar escolhido. */
 let arrastandoNaMesa = null;
 
 function alvoDeSolta(e){
@@ -516,6 +461,30 @@ function alvoDeSolta(e){
   const c = cartaPorUid(arrastandoNaMesa);
   if (!c || Number(alvo.dataset.gfJ) !== c.dono) return null;
   return alvo;
+}
+
+/* A carta do campo sob o ponteiro, quando a arrastada pode entrar do lado
+   dela — mesmo dono e mesma fila. Fora disso, soltar ali é soltar na área. */
+function encaixeDeSolta(e){
+  if (arrastandoNaMesa === null) return null;
+  const el = e.target.closest?.("[data-gf-uid]");
+  if (!el) return null;
+  const uid = Number(el.dataset.gfUid);
+  if (!encaixaNaFila(arrastandoNaMesa, uid)) return null;
+  const r = el.getBoundingClientRect();
+  return {el, uid, depois: e.clientX > r.left + r.width / 2};
+}
+
+const MARCAS_DE_SOLTA = ["alvo-solta", "solta-antes", "solta-depois"];
+
+/* Uma marca por vez na mesa: a área que recebe, ou o lado da carta onde a
+   arrastada vai entrar. `dragover` dispara a cada movimento do mouse, então
+   só mexe nas classes quando a marca muda. */
+function marcarSolta(mesa, el, classe){
+  if (el && el.classList.contains(classe)) return;
+  mesa.querySelectorAll("." + MARCAS_DE_SOLTA.join(",.")).forEach(x =>
+    x.classList.remove(...MARCAS_DE_SOLTA));
+  if (el) el.classList.add(classe);
 }
 
 function ligarArrastarMesa(mesa){
@@ -531,24 +500,30 @@ function ligarArrastarMesa(mesa){
   mesa.addEventListener("dragend", () => {
     arrastandoNaMesa = null;
     mesa.querySelectorAll(".arrastando").forEach(el => el.classList.remove("arrastando"));
-    mesa.querySelectorAll(".alvo-solta").forEach(el => el.classList.remove("alvo-solta"));
+    marcarSolta(mesa, null);
   });
   mesa.addEventListener("dragover", (e) => {
-    const alvo = alvoDeSolta(e);
-    if (!alvo) return;
+    const encaixe = encaixeDeSolta(e);
+    const alvo = encaixe ? null : alvoDeSolta(e);
+    if (!encaixe && !alvo) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (!alvo.classList.contains("alvo-solta")){
-      mesa.querySelectorAll(".alvo-solta").forEach(el => el.classList.remove("alvo-solta"));
-      alvo.classList.add("alvo-solta");
-    }
+    if (encaixe) marcarSolta(mesa, encaixe.el, encaixe.depois ? "solta-depois" : "solta-antes");
+    else marcarSolta(mesa, alvo, "alvo-solta");
   });
   mesa.addEventListener("drop", (e) => {
-    const alvo = alvoDeSolta(e);
-    if (!alvo) return;
+    const encaixe = encaixeDeSolta(e);
+    const alvo = encaixe ? null : alvoDeSolta(e);
+    if (!encaixe && !alvo) return;
     e.preventDefault();
     guardarMesa();
-    gfMover(arrastandoNaMesa, alvo.dataset.gfSolta);
+    const uid = arrastandoNaMesa;
+    if (encaixe){
+      gfMover(uid, "campo");   // não faz nada se ela já está no campo
+      reposicionar(uid, encaixe.uid, encaixe.depois);
+    } else {
+      gfMover(uid, alvo.dataset.gfSolta);
+    }
     arrastandoNaMesa = null;
     desenharMesa();
   });
@@ -605,6 +580,7 @@ export function ligarGoldfish(){
     if (!cartasContadas().length && !estado.comandantes.length){
       return toast("Monte o deck primeiro.");
     }
+    esconderPainel();   // os uids recomeçam do 1 na mesa nova
     montarMesa([deckDaTela()]);
     desenharMesa();
   });
@@ -626,6 +602,8 @@ export function ligarGoldfish(){
   });
 
   $("gf-tela").addEventListener("click", () => {
+    // O painel troca de modo junto (ver `painelFlutua`).
+    esconderPainel();
     const cheia = document.body.classList.toggle("gf-cheia");
     $("gf-tela").textContent = cheia ? "Sair da tela cheia" : "Tela cheia";
   });
@@ -633,14 +611,16 @@ export function ligarGoldfish(){
   const mesa = $("gf-mesa");
   ligarArrastarMesa(mesa);
 
-  // No documento, e não na mesa: sair da mesa por qualquer borda também
-  // fecha o painel.
+  // No documento, e não na mesa: sair da mesa por qualquer borda também é
+  // sair da carta.
   document.addEventListener("mouseover", (e) => {
-    const carta = e.target.closest?.("#gf-mesa .gf-mao [data-gf-uid]");
-    if (carta) mostrarPainel(Number(carta.dataset.gfUid));
-    else if (painelUid !== null) esconderPainel();
+    const carta = e.target.closest?.("#gf-mesa [data-gf-uid]");
+    if (carta) return mostrarPainel(Number(carta.dataset.gfUid));
+    if ($("gf-detalhe").classList.contains("mostra") && painelFlutua()) esconderPainel();
   });
-  mesa.addEventListener("dragstart", esconderPainel);
+  mesa.addEventListener("dragstart", () => {
+    if (painelFlutua()) esconderPainel();
+  });
 
   mesa.addEventListener("click", (e) => {
     const acao = e.target.closest("[data-gf-acao]");
