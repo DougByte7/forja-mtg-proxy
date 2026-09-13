@@ -97,13 +97,18 @@
          tela inteira é essa única pergunta. -->
     <div class="painel heroi" id="heroi">
       <h1>Quem é o comandante?</h1>
-      <p>Todo deck de Commander começa por uma criatura lendária. Ela define a
-        identidade de cor — e daqui pra frente a busca só mostra o que cabe
-        nela.</p>
+      <p>Todo deck de Commander começa por uma criatura lendária: é ela que
+        define a identidade de cor.</p>
       <div class="busca-caixa">
         <input class="campo" id="busca-cmd" autocomplete="off" spellcheck="false"
                placeholder="Buscar comandante… (ex.: Atraxa, Muldrotha)">
       </div>
+      <!-- A mesma caixa aceita o link do deck pronto: quem chega com um deck
+           no Archidekt ou no Moxfield não vai procurar o "···" pra descobrir
+           isso, cola onde está o cursor. Dizer aqui é o que faz a caixa ser
+           usada assim de propósito, e não por acaso (ver `fonteDoLink`). -->
+      <p class="ou-link">Já tem o deck pronto? Cole aqui o link dele no
+        <b>Archidekt</b> ou no <b>Moxfield</b>.</p>
       <div class="resultados" id="res-cmd"></div>
     </div>
 
@@ -158,8 +163,7 @@
 
         <div id="lista-deck"></div>
         <div class="vazio" id="deck-vazio">
-          As 99 cartas entram pela busca. Comece pelas que o comandante pede —
-          a curva ao lado e a aba de análise acompanham enquanto você monta.
+          As 99 cartas entram pela busca. Comece pelas que o comandante pede.
         </div>
         <div class="rodape-deck">
           <button class="btn" id="btn-nova-categoria"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg> Nova categoria</button>
@@ -193,7 +197,7 @@
         <p class="nota" id="poder-nota">A escala oficial de brackets do
           Commander — e <b>por quê</b>, carta por carta. Quem classifica é o
           Commander Spellbook, que acompanha a lista de game changers da
-          Wizards. Sai sozinho ao abrir esta aba.</p>
+          Wizards.</p>
         <div id="poder-resultado" style="margin-top:10px;"></div>
 
         <div class="distrib-duo" style="margin-top:16px;">
@@ -214,8 +218,7 @@
       <div class="painel" id="painel-manabase" data-painel="manabase" hidden>
         <h2 class="secao">Mana base</h2>
         <p class="nota" id="mb-nota">Quantos terrenos a curva pede, quantas
-          fontes de cada cor o deck tem e quantas precisaria. Conta feita aqui,
-          sobre o seu deck — acompanha cada mudança.</p>
+          fontes de cada cor o deck tem e quantas precisaria.</p>
         <div id="mb-resultado" style="margin-top:12px;"></div>
       </div>
 
@@ -227,7 +230,7 @@
         <p class="nota" id="combos-nota">Os combos que o Commander Spellbook
           reconhece entre as cartas que você já tem. Os que ficam a <b>uma
           carta</b> de fechar aparecem na aba <b>Combos</b> do painel de
-          adicionar — lá eles viram carta pra pôr no deck.</p>
+          adicionar.</p>
         <div id="combos-resultado" style="margin-top:12px;"></div>
       </div>
 
@@ -238,8 +241,7 @@
       <div class="painel" id="painel-tokens" data-painel="tokens" hidden>
         <h2 class="secao">Tokens do deck</h2>
         <p class="nota" id="tokens-nota">As fichas que as cartas do deck criam,
-          agrupadas por quem as cria. Sai da própria base de cartas, sem rede —
-          acompanha cada mudança do deck.</p>
+          agrupadas por quem as cria.</p>
         <div id="tokens-resultado" style="margin-top:12px;"></div>
       </div>
 
@@ -382,7 +384,7 @@
       <div class="rail-conteudo" data-rail="combos" hidden>
         <p class="nota" id="combos-rail-nota">Combos que o deck fecha com
           <b>uma carta</b> a mais. Cada peça que falta tem um botão pra entrar
-          direto no deck — é a lista de compras que o Spellbook enxerga.</p>
+          direto no deck.</p>
         <div id="combos-rail-resultado" style="margin-top:4px;"></div>
       </div>
     </div>
@@ -451,8 +453,8 @@
       <input class="campo" id="f-texto" autocomplete="off" spellcheck="false"
              placeholder="ex.: draw a card, sacrifice a creature">
       <p class="ajuda">Cada palavra tem que aparecer no texto da carta, em
-        qualquer ordem. O texto é o <b>oracle em inglês</b> — é assim que a
-        base da Scryfall vem, então "voar" não acha <i>Flying</i>.</p>
+        qualquer ordem. O texto é o <b>oracle em inglês</b>: "voar" não acha
+        <i>Flying</i>.</p>
     </div>
 
     <div class="campo-grupo">
@@ -463,9 +465,8 @@
     <div class="campo-grupo">
       <label>Cor da carta</label>
       <div class="cores-btn" id="f-cores"></div>
-      <p class="ajuda">Mostra o que tem <b>alguma</b> das cores marcadas. É
-        diferente da identidade do comandante, que já filtra tudo o tempo
-        todo — esta aqui é pra achar "o que eu tenho de verde".</p>
+      <p class="ajuda">Mostra o que tem <b>alguma</b> das cores marcadas —
+        pra achar "o que eu tenho de verde".</p>
     </div>
 
     <div class="campo-grupo">
@@ -483,10 +484,10 @@
       <label for="f-preco">Preço máximo (<span id="rot-preco-moeda">US$</span>)</label>
       <input class="campo" id="f-preco" type="number" min="0" step="0.5"
              placeholder="sem teto" inputmode="decimal">
-      <p class="ajuda">Preço da base local, do dia da última sincronização,
-        convertido pelo câmbio — serve pra dar ordem de grandeza. Quem responde
-        "quanto custa comprar" continua sendo o botão de cotar. Carta sem preço
-        conhecido <b>passa</b> no teto em vez de sumir.</p>
+      <p class="ajuda">Preço aproximado, convertido pelo câmbio — serve pra
+        dar ordem de grandeza. Quem responde "quanto custa comprar" continua
+        sendo o botão de cotar. Carta sem preço conhecido <b>passa</b> no teto
+        em vez de sumir.</p>
     </div>
 
     <div class="campo-grupo">
@@ -499,8 +500,7 @@
         <option value="preco_desc">Preço — mais cara primeiro</option>
       </select>
       <p class="ajuda">Vale quando a caixa de busca está vazia. Com nome
-        digitado, quem manda é a relevância — senão "sol" ordenado por preço
-        não mostraria o Sol Ring.</p>
+        digitado, quem manda é a relevância.</p>
     </div>
 
   </div>

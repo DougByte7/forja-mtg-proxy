@@ -165,3 +165,16 @@ export function semAcento(s){
   return String(s || "").toLowerCase().normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 }
+
+/* De que site é este link de deck — `"Archidekt"`, `"Moxfield"` ou nada.
+
+   Serve pra uma caixa de texto saber que o que caiu nela não é nome de
+   carta: nenhuma carta tem "moxfield.com" no nome, então a pergunta não é
+   ambígua e nada precisa ser adivinhado. Os dois padrões são os do
+   `importar.py` — quem decide de verdade se o link presta é o servidor, e
+   este teste só escolhe o que oferecer na tela. */
+export function fonteDoLink(texto){
+  if (/archidekt\.com\/(?:api\/)?decks\/\d+/i.test(texto)) return "Archidekt";
+  if (/moxfield\.com\/decks\/[A-Za-z0-9_-]+/i.test(texto)) return "Moxfield";
+  return null;
+}

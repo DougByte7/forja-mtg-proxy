@@ -6,7 +6,7 @@ import {adicionar, escolherComandante, ondeEsta} from "./edicao.js";
 import {algumFiltro, CATEGORIA_SIDEBOARD, estado} from "./estado.js";
 import {precoMaxEmUsd} from "./preco.js";
 import {api} from "./salvar.js";
-import {ico, identidadeDoDeck, manaHTML, preco, toast,
+import {fonteDoLink, ico, identidadeDoDeck, manaHTML, preco, toast,
         todasAsCategorias} from "./utilidades.js";
 
 let buscaTimer = null;
@@ -135,6 +135,23 @@ export async function buscar(){
 
 export async function buscarComandante(){
   const termo = $("busca-cmd").value.trim();
+  // Quem já tem o deck pronto em outro lugar chega nesta tela e vê UMA
+  // caixa: é nela que o link vai ser colado, com ou sem permissão. Um link
+  // não se confunde com nome de carta (ver `fonteDoLink`), então a caixa
+  // responde às duas coisas sem adivinhar — e sem um segundo campo que 9 em
+  // cada 10 pessoas nunca usariam, na tela que existe pra fazer uma
+  // pergunta só.
+  const fonte = fonteDoLink(termo);
+  if (fonte) return oferecerImportar(fonte);
+  // Link de um site que não sabemos abrir também não é nome de carta:
+  // responder "nada com esse nome" mandaria a pessoa procurar um erro de
+  // digitação que não existe.
+  if (/^https?:\/\//i.test(termo) || /\.(com|net|org)\//i.test(termo)){
+    return recadoNoHeroi(`<div class="aponta aviso"><span>Desse link eu não
+      trago a lista — só do <b>Archidekt</b> e do <b>Moxfield</b>. De
+      qualquer outro site, use o <b>Export</b> de lá e cole a lista em
+      <b>··· › Importar lista</b>.</span></div>`);
+  }
   const params = new URLSearchParams({q: termo, comandante: "true", limite: "25"});
   try {
     const r = await api("/cartas/busca?" + params);
@@ -143,6 +160,28 @@ export async function buscarComandante(){
   } catch (e){
     $("res-cmd").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
   }
+}
+
+/* O link colado não importa sozinho: importar troca o deck inteiro, e uma
+   colagem não é um pedido de troca. A oferta fica visível e o clique (ou o
+   Enter) é que decide — ver `importarLinkColado`, em `eventos.js`. */
+function oferecerImportar(fonte){
+  recadoNoHeroi(`<div class="aponta ok"><span>Isso é um link do
+    <b>${fonte}</b> — dá pra trazer o deck inteiro de lá: comandante, as 99 e
+    o maybeboard.</span></div>
+    <button class="btn ouro" id="btn-importar-colado">Importar do ${
+      fonte}</button>`);
+}
+
+/* O lugar dos resultados, dizendo outra coisa que não uma lista de cartas. */
+function recadoNoHeroi(html){
+  const caixa = $("res-cmd");
+  // Nada de carta na lista: sem isto, o Enter mandaria pro deck a última
+  // carta que a busca achou antes de o link ser colado.
+  ultimosResultados = [];
+  caixa.aoClicar = null;
+  destaque = -1;
+  caixa.innerHTML = html;
 }
 
 export let ultimosResultados = [];

@@ -29,7 +29,7 @@ import {agendarSalvar, lidos, salvando, salvarJa,
         salvarTimer} from "./salvar.js";
 import {buscarSugestoes, desenharSugestoes, importarDeckMedio,
         sugerirPelaCarta, sugestoesPlanas} from "./sugestoes.js";
-import {toast} from "./utilidades.js";
+import {fonteDoLink, toast} from "./utilidades.js";
 
 export function ligarEventos(){
   $("busca").addEventListener("input", agendarBusca);
@@ -57,6 +57,16 @@ export function ligarEventos(){
 
   ligarTecladoDaBusca($("busca"), $("res"));
   ligarTecladoDaBusca($("busca-cmd"), $("res-cmd"));
+
+  // Enter sobre um link vale o mesmo que o botão: quem colou e apertou Enter
+  // pediu a mesma coisa que quem colou e clicou. Registrado depois do teclado
+  // da busca de propósito — lá o Enter sem resultado não faz nada, e link
+  // nenhum deixa resultado na lista (ver `oferecerImportar`).
+  $("busca-cmd").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !fonteDoLink($("busca-cmd").value)) return;
+    e.preventDefault();
+    importarLinkColado();
+  });
 
   document.addEventListener("keydown", (e) => {
     const digitando = ["INPUT","TEXTAREA"].includes(document.activeElement?.tagName);
@@ -123,6 +133,9 @@ export function ligarEventos(){
     abrirGaveta("gaveta-filtros");
   });
   $("btn-fazer-importar").addEventListener("click", fazerImportar);
+  $("res-cmd").addEventListener("click", (e) => {
+    if (e.target.closest("#btn-importar-colado")) importarLinkColado();
+  });
   $("btn-limpar-filtros").addEventListener("click", limparFiltros);
   $("gaveta-fundo").addEventListener("click", fecharGaveta);
   $("btn-fechar-carta").addEventListener("click", fecharCarta);
@@ -423,6 +436,25 @@ export function ligarEventos(){
     window.scrollTo({top: 0, behavior: "smooth"}));
 
   ligarPrevia();
+}
+
+/* Importar o link que foi colado na busca de comandante.
+
+   O trabalho é o mesmo da gaveta, e é pra lá que este atalho leva: o recado
+   do que veio — o que foi pro maybeboard, as cartas que a base local não
+   conhece — precisa de uma superfície que continue na tela, e a tela do
+   comandante desaparece no instante em que o deck importado traz um. */
+function importarLinkColado(){
+  const url = $("busca-cmd").value.trim();
+  if (!fonteDoLink(url)) return;
+  $("i-url").value = url;
+  // A lista em texto que tenha sobrado de uma importação anterior não vale
+  // aqui: quem colou um link pediu o link.
+  $("i-texto").value = "";
+  $("busca-cmd").value = "";
+  $("res-cmd").innerHTML = "";
+  abrirGaveta("gaveta-importar");
+  fazerImportar();
 }
 
 /* O menu do "···". Ele guarda o que se faz uma vez por deck; o cabeçalho

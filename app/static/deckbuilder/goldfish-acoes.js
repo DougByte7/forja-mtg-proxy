@@ -204,9 +204,8 @@ function abrirBusca(ij, zona){
     <input class="campo gf-filtro" id="gf-busca-filtro" autocomplete="off"
       spellcheck="false" placeholder="filtrar pelo nome…">
     <div class="gf-lista" id="gf-busca-lista"></div>
-    ${zona === "baralho" ? `<p class="nota">Ao fechar, o baralho é
-      reembaralhado — olhar a biblioteca e devolvê-la na ordem seria a única
-      trapaça que esta tela sabe fazer.</p>` : ""}`;
+    ${zona === "baralho"
+      ? `<p class="nota">Ao fechar, o baralho é reembaralhado.</p>` : ""}`;
 
   abrirModalGf(titulo, corpo, (caixa) => {
     const filtro = caixa.querySelector("#gf-busca-filtro");
