@@ -892,29 +892,29 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .gf-espaco{flex:1;min-width:8px;}
 .gf-turno{font-family:'IBM Plex Mono',monospace;font-size:12px;
   color:var(--gold-light);white-space:nowrap;}
-.gf-zonas{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 6px;
-  font-size:11.5px;color:var(--text-muted);}
-.gf-zonas b{color:var(--text);font-family:'IBM Plex Mono',monospace;
-  font-weight:600;}
-.gf-zonas button{background:none;border:none;color:inherit;font:inherit;
-  cursor:pointer;padding:0;text-decoration:underline dotted;
-  text-underline-offset:3px;}
-.gf-zonas button:hover{color:var(--gold-light);}
 
-/* Vida. Os botões não levam o sublinhado pontilhado das outras da barra: lá
-   ele diz "isto abre uma lista", e aqui o clique muda o número ao lado. Dois
-   passos por lado (1 e 5) porque são os dois que a mesa usa — dano de criatura
-   e dano de comandante. */
-.gf-vida{display:inline-flex;align-items:center;gap:4px;}
-.gf-vida button{text-decoration:none;border:1px solid var(--border);
-  border-radius:6px;min-width:24px;padding:1px 4px;text-align:center;}
-.gf-vida button:hover{border-color:var(--gold);}
-.gf-vida b{font-size:13px;min-width:24px;text-align:center;}
+/* A dica do título: o aviso de que aqui não tem juiz. Abre no hover e no
+   foco, pra quem chega pelo teclado ler também. */
+.gf-dica{position:relative;display:inline-flex;}
+.gf-dica-botao{width:18px;height:18px;border-radius:50%;padding:0;
+  border:1px solid var(--border);background:none;color:var(--text-muted);
+  font:inherit;font-size:11px;font-weight:700;line-height:1;cursor:help;}
+.gf-dica-botao:hover,.gf-dica-botao:focus-visible{border-color:var(--gold);
+  color:var(--gold-light);outline:none;}
+.gf-dica-texto{position:absolute;left:-8px;top:calc(100% + 8px);z-index:65;
+  width:min(360px,calc(100vw - 32px));padding:10px 12px;border-radius:10px;
+  background:var(--surface-2);border:1px solid var(--border);
+  box-shadow:0 14px 30px -10px rgba(0,0,0,.8);font-size:12px;line-height:1.5;
+  color:var(--text-muted);opacity:0;visibility:hidden;transition:opacity .12s;}
+.gf-dica-texto b{color:var(--text);}
+.gf-dica:hover .gf-dica-texto,.gf-dica:focus-within .gf-dica-texto{
+  opacity:1;visibility:visible;}
 
-/* O resumo fica ENTRE o título da mão e as cartas: é o que se lê antes de
-   decidir manter, e depois do fato (as cartas) ele viraria conferência. */
-.gf-resumo{display:flex;gap:12px;flex-wrap:wrap;align-items:center;
-  font-size:11.5px;color:var(--text-muted);margin:0 0 6px;}
+/* O resumo da mão mora no título dela: é o que se lê antes de decidir
+   manter. Minúsculas e sem espaçamento de letra, pra não ler como mais um
+   rótulo de área. */
+.gf-resumo{display:inline-flex;gap:10px;flex-wrap:wrap;align-items:center;
+  margin-left:10px;text-transform:none;letter-spacing:0;font-size:11px;}
 .gf-resumo b{color:var(--text);font-family:'IBM Plex Mono',monospace;
   font-weight:600;}
 .gf-cores{display:inline-flex;gap:8px;}
@@ -929,46 +929,107 @@ select.campo option{background:var(--surface-2);color:var(--text);}
    mesmo eixo pra não ficar uma coluna torta à esquerda. Só dentro de
    `#gf-mesa` — as modais usam as mesmas classes e são listas, que se leem
    alinhadas à esquerda. O log também fica à esquerda: é texto corrido. */
-#gf-mesa .gf-fila,#gf-mesa .gf-cabeca,#gf-mesa .gf-zonas,#gf-mesa .gf-resumo,
-#gf-mesa .gf-acoes{justify-content:center;}
+#gf-mesa .gf-fila,#gf-mesa .gf-acoes{justify-content:center;}
 #gf-mesa .gf-secao,#gf-mesa .gf-vazio,#gf-mesa .nota{text-align:center;}
 
+/* O tamanho da carta da mesa, num lugar só: a carta, a pilha, a altura
+   mínima das áreas e a margem da deitada saem daqui. Com dois decks a carta
+   encolhe — são seis fileiras de carta em vez de três, e em 144x126 a mesa
+   não caberia na altura de uma tela Full HD. */
+#gf-mesa{--gf-carta-l:144px;--gf-carta-a:126px;}
+#gf-mesa .gf-jogadores.dois{--gf-carta-l:108px;--gf-carta-a:94px;}
+
 /* ---- as áreas da mesa ----
-   Campo de batalha, terrenos, comando e mão são caixas que existem mesmo
-   vazias: é pra onde a carta vai. O corpo tem a altura de uma carta, pra a
-   mesa não pular quando a primeira desce. */
-.gf-area-mesa{border:1px solid var(--border);border-radius:12px;
-  background:rgba(0,0,0,.14);padding:6px 10px 10px;margin-top:10px;min-width:0;}
-.gf-area-titulo{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--text-muted);text-align:center;margin-bottom:6px;}
+   Campo de batalha, terrenos, comando, mão e as pilhas são caixas que existem
+   mesmo vazias: é pra onde a carta vai. O corpo tem a altura de uma carta, pra
+   a mesa não pular quando a primeira desce. */
+/* O título senta na borda de cima da área, como a legenda de um fieldset: é o
+   rótulo dela sem gastar uma linha de altura. O fundo dele é o do painel, pra
+   cortar a borda por trás do texto. */
+.gf-area-mesa{position:relative;border:1px solid var(--border);border-radius:10px;
+  background:rgba(0,0,0,.14);padding:12px 8px 8px;min-width:0;}
+.gf-area-titulo{position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+  padding:0 6px;background:var(--surface);font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text-muted);white-space:nowrap;
+  line-height:16px;}
 .gf-area-titulo b{font-family:'IBM Plex Mono',monospace;color:var(--text);}
-.gf-area-corpo{min-height:126px;display:flex;flex-direction:column;
-  justify-content:center;gap:8px;}
-/* Comando e mão numa linha só; quando a largura não dá, o comando sobe. */
-.gf-linha-mao{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;}
-.gf-linha-mao .gf-comando{flex:none;}
-.gf-linha-mao .gf-area-mao{flex:1 1 320px;}
-.gf-linha-mao .gf-area-mesa{margin-top:10px;}
-.gf-imposto{font-size:11px;color:var(--text-muted);text-align:center;
-  max-width:144px;margin:0 auto;}
+.gf-area-titulo kbd{margin-left:4px;}
+.gf-area-corpo{min-height:var(--gf-carta-a);display:flex;flex-direction:column;
+  justify-content:center;gap:6px;}
+.gf-imposto{font-family:'IBM Plex Mono',monospace;color:var(--gold-light);
+  margin-left:4px;text-transform:none;}
+
+/* O campo de batalha é uma área com dois lados, criaturas à esquerda e o
+   resto à direita, e cada lado cresce na proporção das cartas que tem (o
+   `flex-grow` vem do desenho). Nenhum lado fica mais estreito que uma carta. */
+.gf-batalha{display:flex;gap:0;padding:12px 0 8px;}
+.gf-lado{position:relative;flex-basis:0;min-width:calc(var(--gf-carta-l) + 16px);
+  padding:0 8px;}
+/* O lado começa 12px abaixo da borda da área: o título dele sobe isso a mais
+   pra sentar na mesma borda. */
+.gf-lado > .gf-area-titulo{top:-21px;}
+
+/* O monte de terrenos iguais (ver `montesHTML`): cada carta depois da
+   primeira volta por cima da anterior e deixa 22px dela à vista. A carta sob
+   o mouse sobe pra frente, pra dar pra escolher qual deitar. */
+.gf-monte{display:flex;position:relative;flex:none;}
+.gf-monte .gf-carta + .gf-carta{margin-left:calc(22px - var(--gf-carta-l));}
+.gf-monte .gf-carta:hover{z-index:2;}
+.gf-monte-n{position:absolute;right:4px;bottom:4px;z-index:3;pointer-events:none;
+  padding:0 6px;border-radius:999px;background:rgba(15,13,23,.88);
+  border:1px solid var(--border);color:var(--text);font-size:11px;font-weight:700;
+  line-height:18px;font-family:'IBM Plex Mono',monospace;}
+.gf-lado + .gf-lado{border-left:1px dashed var(--border);}
+
+/* Duas linhas numa grade: comando, terrenos e exílio; deck, mão e cemitério.
+   As laterais têm a largura do que guardam, e a do meio fica com o resto. */
+.gf-zonas{display:grid;grid-template-columns:max-content minmax(0,1fr) max-content;
+  gap:8px;}
+@media (max-width:700px){
+  .gf-zonas{grid-template-columns:1fr 1fr;grid-auto-flow:dense;}
+  .gf-zonas .gf-terrenos,.gf-zonas .gf-area-mao{grid-column:1 / -1;}
+}
+.gf-pilha-area .gf-area-corpo{align-items:center;}
+.gf-mulligan .nota{margin:0;}
+.gf-mulligan .gf-acoes{margin:6px 0 4px;}
+
+/* A pilha: uma carta de largura. O baralho de costas, cemitério e exílio com
+   a carta de cima. O hover é dourado, e não roxo como o da carta, porque o
+   clique abre a zona. */
+.gf-pilha{width:var(--gf-carta-l);height:var(--gf-carta-a);border-radius:8px;
+  border:1px solid var(--border);background:var(--inset) top/cover no-repeat;
+  cursor:pointer;padding:0;flex:none;color:var(--text-muted);font:inherit;
+  font-size:11px;font-style:italic;}
+.gf-pilha:hover{border-color:var(--gold);}
+.gf-pilha.verso{background:repeating-linear-gradient(45deg,var(--surface-2),
+  var(--surface-2) 4px,var(--inset) 4px,var(--inset) 8px);}
+.gf-pilha.vazia{border-style:dashed;background:none;}
+.gf-pilha.arrastando{opacity:.45;}
+
+kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
+  border:1px solid var(--border);border-bottom-width:2px;background:var(--inset);
+  color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:10px;
+  line-height:14px;text-align:center;text-transform:none;letter-spacing:0;}
 /* Onde a carta arrastada vai entrar na fila: uma barra dourada do lado em
    que ela será posta. */
 .gf-carta.solta-antes{box-shadow:-6px 0 0 -2px var(--gold);}
 .gf-carta.solta-depois{box-shadow:6px 0 0 -2px var(--gold);}
 
-/* A carta da mesa é o topo da arte, em 144x126: o nome impresso e a
-   ilustração, que é o que identifica a carta de relance, numa altura que
-   deixa a mesa compacta. O texto inteiro fica no painel da carta: num
-   tabuleiro de 40 cartas, a carta inteira faria a mesa não caber. */
-.gf-carta{width:144px;height:126px;border-radius:8px;border:1px solid var(--border);
+/* A carta da mesa é o topo da arte: o nome impresso e a ilustração, que é o
+   que identifica a carta de relance, numa altura que deixa a mesa compacta.
+   O texto inteiro fica no painel da carta: num tabuleiro de 40 cartas, a
+   carta inteira faria a mesa não caber. */
+.gf-carta{width:var(--gf-carta-l);height:var(--gf-carta-a);border-radius:8px;
+  border:1px solid var(--border);
   background:var(--inset) top/cover no-repeat;cursor:pointer;flex:none;
   position:relative;padding:0;transition:transform .12s;}
 .gf-carta:hover{border-color:var(--purple);transform:translateY(-6px);}
 /* Deitada gira 90°, e girar não muda a caixa do layout: a carta continua
-   ocupando 126 de altura enquanto DESENHA 144. A margem vertical cobre essa
-   diferença — (144-126)/2 = 9px em cima e embaixo — senão ela invade a fila
-   de baixo. A opacidade é o que se vê de longe: essa já foi usada. */
-.gf-carta.deitada{transform:rotate(90deg);margin:9px 0;opacity:.5;}
+   ocupando a altura dela enquanto DESENHA a largura. A margem vertical cobre
+   metade da diferença em cima e embaixo, senão ela invade a fila de baixo.
+   A opacidade é o que se vê de longe: essa já foi usada. */
+.gf-carta.deitada{transform:rotate(90deg);opacity:.5;
+  margin:calc((var(--gf-carta-l) - var(--gf-carta-a)) / 2) 0;}
 .gf-carta.deitada:hover{transform:rotate(90deg) translateY(-6px);}
 .gf-carta.virada{background-image:none;
   background:repeating-linear-gradient(45deg,var(--surface-2),
@@ -986,7 +1047,8 @@ select.campo option{background:var(--surface-2);color:var(--text);}
    carta, e o `title` traz o nome inteiro. */
 .gf-carta .gf-marcas{position:absolute;top:4px;right:4px;display:flex;
   flex-direction:column;gap:3px;align-items:flex-end;}
-.gf-carta .gf-marca-b{min-width:20px;max-width:126px;height:20px;border-radius:10px;
+.gf-carta .gf-marca-b{min-width:20px;max-width:calc(var(--gf-carta-l) - 18px);
+  height:20px;border-radius:10px;
   background:var(--gold);color:var(--sobre-gold);font-size:11px;font-weight:700;
   display:block;line-height:20px;text-align:center;padding:0 5px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -1037,27 +1099,51 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   background:var(--inset);border:1px solid var(--border);color:var(--text);}
 .gf-detalhe-face + .gf-detalhe-face{border-top:1px solid var(--border);
   margin-top:4px;padding-top:8px;}
+/* Os atalhos da mesa. Fora da tela cheia eles vão numa linha embaixo da
+   mesa; na tela cheia, no pé da coluna do painel. */
+.gf-atalhos{margin-top:10px;font-size:11.5px;color:var(--text-muted);}
+.gf-atalhos-titulo{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  margin-bottom:4px;}
+.gf-atalhos dl{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0;}
+.gf-atalhos dt{color:var(--text);}
+.gf-atalhos dd{margin:0 0 0 -8px;}
+
+/* A coluna do painel só existe na tela cheia; fora dela o painel flutua e os
+   atalhos seguem a mesa. */
+.gf-coluna{display:contents;}
+
 /* Na tela cheia a mesa começa na borda do painel, e o painel da carta
-   cobriria a própria mesa: a área de jogo reserva a coluna dele, e ele fica
-   preso nela enquanto a mesa rola, com a última carta olhada. O fundo da
-   coluna aparece mesmo sem carta nenhuma, pra o espaço ler como lugar da
-   carta e não como sobra. Fora da tela cheia a coluna central é estreita
-   demais pra dividir, e o painel cai por cima da busca — por isso lá ele
-   some quando o mouse sai da carta (ver `painelFlutua`). */
+   cobriria a própria mesa: a área de jogo reserva uma coluna presa na altura
+   da janela, com o painel em cima (a última carta olhada) e os atalhos no pé.
+   O fundo da coluna aparece mesmo sem carta nenhuma, pra o espaço ler como
+   lugar da carta e não como sobra. Fora da tela cheia a coluna central é
+   estreita demais pra dividir, e o painel cai por cima da busca — por isso
+   lá ele some quando o mouse sai da carta (ver `painelFlutua`). */
 @media (hover:hover) and (min-width:1100px){
   body.gf-cheia .gf-area{display:grid;grid-template-columns:288px minmax(0,1fr);
     gap:20px;align-items:start;}
-  body.gf-cheia .gf-area::before{content:"";grid-column:1;grid-row:1;
-    align-self:stretch;border-radius:14px;background:var(--inset);
-    border:1px dashed var(--border);}
   body.gf-cheia #gf-mesa{grid-column:2;grid-row:1;min-width:0;}
+  /* A coluna tem a altura da mesa, com a janela de teto: altura fixa de
+     janela empurraria a página pra baixo da mesa só por causa dela. O mínimo
+     é o que a carta grande do painel precisa quando a mesa é baixa. */
+  body.gf-cheia .gf-coluna{grid-column:1;grid-row:1;position:sticky;top:12px;
+    align-self:stretch;max-height:calc(100vh - 24px);
+    min-height:min(640px,calc(100vh - 24px));display:flex;flex-direction:column;
+    border-radius:14px;background:var(--inset);border:1px dashed var(--border);}
   /* A coluna já é a moldura: fundo, borda e sombra próprias fariam uma caixa
      dentro da outra. */
-  body.gf-cheia .gf-detalhe{position:sticky;grid-column:1;grid-row:1;
-    left:auto;background:none;border-color:transparent;box-shadow:none;}
+  body.gf-cheia .gf-detalhe{position:static;flex:1 1 auto;min-height:0;
+    width:auto;max-height:none;background:none;border-color:transparent;
+    box-shadow:none;}
+  body.gf-cheia .gf-atalhos,body.gf-cheia .gf-log{flex:none;margin:0;
+    padding:10px 12px 12px;border-top:1px dashed var(--border);}
+  body.gf-cheia .gf-log{padding-bottom:10px;}
+  body.gf-cheia .gf-atalhos dl{display:grid;grid-template-columns:max-content 1fr;
+    gap:5px 10px;}
+  body.gf-cheia .gf-atalhos dd{margin:0;}
 }
 @media (hover:none){
-  .gf-detalhe{display:none;}
+  .gf-detalhe,.gf-atalhos{display:none;}
 }
 
 /* Menu de uma carta da mesa: pra onde ela vai. */
@@ -1071,50 +1157,57 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .gf-menu hr{border:none;border-top:1px solid var(--border);margin:3px 0;}
 
 /* ---- um bloco por jogador ----
-   Empilhados, e não lado a lado: a mesa tem a largura da tela e a carta tem
-   144px, então dividir ao meio cortaria as duas filas de campo pela metade. Com
-   um deck só, o bloco é a mesa inteira e nada disto aparece. */
+   Empilhados, e não lado a lado: a mesa tem a largura da tela, e dividir ao
+   meio cortaria o campo de cada um pela metade. Os dois campos se separam
+   por uma linha tracejada, que é a borda da mesa entre um e outro. */
 .gf-jogadores{display:flex;flex-direction:column;gap:12px;}
-.gf-jogador + .gf-jogador{border-top:1px solid var(--border);padding-top:10px;}
-.gf-jogador.ativo{border-left:2px solid var(--gold);padding-left:10px;
-  margin-left:-12px;}
-.gf-cabeca{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  font-size:11.5px;color:var(--text-muted);}
-.gf-nome-j{color:var(--text);font-size:13px;}
+.gf-jogador{display:flex;flex-direction:column;gap:8px;}
+.gf-jogador + .gf-jogador{border-top:2px dashed var(--border);padding-top:12px;}
+
+/* A barra do jogador: quem é e como está à esquerda, o que se cria na mesa à
+   direita. O dourado da mesa é só de quem está na vez — a borda da barra e o
+   selo —, pra a vez ser a primeira coisa que se lê de longe. */
+.gf-barra{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;
+  padding:5px 8px 5px 12px;border:1px solid var(--border);border-radius:10px;
+  background:var(--surface-2);font-size:11.5px;color:var(--text-muted);}
+.gf-jogador.ativo .gf-barra{border-color:rgba(233,199,101,.6);
+  box-shadow:inset 3px 0 0 var(--gold);}
+.gf-nome-j{color:var(--text);font-size:13px;max-width:240px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;margin-right:-6px;}
 .gf-vez{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--sobre-gold);background:var(--gold);border-radius:999px;
-  padding:1px 7px;}
+  padding:1px 7px;font-weight:700;white-space:nowrap;}
+.gf-divisor{width:1px;align-self:stretch;background:var(--border);}
+.gf-fatos-j{white-space:nowrap;}
+.gf-fatos-j b{color:var(--text);font-family:'IBM Plex Mono',monospace;
+  font-weight:600;}
 
 /* Vida, marcadores do jogador e dano de comandante são o mesmo controle: um
-   número entre dois passos. Botões sem sublinhado — o que se clica muda o
-   número ao lado, não abre lista. */
-.gf-vida,.gf-marca,.gf-dano{display:inline-flex;align-items:center;gap:4px;}
-.gf-vida button,.gf-marca button,.gf-dano button,.gf-mais{
-  text-decoration:none;border:1px solid var(--border);border-radius:6px;
-  min-width:22px;padding:1px 5px;text-align:center;background:none;
-  color:inherit;font:inherit;cursor:pointer;}
-.gf-vida button:hover,.gf-marca button:hover,.gf-dano button:hover,
-.gf-mais:hover{border-color:var(--gold);color:var(--gold-light);}
-.gf-vida b{font-size:13px;min-width:24px;text-align:center;}
-.gf-marca b,.gf-dano b{min-width:16px;text-align:center;}
+   número entre dois passos redondos. A vida é o número maior da barra. */
+.gf-vida,.gf-marca,.gf-dano{display:inline-flex;align-items:center;gap:5px;
+  white-space:nowrap;}
+.gf-passo{width:20px;height:20px;border-radius:50%;padding:0;flex:none;
+  border:1px solid var(--border);background:none;color:var(--text-muted);
+  font:inherit;font-size:13px;line-height:1;cursor:pointer;}
+.gf-passo:hover{border-color:var(--gold);color:var(--gold-light);}
+.gf-vida b{font-family:'IBM Plex Mono',monospace;font-size:17px;
+  color:var(--text);min-width:26px;text-align:center;}
+.gf-marca b,.gf-dano b{font-family:'IBM Plex Mono',monospace;font-size:13px;
+  color:var(--text);min-width:18px;text-align:center;}
 /* 21 de dano de comandante mata. O número que mata não pode ter a mesma cara
    do número que não mata. */
 .gf-dano.letal b{color:var(--red);}
-
-/* O resumo fica ENTRE o título da mão e as cartas: é o que se lê antes de
-   decidir manter, e depois do fato (as cartas) ele viraria conferência. */
-.gf-resumo{display:flex;gap:12px;flex-wrap:wrap;align-items:center;
-  font-size:11.5px;color:var(--text-muted);margin:0 0 6px;}
-.gf-resumo b{color:var(--text);font-family:'IBM Plex Mono',monospace;
-  font-weight:600;}
-.gf-cores{display:inline-flex;gap:8px;}
-.gf-cor{display:inline-flex;align-items:center;gap:3px;}
-
-.gf-rodape{border-top:1px solid var(--border);padding-top:10px;}
+.gf-botao{border:1px solid var(--border);border-radius:999px;background:none;
+  color:var(--text);font:inherit;font-size:11.5px;padding:3px 11px;
+  cursor:pointer;white-space:nowrap;}
+.gf-botao:hover{border-color:var(--gold);color:var(--gold-light);}
 
 /* ---- log ----
-   Fechado por padrão: é conferência depois do fato, não o assunto da tela. */
+   Fechado por padrão: é conferência depois do fato, não o assunto da tela.
+   Fora da tela cheia vai embaixo da mesa; na tela cheia, na coluna do
+   painel, em cima dos atalhos. */
 .gf-log{margin-top:12px;border-top:1px solid var(--border);padding-top:8px;}
+.gf-log:empty{display:none;}
 .gf-log-cabeca{background:none;border:none;color:var(--text-muted);font:inherit;
   font-size:11.5px;cursor:pointer;padding:0;}
 .gf-log-cabeca:hover{color:var(--gold-light);}
@@ -1187,12 +1280,19 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .gf-nao-puxadas{margin-top:8px;font-size:11.5px;color:var(--text-muted);}
 .gf-nao-puxadas summary{cursor:pointer;}
 
-/* Tela cheia: a mesa quer largura, e as duas colunas laterais não têm o que
-   dizer enquanto se joga. Classe no body em vez de modal — a aba continua
-   sendo a aba, e sair é um clique no mesmo botão. */
+/* Tela cheia: a mesa quer largura e altura, e as duas colunas laterais, o
+   cabeçalho do deck e a fita de abas não têm o que dizer enquanto se joga.
+   Classe no body em vez de modal — a aba continua sendo a aba, e sair é um
+   clique no mesmo botão (ou Esc). */
 body.gf-cheia #lateral,
-body.gf-cheia #trilho{display:none !important;}
-body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;}
+body.gf-cheia #trilho,
+body.gf-cheia .topo,
+body.gf-cheia #abas-deck{display:none !important;}
+body.gf-cheia .corpo{grid-template-columns:minmax(0,1fr);max-width:none;
+  padding-block:12px;}
+body.gf-cheia #painel-goldfish{padding:10px 14px;}
+body.gf-cheia .gf-topo{margin-bottom:6px;}
+body.gf-cheia .gf-jogador{gap:6px;}
 
 /* ---------------- oferta de reclamar deck órfão ---------------- */
 .orfao-fundo{position:fixed;inset:0;background:rgba(15,13,23,.72);

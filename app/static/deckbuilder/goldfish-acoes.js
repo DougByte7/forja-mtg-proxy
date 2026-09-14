@@ -30,6 +30,25 @@ export function desfazerMesa(){
   if (desfazerUmPasso()) desenharMesa();
 }
 
+/* D compra pra quem está na vez e Espaço passa o turno. Devolve se a tecla
+   era da mesa, pra quem ouve o teclado parar ali. Tecla segurada não repete:
+   um Espaço que escorrega não pode passar três turnos. O Espaço também não
+   chega ao botão que estiver com o foco — senão o turno passaria e o botão
+   seria clicado junto. */
+export function atalhoDaMesa(e){
+  if (!estado.mesa || e.ctrlKey || e.metaKey || e.altKey) return false;
+  const espaco = e.key === " ";
+  if (!espaco && e.key.toLowerCase() !== "d") return false;
+  e.preventDefault();
+  if (e.repeat) return true;
+  fecharMenuGf();
+  guardarMesa();
+  if (espaco) passarTurno();
+  else comprar(estado.mesa.ativo, 1);
+  desenharMesa();
+  return true;
+}
+
 /* ------------------------------------------------------ menu de uma carta */
 
 function fecharMenuGf(){
@@ -153,6 +172,27 @@ function abrirMenuDeMarca(ij, x, y){
     if (!nome) return;
     guardarMesa();
     ajustarMarca(ij, nome, 1);
+    desenharMesa();
+  });
+}
+
+/* O menu do deck: comprar ou buscar. Os dois vêm juntos porque é o mesmo
+   gesto de mesa — a mão vai no baralho. */
+function abrirMenuDoDeck(ij, x, y){
+  fecharMenuGf();
+  const menu = document.createElement("div");
+  menu.className = "gf-menu";
+  menu.innerHTML = `<button data-gf-item="comprar">Comprar 1</button>
+    <button data-gf-item="buscar">Buscar no deck</button>`;
+  document.body.appendChild(menu);
+  posicionar(menu, x, y);
+  menu.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-gf-item]");
+    if (!b) return;
+    fecharMenuGf();
+    if (b.dataset.gfItem === "buscar") return abrirBusca(ij, "baralho");
+    guardarMesa();
+    comprar(ij, 1);
     desenharMesa();
   });
 }
@@ -535,28 +575,30 @@ function ligarArrastarMesa(mesa){
    A alternativa — um `id` e um `addEventListener` por botão — não funciona
    aqui: o HTML da mesa é reescrito a cada jogada, e os ouvintes morreriam
    junto com os botões. */
-function fazerAcao(texto, ancora){
+function fazerAcao(texto, ancora, vezes){
   const [nome, ...args] = texto.split(":");
   const ij = Number(args[0]);
 
-  // Primeiro as que NÃO mexem na mesa: abrir uma modal ou o log não pode
+  // Primeiro as que NÃO mexem na mesa: abrir uma modal ou um menu não pode
   // gastar uma das vinte fotos de desfazer.
   if (nome === "novaMarca"){
     const r = ancora.getBoundingClientRect();
     return abrirMenuDeMarca(ij, r.left, r.bottom + 4);
   }
+  if (nome === "deck"){
+    const r = ancora.getBoundingClientRect();
+    return abrirMenuDoDeck(ij, r.left, r.bottom + 4);
+  }
   if (nome === "buscar") return abrirBusca(ij, args[1]);
   if (nome === "ficha") return abrirCriarFicha(ij);
-  if (nome === "log"){
-    estado.mesa.logAberto = !estado.mesa.logAberto;
-    return;
-  }
 
   // Depois as de clique repetido, que contam como um passo só (ver
-  // `guardarMesa`): vida, marcador e dano de comandante andam de um em um.
+  // `guardarMesa`): vida, marcador e dano de comandante andam de um em um, e
+  // vida e dano de cinco em cinco com Shift — os dois passos que a mesa usa,
+  // dano de criatura e dano de comandante.
   if (nome === "vida"){
     guardarMesa("vida" + ij);
-    return ajustarVida(ij, Number(args[1]));
+    return ajustarVida(ij, Number(args[1]) * vezes);
   }
   if (nome === "marca"){
     guardarMesa("marca" + ij + args[1]);
@@ -564,15 +606,12 @@ function fazerAcao(texto, ancora){
   }
   if (nome === "dano"){
     guardarMesa("dano" + ij + args[1]);
-    return ajustarDanoCmd(ij, Number(args[1]), Number(args[2]));
+    return ajustarDanoCmd(ij, Number(args[1]), Number(args[2]) * vezes);
   }
 
   guardarMesa();
   if (nome === "manter") return manterMao(ij);
   if (nome === "mulligan") return mulliganLondon(ij);
-  if (nome === "comprar") return comprar(ij, 1);
-  if (nome === "turno") return passarTurno();
-  if (nome === "combate") return limparCombate();
 }
 
 export function ligarGoldfish(){
@@ -586,6 +625,27 @@ export function ligarGoldfish(){
   });
 
   $("gf-desfazer").addEventListener("click", desfazerMesa);
+
+  $("gf-passar").addEventListener("click", () => {
+    if (!estado.mesa) return;
+    guardarMesa();
+    passarTurno();
+    desenharMesa();
+  });
+
+  $("gf-fim-combate").addEventListener("click", () => {
+    if (!estado.mesa) return;
+    guardarMesa();
+    limparCombate();
+    desenharMesa();
+  });
+
+  // Abrir o log não é jogada: não passa pelo `guardarMesa`.
+  $("gf-log").addEventListener("click", (e) => {
+    if (!e.target.closest(".gf-log-cabeca") || !estado.mesa) return;
+    estado.mesa.logAberto = !estado.mesa.logAberto;
+    desenharMesa();
+  });
 
   $("gf-segundo").addEventListener("click", () => {
     if (!estado.mesa) return;
@@ -625,7 +685,7 @@ export function ligarGoldfish(){
   mesa.addEventListener("click", (e) => {
     const acao = e.target.closest("[data-gf-acao]");
     if (acao){
-      fazerAcao(acao.dataset.gfAcao, acao);
+      fazerAcao(acao.dataset.gfAcao, acao, e.shiftKey ? 5 : 1);
       return desenharMesa();
     }
 

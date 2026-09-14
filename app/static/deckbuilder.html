@@ -257,8 +257,8 @@
 
       <!-- ================= goldfish =================
            Jogar sozinho pra ver se a mão anda. NÃO é motor de regras: nada
-           aqui impede nada, e a linha fixa abaixo diz isso antes do primeiro
-           clique — a pessoa precisa saber que o juiz é ela. -->
+           aqui impede nada, e a dica ao lado do título diz isso — a pessoa
+           precisa saber que o juiz é ela. -->
       <!-- A aba só aparece a partir da v1: com uma versão só não há o que
            comparar (ver `desenharVersao`). -->
       <div class="painel" id="painel-historico" data-painel="historico" hidden>
@@ -269,7 +269,19 @@
       <div class="painel" id="painel-goldfish" data-painel="goldfish" hidden>
         <div class="gf-topo">
           <h2 class="secao" style="margin:0">Goldfish</h2>
+          <span class="gf-dica">
+            <button class="gf-dica-botao" type="button" aria-label="Sobre o goldfish"
+              aria-describedby="gf-aviso">?</button>
+            <span class="gf-dica-texto" role="tooltip" id="gf-aviso">Aqui não tem
+              juiz: nada impede de baixar dois terrenos no mesmo turno nem de jogar
+              uma carta de 8 manas no turno 1. O que se mede aqui é a <b>mão</b>,
+              não a legalidade. Clique numa carta pra abrir o menu dela — ou
+              arraste pra outra zona.</span>
+          </span>
           <span class="gf-turno" id="gf-turno"></span>
+          <button class="btn ouro" id="gf-passar" disabled
+            title="Passar turno (Espaço)">Passar turno</button>
+          <button class="btn" id="gf-fim-combate" hidden>Fim do combate</button>
           <span class="gf-espaco"></span>
           <button class="btn" id="gf-segundo" disabled
             title="Pôr um deck seu do outro lado da mesa">Segundo deck</button>
@@ -282,17 +294,24 @@
           <button class="btn ouro" id="gf-embaralhar">Embaralhar</button>
         </div>
 
-        <p class="nota" id="gf-aviso">Aqui não tem juiz: nada impede de baixar
-          dois terrenos no mesmo turno nem de jogar uma carta de 8 manas no
-          turno 1. O que se mede aqui é a <b>mão</b>, não a legalidade.
-          Clique numa carta pra abrir o menu dela — ou arraste pra outra zona.</p>
-
         <div class="gf-area">
           <div id="gf-mesa"></div>
-          <aside class="gf-detalhe" id="gf-detalhe" aria-hidden="true">
-            <img id="gf-detalhe-arte" alt="" referrerpolicy="no-referrer">
-            <div id="gf-detalhe-corpo"></div>
-          </aside>
+          <div class="gf-coluna">
+            <aside class="gf-detalhe" id="gf-detalhe" aria-hidden="true">
+              <img id="gf-detalhe-arte" alt="" referrerpolicy="no-referrer">
+              <div id="gf-detalhe-corpo"></div>
+            </aside>
+            <div class="gf-log" id="gf-log"></div>
+            <div class="gf-atalhos">
+              <div class="gf-atalhos-titulo">Atalhos</div>
+              <dl>
+                <dt><kbd>D</kbd></dt><dd>Comprar</dd>
+                <dt><kbd>Espaço</kbd></dt><dd>Passar turno</dd>
+                <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd></dt><dd>Desfazer</dd>
+                <dt><kbd>Shift</kbd>+clique</dt><dd>Vida e dano de 5 em 5</dd>
+              </dl>
+            </div>
+          </div>
         </div>
       </div>
     </div>

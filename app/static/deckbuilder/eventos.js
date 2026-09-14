@@ -17,7 +17,8 @@ import {estado} from "./estado.js";
 import {abrirGaveta, desenharBarraFiltros, fecharGaveta, gavetaAberta,
         lerGavetaFiltros, limparFiltros, montarGavetaFiltros,
         preencherGavetaFiltros, tirarFiltro} from "./filtros.js";
-import {desfazerMesa, fecharModalGf, modalGfAberto} from "./goldfish-acoes.js";
+import {atalhoDaMesa, desfazerMesa, fecharModalGf,
+        modalGfAberto} from "./goldfish-acoes.js";
 import {exportar, fazerImportar} from "./importar-exportar.js";
 import {abrirCiclo, adicionarLote, analisarManabase, chamarManabase,
         fixadoresPlanos} from "./manabase.js";
@@ -102,6 +103,9 @@ export function ligarEventos(){
     }
     if (gavetaAberta) return;   // dentro da gaveta, o teclado é dela
     if (cartaAberta) return;    // e dentro da modal, dela
+    // D e Espaço só valem com a mesa à vista e nada por cima dela.
+    if (estado.aba === "goldfish" && !digitando && !modalGfAberto() &&
+        atalhoDaMesa(e)) return;
     if (e.key === "/" && !digitando){
       e.preventDefault();
       (estado.comandantes.length ? $("busca") : $("busca-cmd")).focus();

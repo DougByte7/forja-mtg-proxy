@@ -1,16 +1,16 @@
 /* ------------------------------------------------- o desenho da mesa
 
-   Uma seção por jogador, e dentro dela a ordem de um tabuleiro: quem é e como
-   está (vida, marcadores, zonas), o campo de batalha, os terrenos e, na borda
-   de quem joga, a mão com o comando ao lado. As quatro áreas existem sempre,
-   mesmo vazias: são o lugar pra onde a carta vai, e uma área que só aparece
-   com a primeira carta faria a mesa pular a cada jogada.
+   Uma seção por jogador, e dentro dela a ordem de um tabuleiro: o campo de
+   batalha (criaturas | outros), a linha dos terrenos entre o comando e o
+   exílio, a linha da mão entre o deck e o cemitério e, na borda de quem joga,
+   a barra com quem é e como está. As áreas existem sempre, mesmo vazias: são
+   o lugar pra onde a carta vai, e uma área que só aparece com a primeira
+   carta faria a mesa pular a cada jogada.
 
-   Com dois decks a mesa é ESPELHADA, como numa mesa de verdade: o segundo
-   jogador fica em cima com a ordem invertida — mão, terrenos, campo de
-   batalha —, e os dois campos de batalha se encaram no meio. O espelho vale
-   dentro do campo de batalha também: as criaturas ficam do lado do meio,
-   de frente pras do outro.
+   Com dois decks a mesa é ESPELHADA na vertical, como numa mesa de verdade: o
+   segundo jogador fica em cima com a ordem invertida — barra, mão, terrenos,
+   campo de batalha —, e os dois campos de batalha se encaram no meio. Na
+   horizontal nada vira: as criaturas de um ficam em cima das do outro.
 
    Este módulo só LÊ a mesa. Quem muda alguma coisa é `goldfish-acoes.js`, e a
    separação é o que deixa as regras (`goldfish.js`) rodarem no teste sem DOM
@@ -146,7 +146,7 @@ let painelUid = null;
 /* Flutuando (fora da tela cheia) o painel cobre a busca, então ele some
    quando o mouse sai da carta. Na coluna reservada da tela cheia ele é o
    lugar da carta, e fica com a última carta olhada até o próximo hover.
-   Quem decide o modo é o CSS (`body.gf-cheia .gf-area`); o script só lê. */
+   Quem decide o modo é o CSS (`body.gf-cheia .gf-coluna`); o script só lê. */
 export function painelFlutua(){
   return getComputedStyle($("gf-detalhe")).position === "fixed";
 }
@@ -224,13 +224,13 @@ function resumoHTML(mao){
   const pips = CORES.filter(c => r.cores[c]).map(c =>
     `<span class="gf-cor" title="${NOME_COR[c]}"><span class="pip ${c}"></span>${
       r.cores[c]}</span>`).join("");
-  return `<div class="gf-resumo">
-    <span><b>${r.terrenos}</b> terreno(s) em ${mao.length}</span>
+  return `<span class="gf-resumo">
+    <span><b>${r.terrenos}</b> terreno(s)</span>
     ${r.feiticos ? `<span title="Média de custo do que não é terreno"><b>${
       r.custoMedio.toFixed(1).replace(".", ",")}</b> de custo médio</span>` : ""}
     ${pips ? `<span class="gf-cores" title="Símbolos de cor que a mão pede"
       >${pips}</span>` : ""}
-  </div>`;
+  </span>`;
 }
 
 /* ------------------------------------------------------------- as áreas */
@@ -238,82 +238,160 @@ function resumoHTML(mao){
 /* Uma área da mesa: título com a contagem, e o corpo. A área inteira é alvo
    de soltar — soltar em qualquer ponto dela, e não só em cima de outra carta,
    é o que deixa a área vazia receber a primeira. */
-function areaHTML(titulo, conta, corpo, zona, ij, classe){
+function areaHTML(titulo, corpo, zona, ij, classe){
   return `<div class="gf-area-mesa ${classe}" data-gf-solta="${zona}" data-gf-j="${ij}">
-    <div class="gf-area-titulo">${titulo} <b>${conta}</b></div>
+    <div class="gf-area-titulo">${titulo}</div>
     <div class="gf-area-corpo">${corpo}</div>
   </div>`;
+}
+
+function contaHTML(nome, n){
+  return `${nome} <b>${n}</b>`;
 }
 
 function vazioHTML(texto){
   return `<div class="gf-vazio">${escapar(texto)}</div>`;
 }
 
-/* Criaturas numa fila, o resto noutra: quem olha um tabuleiro procura uma
+/* Criaturas de um lado, o resto do outro: quem olha um tabuleiro procura uma
    coisa de cada vez ("tenho bicho pra atacar?"), e misturadas cada pergunta
-   vira busca visual. Fila vazia não é desenhada — a área já tem a altura de
-   uma carta. A ordem dentro de cada fila é a que a pessoa arrumou (ver
-   `reposicionar`). */
-function campoDeBatalhaHTML(j, ij, espelhado){
+   vira busca visual. Lado a lado, e não empilhadas, pra o campo ter a altura
+   de uma carta só. Cada lado cresce na proporção das cartas que tem, e as
+   criaturas ficam à esquerda nos dois jogadores: com a mesa espelhada, as de
+   um ficam em cima das do outro. A ordem dentro de cada lado é a que a pessoa
+   arrumou (ver `reposicionar`). */
+function campoDeBatalhaHTML(j, ij){
+  const lado = (nome, lista, vazio) => `<div class="gf-lado"
+      style="flex-grow:${Math.max(1, lista.length)}">
+      <div class="gf-area-titulo">${contaHTML(nome, lista.length)}</div>
+      <div class="gf-area-corpo">${
+        lista.length ? cartasHTML(lista, "campo") : vazioHTML(vazio)}</div>
+    </div>`;
   const criaturas = j.campo.filter(c => grupoDoCampo(c) === "Criaturas");
   const outras = j.campo.filter(c => grupoDoCampo(c) === "Outros");
-  const filas = espelhado ? [outras, criaturas] : [criaturas, outras];
-  const total = criaturas.length + outras.length;
-  const corpo = total
-    ? filas.filter(l => l.length).map(l => cartasHTML(l, "campo")).join("")
-    : vazioHTML("nada em jogo");
-  return areaHTML("Campo de batalha", total, corpo, "campo", ij, "gf-batalha");
+  return `<div class="gf-area-mesa gf-batalha" data-gf-solta="campo" data-gf-j="${ij}">
+    ${lado("Criaturas", criaturas, "nenhuma criatura")}
+    ${lado("Outros", outras, "nada mais em jogo")}
+  </div>`;
+}
+
+/* Terrenos iguais viram um MONTE: as cartas sobrepostas, cada uma mostrando
+   uma tira, e a quantidade no canto. Oito Florestas em fila são uma segunda
+   fileira da mesa; num monte, a largura de uma carta e pouco. Igual quer
+   dizer mesmo nome E mesmo estado — deitar uma Floresta a tira do monte das
+   em pé e a põe no das deitadas, que é a pergunta que se faz ao terreno
+   ("quantas ainda posso usar?"). Cada carta continua sendo o seu botão: o
+   menu, o arrastar e o painel não sabem que o monte existe. O monte fica no
+   lugar da primeira carta dele, na ordem que a pessoa arrumou. */
+function montesHTML(terrenos){
+  const montes = new Map();
+  for (const c of terrenos){
+    const chave = [nomeDaCarta(c), c.deitada, c.virada, c.verso, c.ficha,
+                   c.atacando, c.bloqueando, JSON.stringify(c.marcas)].join("|");
+    if (!montes.has(chave)) montes.set(chave, []);
+    montes.get(chave).push(c);
+  }
+  return `<div class="gf-fila">${[...montes.values()].map(monte => monte.length === 1
+    ? gfCartaHTML(monte[0], "campo")
+    : `<div class="gf-monte">${monte.map(c => gfCartaHTML(c, "campo")).join("")
+      }<span class="gf-monte-n" aria-hidden="true">×${monte.length}</span></div>`
+  ).join("")}</div>`;
 }
 
 /* Terreno-criatura mora aqui, e pela mesma razão de `CATEGORIAS`: a primeira
    regra que casa ganha, e pra quem joga ele é o terreno que entrou no turno. */
 function terrenosHTML(j, ij){
   const terrenos = j.campo.filter(c => grupoDoCampo(c) === "Terrenos");
-  const corpo = terrenos.length ? cartasHTML(terrenos, "campo") : vazioHTML("nenhum terreno");
-  return areaHTML("Terrenos", terrenos.length, corpo, "campo", ij, "gf-terrenos");
+  const corpo = terrenos.length ? montesHTML(terrenos) : vazioHTML("nenhum terreno");
+  return areaHTML(contaHTML("Terrenos", terrenos.length), corpo, "campo", ij, "gf-terrenos");
 }
 
-/* O comando fica ao lado da mão porque é de onde se lança o comandante —
-   são as duas áreas de "o que eu posso jogar agora". O imposto é
-   INFORMAÇÃO: quanto a próxima vez custaria, sem cobrar nada. */
-function maoEComandoHTML(j, ij){
+/* O comando fica ao lado dos terrenos porque é de onde se lança o comandante.
+   O imposto é INFORMAÇÃO: quanto a próxima vez custaria, sem cobrar nada. */
+function comandoHTML(j, ij){
   const imposto = j.impostoPago
-    ? `<div class="gf-imposto">próxima vez custa +${j.impostoPago * 2}</div>` : "";
-  const comando = areaHTML("Comando", j.comando.length,
-    (j.comando.length ? cartasHTML(j.comando, "comando") : vazioHTML("vazia")) + imposto,
+    ? ` <span class="gf-imposto" title="Custo a mais na próxima vez">+${
+        j.impostoPago * 2}</span>` : "";
+  return areaHTML(contaHTML("Comando", j.comando.length) + imposto,
+    j.comando.length ? cartasHTML(j.comando, "comando") : vazioHTML("vazia"),
     "comando", ij, "gf-comando");
-  const mao = areaHTML("Mão", j.mao.length,
-    resumoHTML(j.mao) + (j.mao.length ? cartasHTML(j.mao, "mao") : vazioHTML("mão vazia")),
-    "mao", ij, "gf-area-mao");
-  return `<div class="gf-linha-mao">${comando}${mao}</div>`;
 }
 
-/* ------------------------------------------------- cabeça de cada jogador */
+/* Baralho, cemitério e exílio são PILHAS: uma carta de largura, e o clique
+   abre a zona inteira em vez de agir sobre a carta de cima. A de cima aparece
+   (com o painel no hover e o arrastar, pra puxar de volta a última que caiu);
+   o baralho aparece de costas, como na mesa. */
+function pilhaHTML(j, ij, zona, titulo, acao, rotulo){
+  const lista = j[zona];
+  const topo = zona === "baralho" ? null : lista[0];
+  const arte = topo && !topo.virada ? arteNaMesa(topo) : "";
+  const classes = ["gf-pilha"];
+  if (!lista.length) classes.push("vazia");
+  else if (!arte) classes.push("verso");
+  const botao = `<button class="${classes.join(" ")}" data-gf-acao="${acao}"
+    title="${escapar(rotulo)}" aria-label="${escapar(rotulo)}"
+    ${topo ? `data-gf-uid="${topo.uid}" draggable="true"` : ""}
+    ${arte ? `style="background-image:url('${escapar(arte)}')"` : ""}
+    >${lista.length ? "" : "vazio"}</button>`;
+  return areaHTML(titulo, botao, zona, ij, `gf-pilha-area gf-${zona}`);
+}
 
+function baralhoHTML(j, ij, naVez){
+  // A tecla D compra pra quem está na vez: é nesse baralho que ela aparece.
+  const tecla = naVez ? ` <kbd title="Comprar">D</kbd>` : "";
+  return pilhaHTML(j, ij, "baralho", contaHTML("Deck", j.baralho.length) + tecla,
+    `deck:${ij}`, "Comprar ou buscar no deck");
+}
+
+/* A mão com o resumo no título: é o que se lê antes de decidir manter, e na
+   linha do título ele não rouba altura da mesa. No mulligan, a escolha fica
+   dentro da própria mão, em cima das cartas que ela julga. */
+function maoHTML(j, ij){
+  const mulligan = j.fase === "jogo" ? "" : `<div class="gf-mulligan">${controlesDoMulliganHTML(j, ij)}</div>`;
+  return areaHTML(contaHTML("Mão", j.mao.length) + resumoHTML(j.mao),
+    mulligan + (j.mao.length ? cartasHTML(j.mao, "mao") : vazioHTML("mão vazia")),
+    "mao", ij, "gf-area-mao");
+}
+
+/* Duas linhas numa grade de três colunas: comando, terrenos e exílio; deck,
+   mão e cemitério. A grade é compartilhada pra as pilhas ficarem uma em cima
+   da outra. No espelho, a linha da mão vai pra borda, como a do outro. */
+function zonasHTML(j, ij, mesa, espelhado){
+  const naVez = mesa.ativo === ij;
+  const terrenos = comandoHTML(j, ij) + terrenosHTML(j, ij) +
+    pilhaHTML(j, ij, "exilio", contaHTML("Exílio", j.exilio.length),
+              `buscar:${ij}:exilio`, "Ver o exílio");
+  const mao = baralhoHTML(j, ij, naVez) + maoHTML(j, ij) +
+    pilhaHTML(j, ij, "cemiterio", contaHTML("Cemitério", j.cemiterio.length),
+              `buscar:${ij}:cemiterio`, "Ver o cemitério");
+  return `<div class="gf-zonas">${espelhado ? mao + terrenos : terrenos + mao}</div>`;
+}
+
+/* ------------------------------------------------- a barra de cada jogador */
+
+/* Shift no clique anda de 5 em 5 (ver `fazerAcao`). */
 function passoHTML(acao, rotulo, texto){
-  return `<button data-gf-acao="${acao}" aria-label="${escapar(rotulo)}"
-    title="${escapar(rotulo)}">${texto}</button>`;
+  return `<button class="gf-passo" data-gf-acao="${acao}" aria-label="${escapar(rotulo)}"
+    title="${escapar(rotulo)} (Shift: 5)">${texto}</button>`;
 }
 
 function vidaHTML(j, ij){
   return `<span class="gf-vida">Vida
-    ${passoHTML(`vida:${ij}:-5`, "Menos 5 de vida", "−5")}
-    ${passoHTML(`vida:${ij}:-1`, "Menos 1 de vida", "−1")}
+    ${passoHTML(`vida:${ij}:-1`, "Menos 1 de vida", "−")}
     <b>${j.vida}</b>
-    ${passoHTML(`vida:${ij}:1`, "Mais 1 de vida", "+1")}
-    ${passoHTML(`vida:${ij}:5`, "Mais 5 de vida", "+5")}
+    ${passoHTML(`vida:${ij}:1`, "Mais 1 de vida", "+")}
   </span>`;
 }
 
 function marcasDoJogadorHTML(j, ij){
-  const chips = Object.keys(j.marcas).map(nome => `<span class="gf-marca">
+  return Object.keys(j.marcas).map(nome => `<span class="gf-marca">
     ${escapar(nome)}
-    ${passoHTML(`marca:${ij}:${nome}:-1`, `Menos 1 de ${nome}`, "−")}
+    <button class="gf-passo" data-gf-acao="marca:${ij}:${nome}:-1"
+      aria-label="Menos 1 de ${escapar(nome)}">−</button>
     <b>${j.marcas[nome]}</b>
-    ${passoHTML(`marca:${ij}:${nome}:1`, `Mais 1 de ${nome}`, "+")}
+    <button class="gf-passo" data-gf-acao="marca:${ij}:${nome}:1"
+      aria-label="Mais 1 de ${escapar(nome)}">+</button>
   </span>`).join("");
-  return chips + `<button class="gf-mais" data-gf-acao="novaMarca:${ij}"
-    title="Pôr um marcador neste jogador">+ marcador</button>`;
 }
 
 /* Dano de comandante: só existe com dois decks na mesa. Sozinho, ele seria uma
@@ -332,27 +410,37 @@ function danoHTML(j, ij, mesa){
   }).join("");
 }
 
-function zonasHTML(j, ij){
+/* Fatos do tabuleiro, não conta de mana: quantos terrenos estão em pé e
+   quantos deitados. Ver o cabeçalho de `goldfish.js`. Os três ficam sempre,
+   mesmo em zero, pra barra não mudar de largura a cada terreno. */
+function terrenosDaBarraHTML(j){
   const terrenos = j.campo.filter(c => ehTerreno(c.carta));
   const emPe = terrenos.filter(c => !c.deitada).length;
-  // Fatos do tabuleiro, não conta de mana: quantos terrenos estão em pé e
-  // quantos deitados. Ver o cabeçalho de `goldfish.js`.
-  return `<div class="gf-zonas">
-    <button data-gf-acao="buscar:${ij}:baralho" data-gf-solta="baralho"
-      data-gf-j="${ij}" title="Ver e buscar no baralho (ele é reembaralhado ao fechar)"
-      >Baralho <b>${j.baralho.length}</b></button>
-    <span>Terrenos <b>${emPe}</b> em pé${
-      terrenos.length - emPe ? ` · <b>${terrenos.length - emPe}</b> deitados` : ""}</span>
-    ${j.terrenosBaixados ? `<span title="Conta, não impede — aqui não tem juiz."
-      >Baixados neste turno <b>${j.terrenosBaixados}</b></span>` : ""}
-    <button data-gf-acao="buscar:${ij}:cemiterio" data-gf-solta="cemiterio"
-      data-gf-j="${ij}">Cemitério <b>${j.cemiterio.length}</b></button>
-    <button data-gf-acao="buscar:${ij}:exilio" data-gf-solta="exilio"
-      data-gf-j="${ij}">Exílio <b>${j.exilio.length}</b></button>
+  const deitados = terrenos.length - emPe;
+  return `<span class="gf-fatos-j">Terrenos <b>${emPe}</b> em pé ·
+    <b>${deitados}</b> ${deitados === 1 ? "deitado" : "deitados"}
+    <span title="Terrenos baixados neste turno">· Baixados <b>${j.terrenosBaixados}</b></span></span>`;
+}
+
+/* A barra fica na borda de fora de cada jogador: embaixo de quem está
+   embaixo e em cima de quem está em cima. À esquerda quem é e como está; à
+   direita o que se cria na mesa. */
+function barraHTML(j, ij, mesa){
+  const vez = mesa.jogadores.length > 1 && mesa.ativo === ij
+    ? `<span class="gf-vez">sua vez</span>` : "";
+  return `<div class="gf-barra">
+    <b class="gf-nome-j" title="${escapar(j.nome)}">${escapar(j.nome)}</b>${vez}
+    ${vidaHTML(j, ij)}${danoHTML(j, ij, mesa)}${marcasDoJogadorHTML(j, ij)}
+    <span class="gf-divisor" aria-hidden="true"></span>
+    ${terrenosDaBarraHTML(j)}
+    <span class="gf-espaco"></span>
+    <button class="gf-botao" data-gf-acao="ficha:${ij}">Criar ficha</button>
+    <button class="gf-botao" data-gf-acao="novaMarca:${ij}"
+      title="Pôr um marcador neste jogador">Marcador</button>
   </div>`;
 }
 
-/* ------------------------------------------------ o que vai junto da mão */
+/* ------------------------------------------------- a escolha do mulligan */
 
 function notaDoMulliganHTML(j, ij){
   const devolve = devolveAoManterDe(ij);
@@ -372,66 +460,38 @@ function notaDoMulliganHTML(j, ij){
       : `fica com <b>${j.mao.length}</b>`}.${depois}</p>`;
 }
 
-function controlesDaMaoHTML(j, ij){
-  if (j.fase === "jogo"){
-    return `<div class="gf-acoes">
-      <button class="btn" data-gf-acao="comprar:${ij}">Comprar 1</button>
-      <button class="btn" data-gf-acao="buscar:${ij}:baralho">Buscar no deck</button>
-      <button class="btn" data-gf-acao="ficha:${ij}">Criar ficha</button>
-    </div>`;
-  }
+function controlesDoMulliganHTML(j, ij){
   return notaDoMulliganHTML(j, ij) + (j.fase === "fundo" ? "" : `<div class="gf-acoes">
       <button class="btn ouro" data-gf-acao="manter:${ij}">Manter esta mão</button>
       <button class="btn" data-gf-acao="mulligan:${ij}">Mulligan</button>
     </div>`);
 }
 
-/* Os controles da mão ficam do lado de fora, na borda de quem joga: embaixo
-   da mão de quem está embaixo, e em cima da de quem está em cima. */
+/* De cima pra baixo, quem está embaixo: campo de batalha, as duas linhas de
+   zonas e a barra. Quem está em cima tem a mesma ordem de baixo pra cima. */
 function jogadorHTML(j, ij, mesa, espelhado){
-  const dois = mesa.jogadores.length > 1;
-  const eleJoga = dois && mesa.ativo === ij;
-  const cabeca = `<div class="gf-cabeca">
-      ${dois ? `<b class="gf-nome-j">${escapar(j.nome)}</b>` : ""}
-      ${eleJoga ? `<span class="gf-vez">é a vez</span>` : ""}
-      ${vidaHTML(j, ij)}
-      ${danoHTML(j, ij, mesa)}
-      ${marcasDoJogadorHTML(j, ij)}
-    </div>
-    ${zonasHTML(j, ij)}`;
-  const partes = espelhado
-    ? [cabeca, controlesDaMaoHTML(j, ij), maoEComandoHTML(j, ij),
-       terrenosHTML(j, ij), campoDeBatalhaHTML(j, ij, true)]
-    : [cabeca, campoDeBatalhaHTML(j, ij, false), terrenosHTML(j, ij),
-       maoEComandoHTML(j, ij), controlesDaMaoHTML(j, ij)];
-  return `<section class="gf-jogador${eleJoga ? " ativo" : ""}${
+  const partes = [campoDeBatalhaHTML(j, ij), zonasHTML(j, ij, mesa, espelhado),
+                  barraHTML(j, ij, mesa)];
+  if (espelhado) partes.reverse();
+  const ativo = mesa.jogadores.length > 1 && mesa.ativo === ij;
+  return `<section class="gf-jogador${ativo ? " ativo" : ""}${
     espelhado ? " espelhado" : ""}" data-gf-j="${ij}">${partes.join("")}</section>`;
 }
 
-/* ------------------------------------------------------- rodapé e log */
-
-function rodapeHTML(m){
-  const emCombate = atacantes().length ||
-    m.jogadores.some(j => j.campo.some(c => c.bloqueando));
-  return `<div class="gf-acoes gf-rodape">
-    <button class="btn ouro" data-gf-acao="turno">Passar turno (compra 1)</button>
-    ${emCombate ? `<button class="btn" data-gf-acao="combate">Fim do combate</button>` : ""}
-  </div>`;
-}
+/* ---------------------------------------------------------------- log */
 
 /* O log fica fechado, e aberto continua aberto: ele é conferência depois do
-   fato ("em que turno eu baixei aquilo?"), não o assunto da tela. O estado do
-   `details` mora na mesa porque o desenho reescreve o HTML a cada clique — um
-   `open` nascido do HTML fecharia sozinho a cada jogada. */
+   fato ("em que turno eu baixei aquilo?"), não o assunto da tela — por isso
+   mora na coluna do painel, e não embaixo da mesa. O estado de aberto mora na
+   mesa porque o desenho reescreve o HTML a cada clique, e um `open` nascido do
+   HTML fecharia sozinho a cada jogada. */
 function logHTML(m){
   if (!m.log.length) return "";
   const linhas = m.log.slice().reverse().map(l =>
     `<li><span class="gf-log-t">T${l.turno}</span> ${escapar(l.texto)}</li>`).join("");
-  return `<div class="gf-log">
-    <button class="gf-log-cabeca" data-gf-acao="log" aria-expanded="${m.logAberto}"
+  return `<button class="gf-log-cabeca" aria-expanded="${m.logAberto}"
       >${m.logAberto ? "▾" : "▸"} Log da partida <b>${m.log.length}</b></button>
-    ${m.logAberto ? `<ol class="gf-log-lista">${linhas}</ol>` : ""}
-  </div>`;
+    ${m.logAberto ? `<ol class="gf-log-lista">${linhas}</ol>` : ""}`;
 }
 
 function tituloDoTurno(m){
@@ -449,8 +509,12 @@ export function desenharMesa(){
   $("gf-desfazer").disabled = !estado.mesaDesfazer.length;
   $("gf-segundo").disabled = !m;
   $("gf-encerrar").disabled = !m;
+  $("gf-passar").disabled = !m;
+  $("gf-fim-combate").hidden = !(m && (atacantes().length ||
+    m.jogadores.some(j => j.campo.some(c => c.bloqueando))));
   if (!m){
     $("gf-turno").textContent = "";
+    $("gf-log").innerHTML = "";
     alvo.innerHTML = `<div class="gf-vazio">Clique em <b>Embaralhar</b> pra
       começar. O comandante vai pra zona de comando; o sideboard e o maybeboard
       ficam de fora, como em toda análise desta tela.</div>`;
@@ -466,8 +530,8 @@ export function desenharMesa(){
   // O segundo jogador vem primeiro: ele é o lado de cima da mesa espelhada.
   const ordem = dois ? [1, 0] : [0];
   alvo.innerHTML =
-    `<div class="gf-jogadores">${ordem.map(ij =>
-      jogadorHTML(m.jogadores[ij], ij, m, dois && ij === 1)).join("")}</div>` +
-    rodapeHTML(m) + logHTML(m);
+    `<div class="gf-jogadores${dois ? " dois" : ""}">${ordem.map(ij =>
+      jogadorHTML(m.jogadores[ij], ij, m, dois && ij === 1)).join("")}</div>`;
+  $("gf-log").innerHTML = logHTML(m);
   atualizarPainel();
 }
