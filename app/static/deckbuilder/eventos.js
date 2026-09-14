@@ -8,6 +8,7 @@ import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,
         escolherPorPagina, ligarTecladoDaBusca, ultimosResultados,
         virarPagina} from "./busca.js";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
+import {linkDeConta} from "./conta.js";
 import {adicionarPeca} from "./combos.js";
 import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
 import {alternarCotacao, fecharCotacao} from "./cotacao.js";
@@ -487,6 +488,11 @@ function menuDoCabecalho(){
   itens.push("risco");
   itens.push({rotulo: "Novo deck", href: location.pathname, aoClicar: comecarNovo});
   itens.push({rotulo: "Imprimir proxies", href: "/"});
+  if (!estado.usuario){
+    itens.push("risco");
+    itens.push({rotulo: "Entrar", href: linkDeConta("entrar")});
+    itens.push({rotulo: "Criar conta", href: linkDeConta("cadastro")});
+  }
   return itens;
 }
 

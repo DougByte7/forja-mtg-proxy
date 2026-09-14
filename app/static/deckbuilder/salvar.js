@@ -113,6 +113,10 @@ export async function salvarAgora(){
   // Deck sem comandante e sem carta não vira registro no servidor: senão cada
   // pessoa que só abriu a página deixaria um deck vazio pra trás.
   if (!estado.comandantes.length && !estado.cartas.length) return;
+  if (!estado.usuario){
+    marcarEstado("entre na sua conta pra salvar", "erro");
+    return;
+  }
   salvando = true;
   marcarEstado("salvando…");
   try {
@@ -175,9 +179,9 @@ export async function salvarJa(){
 
 /* ------------------------------------------------- meus decks (localStorage)
 
-   Mesma escolha da tela "Meus Pedidos": não existe login, então a lista de
-   quem montou o quê mora no navegador de quem montou. O servidor guarda os
-   decks e não sabe de quem são. */
+   Os decks abertos neste navegador, inclusive os que outra pessoa
+   compartilhou — que não são da conta de quem abriu e por isso não saem no
+   `/decks/meus`. A tela "Meus decks" junta as duas listas. */
 const CHAVE = "forja.decks";
 
 export function lidos(){

@@ -618,6 +618,22 @@
   </div>
 </div>
 
+<!-- Convite pra quem abre a tela sem conta. Nasce escondido e o texto é
+     posto por `convidarAEntrar`: muda quando há um deck aberto, porque aí a
+     pessoa veio olhar um link, não montar. "Só olhar" fecha e deixa a tela
+     à mão — abrir baralho não pede conta. -->
+<div class="orfao-fundo" id="convite-fundo" hidden>
+  <div class="orfao-caixa" role="dialog" aria-modal="true" aria-labelledby="convite-titulo">
+    <h3 id="convite-titulo">Entre pra montar seu baralho</h3>
+    <p id="convite-texto"></p>
+    <div class="orfao-acoes">
+      <button class="btn" id="convite-olhar" type="button">Só olhar</button>
+      <a class="btn" id="convite-entrar" href="/entrar">Entrar</a>
+      <a class="btn ouro" id="convite-cadastro" href="/cadastro">Criar conta</a>
+    </div>
+  </div>
+</div>
+
 <!-- ================= escolher a arte =================
      Duas listas, e a diferença entre elas é a coisa mais importante desta
      tela: em cima, as impressões OFICIAIS da Scryfall — servem pra achar,

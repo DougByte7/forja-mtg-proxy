@@ -1,13 +1,12 @@
 """
 Decks de Commander: as regras do formato e onde eles ficam guardados.
 
-SEM LOGIN, COMO O RESTO DO SISTEMA. Não existe conta de usuário aqui (ver o
-README, "Meus Pedidos"), e inventar uma só pro deckbuilder seria a maior
-mudança do projeto por causa da menor tela dele. Então vale a mesma regra dos
-pedidos: **quem tem o id, mexe**. O navegador guarda a lista de decks daquela
-pessoa no `localStorage`; o servidor guarda os decks e não sabe de quem são.
+CRIAR E ALTERAR PEDE CONTA; ABRIR, NÃO. Quem decide é a rota
+(`main.exige_login_no_deck` e `main._pode_mexer`); este módulo guarda o
+`dono` de cada deck e não confere nada. Abrir fica livre porque compartilhar o
+link é a razão de o link existir.
 
-A diferença pro pedido é o tamanho do id: 12 dígitos hex em vez de 8. Um
+O id tem 12 dígitos hex, e não 8 como o do pedido. Um
 pedido chutado por sorte só pode ser cancelado (e isso fica no histórico);
 um deck chutado por sorte pode ser REESCRITO, e o estrago aí é o trabalho de
 montar o deck. 12 dígitos custam nada e tiram a força bruta da mesa.
@@ -329,11 +328,11 @@ def _guardaveis(cartas, maybeboard, categorias) -> tuple[list, list, list]:
 
 def criar(nome: str = "", comandantes=None, cartas=None, maybeboard=None,
           categorias=None, dono: str | None = None) -> dict:
-    """Cria um deck. `dono` é opcional e vem de quem está logado, se houver.
+    """Cria um deck. `dono` vem de quem está logado.
 
-    Anônimo cria deck órfão, e órfão é um estado normal, não um defeito: é
-    como todo deck deste sistema existiu até o login aparecer, e continua
-    sendo o que acontece pra quem prefere não ter conta.
+    É opcional aqui porque órfão é um estado normal, não um defeito: o admin
+    apagar uma conta devolve os decks dela a esse estado, e qualquer conta
+    pode reclamá-los.
     """
     deck_id = uuid.uuid4().hex[:12]
     agora = time.time()
@@ -385,7 +384,7 @@ def salvar(deck_id: str, nome: str, comandantes, cartas, maybeboard=None,
 
 def duplicar(deck_id: str) -> dict | None:
     """Cópia com id novo — é o "fork" de quem quer variar um deck sem perder
-    o original, e o único jeito de "salvar como" num sistema sem login.
+    o original, e o "salvar como" deste sistema.
 
     As artes escolhidas vão junto: escolher arte é o trabalho mais chato de um
     deck, e quem duplica quer a cópia igual — inclusive nisso.

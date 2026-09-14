@@ -40,6 +40,11 @@ sys.path.insert(0, str(RAIZ))
 TMP = tempfile.mkdtemp(prefix="teste-decks-")
 os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
 os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
+# As rotas das versões pedem conta. O `app.main` é importado mais de uma vez
+# neste arquivo, e os dois valores são lidos no primeiro import: sem o
+# SESSAO_SEGURA desligado o cookie não é gravado em http://testserver.
+os.environ["SENHA_ITERACOES"] = "1000"
+os.environ["SESSAO_SEGURA"] = "0"
 
 from app import cartas, cotacao, decks  # noqa: E402
 
@@ -655,9 +660,16 @@ try:
         print("PULADO: fastapi não está instalado")
     else:
         os.chdir(RAIZ)
+        from app import usuarios
         from app.main import app
 
+        # Gravar deck pede conta (ver `test_login.py`); aqui a conta é só o
+        # ingresso pras rotas das versões.
+        usuarios.init_db()
+        usuarios.criar("montador", "senha-do-montador")
         cliente = TestClient(app)
+        cliente.post("/conta/entrar",
+                     json={"login": "montador", "senha": "senha-do-montador"})
         rd = decks.criar("Pela rota", ["Atraxa"], cem())
         resp = cliente.put(f"/decks/{rd['id']}", json={
             "nome": "Pela rota", "comandantes": ["Atraxa"], "cartas": cem()})
@@ -681,8 +693,10 @@ try:
         eq("concluir deck que não existe é 404",
            cliente.post("/decks/naoexiste123/versoes").status_code, 404)
 
+        eq("sem conta não conclui versão",
+           TestClient(app).post(f"/decks/{rd['id']}/versoes").status_code, 401)
         decks.definir_dono(rd["id"], "alguem")
-        eq("deck com dono: anônimo não conclui versão",
+        eq("deck de outra pessoa: não conclui versão",
            cliente.post(f"/decks/{rd['id']}/versoes").status_code, 403)
 
 finally:

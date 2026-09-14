@@ -1,21 +1,23 @@
 """
-Confere que o login é OPCIONAL e ADITIVO.
+Confere o que a conta abre e o que ela protege.
 
-MOTIVO DE EXISTIR, e ele cabe numa frase: **quem não tem conta tem que
-continuar usando o site exatamente como antes desta tabela existir.** Este
-projeto inteiro foi construído sobre "quem tem o id, mexe" — sem cadastro,
-sem sessão, sem nada. Acrescentar login é o tipo de mudança que fecha portas
-sem querer, e o sintoma não é erro de teste: é uma pessoa que não consegue
-mais salvar o deck que estava montando.
+MOTIVO DE EXISTIR, e a regra cabe numa frase: **deck se cria e se altera com
+conta; abrir deck e fazer pedido, não.** Conta é o tipo de coisa que fecha
+portas sem querer — ou deixa abertas —, e o sintoma não é erro de teste: é um
+link compartilhado que parou de abrir, ou um anônimo reescrevendo o deck de
+alguém.
 
-Por isso a PRIMEIRA seção é a do anônimo, e ela é a mais importante do
-arquivo. As outras protegem o que o login promete em troca:
+Por isso a PRIMEIRA seção é a do anônimo: ele abre qualquer deck e não mexe
+em nenhum, nem no órfão. As outras protegem o resto:
 
 * deck com dono só é gravado pelo dono (e pelo admin) — mas continua ABRINDO
   pra qualquer um, porque compartilhar o link é a razão de o link existir;
 * reclamar órfão nunca tira nada de ninguém: só pega o que não tem dono;
 * `GET /decks/meus` é listagem, e não "o deck de id `meus`" — a armadilha de
   ordem de rota do FastAPI, que falha em silêncio e pra sempre;
+* o cadastro só cria conta com o token de acesso, e confere o token antes de
+  dizer "já existe conta com esse e-mail" — senão a tela contaria quem tem
+  conta a quem não foi convidado;
 * o `ADMIN_TOKEN` continua abrindo o painel, porque ele é a chave da casa:
   funciona de `curl`, sem cookie e sem banco, e é o que resta quando a tabela
   de usuários está vazia ou alguém esqueceu a senha.
@@ -47,6 +49,8 @@ os.environ["SENHA_ITERACOES"] = "1000"
 # e nada aqui entraria. É a MESMA pegadinha que derruba o login na rede local,
 # e é por isso que a variável existe.
 os.environ["SESSAO_SEGURA"] = "0"
+CONVITE = "convite-do-grupo"
+os.environ["CADASTRO_TOKEN"] = CONVITE
 
 try:
     from fastapi.testclient import TestClient
@@ -94,21 +98,30 @@ try:
     anonimo = TestClient(app)
 
     # =====================================================================
-    print("\n--- o anônimo continua funcionando (a promessa da etapa) ---")
+    print("\n--- o anônimo abre deck, mas não cria nem altera ---")
     # =====================================================================
 
-    r = anonimo.post("/decks", json={"nome": "Deck de ninguém"})
-    eq("anônimo cria deck", r.status_code, 200)
-    orfao = r.json()["deck"]["id"]
-
+    orfao = decks.criar("Deck de ninguém")["id"]
     eq("anônimo lê", anonimo.get(f"/decks/{orfao}").status_code, 200)
-    eq("anônimo grava",
+
+    r = anonimo.post("/decks", json={"nome": "Sem conta"})
+    eq("anônimo não cria deck", r.status_code, 401)
+    check("e a recusa diz que é por conta", "conta" in r.json()["detail"],
+          r.json())
+    # Nem o órfão: sem esta linha, "precisa de conta pra criar" seria
+    # contornado abrindo qualquer link de deck sem dono e reescrevendo.
+    eq("não grava nem deck sem dono",
        anonimo.put(f"/decks/{orfao}",
                    json={"nome": "Mudei o nome", "comandantes": [],
-                         "cartas": []}).status_code, 200)
-    eq("anônimo duplica",
-       anonimo.post(f"/decks/{orfao}/duplicar").status_code, 200)
-    eq("anônimo apaga", anonimo.delete(f"/decks/{orfao}").status_code, 200)
+                         "cartas": []}).status_code, 401)
+    eq("não duplica", anonimo.post(f"/decks/{orfao}/duplicar").status_code, 401)
+    eq("não apaga", anonimo.delete(f"/decks/{orfao}").status_code, 401)
+    eq("não escolhe arte",
+       anonimo.put(f"/decks/{orfao}/artes", json={}).status_code, 401)
+    eq("não conclui versão",
+       anonimo.post(f"/decks/{orfao}/versoes").status_code, 401)
+    eq("e o deck continua como estava", decks.obter(orfao)["nome"],
+       "Deck de ninguém")
 
     eq("e a rota de conta não erra pra quem não tem conta",
        anonimo.get("/conta").status_code, 200)
@@ -151,6 +164,11 @@ try:
     # =====================================================================
 
     meu = c_ana.post("/decks", json={"nome": "Deck da Ana"}).json()["deck"]["id"]
+    eq("o deck nasce de quem criou", decks.dono_de(meu)[1], ana["id"])
+    eq("com conta, grava deck sem dono",
+       c_ana.put(f"/decks/{orfao}",
+                 json={"nome": "Agora sim", "comandantes": [],
+                       "cartas": []}).status_code, 200)
     c_beto = cliente_logado("beto", "senha-do-beto-1")
     c_chefe = cliente_logado("chefe", "senha-do-chefe-1")
 
@@ -158,8 +176,10 @@ try:
     # Ler continua aberto: compartilhar o link é a razão de o link existir.
     eq("anônimo ainda ABRE o deck de outra pessoa",
        anonimo.get(f"/decks/{meu}").status_code, 200)
-    eq("mas não grava", anonimo.put(f"/decks/{meu}", json=corpo).status_code, 403)
-    eq("e não apaga", anonimo.delete(f"/decks/{meu}").status_code, 403)
+    # 401 e não 403: pra quem não tem conta, a resposta útil é "entre", não
+    # "é de outra pessoa".
+    eq("mas não grava", anonimo.put(f"/decks/{meu}", json=corpo).status_code, 401)
+    eq("e não apaga", anonimo.delete(f"/decks/{meu}").status_code, 401)
     eq("outro usuário também não",
        c_beto.put(f"/decks/{meu}", json=corpo).status_code, 403)
     eq("o dono grava", c_ana.put(f"/decks/{meu}", json=corpo).status_code, 200)
@@ -175,7 +195,7 @@ try:
     print("\n--- reclamar órfão ---")
     # =====================================================================
 
-    solto = anonimo.post("/decks", json={"nome": "Sem dono"}).json()["deck"]["id"]
+    solto = decks.criar("Sem dono")["id"]
     eq("anônimo não pode reclamar",
        anonimo.post(f"/decks/{solto}/reclamar").status_code, 401)
     eq("logado reclama", c_ana.post(f"/decks/{solto}/reclamar").status_code, 200)
@@ -324,6 +344,67 @@ try:
     # Trocar senha derruba TODAS as sessões, inclusive esta.
     eq("e a sessão de quem trocou cai junto",
        c_ana.get("/decks/meus").status_code, 401)
+
+    print("\n--- cadastro com token de acesso ---")
+
+    eq("a página /cadastro abre", anonimo.get("/cadastro").status_code, 200)
+    carla = TestClient(app)
+    base = {"nome": "Carla", "email": "Carla@Exemplo.com",
+            "senha": "senha-da-carla", "confirmacao": "senha-da-carla",
+            "token": CONVITE}
+
+    eq("sem token é 403",
+       carla.post("/conta/criar", json={**base, "token": ""}).status_code, 403)
+    eq("token errado é 403",
+       carla.post("/conta/criar", json={**base, "token": "chute"}).status_code, 403)
+    check("e nada foi criado",
+          all(u["login"] != "carla@exemplo.com" for u in usuarios.listar()))
+
+    # Sem CADASTRO_TOKEN no .env o cadastro fica fechado — inclusive pra
+    # quem manda o token vazio, que "bateria" com a configuração vazia.
+    guardado, usuarios.CADASTRO_TOKEN = usuarios.CADASTRO_TOKEN, ""
+    eq("sem token configurado, nem o vazio entra",
+       carla.post("/conta/criar", json={**base, "token": ""}).status_code, 403)
+    usuarios.CADASTRO_TOKEN = guardado
+
+    eq("confirmação diferente é 400",
+       carla.post("/conta/criar",
+                  json={**base, "confirmacao": "outra-senha"}).status_code, 400)
+    eq("e-mail sem forma de e-mail é 400",
+       carla.post("/conta/criar", json={**base, "email": "carla"}).status_code, 400)
+    eq("sem nome é 400",
+       carla.post("/conta/criar", json={**base, "nome": "  "}).status_code, 400)
+    eq("senha curta é 400",
+       carla.post("/conta/criar", json={**base, "senha": "curta",
+                                        "confirmacao": "curta"}).status_code, 400)
+
+    r = carla.post("/conta/criar", json=base)
+    eq("com o token certo, cria", r.status_code, 200)
+    eq("o e-mail vira o login, minúsculo", r.json()["usuario"]["login"],
+       "carla@exemplo.com")
+    eq("com o nome", r.json()["usuario"]["nome"], "Carla")
+    eq("e perfil cliente", r.json()["usuario"]["perfil"], "cliente")
+    check("a resposta não traz hash de senha", "pbkdf2" not in r.text)
+    eq("e já sai logada", (carla.get("/conta").json()["usuario"] or {}).get("login"),
+       "carla@exemplo.com")
+    eq("pronta pra criar deck",
+       carla.post("/decks", json={"nome": "Deck da Carla"}).status_code, 200)
+    eq("e entra depois com o e-mail",
+       TestClient(app).post("/conta/entrar",
+                            json={"login": "carla@exemplo.com",
+                                  "senha": "senha-da-carla"}).status_code, 200)
+
+    # O token vem antes de "já existe": sem ele, a tela não conta quem tem conta.
+    eq("e-mail repetido sem o token não diz que existe",
+       anonimo.post("/conta/criar", json={**base, "token": "chute"}).status_code, 403)
+    r = anonimo.post("/conta/criar", json=base)
+    eq("e-mail repetido com o token é 400", r.status_code, 400)
+    check("com a razão", "Já existe" in r.json()["detail"], r.json())
+
+    for _ in range(usuarios.MAX_TENTATIVAS):
+        anonimo.post("/conta/criar", json={**base, "token": "chute"})
+    eq("chutar o token várias vezes liga o freio",
+       anonimo.post("/conta/criar", json=base).status_code, 429)
 
     print("\n--- sair ---")
 

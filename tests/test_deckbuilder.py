@@ -639,6 +639,9 @@ try:
     # clique que sempre volta com "não".
     versao = avaliar("""
     var r = {};
+    estado.usuario = null;
+    r.anonimo = bloqueioDeConcluir();
+    estado.usuario = {id: "eu", perfil: "cliente"};
     estado.versao = null;
     r.wipInvalido = bloqueioDeConcluir();
     desenharVersao();
@@ -670,6 +673,8 @@ try:
     r.historico = $("historico-resultado").innerHTML;
     JSON.stringify(r);
     """)
+    check("sem conta não conclui", "conta" in versao["anonimo"],
+          versao["anonimo"])
     check("WIP com lista incompleta diz quantas faltam",
           "Faltam" in versao["wipInvalido"], versao["wipInvalido"])
     eq("deck sem versão é WIP, sem aba de histórico",

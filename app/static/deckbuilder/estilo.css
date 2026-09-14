@@ -1303,7 +1303,8 @@ body.gf-cheia .gf-jogador{gap:6px;}
 .orfao-caixa h3{font-family:'Cinzel',serif;font-size:17px;margin:0 0 8px;}
 .orfao-caixa p{color:var(--text-muted);font-size:13.5px;line-height:1.55;
   margin:0 0 16px;}
-.orfao-acoes{display:flex;gap:8px;justify-content:flex-end;}
+.orfao-acoes{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
+.orfao-acoes a.btn{text-decoration:none;}
 
 /* ---------------- símbolos de mana ---------------- */
 .mana{display:inline-flex;gap:2px;align-items:center;flex:none;}

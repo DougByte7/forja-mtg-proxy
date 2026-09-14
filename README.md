@@ -429,12 +429,13 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /decks/{id}/artes/revalidar` | antes de imprimir | pergunta se os ids guardados ainda existem na biblioteca |
 | `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
 | `GET /conta` | todas as telas | quem está logado, ou `{usuario: null}`. **200 pra anônimo**, não 401 |
-| `POST /conta/entrar` | /entrar | confere a senha e devolve o cookie de sessão |
+| `POST /conta/entrar` | /entrar | confere a senha e devolve o cookie de sessão. O login é o e-mail, pra quem se cadastrou |
+| `GET /cadastro` · `POST /conta/criar` | /cadastro | cria conta `cliente` com nome, e-mail, senha, confirmação e o **token de acesso** (`CADASTRO_TOKEN`), e já devolve o cookie. 403 com token errado, 429 com o freio |
 | `POST /conta/sair` · `POST /conta/senha` | cabeçalho | encerra a sessão deste aparelho; troca a própria senha (pede a atual, e derruba todas as sessões) |
 | `GET /decks/meus` · `GET /pedidos/meus` | listagens | o que é da conta, de qualquer aparelho |
 | `POST /decks/{id}/reclamar` | deckbuilder | vira dono de um deck órfão. 409 se já tem dono |
 | `POST /pedidos/reclamar` | home | carimba os pedidos órfãos do `localStorage`. Roda sozinho ao abrir |
-| `GET/POST /admin/usuarios`, `POST /admin/usuarios/{id}/senha`, `DELETE …` | admin | as contas. Não existe cadastro aberto |
+| `GET/POST /admin/usuarios`, `POST /admin/usuarios/{id}/senha`, `DELETE …` | admin | as contas, com login e perfil à escolha. O outro caminho é o `/cadastro`, com token |
 | `GET /admin/decks` | admin | **todos** os baralhos do banco, com o dono de cada um, mais `contagem.sem_dono`. Única leitura do projeto que enumera decks — por isso atrás do `_check_admin` |
 | `GET /meus-decks` | navegador | a tela que lista os decks deste navegador — só a casca, sem deck nenhum dentro |
 | `POST /decks/resumo` | página de decks | recebe `{ids:[…]}` e devolve os metadados de cada um (nome, comandante, arte, X/100, quando mexeu) mais os que não existem mais. Nunca lista o banco |
@@ -442,11 +443,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /cartas/detalhe?nome=…` | deckbuilder | a carta inteira pra modal: edição, raridade, artista, ambientação e as **notas de regras** (rulings). Vem da API da Scryfall, com cache de um dia |
 | `POST /admin/cartas/sync` | você (`X-Admin-Token`) | refaz a base de cartas na hora. Baixa 100+ MB da Scryfall, daí o token |
 | `POST /decks/importar` | botão **Importar** | traz um deck do Archidekt/Moxfield pelo link, ou de uma lista colada. Devolve as cartas resolvidas na base local + o que ela não conhece. Não grava nada |
-| `POST /decks` | deckbuilder | cria o deck e devolve o id (12 dígitos hex). O corpo aceita `cartas` (cada uma com `categoria` opcional), `maybeboard` e `categorias` |
+| `POST /decks` | deckbuilder | **pede conta**. Cria o deck, de quem criou, e devolve o id (12 dígitos hex). O corpo aceita `cartas` (cada uma com `categoria` opcional), `maybeboard` e `categorias` |
 | `GET /decks/{id}` | deckbuilder | o deck com as cartas resolvidas e a validação junto |
-| `PUT /decks/{id}` | deckbuilder | grava o deck por cima, com os mesmos campos do POST. É o autosave — a validação vai na resposta mas não impede de gravar |
-| `POST /decks/{id}/duplicar` | deckbuilder | cópia com id novo (o "salvar como" de um sistema sem login) |
-| `DELETE /decks/{id}` | deckbuilder | apaga o deck. Não tem volta |
+| `PUT /decks/{id}` | deckbuilder | **pede conta**. Grava o deck por cima, com os mesmos campos do POST. É o autosave — a validação vai na resposta mas não impede de gravar |
+| `POST /decks/{id}/duplicar` | deckbuilder | **pede conta**. Cópia com id novo, de quem duplicou (o "salvar como") |
+| `DELETE /decks/{id}` | deckbuilder | **pede conta**. Apaga o deck. Não tem volta |
 | `POST /decks/{id}/versoes` | pílula da versão | conclui a próxima versão com a lista gravada (comandantes, deck e sideboard). WIP só vira v0 com a lista válida; depois, cada versão precisa de lista diferente da anterior. 409 com o motivo quando não cabe |
 | `GET /decks/{id}/versoes` | aba **Histórico** | as versões da mais nova pra mais antiga, cada uma com o que entrou e saiu, e em `pendente` o que mudou desde a última |
 | `GET /decks/{id}/lista` | deckbuilder | a decklist em texto, comandante primeiro — é o que se cola no MPC Fill. Leva o sideboard, não leva o maybeboard |
@@ -735,10 +736,11 @@ divirjam calado.
 
 ### Onde os decks ficam
 
-Não há login, pela mesma razão do resto do sistema: **quem tem o id, mexe**. O
-servidor guarda os decks e não sabe de quem são; a lista "Meus decks" mora no
-`localStorage` do navegador, igual à tela *Meus Pedidos*. **Compartilhar**
-copia o link — quem abrir vê e edita o mesmo deck.
+Os decks ficam no servidor, com o dono de cada um. A lista "Meus decks" junta
+os da conta (`GET /decks/meus`) com os abertos naquele navegador, que moram
+no `localStorage` — inclusive os que outra pessoa compartilhou.
+**Compartilhar** copia o link: quem abrir vê o deck; editar pede conta, e deck
+com dono só o dono edita (ver *Conta e cadastro*).
 
 A diferença pro pedido é o tamanho do id: **12 dígitos hex, não 8**. Um pedido
 acertado por sorte só pode ser cancelado, e isso fica no histórico; um deck
@@ -1127,30 +1129,47 @@ Apagar pede o **id digitado** na caixa de confirmação, como os pedidos já
 pediam, e o texto diz o que a lista esconde: o deck é de quem montou, não do
 sistema — ela não é avisada, e o link que guardou simplesmente para de abrir.
 
-### Login opcional
+### Conta e cadastro
 
-Entrar **não destranca nada**. Quem não tem conta monta deck, salva,
-compartilha e faz pedido exatamente como antes desta seção existir — o
-`tests/test_login.py` abre justamente por aí, porque essa é a promessa que uma
-mudança futura pode quebrar sem dar erro nenhum. O que a conta acrescenta é
-**dono**, e com dono vêm "os meus baralhos" em qualquer aparelho, em vez de só
-no navegador onde foram montados.
+A regra cabe numa frase: **deck se cria e se altera com conta; abrir deck e
+fazer pedido, não.** O link compartilhado continua abrindo pra qualquer um —
+compartilhar é a razão de o link existir —, e quem abre o deckbuilder sem
+conta recebe o convite de entrar ou criar uma. O `tests/test_login.py` abre
+justamente pelo anônimo: ele lê qualquer deck e não grava em nenhum, nem no
+órfão, senão "precisa de conta pra criar" seria contornado abrindo um link
+sem dono. Com conta vem **dono**, e com dono vêm "os meus baralhos" em
+qualquer aparelho, em vez de só no navegador onde foram montados.
 
-A regra de autorização mora numa função só (`main._pode_mexer`) e vale para
-deck e pedido:
+Quem cria e altera deck passa pelo `main.exige_login_no_deck` (criar, gravar,
+duplicar, apagar, escolher arte, concluir versão). Depois dele, a regra de
+dono mora numa função só (`main._pode_mexer`) e vale para deck e pedido:
 
-* **Sem dono** → qualquer um mexe, inclusive anônimo. É o sistema de sempre.
-* **Com dono** → só o dono e o admin gravam ou apagam. O link continua
-  **abrindo** pra qualquer um, porque compartilhar é a razão de o link existir.
+* **Sem dono** → qualquer um que chegou até ali mexe. No pedido, inclusive
+  anônimo; no deck, qualquer conta.
+* **Com dono** → só o dono e o admin gravam ou apagam.
 
-Ler nunca passa por lá. E `duplicar` fica livre de propósito: é a válvula de
-escape de quem abriu o deck de outra pessoa e quis mexer — não altera o
-original, e a cópia nasce de quem duplicou.
+Ler nunca passa por lá. E `duplicar` fica livre pra qualquer conta, de
+propósito: é a válvula de escape de quem abriu o deck de outra pessoa e quis
+mexer — não altera o original, e a cópia nasce de quem duplicou.
+
+#### Cadastro com token de acesso
+
+A conta nasce de dois jeitos: pelo admin (`POST /admin/usuarios`, qualquer
+login e perfil) ou pela própria pessoa em **`/cadastro`** — nome, e-mail,
+senha, confirmação e o **token de acesso**, que é o `CADASTRO_TOKEN` do
+`.env` passado pelo dono do sistema ao grupo. O e-mail vira o login.
+
+Isto não é uma loja, e um cadastro aberto de verdade é a primeira coisa que um
+bot acha. Com o token, o bot precisa adivinhá-lo — e o freio por IP (cinco
+chutes, trinta segundos) tira a força bruta da mesa. O token é conferido
+**antes** de "já existe conta com esse e-mail": sem ele, a tela não conta a
+ninguém quem tem conta. `CADASTRO_TOKEN` vazio fecha o cadastro. A conta
+criada já sai logada e volta pra tela que pediu (`?voltar=`).
 
 #### Reclamar órfão não tira nada de ninguém
 
-É o parágrafo que sustenta o resto. Antes da reclamação, **qualquer um com o
-id já podia reescrever aquele deck**. Depois dela, só o dono e o admin. A
+É o parágrafo que sustenta o resto. Antes da reclamação, **qualquer conta já podia
+reescrever aquele deck**. Depois dela, só o dono e o admin. A
 reclamação REDUZ o conjunto de quem edita — por isso ela pode ser
 primeiro-a-chegar sem virar um problema, e por isso o deckbuilder oferece
 reclamar **qualquer** órfão que a pessoa abra, e não só os que estão no

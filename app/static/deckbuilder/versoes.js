@@ -23,12 +23,13 @@ function ehWip(){
   return estado.versao?.atual == null;
 }
 
-/* Deck com dono só o dono e o admin alteram — a mesma regra do autosave, e
-   concluir versão é alterar o deck. */
+/* Concluir versão é alterar o deck, então vale a regra do autosave: pede
+   conta, e deck com dono só o dono e o admin alteram. */
 function podeConcluir(){
-  if (!estado.dono) return true;
   const u = estado.usuario;
-  return !!u && (u.id === estado.dono || u.perfil === "admin");
+  if (!u) return false;
+  if (!estado.dono) return true;
+  return u.id === estado.dono || u.perfil === "admin";
 }
 
 function dataCurta(ts){
@@ -43,6 +44,7 @@ function dataCurta(ts){
    servidor: o `mudou` que ele contou pode estar velho, então o clique fica
    liberado e quem responde é o servidor, depois de gravar. */
 function bloqueioDeConcluir(){
+  if (!estado.usuario) return "Entre na sua conta pra concluir versões.";
   if (!podeConcluir()) return "Só quem é dono do deck conclui versões.";
   if (ehWip()){
     const v = validacaoAtual();

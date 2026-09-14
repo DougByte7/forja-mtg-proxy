@@ -1,25 +1,29 @@
 """
-Contas e sessões. Login OPCIONAL e ADITIVO.
+Contas e sessões.
 
-O QUE ISTO NÃO MUDA. O sistema inteiro é "quem tem o id, mexe" (ver
-`decks.py` e `main.cancel_order`), e continua sendo. Ninguém precisa de conta
-pra montar deck, abrir um link compartilhado ou fazer pedido — quem não entra
-usa o site exatamente como antes desta tabela existir. Entrar acrescenta duas
-coisas e só: o deck ou pedido passa a ter DONO, e a pessoa passa a poder
-perguntar "quais são os meus" sem depender do `localStorage` daquele
-navegador.
+O QUE A CONTA DECIDE. Deck se cria, grava e apaga só com conta; abrir um deck
+continua livre pra qualquer um, porque compartilhar o link é a razão de o
+link existir. Pedido não pede conta: quem tem o id, mexe (ver
+`main.cancel_order`). Pra quem entra, a conta dá DONO ao que cria e responde
+"quais são os meus" sem depender do `localStorage` daquele navegador.
 
 A REGRA DE AUTORIZAÇÃO, que mora no `main._pode_mexer`:
 
-* deck/pedido SEM dono -> qualquer um mexe, inclusive anônimo. É o sistema
-  de sempre.
-* COM dono -> só o dono e o admin gravam ou apagam. O link continua ABRINDO
-  pra qualquer um, porque compartilhar deck é a razão de o link existir.
+* SEM dono -> qualquer um mexe. No pedido isso inclui o anônimo; no deck, a
+  rota já exigiu conta antes de perguntar (ver `main.exige_login_no_deck`).
+* COM dono -> só o dono e o admin gravam ou apagam.
 
 Ou seja: reclamar um órfão não tira de ninguém nada que a pessoa tivesse.
-Antes da reclamação qualquer um com o id já podia reescrever aquele deck;
+Antes da reclamação qualquer um com conta já podia reescrever aquele deck;
 depois, menos gente pode. A reclamação REDUZ o conjunto de quem edita, e é
 por isso que ela pode ser primeiro-a-chegar sem virar um problema.
+
+CADASTRO COM CONVITE. A conta é criada pelo admin ou pela própria pessoa em
+`/cadastro`, e o cadastro pede o `CADASTRO_TOKEN` do `.env` — a senha que o
+dono do sistema passa pro grupo de jogo. Um cadastro aberto de verdade é a
+primeira coisa que um bot acha; com o token, o bot precisa adivinhá-lo, e o
+freio por IP (`cadastrar`) tira a força bruta da mesa. Token vazio fecha o
+cadastro.
 
 SEM DEPENDÊNCIA NOVA. Senha é `hashlib.pbkdf2_hmac` da biblioteca padrão —
 o mesmo algoritmo que o Django usa —, comparação com `hmac.compare_digest`,
@@ -41,6 +45,7 @@ arquivo não pode ser um maço de sessões vivas.
 import hashlib
 import hmac
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -65,6 +70,13 @@ SESSAO_DIAS_LEMBRAR = float(os.environ.get("SESSAO_DIAS", "60"))
 
 PERFIS = ("admin", "cliente")
 
+# O convite do cadastro. Vazio = cadastro fechado, e só o admin cria conta.
+CADASTRO_TOKEN = os.environ.get("CADASTRO_TOKEN", "")
+
+# Forma de e-mail, e só a forma: conferir se a caixa existe pediria mandar
+# e-mail, e o que o login precisa é de um texto único que a pessoa lembre.
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
 # Freio de tentativa, em memória. Não vai pro banco de propósito: reiniciar o
 # processo limpar o freio é aceitável (quem reinicia o container é o dono), e
 # gravar cada senha errada num arquivo daria a quem lê o banco um mapa de
@@ -78,6 +90,12 @@ _trava = threading.Lock()
 class SenhaFraca(ValueError):
     """Senha curta demais. Separada de `ValueError` cru pra a rota poder
     devolver 400 com a mensagem certa sem adivinhar pelo texto."""
+
+
+class CadastroFechado(PermissionError):
+    """Sem `CADASTRO_TOKEN` no `.env`, ou com o token errado. Uma classe só
+    pros dois: dizer "o cadastro está fechado" a quem errou o token contaria
+    que existe um."""
 
 
 def _conn():
@@ -350,6 +368,19 @@ def entrar(login: str, senha: str, lembrar: bool = False,
         return None
     _acertou(login)
 
+    token, duracao = abrir_sessao(linha["id"], lembrar, agente)
+    log.evento("usuarios", "entrou", login=login, lembrar=bool(lembrar))
+    return _publico(linha), token, duracao
+
+
+def abrir_sessao(usuario_id: str, lembrar: bool = False,
+                 agente: str = "") -> tuple[str, int]:
+    """Cria a sessão de uma conta já conferida. Devolve `(token_cru, duracao)`.
+
+    Não confere senha: é o passo que vem DEPOIS de conferir, dividido entre o
+    `entrar` e o `cadastrar` — este último acabou de cifrar a senha, e
+    conferi-la de novo custaria mais meio segundo pra saber o que já se sabe.
+    """
     duracao = int((SESSAO_DIAS_LEMBRAR * 86400) if lembrar
                   else (SESSAO_HORAS * 3600))
     token = secrets.token_urlsafe(32)
@@ -359,15 +390,53 @@ def entrar(login: str, senha: str, lembrar: bool = False,
         conn.execute(
             "INSERT INTO sessoes (token, usuario_id, criado_em, expira_em, "
             "visto_em, agente) VALUES (?,?,?,?,?,?)",
-            (_achatar_token(token), linha["id"], agora, agora + duracao, agora,
+            (_achatar_token(token), usuario_id, agora, agora + duracao, agora,
              (agente or "")[:200]))
         conn.execute("UPDATE usuarios SET ultimo_acesso=? WHERE id=?",
-                     (agora, linha["id"]))
+                     (agora, usuario_id))
         conn.commit()
     finally:
         conn.close()
-    log.evento("usuarios", "entrou", login=login, lembrar=bool(lembrar))
-    return _publico(linha), token, duracao
+    return token, duracao
+
+
+def cadastrar(nome: str, email: str, senha: str, confirmacao: str,
+              convite: str, origem: str = "") -> dict:
+    """A conta que a própria pessoa cria em `/cadastro`. Perfil `cliente`.
+
+    O e-mail vira o login: é o texto único que a pessoa já sabe de cor, e
+    assim a tabela não ganha coluna nem a tela de entrar ganha campo.
+
+    O convite é conferido ANTES de tudo, inclusive antes de "já existe conta
+    com esse e-mail": sem o token, a tela não pode servir pra descobrir quem
+    tem conta. `origem` (o IP) é a chave do freio — o token é um só pro grupo
+    inteiro, então o que se freia é quem está chutando, não o token.
+
+    Levanta `PermissionError` com o freio ligado, `CadastroFechado` sem
+    token certo e `ValueError` (ou `SenhaFraca`) com a razão em português.
+    """
+    chave = "cadastro:" + (origem or "?")
+    espera = _freado(chave)
+    if espera:
+        raise PermissionError(
+            f"Muitas tentativas. Tente de novo em {int(espera) + 1} segundos.")
+    informado = str(convite or "").strip().encode("utf-8")
+    if not CADASTRO_TOKEN or not hmac.compare_digest(
+            informado, CADASTRO_TOKEN.encode("utf-8")):
+        _errou(chave)
+        log.aviso("usuarios", "cadastro-recusado", origem=origem or "?")
+        raise CadastroFechado("Token de acesso inválido.")
+    _acertou(chave)
+
+    nome = str(nome or "").strip()
+    email = achatar_login(email)
+    if not nome:
+        raise ValueError("Falta o nome.")
+    if not _EMAIL.match(email):
+        raise ValueError("Esse e-mail não parece válido.")
+    if str(senha or "") != str(confirmacao or ""):
+        raise ValueError("A confirmação não é igual à senha.")
+    return criar(email, senha, nome=nome, perfil="cliente")
 
 
 def da_sessao(token: str) -> dict | None:

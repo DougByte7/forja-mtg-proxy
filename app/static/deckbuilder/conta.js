@@ -1,23 +1,59 @@
 /* ------------------------------------------------------------------- conta
 
-   O login é OPCIONAL. Nada nesta tela depende dele: quem não entra monta,
-   salva e compartilha exatamente como antes de existir conta neste projeto.
-   O que ele acrescenta é dono — e, com dono, "os meus" em qualquer aparelho.
+   Criar e alterar baralho pede conta; abrir um, não. O link compartilhado
+   abre pra qualquer um, e quem chega sem conta recebe o convite de entrar ou
+   criar uma. Com conta vem dono — e, com dono, "os meus" em qualquer
+   aparelho.
 
-   `estado.usuario` é null pra anônimo, e null NÃO é erro aqui. */
+   `estado.usuario` é null pra anônimo. Não é erro: é quem está só olhando. */
 
 import {$} from "../comum/dom.js";
 import {estado} from "./estado.js";
 import {api} from "./salvar.js";
 import {toast} from "./utilidades.js";
 
-export async function carregarConta(){
+/* Sem conta legível (rede fora), a tela trata como anônimo: o servidor
+   recusaria a gravação do mesmo jeito, e o convite ao menos diz por quê. */
+export async function lerConta(){
   try {
     estado.usuario = (await api("/conta")).usuario || null;
   } catch (e){
-    return;   // sem conta legível, a tela é a de sempre
+    estado.usuario = null;
   }
+}
+
+/* Chamada com o deck já em mãos: o reclamar precisa saber se ele tem dono,
+   e o convite muda de texto quando há um deck aberto. */
+export function receberConta(){
   if (estado.usuario) oferecerReclamar();
+  else convidarAEntrar();
+}
+
+/* O caminho pra entrar ou criar conta, voltando pra esta mesma tela — com o
+   deck aberto, se houver um. */
+export function linkDeConta(pagina){
+  return `/${pagina}?voltar=${encodeURIComponent(location.pathname + location.search)}`;
+}
+
+function convidarAEntrar(){
+  if (estado.id){
+    $("convite-titulo").textContent = "Você está vendo este baralho";
+    $("convite-texto").textContent = "Pra editar ou montar o seu, entre " +
+      "na sua conta ou crie uma.";
+  } else {
+    $("convite-titulo").textContent = "Entre pra montar seu baralho";
+    $("convite-texto").textContent = "Criar um baralho pede uma conta. Sem " +
+      "entrar, você ainda abre os baralhos que compartilharem com você.";
+  }
+  $("convite-entrar").href = linkDeConta("entrar");
+  $("convite-cadastro").href = linkDeConta("cadastro");
+  $("convite-fundo").hidden = false;
+}
+
+export function ligarConvite(){
+  $("convite-olhar").addEventListener("click", () => {
+    $("convite-fundo").hidden = true;
+  });
 }
 
 /* Quem recusou, fica recusado. Sem isto, quem deixa um deck órfão de

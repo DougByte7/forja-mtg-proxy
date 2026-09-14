@@ -3,7 +3,7 @@
 import {$} from "../comum/dom.js";
 import {carregarArtes, ligarArte} from "./artes.js";
 import {buscar, buscarComandante, escolherDestino} from "./busca.js";
-import {carregarConta, ligarOrfao} from "./conta.js";
+import {lerConta, ligarConvite, ligarOrfao, receberConta} from "./conta.js";
 import {desenharTudo} from "./desenho.js";
 import {estado} from "./estado.js";
 import {ligarEventos} from "./eventos.js";
@@ -36,6 +36,7 @@ async function conferirBase(){
 async function abrir(){
   ligarEventos();
   ligarOrfao();
+  ligarConvite();
   ligarGoldfish();
   ligarArte();
   atualizarBotaoMeus();
@@ -49,6 +50,10 @@ async function abrir(){
   try {
     if (localStorage.getItem(CHAVE_TALVEZ) === "0") recolherTalvez(true);
   } catch(e){ /* navegador privado: a coluna abre, que é o padrão */ }
+
+  // Junto do deck, e não depois dele: o autosave pergunta se há conta, e a
+  // primeira carta pode entrar antes de um `/conta` que viesse em seguida.
+  const lendoConta = lerConta();
 
   const id = new URLSearchParams(location.search).get("deck");
   if (id){
@@ -79,8 +84,8 @@ async function abrir(){
 
   desenharTudo();
   // Depois do deck, de propósito: a oferta de reclamar precisa saber se este
-  // deck tem dono, e isso só se sabe com o deck em mãos.
-  carregarConta();
+  // deck tem dono, e o convite, se há deck aberto.
+  lendoConta.then(receberConta);
   // As artes escolhidas, uma vez: a lista desenha 100 botões e uma consulta
   // por botão seria 100 requisições.
   carregarArtes();

@@ -64,9 +64,9 @@ SESSAO_SEGURA = os.environ.get("SESSAO_SEGURA", "1") == "1"
 def quem_e(forja_sessao: str | None = Cookie(default=None)) -> dict | None:
     """Quem está pedindo, ou `None` pra anônimo — que NÃO é erro.
 
-    É a peça que faz o login ser ADITIVO: nenhuma rota fica fechada por causa
-    dela. Sem cookie, o sistema se comporta exatamente como antes de existir
-    conta neste projeto.
+    Não fecha rota nenhuma: quem fecha é o `exige_login` e o
+    `exige_login_no_deck`. Ler deck, cotar e fazer pedido seguem abertos pra
+    quem não tem cookie.
     """
     return usuarios.da_sessao(forja_sessao) if forja_sessao else None
 
@@ -78,11 +78,26 @@ def exige_login(quem: dict | None = Depends(quem_e)) -> dict:
     return quem
 
 
+def exige_login_no_deck(quem: dict | None = Depends(quem_e)) -> dict:
+    """Pras rotas que criam ou alteram deck: criar, gravar, duplicar, apagar,
+    escolher arte e concluir versão. Abrir o deck fica de fora, de propósito —
+    o link compartilhado abre pra qualquer um.
+
+    Separada do `exige_login` só pela mensagem: "pra ver isso" diante de um
+    autosave recusado mandaria a pessoa procurar o que não está escondido.
+    """
+    if not quem:
+        raise HTTPException(401, "Entre na sua conta pra criar ou alterar "
+                                 "baralhos.")
+    return quem
+
+
 def _pode_mexer(dono: str | None, quem: dict | None) -> bool:
     """Quem pode gravar e apagar. UMA função, vale pra deck e pra pedido.
 
-    * SEM dono -> qualquer um, inclusive anônimo. É o sistema de sempre:
-      quem tem o id, mexe.
+    * SEM dono -> qualquer um que tenha chegado até aqui. No pedido isso
+      inclui o anônimo; nas rotas de deck, o `exige_login_no_deck` já barrou
+      quem não tem conta.
     * COM dono -> só o dono e o admin. O link continua ABRINDO pra qualquer
       um, porque compartilhar deck é a razão de o link existir; o que fecha é
       gravar e apagar.
@@ -862,10 +877,8 @@ def conta_entrar(resposta: Response, request: Request,
                  corpo: dict = Body(default={})):
     """Confere a senha e abre a sessão, devolvendo o cookie.
 
-    Não existe cadastro aberto neste sistema: conta é criada pelo admin. O
-    README abre dizendo que isto não é uma loja — é ferramenta privada, de um
-    grupo de jogo —, e um `/conta/criar` público é a primeira coisa que um bot
-    encontra.
+    O `login` é o que a conta tem de login: o e-mail, pra quem se cadastrou
+    em `/cadastro`; o que o admin escolheu, pra quem ele criou.
     """
     try:
         aberta = usuarios.entrar(
@@ -884,6 +897,44 @@ def conta_entrar(resposta: Response, request: Request,
     resposta.set_cookie(
         COOKIE_SESSAO, token, max_age=duracao, httponly=True,
         samesite="lax", path="/", secure=SESSAO_SEGURA)
+    return {"usuario": usuario}
+
+
+@app.get("/cadastro")
+def pagina_de_cadastro():
+    """A tela de criar conta. Rota própria pra a URL não ter .html."""
+    return FileResponse("app/static/cadastro.html", media_type="text/html")
+
+
+@app.post("/conta/criar")
+def conta_criar(resposta: Response, request: Request,
+                corpo: dict = Body(default={})):
+    """Cria a conta com o token de acesso e já abre a sessão.
+
+    O token é o `CADASTRO_TOKEN` do `.env`, que o dono do sistema passa pro
+    grupo — isto não é uma loja, e um cadastro sem convite seria a primeira
+    coisa que um bot acharia (ver `usuarios.cadastrar`). Sai logado porque a
+    pessoa chegou aqui vindo de uma tela que pediu conta, e mandá-la digitar
+    de novo o que acabou de digitar seria o único passo sem motivo do fluxo.
+    """
+    try:
+        usuario = usuarios.cadastrar(
+            corpo.get("nome", ""), corpo.get("email", ""),
+            corpo.get("senha", ""), corpo.get("confirmacao", ""),
+            corpo.get("token", ""), origem=visitas.ip_do_pedido(request))
+    except usuarios.CadastroFechado as e:
+        raise HTTPException(403, str(e))
+    except PermissionError as e:
+        raise HTTPException(429, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    token, duracao = usuarios.abrir_sessao(
+        usuario["id"], agente=request.headers.get("user-agent", ""))
+    resposta.set_cookie(
+        COOKIE_SESSAO, token, max_age=duracao, httponly=True,
+        samesite="lax", path="/", secure=SESSAO_SEGURA)
+    log.evento("usuarios", "cadastrou", login=usuario["login"])
     return {"usuario": usuario}
 
 
@@ -1166,21 +1217,16 @@ def deck_medio(corpo: dict = Body(default={})):
 
 @app.post("/decks")
 def criar_deck(corpo: dict = Body(default={}),
-               quem: dict | None = Depends(quem_e)):
-    """Cria um deck e devolve o id.
+               quem: dict = Depends(exige_login_no_deck)):
+    """Cria um deck e devolve o id. Pede conta, e o deck nasce de quem criou.
 
-    Aberta pra qualquer um, com ou sem conta: quem tem o id, mexe. O id tem 12
-    dígitos hex — mais que os 8 do pedido, porque aqui o estrago de acertar um
-    por sorte é reescrever o deck de alguém (ver `decks.py`).
-
-    Quem está logado nasce dono; anônimo cria deck órfão, que é como todo deck
-    deste sistema existiu até o login aparecer.
+    O id tem 12 dígitos hex — mais que os 8 do pedido, porque aqui o estrago
+    de acertar um por sorte é reescrever o deck de alguém (ver `decks.py`).
     """
     try:
         deck = decks.criar(corpo.get("nome", ""), corpo.get("comandantes"),
                            corpo.get("cartas"), corpo.get("maybeboard"),
-                           corpo.get("categorias"),
-                           dono=quem["id"] if quem else None)
+                           corpo.get("categorias"), dono=quem["id"])
     except ValueError as e:
         raise HTTPException(400, str(e))
     log.evento("deck", "criou", deck=deck["id"])
@@ -1284,11 +1330,11 @@ def pedido_do_deck(deck_id: str):
 
 @app.put("/decks/{deck_id}/artes")
 def escolher_arte(deck_id: str, corpo: dict = Body(default={}),
-                  quem: dict | None = Depends(quem_e)):
+                  quem: dict = Depends(exige_login_no_deck)):
     """Grava a arte de uma carta deste deck.
 
-    Passa pela mesma regra de dono do autosave: deck órfão qualquer um mexe,
-    deck com dono só o dono e o admin. Escolher arte é editar o deck.
+    Passa pela mesma regra do autosave: pede conta, e deck com dono só o dono
+    e o admin mexem. Escolher arte é editar o deck.
     """
     _deck_ou_404(deck_id)
     existe, dono = decks.dono_de(deck_id)
@@ -1307,7 +1353,7 @@ def escolher_arte(deck_id: str, corpo: dict = Body(default={}),
 
 @app.delete("/decks/{deck_id}/artes")
 def limpar_arte(deck_id: str, nome: str, face: str = "frente",
-                quem: dict | None = Depends(quem_e)):
+                quem: dict = Depends(exige_login_no_deck)):
     """Volta uma carta pra arte padrão."""
     _deck_ou_404(deck_id)
     existe, dono = decks.dono_de(deck_id)
@@ -1373,13 +1419,13 @@ def obter_deck(deck_id: str):
 
 @app.put("/decks/{deck_id}")
 def salvar_deck(deck_id: str, corpo: dict = Body(...),
-                quem: dict | None = Depends(quem_e)):
+                quem: dict = Depends(exige_login_no_deck)):
     """Grava o deck por cima. É o autosave da tela.
 
     A validação vai na resposta, mas NÃO impede de gravar: deck pela metade é
     o estado normal de quem está montando (ver `decks.py`).
 
-    Deck órfão qualquer um grava, como sempre foi. Deck com dono, só ele e o
+    Pede conta. Deck órfão qualquer conta grava; deck com dono, só ele e o
     admin — e o `GET` acima continua aberto, porque compartilhar o link é a
     razão de o link existir.
     """
@@ -1399,24 +1445,24 @@ def salvar_deck(deck_id: str, corpo: dict = Body(...),
 
 
 @app.post("/decks/{deck_id}/duplicar")
-def duplicar_deck(deck_id: str, quem: dict | None = Depends(quem_e)):
+def duplicar_deck(deck_id: str, quem: dict = Depends(exige_login_no_deck)):
     """Cópia com id novo — o "salvar como" deste sistema.
 
-    Fica LIVRE mesmo quando o original tem dono, de propósito: é a válvula de
-    escape de quem abriu o deck de outra pessoa e quis mexer. Não altera nada
-    do original, e a cópia nasce de quem duplicou — não do dono do original.
+    Pede conta, como criar deck. Fora isso fica LIVRE mesmo quando o original
+    tem dono, de propósito: é a válvula de escape de quem abriu o deck de
+    outra pessoa e quis mexer. Não altera nada do original, e a cópia nasce de
+    quem duplicou — não do dono do original.
     """
     _deck_ou_404(deck_id)
     copia = decks.duplicar(deck_id)
-    if quem:
-        decks.definir_dono(copia["id"], quem["id"])
-        copia = decks.obter(copia["id"])
+    decks.definir_dono(copia["id"], quem["id"])
+    copia = decks.obter(copia["id"])
     log.evento("deck", "duplicou", deck=deck_id, copia=copia["id"])
     return _deck_completo(copia)
 
 
 @app.delete("/decks/{deck_id}")
-def apagar_deck(deck_id: str, quem: dict | None = Depends(quem_e)):
+def apagar_deck(deck_id: str, quem: dict = Depends(exige_login_no_deck)):
     """Apaga o deck. Não tem volta: o deck vive só aqui."""
     existe, dono = decks.dono_de(deck_id)
     if existe and not _pode_mexer(dono, quem):
@@ -1446,7 +1492,8 @@ def versoes_do_deck(deck_id: str):
 
 
 @app.post("/decks/{deck_id}/versoes")
-def concluir_versao_do_deck(deck_id: str, quem: dict | None = Depends(quem_e)):
+def concluir_versao_do_deck(deck_id: str,
+                            quem: dict = Depends(exige_login_no_deck)):
     """Conclui a próxima versão com a lista que o servidor tem gravada.
 
     Quem chama grava antes o que estiver esperando o autosave: a fotografia é
@@ -1757,11 +1804,10 @@ def admin_list_usuarios(x_admin_token: str | None = Header(default=None),
 def admin_criar_usuario(corpo: dict = Body(default={}),
                         x_admin_token: str | None = Header(default=None),
                         quem: dict | None = Depends(quem_e)):
-    """Cria uma conta. É o único caminho: não existe cadastro aberto.
+    """Cria uma conta com login e perfil à escolha do admin.
 
-    O README abre dizendo que isto não é uma loja — é ferramenta privada, de
-    um grupo de jogo. Um `POST /conta/criar` público seria a primeira coisa
-    que um bot encontraria, e a primeira que encheria o banco.
+    O outro caminho é o `/cadastro`, que só cria `cliente` e pede o token de
+    acesso (ver `usuarios.cadastrar`).
     """
     _check_admin(x_admin_token, quem)
     try:

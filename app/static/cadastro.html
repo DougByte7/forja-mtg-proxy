@@ -3,9 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Entrar — Forja de Proxies</title>
+<title>Criar conta — Forja de Proxies</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Mesma paleta e mesmas classes do entrar.html: as duas telas são o mesmo
+     passo visto de lados diferentes, e o link entre elas não pode parecer
+     que leva a outro site. -->
 <style>
   :root{
     --bg:#0F0D17; --surface:#1B1730; --surface-2:#241F3D; --border:#382F5C;
@@ -38,8 +41,8 @@
   .campo{width:100%;background:var(--inset);border:1px solid var(--border);
     border-radius:9px;color:var(--text);padding:10px 12px;font-size:14px;
     font-family:inherit;margin-bottom:13px;}
-  .lembrar{display:flex;align-items:center;gap:8px;font-size:13px;
-    color:var(--text-muted);margin-bottom:16px;cursor:pointer;}
+  .ajuda{font-size:12px;color:var(--text-muted);margin:-8px 0 13px;line-height:1.45;}
+  .separa{border:none;border-top:1px solid var(--border);margin:4px 0 16px;}
   .btn{width:100%;background:linear-gradient(150deg,var(--gold),#C9A24B);
     color:var(--sobre-gold);border:none;border-radius:9px;padding:11px;
     font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
@@ -56,32 +59,43 @@
 
 <div class="caixa">
   <div class="rune"><span>⌘</span></div>
-  <h1>Entrar</h1>
-  <!-- A tela diz o que muda com o login, e só isso: montar baralho pede
-       conta; abrir um e fazer pedido, não. -->
-  <p class="sub">Com a conta você monta baralhos e encontra seus baralhos e
-    pedidos em qualquer aparelho.</p>
+  <h1>Criar conta</h1>
+  <p class="sub">Com a conta você monta baralhos e encontra todos eles em
+    qualquer aparelho.</p>
 
   <div class="erro" id="erro" hidden></div>
 
   <form id="form">
-    <label for="login">E-mail ou login</label>
-    <input class="campo" id="login" autocomplete="username" autocapitalize="none"
-           spellcheck="false" required>
+    <label for="nome">Nome</label>
+    <input class="campo" id="nome" autocomplete="name" maxlength="80" required>
+
+    <label for="email">E-mail</label>
+    <input class="campo" id="email" type="email" autocomplete="email"
+           autocapitalize="none" spellcheck="false" required>
+    <p class="ajuda">É com ele que você entra.</p>
 
     <label for="senha">Senha</label>
-    <input class="campo" id="senha" type="password" autocomplete="current-password"
-           required>
+    <input class="campo" id="senha" type="password" autocomplete="new-password"
+           minlength="8" required>
 
-    <label class="lembrar">
-      <input type="checkbox" id="lembrar"> Continuar conectado neste aparelho
-    </label>
+    <label for="confirmacao">Confirmação de senha</label>
+    <input class="campo" id="confirmacao" type="password"
+           autocomplete="new-password" minlength="8" required>
 
-    <button class="btn" id="btn" type="submit">Entrar</button>
+    <hr class="separa">
+
+    <label for="token">Token de acesso</label>
+    <!-- `autocomplete="off"`: o gerenciador de senhas oferece a senha da conta
+         num campo sem nome reconhecível, e o token não é a senha de ninguém. -->
+    <input class="campo" id="token" autocomplete="off" autocapitalize="none"
+           spellcheck="false" required>
+    <p class="ajuda">Peça ao dono do sistema.</p>
+
+    <button class="btn" id="btn" type="submit">Criar conta</button>
   </form>
 
-  <p class="rodape">Não tem conta? <a id="link-cadastro" href="/cadastro">Criar conta</a><br>
-    <a href="/">Voltar sem entrar</a></p>
+  <p class="rodape">Já tem conta? <a id="link-entrar" href="/entrar">Entrar</a><br>
+    <a href="/">Voltar</a></p>
 </div>
 
 <script>
@@ -89,19 +103,16 @@
 
 const $ = id => document.getElementById(id);
 
-/* Pra onde voltar depois de entrar.
-
-   Só caminho relativo é aceito: um `?voltar=` que aceitasse URL inteira
-   viraria redirecionamento aberto — o link parece do site, e joga a pessoa
-   num clone que pede a senha de novo. */
+/* Pra onde voltar depois de criar a conta. A mesma regra do entrar.html: só
+   caminho relativo, senão o `?voltar=` vira redirecionamento aberto. */
 function destino(){
   const bruto = new URLSearchParams(location.search).get("voltar") || "";
   return /^\/[^/\\]/.test(bruto) ? bruto : "/";
 }
 
-// O cadastro leva o mesmo destino: quem descobre aqui que não tem conta
-// volta, depois de criar, pra tela que pediu o login.
-$("link-cadastro").href = "/cadastro?voltar=" + encodeURIComponent(destino());
+// O "Entrar" leva o mesmo destino: quem descobre aqui que já tinha conta
+// não pode perder o caminho de volta pro deck que estava abrindo.
+$("link-entrar").href = "/entrar?voltar=" + encodeURIComponent(destino());
 
 function mostrarErro(msg){
   $("erro").textContent = msg;
@@ -111,16 +122,26 @@ function mostrarErro(msg){
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   mostrarErro("");
+  // Conferida aqui também, e não só no servidor: a senha digitada duas vezes
+  // errada é o erro mais comum desta tela, e ele não precisa de rede.
+  if ($("senha").value !== $("confirmacao").value){
+    mostrarErro("A confirmação não é igual à senha.");
+    $("confirmacao").value = "";
+    $("confirmacao").focus();
+    return;
+  }
   $("btn").disabled = true;
-  $("btn").textContent = "Entrando…";
+  $("btn").textContent = "Criando…";
   try {
-    const r = await fetch("/conta/entrar", {
+    const r = await fetch("/conta/criar", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        login: $("login").value,
+        nome: $("nome").value,
+        email: $("email").value,
         senha: $("senha").value,
-        lembrar: $("lembrar").checked,
+        confirmacao: $("confirmacao").value,
+        token: $("token").value,
       }),
     });
     const dados = await r.json().catch(() => ({}));
@@ -129,24 +150,21 @@ $("form").addEventListener("submit", async (e) => {
     return;   // não reabilita o botão: a página está indo embora
   } catch (err){
     mostrarErro(err.message);
-    $("senha").value = "";
-    $("senha").focus();
   }
   $("btn").disabled = false;
-  $("btn").textContent = "Entrar";
+  $("btn").textContent = "Criar conta";
 });
 
-/* Já logado? Então esta tela não tem o que fazer. Acontece com quem clica
-   "Entrar" num cabeçalho desatualizado, ou volta pelo histórico. */
+/* Já logado? Então esta tela não tem o que fazer. */
 (async () => {
   try {
     const r = await fetch("/conta", {cache: "no-store"});
     const dados = await r.json();
     if (dados.usuario) location.replace(destino());
-  } catch (e){ /* sem rede, a tela de login é o lugar certo pra estar */ }
+  } catch (e){ /* sem rede, fica na tela */ }
 })();
 
-$("login").focus();
+$("nome").focus();
 </script>
 </body>
 </html>
