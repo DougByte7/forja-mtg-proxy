@@ -257,7 +257,8 @@ async def create_order(xml_file: UploadFile, lamination: str = Form(...),
     xml_text = (await xml_file.read()).decode("utf-8")
     try:
         qty, backs_count = calc.parse_order(xml_text)
-        result = calc.compute_cost(qty, backs_count, lamination)
+        result = calc.compute_cost(qty, backs_count, lamination,
+                                   estoque.precos_por_pagina())
         deck_hash = calc.compute_deck_hash(xml_text)
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -1674,6 +1675,13 @@ def tokens_do_deck(deck_id: str):
             "total": sum(len(g["tokens"]) for g in grupos)}
 
 
+@app.get("/precos")
+def precos():
+    """Reais por página em cada acabamento, pra tela do cliente mostrar e
+    somar o mesmo valor que `POST /orders` vai cobrar."""
+    return estoque.precos_por_pagina()
+
+
 @app.get("/impressora/tinta")
 def ink_level():
     """Nível de tinta da impressora, pra tela avisar quando vai demorar.
@@ -2182,7 +2190,7 @@ def admin_delete_order(order_id: str,
 #
 # A baixa não passa por aqui: ela acompanha o status do pedido dentro do
 # `storage` (ver `estoque.sincronizar`). Estas rotas são o lado manual —
-# compra, contagem e os preços que dão o custo de uma folha.
+# compra, contagem, tinta e os preços: o que custa uma folha e o que se cobra.
 
 
 def _item_de_estoque(item: str) -> None:
@@ -2250,13 +2258,28 @@ def admin_estoque_ajustes(item: str, corpo: dict = Body(default={}),
 def admin_estoque_custos(corpo: dict = Body(default={}),
                          x_admin_token: str | None = Header(default=None),
                          quem: dict | None = Depends(quem_e)):
-    """Tinta por página e quanto plástico cada acabamento gasta por folha."""
+    """Preço cobrado por página e folhas por plástico, nos dois acabamentos.
+
+    O preço vale pra pedido novo; pedido que já existe guarda o valor dele.
+    """
     _check_admin(x_admin_token, quem)
     try:
-        estoque.ajustar_custos(
-            tinta_por_pagina=corpo.get("tinta_por_pagina"),
-            plastico_um_lado=corpo.get("plastico_um_lado"),
-            plastico_dois_lados=corpo.get("plastico_dois_lados"))
+        estoque.ajustar_custos(corpo)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log.evento("estoque", "custos", **{k: v for k, v in corpo.items()
+                                       if k in estoque._CONFIG_PADRAO})
+    return estoque.resumo()
+
+
+@app.post("/admin/estoque/tinta")
+def admin_estoque_tinta(corpo: dict = Body(default={}),
+                        x_admin_token: str | None = Header(default=None),
+                        quem: dict | None = Depends(quem_e)):
+    """Preço e volume de cada garrafa e o consumo por folha, por cor."""
+    _check_admin(x_admin_token, quem)
+    try:
+        estoque.ajustar_tintas(corpo)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return estoque.resumo()

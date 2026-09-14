@@ -8,6 +8,8 @@ import math
 import xml.etree.ElementTree as ET
 
 CARDS_PER_PAGE = 9
+# Preço padrão por página. O que a cobrança usa é o da aba Estoque do admin
+# (`estoque.precos_por_pagina`), que nasce com estes valores.
 PRICE_SINGLE_SIDE = 2.50
 PRICE_DOUBLE_SIDE_PER_PAGE = 3.3333
 
@@ -78,7 +80,10 @@ def compute_deck_hash(xml_text: str) -> str:
     return digest[:8].upper()
 
 
-def compute_cost(qty: int, backs_count: int, lamination: str) -> dict:
+def compute_cost(qty: int, backs_count: int, lamination: str,
+                 precos: dict | None = None) -> dict:
+    """`precos` é `{"single", "double"}` em reais por página; sem ele, vale
+    o preço padrão deste módulo."""
     if lamination not in ("single", "double"):
         raise ValueError("lamination precisa ser 'single' ou 'double'")
 
@@ -87,10 +92,9 @@ def compute_cost(qty: int, backs_count: int, lamination: str) -> dict:
     last_filled = slots_needed % CARDS_PER_PAGE or CARDS_PER_PAGE
     blanks = 0 if slots_needed % CARDS_PER_PAGE == 0 else CARDS_PER_PAGE - last_filled
 
-    if lamination == "single":
-        total = round(pages * PRICE_SINGLE_SIDE, 2)
-    else:
-        total = round(pages * PRICE_DOUBLE_SIDE_PER_PAGE, 2)
+    precos = precos or {"single": PRICE_SINGLE_SIDE,
+                        "double": PRICE_DOUBLE_SIDE_PER_PAGE}
+    total = round(pages * float(precos[lamination]), 2)
 
     return {
         "qty": qty,

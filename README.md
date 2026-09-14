@@ -413,11 +413,13 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /admin/combos/{id}/pdf` | tela de pedidos | manda montar a folha combinada (ou diz como vai a montagem). `?fresh=true` remonta |
 | `POST /admin/combos/{id}/imprimir` | tela de pedidos | manda a folha pra fila e marca **todos** os pedidos dela como pagos |
 | `DELETE /admin/combos/{id}` | tela de pedidos | desfaz a combinação e apaga a folha. Os pedidos não são tocados |
-| `GET /admin/estoque` | aba **Estoque** | saldo de papel e plástico, custo de uma folha e os últimos movimentos |
+| `GET /admin/estoque` | aba **Estoque** | saldo de papel e plástico, tintas, custo de uma folha e os últimos movimentos |
 | `POST /admin/estoque/{item}/entrada` | aba **Estoque** | soma uma compra (`quantidade`, `valor_pago` opcional) |
 | `POST /admin/estoque/{item}/contagem` | aba **Estoque** | troca o saldo pelo número contado |
-| `POST /admin/estoque/{item}/ajustes` | aba **Estoque** | mínimo de alerta e preço por folha do item |
-| `POST /admin/estoque/custos` | aba **Estoque** | tinta por página e plástico por folha em cada acabamento |
+| `POST /admin/estoque/{item}/ajustes` | aba **Estoque** | mínimo de alerta e preço por unidade do item |
+| `POST /admin/estoque/custos` | aba **Estoque** | preço cobrado por página e folhas por plástico, em cada acabamento |
+| `POST /admin/estoque/tinta` | aba **Estoque** | preço e ml de cada garrafa e ml por folha, por cor |
+| `GET /precos` | tela do cliente | reais por página em cada acabamento (público) |
 | `GET /combos/{id}/pdf?token=…` | botão **Ver PDF** da barra | a folha combinada, pra conferir antes de imprimir |
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
 | `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, pra descobrir o `PRINTER_QUEUE` certo |
@@ -520,14 +522,15 @@ pra impressora nenhuma.
 
 ### Estoque de material
 
-A aba **Estoque** controla papel A4 e plástico de plastificação, e mostra o
-custo de material de **uma folha** nos dois acabamentos.
+A aba **Estoque** controla papel fotográfico A4 e plástico de plastificação,
+mostra o custo de material de **uma folha** nos dois acabamentos e é onde se
+muda o preço cobrado por página.
 
 **A baixa é automática e segue o status do pedido** (`app/estoque.py`):
 
 | O pedido... | Papel | Plástico |
 |---|---|---|
-| vira `notified` (avisou que pagou) ou `paid` | sai 1 por página | sai 1 por página (um lado) ou 2 (dois lados) |
+| vira `notified` (avisou que pagou) ou `paid` | sai 1 por página | um lado: 1 a cada 2 páginas, arredondando pra cima; dois lados: 1 por página |
 | volta pra `pending` ou vira `cancelado` | volta o que saiu | volta o que saiu |
 | é apagado sem ter sido impresso | volta | volta |
 | é apagado depois de `paid` | fica baixado | fica baixado |
@@ -538,17 +541,48 @@ ligação mora em `estoque_baixas`, e a baixa roda na mesma transação que muda
 o status (`storage`), então qualquer caminho — e-mail, tela ou combinação —
 cai nela.
 
-A **folha combinada** gasta menos que a soma dos pedidos; ao imprimir, a
-diferença (`folhas_economizadas`) volta pro estoque, uma vez por combinação.
-Reimpressão não baixa nada: quando a prateleira não bater, **Contagem** troca
-o saldo pelo número contado e deixa a diferença nos movimentos.
+A **folha combinada** gasta menos que a soma dos pedidos: ao imprimir, a
+diferença de papel e de plástico volta pro estoque, uma vez por combinação
+(duas folhas de um lado de pedidos diferentes, por exemplo, dividem um
+plástico). Reimpressão não baixa nada: quando a prateleira não bater,
+**Contagem** troca o saldo pelo número contado e deixa a diferença nos
+movimentos.
 
-**Custo de uma folha:** papel e plástico usam o preço por folha da última
-**Entrada** com valor pago (ou o que for digitado em **Mínimo e preço**); a
-tinta é um valor por página, em **Ajustar**. A tabela soma os três e mostra
-ao lado o preço cobrado por página (`calc.PRICE_SINGLE_SIDE` e
-`PRICE_DOUBLE_SIDE_PER_PAGE`). O plástico por folha de cada acabamento (1 e 2
-por padrão) também se ajusta ali.
+#### Custo de uma folha
+
+| Parte | De onde vem |
+|---|---|
+| Papel | preço por unidade da última **Entrada** com valor pago (ou **Mínimo e preço**) |
+| Plástico | preço por unidade ÷ folhas por plástico do acabamento (2 no um lado, 1 no dois lados — ajustável em **Preço e plástico**) |
+| Tinta | soma das quatro cores: preço da garrafa ÷ ml da garrafa × ml por folha |
+
+A tabela mostra ao lado o **cobrado** por página e a sobra.
+
+**Tinta 504 da EPSON L4260.** Garrafas de 127 ml (preto) e 70 ml (amarelo,
+magenta, ciano); o preço de cada uma se cadastra em **Garrafas**. O consumo
+por folha nasce de uma estimativa pra folha A4 de cartas em alta qualidade no
+papel fotográfico brilhante — 9 cartas de 63×88 mm, ~500 cm² de arte, a
+~0,0018 ml/cm², o que dá ~0,9 ml por folha:
+
+| Cor | ml por folha |
+|---|---|
+| Preto | 0,02 |
+| Amarelo | 0,26 |
+| Magenta | 0,30 |
+| Ciano | 0,32 |
+
+O preto quase não entra porque, em papel brilhante, o driver dessas EcoTank
+não usa o preto pigmentado da 504 — o preto das molduras sai da mistura das
+três cores. É estimativa: a limpeza de cabeçote também gasta tinta e não está
+na conta. Pra calibrar, marque o nível dos tanques, imprima um lote de folhas
+conhecido e corrija em **Consumo**.
+
+#### Preço cobrado
+
+**Preço e plástico** muda os reais por página de cada acabamento. Vale pra
+pedido novo: `POST /orders` cobra com ele e a tela do cliente lê o mesmo
+número em `GET /precos`. Pedido que já existe mantém o valor com que foi
+criado. O padrão (R$ 2,50 e R$ 3,3333) está em `calc.py`.
 
 Com um **mínimo** definido, o item fica vermelho ao chegar nele e a aba
 ganha a marca *baixo*.

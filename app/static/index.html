@@ -626,12 +626,12 @@
         <label class="lam-opt" id="optSingle">
           <input type="radio" name="lam" value="single">
           <div class="t">Um lado</div>
-          <div class="p">R$ 2,50 / pág</div>
+          <div class="p" id="precoSingle">R$ 2,50 / pág</div>
         </label>
         <label class="lam-opt active" id="optDouble">
           <input type="radio" name="lam" value="double" checked>
           <div class="t">Dois lados</div>
-          <div class="p">R$ 3,33 / pág</div>
+          <div class="p" id="precoDouble">R$ 3,33 / pág</div>
         </label>
       </div>
     </div>
@@ -1624,6 +1624,28 @@
   const MPC_BRACKETS = [18,36,55,72,90,108,126,144,162,180,198,216,
                         234,252,270,288,306,324,342,360,396,504,612];
 
+  // Reais por página em cada acabamento. Nascem com o preço padrão e passam
+  // a ser os que `POST /orders` cobra assim que `GET /precos` responde.
+  const PRECOS = {single: 2.50, double: 3.3333};
+
+  async function carregarPrecos(){
+    try{
+      const resp = await fetch('/precos', {cache:'no-store'});
+      if(!resp.ok) return;
+      const p = await resp.json();
+      if(typeof p.single === 'number') PRECOS.single = p.single;
+      if(typeof p.double === 'number') PRECOS.double = p.double;
+    }catch(err){
+      return;   // fica o preço padrão; o valor da cobrança vem do servidor
+    }
+    document.getElementById('precoSingle').textContent =
+      `R$ ${formatBRL(PRECOS.single)} / pág`;
+    document.getElementById('precoDouble').textContent =
+      `R$ ${formatBRL(PRECOS.double)} / pág`;
+    if(lastState) recalc();
+  }
+  carregarPrecos();
+
   // Mesma conta do app/calc.py — usada tanto no resumo do pedido quanto no
   // rodapé do editor, pra os dois nunca discordarem.
   function computeTotals(qty, backsCount, lam){
@@ -1632,9 +1654,7 @@
     const resto = slotsNeeded % CARDS_PER_PAGE;
     const lastPageFilled = resto === 0 ? CARDS_PER_PAGE : resto;
     const blanks = resto === 0 ? 0 : CARDS_PER_PAGE - lastPageFilled;
-    const total = lam === 'single'
-      ? pages * 2.50
-      : Math.round(pages * 3.3333 * 100) / 100;
+    const total = Math.round(pages * PRECOS[lam] * 100) / 100;
     return {slotsNeeded, pages, lastPageFilled, blanks, total,
             lamLabel: lam === 'single' ? 'Um lado' : 'Dois lados'};
   }

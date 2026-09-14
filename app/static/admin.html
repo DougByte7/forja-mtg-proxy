@@ -161,6 +161,9 @@
   .movimento .oque{flex:1;min-width:160px;}
   .modal-campo{display:block;margin-bottom:12px;}
   .modal-campo .rotulo{margin-bottom:6px;}
+  #modalCampos.grade{display:grid;grid-template-columns:1fr 1fr;column-gap:10px;}
+  .bloco-estoque .nota-bloco{font-family:'IBM Plex Mono',monospace;font-size:11px;
+    color:var(--text-muted);margin-top:8px;line-height:1.6;}
 
   /* --- Decks -------------------------------------------------------- */
   .deck{
@@ -650,8 +653,11 @@ const MOTIVOS = {
 const inteiro = (n) => Number(n || 0).toLocaleString("pt-BR");
 const dinheiroFino = (v) => "R$ " + Number(v || 0).toLocaleString("pt-BR",
   {minimumFractionDigits: 2, maximumFractionDigits: 3});
+const decimalBr = (v) => Number(v || 0).toLocaleString("pt-BR",
+  {maximumFractionDigits: 3});
 // Valor pro campo do formulário: vírgula, sem zeros sobrando.
-const campoDecimal = (v) => v ? String(Number(v.toFixed(4))).replace(".", ",") : "";
+const campoDecimal = (v) => Number(v)
+  ? String(Number(Number(v).toFixed(4))).replace(".", ",") : "";
 
 async function carregarEstoque() {
   estoque = await api("/admin/estoque");
@@ -686,7 +692,7 @@ function desenharEstoque() {
     el.className = "item-estoque" + (item.baixo ? " baixo" : "");
     const detalhes = [
       item.minimo ? `aviso em ${inteiro(item.minimo)}` : "sem mínimo",
-      item.custo_unitario ? `${dinheiroFino(item.custo_unitario)} a folha` : "sem preço",
+      item.custo_unitario ? `${dinheiroFino(item.custo_unitario)} cada` : "sem preço",
     ];
     el.innerHTML = `
       <div class="nome">${escapar(item.nome)}</div>
@@ -711,21 +717,49 @@ function desenharEstoque() {
   custo.innerHTML = `
     <div class="topo">
       <span class="rotulo">Custo de uma folha</span>
-      <button class="btn-sec" data-estoque="custos">Ajustar</button>
+      <button class="btn-sec" data-estoque="custos">Preço e plástico</button>
     </div>
     <div class="rolagem"><table class="custo-folha">
       <thead><tr><th></th><th>Um lado</th><th>Dois lados</th></tr></thead>
       <tbody>
         ${linha("Papel", um.papel, dois.papel)}
-        ${linha(`Plástico (${inteiro(cfg.plastico_um_lado)} / ${inteiro(cfg.plastico_dois_lados)} por folha)`,
-                um.plastico, dois.plastico)}
+        ${linha("Plástico", um.plastico, dois.plastico)}
         ${linha("Tinta", um.tinta, dois.tinta)}
         ${linha("Material", um.total, dois.total, "total")}
         ${linha("Cobrado", um.cobrado, dois.cobrado)}
         ${linha("Sobra", um.margem, dois.margem)}
       </tbody>
-    </table></div>`;
+    </table></div>
+    <div class="nota-bloco">1 plástico a cada ${inteiro(cfg.folhas_por_plastico_um_lado)}
+      folha(s) no um lado e a cada ${inteiro(cfg.folhas_por_plastico_dois_lados)}
+      no dois lados</div>`;
   lista.appendChild(custo);
+
+  const tintas = document.createElement("div");
+  tintas.className = "bloco-estoque";
+  const mlTotal = estoque.tintas.reduce((n, t) => n + t.ml_por_folha, 0);
+  const tintaTotal = estoque.tintas.reduce((n, t) => n + t.custo_folha, 0);
+  tintas.innerHTML = `
+    <div class="topo">
+      <span class="rotulo">Tinta 504</span>
+      <button class="btn-sec" data-estoque="tinta-precos">Garrafas</button>
+      <button class="btn-sec" data-estoque="tinta-consumo">Consumo</button>
+    </div>
+    <div class="rolagem"><table class="custo-folha">
+      <thead><tr><th>Cor</th><th>Garrafa</th><th>ml</th><th>ml por folha</th>
+        <th>Por folha</th></tr></thead>
+      <tbody>
+        ${estoque.tintas.map((t) => `<tr><td>${escapar(t.nome)}</td>
+          <td>${t.preco_garrafa ? dinheiroFino(t.preco_garrafa) : "—"}</td>
+          <td>${decimalBr(t.ml_garrafa)}</td>
+          <td>${decimalBr(t.ml_por_folha)}</td>
+          <td>${dinheiroFino(t.custo_folha)}</td></tr>`).join("")}
+        <tr class="total"><td>Total</td><td></td><td></td>
+          <td>${decimalBr(mlTotal)}</td><td>${dinheiroFino(tintaTotal)}</td></tr>
+      </tbody>
+    </table></div>
+    <div class="nota-bloco">Folha A4 de cartas em alta qualidade, papel fotográfico brilhante</div>`;
+  lista.appendChild(tintas);
 
   const movs = document.createElement("div");
   movs.className = "bloco-estoque";
@@ -767,6 +801,16 @@ async function salvarEstoque(caminho, valores, mensagem) {
   if (aba === "estoque") desenharEstoque();
 }
 
+/* Campos "cor.campo" do modal viram {cor: {campo: valor}}. */
+function porCor(valores) {
+  const saida = {};
+  for (const [chave, valor] of Object.entries(valores)) {
+    const [cor, campo] = chave.split(".");
+    (saida[cor] = saida[cor] || {})[campo] = valor;
+  }
+  return saida;
+}
+
 function acaoDeEstoque(acao, id) {
   if (!estoque) return;
   const item = estoque.itens.find((i) => i.id === id);
@@ -774,7 +818,7 @@ function acaoDeEstoque(acao, id) {
   if (acao === "entrada" && item) {
     abrirModal({
       titulo: `Entrada — ${item.nome}`,
-      texto: "Quantas folhas chegaram e quanto custou a compra.",
+      texto: `Quantas ${escapar(item.unidade)} chegaram e quanto custou a compra.`,
       campos: [
         {nome: "quantidade", rotulo: "Quantidade", modo: "numeric"},
         {nome: "valor_pago", rotulo: "Valor pago (R$, opcional)", modo: "decimal"},
@@ -787,7 +831,7 @@ function acaoDeEstoque(acao, id) {
     abrirModal({
       titulo: `Contagem — ${item.nome}`,
       texto: `O estoque marca <b>${inteiro(item.quantidade)}</b>. ` +
-             `Quantas folhas há de fato?`,
+             `Quantas ${escapar(item.unidade)} há de fato?`,
       campos: [{nome: "quantidade", rotulo: "Contado", modo: "numeric",
                 valor: String(Math.max(0, item.quantidade))}],
       ok: "Salvar contagem",
@@ -801,7 +845,7 @@ function acaoDeEstoque(acao, id) {
       campos: [
         {nome: "minimo", rotulo: "Avisar quando chegar a", modo: "numeric",
          valor: String(item.minimo || 0)},
-        {nome: "custo_unitario", rotulo: "Preço por folha (R$)", modo: "decimal",
+        {nome: "custo_unitario", rotulo: "Preço por unidade (R$)", modo: "decimal",
          valor: campoDecimal(item.custo_unitario)},
       ],
       ok: "Salvar",
@@ -810,19 +854,49 @@ function acaoDeEstoque(acao, id) {
     });
   } else if (acao === "custos") {
     abrirModal({
-      titulo: "Custo de uma folha",
-      texto: "",
+      titulo: "Preço e plástico",
+      texto: "O preço novo vale para os próximos pedidos.",
+      colunas: 2,
       campos: [
-        {nome: "tinta_por_pagina", rotulo: "Tinta por página (R$)", modo: "decimal",
-         valor: campoDecimal(cfg.tinta_por_pagina)},
-        {nome: "plastico_um_lado", rotulo: "Plástico por folha — um lado",
-         modo: "numeric", valor: String(cfg.plastico_um_lado)},
-        {nome: "plastico_dois_lados", rotulo: "Plástico por folha — dois lados",
-         modo: "numeric", valor: String(cfg.plastico_dois_lados)},
+        {nome: "preco_um_lado", rotulo: "Um lado — R$ por página", modo: "decimal",
+         valor: campoDecimal(cfg.preco_um_lado)},
+        {nome: "preco_dois_lados", rotulo: "Dois lados — R$ por página", modo: "decimal",
+         valor: campoDecimal(cfg.preco_dois_lados)},
+        {nome: "folhas_por_plastico_um_lado", rotulo: "Um lado — folhas por plástico",
+         modo: "numeric", valor: String(cfg.folhas_por_plastico_um_lado)},
+        {nome: "folhas_por_plastico_dois_lados", rotulo: "Dois lados — folhas por plástico",
+         modo: "numeric", valor: String(cfg.folhas_por_plastico_dois_lados)},
       ],
       ok: "Salvar",
       aoConfirmar: (v) => salvarEstoque("/admin/estoque/custos", v,
-        "Custos atualizados."),
+        "Preço e plástico atualizados."),
+    });
+  } else if (acao === "tinta-precos") {
+    abrirModal({
+      titulo: "Garrafas de tinta",
+      texto: "",
+      colunas: 2,
+      campos: estoque.tintas.flatMap((t) => [
+        {nome: `${t.cor}.preco_garrafa`, rotulo: `${t.nome} — garrafa (R$)`,
+         modo: "decimal", valor: campoDecimal(t.preco_garrafa)},
+        {nome: `${t.cor}.ml_garrafa`, rotulo: `${t.nome} — ml`,
+         modo: "decimal", valor: campoDecimal(t.ml_garrafa)},
+      ]),
+      ok: "Salvar",
+      aoConfirmar: (v) => salvarEstoque("/admin/estoque/tinta", porCor(v),
+        "Garrafas atualizadas."),
+    });
+  } else if (acao === "tinta-consumo") {
+    abrirModal({
+      titulo: "Consumo por folha",
+      texto: "ml de cada cor numa folha de cartas.",
+      colunas: 2,
+      campos: estoque.tintas.map((t) => (
+        {nome: `${t.cor}.ml_por_folha`, rotulo: `${t.nome} — ml`,
+         modo: "decimal", valor: campoDecimal(t.ml_por_folha)})),
+      ok: "Salvar",
+      aoConfirmar: (v) => salvarEstoque("/admin/estoque/tinta", porCor(v),
+        "Consumo atualizado."),
     });
   }
 }
@@ -1384,13 +1458,16 @@ $("comboLimpar").addEventListener("click", () => {
 let confirmarAtual = null;
 
 /* `campos` são entradas de formulário ({nome, rotulo, modo, valor}); o que
-   foi digitado chega em `aoConfirmar` como {nome: texto}. */
-function abrirModal({titulo, texto, ok, perigo, confirmarCom, campos, aoConfirmar}) {
+   foi digitado chega em `aoConfirmar` como {nome: texto}. `colunas: 2` põe
+   os campos lado a lado, em pares. */
+function abrirModal({titulo, texto, ok, perigo, confirmarCom, campos, colunas,
+                     aoConfirmar}) {
   $("modalTitulo").textContent = titulo;
   $("modalTexto").innerHTML = texto;
   $("modalTexto").hidden = !texto;
   const caixa = $("modalCampos");
   caixa.innerHTML = "";
+  caixa.classList.toggle("grade", colunas === 2);
   for (const c of campos || []) {
     const rotulo = document.createElement("label");
     rotulo.className = "modal-campo";
