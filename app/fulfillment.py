@@ -32,7 +32,7 @@ import os
 import threading
 import time
 
-from . import pdf_generator, printer, storage
+from . import estoque, pdf_generator, printer, storage
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 # URL pública do backend, usada pra montar os links do e-mail.
@@ -438,5 +438,7 @@ def run_combo_print_job(combo_id: str) -> tuple[str, int, str, list[str]]:
         raise ValueError("Combinação não encontrada.")
     path, failures = ensure_combo_pdf(combo_id)
     storage.mark_paid_many(combo["order_ids"])
+    pedidos = [p for p in (storage.get_order(i) for i in combo["order_ids"]) if p]
+    estoque.devolver_combinacao(combo_id, pedidos)
     status = printer.print_pdf(path)
     return path, failures, status, combo["order_ids"]

@@ -14,7 +14,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
 from fastapi.staticfiles import StaticFiles
 
 from . import (artes, calc, cambio, cartas, cleanup, cotacao_job, decks,
-               detalhe_carta, edhrec, fulfillment, importar, log, manabase,
+               detalhe_carta, edhrec, estoque, fulfillment, importar, log, manabase,
                mpcfill, notify, pix, poder, printer, spellbook, storage, tinta,
                usuarios, visitas)
 
@@ -2176,6 +2176,90 @@ def admin_delete_order(order_id: str,
     tinha_pdf = fulfillment.descartar_pdf(order_id)
     log.evento("admin", "apagou-pedido", pedido=order_id, pdf=tinha_pdf)
     return {"ok": True, "pdf_apagado": tinha_pdf}
+
+
+# --- Estoque de material (aba Estoque da tela do admin) --------------------
+#
+# A baixa não passa por aqui: ela acompanha o status do pedido dentro do
+# `storage` (ver `estoque.sincronizar`). Estas rotas são o lado manual —
+# compra, contagem e os preços que dão o custo de uma folha.
+
+
+def _item_de_estoque(item: str) -> None:
+    if item not in estoque.ITENS:
+        raise HTTPException(404, "Item de estoque não encontrado.")
+
+
+@app.get("/admin/estoque")
+def admin_estoque(x_admin_token: str | None = Header(default=None),
+                  quem: dict | None = Depends(quem_e)):
+    """Saldo de cada item, custo de uma folha e os últimos movimentos."""
+    _check_admin(x_admin_token, quem)
+    return estoque.resumo()
+
+
+@app.post("/admin/estoque/{item}/entrada")
+def admin_estoque_entrada(item: str, corpo: dict = Body(default={}),
+                          x_admin_token: str | None = Header(default=None),
+                          quem: dict | None = Depends(quem_e)):
+    """Soma uma compra ao saldo. `valor_pago`, se vier, vira o preço por
+    unidade do item."""
+    _check_admin(x_admin_token, quem)
+    _item_de_estoque(item)
+    try:
+        estoque.entrada(item, corpo.get("quantidade"), corpo.get("valor_pago"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log.evento("estoque", "entrada", item=item,
+               quantidade=corpo.get("quantidade"))
+    return estoque.resumo()
+
+
+@app.post("/admin/estoque/{item}/contagem")
+def admin_estoque_contagem(item: str, corpo: dict = Body(default={}),
+                           x_admin_token: str | None = Header(default=None),
+                           quem: dict | None = Depends(quem_e)):
+    """Troca o saldo pelo que foi contado. A diferença fica nos movimentos."""
+    _check_admin(x_admin_token, quem)
+    _item_de_estoque(item)
+    try:
+        estoque.contagem(item, corpo.get("quantidade"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log.evento("estoque", "contagem", item=item,
+               quantidade=corpo.get("quantidade"))
+    return estoque.resumo()
+
+
+@app.post("/admin/estoque/{item}/ajustes")
+def admin_estoque_ajustes(item: str, corpo: dict = Body(default={}),
+                          x_admin_token: str | None = Header(default=None),
+                          quem: dict | None = Depends(quem_e)):
+    """Mínimo de alerta e preço por unidade de um item."""
+    _check_admin(x_admin_token, quem)
+    _item_de_estoque(item)
+    try:
+        estoque.ajustar_item(item, minimo=corpo.get("minimo"),
+                             custo_unitario=corpo.get("custo_unitario"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return estoque.resumo()
+
+
+@app.post("/admin/estoque/custos")
+def admin_estoque_custos(corpo: dict = Body(default={}),
+                         x_admin_token: str | None = Header(default=None),
+                         quem: dict | None = Depends(quem_e)):
+    """Tinta por página e quanto plástico cada acabamento gasta por folha."""
+    _check_admin(x_admin_token, quem)
+    try:
+        estoque.ajustar_custos(
+            tinta_por_pagina=corpo.get("tinta_por_pagina"),
+            plastico_um_lado=corpo.get("plastico_um_lado"),
+            plastico_dois_lados=corpo.get("plastico_dois_lados"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return estoque.resumo()
 
 
 @app.post("/admin/cleanup")

@@ -413,6 +413,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /admin/combos/{id}/pdf` | tela de pedidos | manda montar a folha combinada (ou diz como vai a montagem). `?fresh=true` remonta |
 | `POST /admin/combos/{id}/imprimir` | tela de pedidos | manda a folha pra fila e marca **todos** os pedidos dela como pagos |
 | `DELETE /admin/combos/{id}` | tela de pedidos | desfaz a combinação e apaga a folha. Os pedidos não são tocados |
+| `GET /admin/estoque` | aba **Estoque** | saldo de papel e plástico, custo de uma folha e os últimos movimentos |
+| `POST /admin/estoque/{item}/entrada` | aba **Estoque** | soma uma compra (`quantidade`, `valor_pago` opcional) |
+| `POST /admin/estoque/{item}/contagem` | aba **Estoque** | troca o saldo pelo número contado |
+| `POST /admin/estoque/{item}/ajustes` | aba **Estoque** | mínimo de alerta e preço por folha do item |
+| `POST /admin/estoque/custos` | aba **Estoque** | tinta por página e plástico por folha em cada acabamento |
 | `GET /combos/{id}/pdf?token=…` | botão **Ver PDF** da barra | a folha combinada, pra conferir antes de imprimir |
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
 | `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, pra descobrir o `PRINTER_QUEUE` certo |
@@ -512,6 +517,41 @@ de imprimir o pedido errado.
 Sem `PRINTER_QUEUE` configurada, aparece um aviso no topo — ali o botão
 **Imprimir** confirma o pagamento e deixa o PDF pronto, mas não manda nada
 pra impressora nenhuma.
+
+### Estoque de material
+
+A aba **Estoque** controla papel A4 e plástico de plastificação, e mostra o
+custo de material de **uma folha** nos dois acabamentos.
+
+**A baixa é automática e segue o status do pedido** (`app/estoque.py`):
+
+| O pedido... | Papel | Plástico |
+|---|---|---|
+| vira `notified` (avisou que pagou) ou `paid` | sai 1 por página | sai 1 por página (um lado) ou 2 (dois lados) |
+| volta pra `pending` ou vira `cancelado` | volta o que saiu | volta o que saiu |
+| é apagado sem ter sido impresso | volta | volta |
+| é apagado depois de `paid` | fica baixado | fica baixado |
+
+Cada pedido baixa uma vez só: passar por `notified` e depois por `paid` não
+desconta de novo, e o estorno devolve exatamente o que foi descontado. A
+ligação mora em `estoque_baixas`, e a baixa roda na mesma transação que muda
+o status (`storage`), então qualquer caminho — e-mail, tela ou combinação —
+cai nela.
+
+A **folha combinada** gasta menos que a soma dos pedidos; ao imprimir, a
+diferença (`folhas_economizadas`) volta pro estoque, uma vez por combinação.
+Reimpressão não baixa nada: quando a prateleira não bater, **Contagem** troca
+o saldo pelo número contado e deixa a diferença nos movimentos.
+
+**Custo de uma folha:** papel e plástico usam o preço por folha da última
+**Entrada** com valor pago (ou o que for digitado em **Mínimo e preço**); a
+tinta é um valor por página, em **Ajustar**. A tabela soma os três e mostra
+ao lado o preço cobrado por página (`calc.PRICE_SINGLE_SIDE` e
+`PRICE_DOUBLE_SIDE_PER_PAGE`). O plástico por folha de cada acabamento (1 e 2
+por padrão) também se ajusta ali.
+
+Com um **mínimo** definido, o item fica vermelho ao chegar nele e a aba
+ganha a marca *baixo*.
 
 ### Combinar pedidos numa folha só
 

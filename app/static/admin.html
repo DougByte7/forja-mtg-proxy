@@ -109,8 +109,8 @@
   .btn-sec.perigo:hover:not(:disabled){border-color:var(--red);color:#F2AFA1;}
 
   /* --- Lista de pedidos -------------------------------------------------- */
-  /* Troca de assunto do painel: pedidos ou decks. Fica acima dos filtros
-     porque muda O QUE se lista, não como. */
+  /* Troca de assunto do painel: pedidos, decks ou estoque. Fica acima dos
+     filtros porque muda O QUE se lista, não como. */
   .abas{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);}
   .aba{background:none;border:none;border-bottom:2px solid transparent;
     color:var(--text-muted);font-size:13px;padding:8px 12px;cursor:pointer;
@@ -119,6 +119,48 @@
   .aba.ativo{color:var(--gold-light);border-bottom-color:var(--gold);}
   .aba .n{font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.75;
     margin-left:5px;}
+  .aba .n.alerta{color:#F2AFA1;opacity:1;}
+
+  /* --- Estoque ------------------------------------------------------ */
+  .estoque-itens{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+    gap:10px;margin-bottom:10px;}
+  .item-estoque{background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:14px 16px;}
+  .item-estoque.baixo{border-color:var(--red);background:rgba(217,99,74,.07);}
+  .item-estoque .nome{font-size:13px;color:var(--text-muted);}
+  .item-estoque .saldo{font-family:'IBM Plex Mono',monospace;font-size:28px;
+    color:var(--gold-light);margin:4px 0 2px;}
+  .item-estoque.baixo .saldo{color:#F2AFA1;}
+  .item-estoque .saldo small{font-size:12px;color:var(--text-muted);margin-left:6px;}
+  .item-estoque .detalhe{font-family:'IBM Plex Mono',monospace;font-size:11px;
+    color:var(--text-muted);line-height:1.7;}
+  .item-estoque .p-acoes .btn-sec{padding:7px 11px;font-size:11px;}
+  .bloco-estoque{background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+  .bloco-estoque .topo{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .bloco-estoque .topo .rotulo{flex:1;margin:0;}
+  .bloco-estoque .topo .btn-sec{padding:6px 11px;font-size:11px;}
+  .rolagem{overflow-x:auto;}
+  .custo-folha{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .custo-folha th,.custo-folha td{padding:6px 8px;text-align:right;
+    border-bottom:1px solid var(--border);white-space:nowrap;}
+  .custo-folha th:first-child,.custo-folha td:first-child{text-align:left;
+    color:var(--text-muted);}
+  .custo-folha th{font-weight:500;color:var(--text-muted);font-size:11px;}
+  .custo-folha td{font-family:'IBM Plex Mono',monospace;}
+  .custo-folha tr.total td{color:var(--gold-light);font-weight:600;}
+  .custo-folha tr:last-child td{border-bottom:none;}
+  .custo-folha .negativo{color:#F2AFA1;}
+  .movimento{display:flex;gap:10px;font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;line-height:1.5;padding:5px 0;border-bottom:1px solid var(--border);
+    color:var(--text-muted);flex-wrap:wrap;}
+  .movimento:last-child{border-bottom:none;}
+  .movimento .delta{min-width:52px;text-align:right;color:var(--text);}
+  .movimento .delta.sai{color:#F2AFA1;}
+  .movimento .delta.entra{color:var(--green);}
+  .movimento .oque{flex:1;min-width:160px;}
+  .modal-campo{display:block;margin-bottom:12px;}
+  .modal-campo .rotulo{margin-bottom:6px;}
 
   /* --- Decks -------------------------------------------------------- */
   .deck{
@@ -301,10 +343,11 @@
   <div class="abas" id="abas">
     <button class="aba ativo" data-aba="pedidos">Pedidos</button>
     <button class="aba" data-aba="decks">Baralhos<span class="n" id="abaDecksN"></span></button>
+    <button class="aba" data-aba="estoque">Estoque<span class="n" id="abaEstoqueN"></span></button>
   </div>
 
   <div class="barra" id="filtros"></div>
-  <div class="busca-linha">
+  <div class="busca-linha" id="buscaLinha">
     <input type="search" id="buscaInput" placeholder="Buscar por nome, id do pedido ou código do deck">
   </div>
 
@@ -319,6 +362,11 @@
     Todos os baralhos do banco, do mais mexido pro mais parado.<br>
     <b>Apagar</b> aqui é definitivo e não avisa quem montou — o deck é da pessoa,
     não do sistema.
+  </p>
+  <p class="rodape" id="rodapeEstoque" hidden>
+    O material sai quando o cliente avisa que pagou e volta se o pedido for
+    cancelado ou reaberto.<br>
+    <b>Contagem</b> troca o saldo pelo número da prateleira.
   </p>
 </div>
 
@@ -343,6 +391,7 @@
   <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitulo">
     <h3 id="modalTitulo"></h3>
     <p id="modalTexto"></p>
+    <div id="modalCampos"></div>
     <input type="text" id="modalInput" hidden autocomplete="off">
     <div class="modal-acoes">
       <button class="btn-sec" id="modalCancelar">Voltar</button>
@@ -372,11 +421,13 @@ const ESTADOS = {
 };
 const LAMINACAO = {single: "Um lado", double: "Dois lados"};
 
-let aba = "pedidos";       // "pedidos" | "decks" — o que a lista mostra
+let aba = "pedidos";       // "pedidos" | "decks" | "estoque" — o que a lista mostra
 let filtro = "";           // "" = todos
 let busca = "";
 let pedidos = [];
 let decks = [];            // a listagem do admin, quando a aba é "decks"
+let estoque = null;        // o resumo de `/admin/estoque`
+let notaEstoque = null;    // {tipo, texto} mostrado no topo da aba Estoque
 let notas = {};            // id -> {tipo, texto} mostrado embaixo do pedido
 let carregando = false;
 let ocupado = 0;           // ações longas em andamento (montagem, impressão)
@@ -452,6 +503,9 @@ async function entrar() {
       "PRINTER_QUEUE não está configurada: o botão Imprimir vai confirmar o " +
       "pagamento e deixar o PDF pronto, mas não manda nada pra impressora.";
   }
+  // Só pela marca de estoque baixo na aba; falhar aqui não impede a lista.
+  api("/admin/estoque").then((d) => { estoque = d; marcarAbaEstoque(); })
+    .catch(() => {});
   await carregar();
 }
 
@@ -483,6 +537,7 @@ async function carregar() {
   $("btnAtualizar").disabled = true;
   try {
     if (aba === "decks") { await carregarDecks(); return; }
+    if (aba === "estoque") { await carregarEstoque(); return; }
     const params = new URLSearchParams();
     if (filtro) params.set("status", filtro);
     if (busca) params.set("busca", busca);
@@ -578,11 +633,206 @@ function desenharDecks() {
   }
 }
 
+/* ------------------------------------------------------------- estoque
+
+   Papel e plástico, com a baixa que os pedidos fazem sozinhos, e o custo de
+   material de UMA folha nos dois acabamentos, ao lado do preço cobrado por
+   página. As contas são do backend (`estoque.resumo`); aqui é só desenho. */
+
+const MOTIVOS = {
+  pedido: "Pedido",
+  estorno: "Devolvido pelo pedido",
+  combinado: "Sobra da folha combinada",
+  entrada: "Entrada",
+  contagem: "Contagem",
+};
+
+const inteiro = (n) => Number(n || 0).toLocaleString("pt-BR");
+const dinheiroFino = (v) => "R$ " + Number(v || 0).toLocaleString("pt-BR",
+  {minimumFractionDigits: 2, maximumFractionDigits: 3});
+// Valor pro campo do formulário: vírgula, sem zeros sobrando.
+const campoDecimal = (v) => v ? String(Number(v.toFixed(4))).replace(".", ",") : "";
+
+async function carregarEstoque() {
+  estoque = await api("/admin/estoque");
+  $("filtros").innerHTML = "";
+  marcarAbaEstoque();
+  desenharEstoque();
+}
+
+function marcarAbaEstoque() {
+  const baixo = !!(estoque && estoque.itens.some((i) => i.baixo));
+  $("abaEstoqueN").textContent = baixo ? "baixo" : "";
+  $("abaEstoqueN").classList.toggle("alerta", baixo);
+}
+
+function desenharEstoque() {
+  const lista = $("lista");
+  lista.innerHTML = "";
+  if (!estoque) return;
+
+  if (notaEstoque) {
+    const n = document.createElement("div");
+    n.className = "p-nota " + notaEstoque.tipo;
+    n.style.margin = "0 0 10px";
+    n.textContent = notaEstoque.texto;
+    lista.appendChild(n);
+  }
+
+  const grade = document.createElement("div");
+  grade.className = "estoque-itens";
+  for (const item of estoque.itens) {
+    const el = document.createElement("div");
+    el.className = "item-estoque" + (item.baixo ? " baixo" : "");
+    const detalhes = [
+      item.minimo ? `aviso em ${inteiro(item.minimo)}` : "sem mínimo",
+      item.custo_unitario ? `${dinheiroFino(item.custo_unitario)} a folha` : "sem preço",
+    ];
+    el.innerHTML = `
+      <div class="nome">${escapar(item.nome)}</div>
+      <div class="saldo">${inteiro(item.quantidade)}<small>${escapar(item.unidade)}</small></div>
+      <div class="detalhe">${item.baixo ? "abaixo do mínimo · " : ""}${detalhes.join(" · ")}</div>
+      <div class="p-acoes">
+        <button class="btn-sec" data-estoque="entrada" data-item="${escapar(item.id)}">Entrada</button>
+        <button class="btn-sec" data-estoque="contagem" data-item="${escapar(item.id)}">Contagem</button>
+        <button class="btn-sec" data-estoque="ajustes" data-item="${escapar(item.id)}">Mínimo e preço</button>
+      </div>`;
+    grade.appendChild(el);
+  }
+  lista.appendChild(grade);
+
+  const um = estoque.custo_folha.single, dois = estoque.custo_folha.double;
+  const cfg = estoque.config;
+  const linha = (rotulo, a, b, classe) => `<tr class="${classe || ""}"><td>${rotulo}</td>` +
+    `<td class="${a < 0 ? "negativo" : ""}">${dinheiroFino(a)}</td>` +
+    `<td class="${b < 0 ? "negativo" : ""}">${dinheiroFino(b)}</td></tr>`;
+  const custo = document.createElement("div");
+  custo.className = "bloco-estoque";
+  custo.innerHTML = `
+    <div class="topo">
+      <span class="rotulo">Custo de uma folha</span>
+      <button class="btn-sec" data-estoque="custos">Ajustar</button>
+    </div>
+    <div class="rolagem"><table class="custo-folha">
+      <thead><tr><th></th><th>Um lado</th><th>Dois lados</th></tr></thead>
+      <tbody>
+        ${linha("Papel", um.papel, dois.papel)}
+        ${linha(`Plástico (${inteiro(cfg.plastico_um_lado)} / ${inteiro(cfg.plastico_dois_lados)} por folha)`,
+                um.plastico, dois.plastico)}
+        ${linha("Tinta", um.tinta, dois.tinta)}
+        ${linha("Material", um.total, dois.total, "total")}
+        ${linha("Cobrado", um.cobrado, dois.cobrado)}
+        ${linha("Sobra", um.margem, dois.margem)}
+      </tbody>
+    </table></div>`;
+  lista.appendChild(custo);
+
+  const movs = document.createElement("div");
+  movs.className = "bloco-estoque";
+  movs.innerHTML = `<div class="topo"><span class="rotulo">Movimentos</span></div>`;
+  const nomes = Object.fromEntries(estoque.itens.map((i) => [i.id, i.nome]));
+  if (!estoque.movimentos.length) {
+    movs.appendChild(caixaVazia("Nenhum movimento ainda."));
+  }
+  for (const m of estoque.movimentos) {
+    const el = document.createElement("div");
+    el.className = "movimento";
+    const sinal = m.delta > 0 ? "+" : "−";
+    const ref = m.referencia
+      ? ` <b>#${escapar(m.referencia)}</b>` : "";
+    el.innerHTML = `
+      <span>${escapar(quando(m.criado_em).split(" (")[0])}</span>
+      <span class="oque">${escapar(nomes[m.item] || m.item)} ·
+        ${escapar(MOTIVOS[m.motivo] || m.motivo)}${ref}</span>
+      <span class="delta ${m.delta < 0 ? "sai" : "entra"}">${sinal}${inteiro(Math.abs(m.delta))}</span>
+      <span>= ${inteiro(m.saldo)}</span>`;
+    movs.appendChild(el);
+  }
+  lista.appendChild(movs);
+}
+
+async function salvarEstoque(caminho, valores, mensagem) {
+  try {
+    estoque = await api(caminho, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(valores),
+    });
+    notaEstoque = {tipo: "ok", texto: mensagem};
+  } catch (e) {
+    if (e.message === "401") return;
+    notaEstoque = {tipo: "erro", texto: e.message};
+  }
+  marcarAbaEstoque();
+  if (aba === "estoque") desenharEstoque();
+}
+
+function acaoDeEstoque(acao, id) {
+  if (!estoque) return;
+  const item = estoque.itens.find((i) => i.id === id);
+  const cfg = estoque.config;
+  if (acao === "entrada" && item) {
+    abrirModal({
+      titulo: `Entrada — ${item.nome}`,
+      texto: "Quantas folhas chegaram e quanto custou a compra.",
+      campos: [
+        {nome: "quantidade", rotulo: "Quantidade", modo: "numeric"},
+        {nome: "valor_pago", rotulo: "Valor pago (R$, opcional)", modo: "decimal"},
+      ],
+      ok: "Somar ao estoque",
+      aoConfirmar: (v) => salvarEstoque(`/admin/estoque/${id}/entrada`, v,
+        `Entrada de ${v.quantidade} em ${item.nome}.`),
+    });
+  } else if (acao === "contagem" && item) {
+    abrirModal({
+      titulo: `Contagem — ${item.nome}`,
+      texto: `O estoque marca <b>${inteiro(item.quantidade)}</b>. ` +
+             `Quantas folhas há de fato?`,
+      campos: [{nome: "quantidade", rotulo: "Contado", modo: "numeric",
+                valor: String(Math.max(0, item.quantidade))}],
+      ok: "Salvar contagem",
+      aoConfirmar: (v) => salvarEstoque(`/admin/estoque/${id}/contagem`, v,
+        `${item.nome} passou a ${v.quantidade}.`),
+    });
+  } else if (acao === "ajustes" && item) {
+    abrirModal({
+      titulo: item.nome,
+      texto: "",
+      campos: [
+        {nome: "minimo", rotulo: "Avisar quando chegar a", modo: "numeric",
+         valor: String(item.minimo || 0)},
+        {nome: "custo_unitario", rotulo: "Preço por folha (R$)", modo: "decimal",
+         valor: campoDecimal(item.custo_unitario)},
+      ],
+      ok: "Salvar",
+      aoConfirmar: (v) => salvarEstoque(`/admin/estoque/${id}/ajustes`, v,
+        `${item.nome} atualizado.`),
+    });
+  } else if (acao === "custos") {
+    abrirModal({
+      titulo: "Custo de uma folha",
+      texto: "",
+      campos: [
+        {nome: "tinta_por_pagina", rotulo: "Tinta por página (R$)", modo: "decimal",
+         valor: campoDecimal(cfg.tinta_por_pagina)},
+        {nome: "plastico_um_lado", rotulo: "Plástico por folha — um lado",
+         modo: "numeric", valor: String(cfg.plastico_um_lado)},
+        {nome: "plastico_dois_lados", rotulo: "Plástico por folha — dois lados",
+         modo: "numeric", valor: String(cfg.plastico_dois_lados)},
+      ],
+      ok: "Salvar",
+      aoConfirmar: (v) => salvarEstoque("/admin/estoque/custos", v,
+        "Custos atualizados."),
+    });
+  }
+}
+
 function trocarAba(nova) {
   if (aba === nova) return;
   aba = nova;
   busca = "";
   filtro = "";
+  notaEstoque = null;
   $("buscaInput").value = "";
   $("buscaInput").placeholder = aba === "decks"
     ? "Buscar por nome do baralho, comandante, dono ou id"
@@ -590,8 +840,11 @@ function trocarAba(nova) {
   for (const b of document.querySelectorAll("[data-aba]")) {
     b.classList.toggle("ativo", b.getAttribute("data-aba") === aba);
   }
+  $("buscaLinha").hidden = aba === "estoque";
+  $("filtros").innerHTML = "";
   $("rodapePedidos").hidden = aba !== "pedidos";
   $("rodapeDecks").hidden = aba !== "decks";
+  $("rodapeEstoque").hidden = aba !== "estoque";
   // A barra de combinar é dos pedidos: some junto com eles, senão fica uma
   // ação de outro assunto flutuando sobre uma lista que não a entende.
   $("comboBarra").hidden = true;
@@ -1130,9 +1383,28 @@ $("comboLimpar").addEventListener("click", () => {
 
 let confirmarAtual = null;
 
-function abrirModal({titulo, texto, ok, perigo, confirmarCom, aoConfirmar}) {
+/* `campos` são entradas de formulário ({nome, rotulo, modo, valor}); o que
+   foi digitado chega em `aoConfirmar` como {nome: texto}. */
+function abrirModal({titulo, texto, ok, perigo, confirmarCom, campos, aoConfirmar}) {
   $("modalTitulo").textContent = titulo;
   $("modalTexto").innerHTML = texto;
+  $("modalTexto").hidden = !texto;
+  const caixa = $("modalCampos");
+  caixa.innerHTML = "";
+  for (const c of campos || []) {
+    const rotulo = document.createElement("label");
+    rotulo.className = "modal-campo";
+    rotulo.innerHTML = `<span class="rotulo"></span>`;
+    rotulo.firstChild.textContent = c.rotulo;
+    const entrada = document.createElement("input");
+    entrada.type = "text";
+    entrada.name = c.nome;
+    entrada.inputMode = c.modo || "text";
+    entrada.autocomplete = "off";
+    entrada.value = c.valor || "";
+    rotulo.appendChild(entrada);
+    caixa.appendChild(rotulo);
+  }
   const btn = $("modalOk");
   btn.textContent = ok;
   btn.className = "btn-confirma" + (perigo ? " perigo" : "");
@@ -1147,8 +1419,22 @@ function abrirModal({titulo, texto, ok, perigo, confirmarCom, aoConfirmar}) {
     : null;
   confirmarAtual = aoConfirmar;
   $("modal").classList.add("show");
-  (confirmarCom ? campo : btn).focus();
+  const primeiro = caixa.querySelector("input");
+  if (primeiro) { primeiro.focus(); primeiro.select(); }
+  else (confirmarCom ? campo : btn).focus();
 }
+
+function lerCamposDoModal() {
+  const valores = {};
+  for (const e of $("modalCampos").querySelectorAll("input")) {
+    valores[e.name] = e.value.trim();
+  }
+  return valores;
+}
+
+$("modalCampos").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") { ev.preventDefault(); $("modalOk").click(); }
+});
 
 function fecharModal() {
   $("modal").classList.remove("show");
@@ -1173,8 +1459,9 @@ document.addEventListener("keydown", (ev) => {
 });
 $("modalOk").addEventListener("click", async () => {
   const acao = confirmarAtual;
+  const valores = lerCamposDoModal();
   fecharModal();
-  if (acao) await acao();
+  if (acao) await acao(valores);
 });
 
 /* --------------------------------------------------------------- eventos */
@@ -1189,6 +1476,12 @@ $("abas").addEventListener("click", (ev) => {
 });
 
 $("lista").addEventListener("click", (ev) => {
+  const deEstoque = ev.target.closest("[data-estoque]");
+  if (deEstoque) {
+    acaoDeEstoque(deEstoque.getAttribute("data-estoque"),
+                  deEstoque.getAttribute("data-item"));
+    return;
+  }
   const abrir = ev.target.closest("[data-abrir-deck]");
   if (abrir) {
     // Aba nova: o operador quase sempre volta pra lista depois de olhar.

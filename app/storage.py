@@ -18,6 +18,8 @@ import sqlite3
 import time
 import uuid
 
+from . import estoque
+
 DB_PATH = os.environ.get("DB_PATH", "/app/data/orders.db")
 
 
@@ -66,6 +68,7 @@ def init_db():
         )
         """
     )
+    estoque.criar_tabelas(conn)
     conn.commit()
     conn.close()
 
@@ -103,6 +106,7 @@ def create_order(xml_text: str, lamination: str, customer_name: str,
 def mark_paid(order_id: str):
     conn = _conn()
     conn.execute("UPDATE orders SET status='paid' WHERE id=?", (order_id,))
+    estoque.sincronizar(conn, [order_id])
     conn.commit()
     conn.close()
 
@@ -114,6 +118,7 @@ def mark_notified(order_id: str):
         "UPDATE orders SET status='notified', notified_at=? WHERE id=? AND status!='paid'",
         (time.time(), order_id),
     )
+    estoque.sincronizar(conn, [order_id])
     conn.commit()
     conn.close()
 
@@ -302,6 +307,7 @@ def set_status(order_id: str, status: str) -> bool:
     else:
         cur = conn.execute("UPDATE orders SET status=? WHERE id=?",
                            (status, order_id))
+    estoque.sincronizar(conn, [order_id])
     conn.commit()
     mudou = cur.rowcount > 0
     conn.close()
@@ -316,6 +322,7 @@ def delete_order(order_id: str) -> bool:
     frente é cancelar, não apagar.
     """
     conn = _conn()
+    estoque.ao_apagar(conn, order_id)
     cur = conn.execute("DELETE FROM orders WHERE id=?", (order_id,))
     conn.commit()
     apagou = cur.rowcount > 0
@@ -364,6 +371,7 @@ def mark_paid_many(order_ids: list[str]) -> int:
     conn = _conn()
     cur = conn.execute(
         f"UPDATE orders SET status='paid' WHERE id IN ({marcadores})", unicos)
+    estoque.sincronizar(conn, unicos)
     conn.commit()
     n = cur.rowcount
     conn.close()
