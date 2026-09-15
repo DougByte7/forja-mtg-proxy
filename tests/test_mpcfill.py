@@ -255,11 +255,27 @@ try:
        meta["aaa"]["miniatura"],
        "https://drive.google.com/thumbnail?sz=w400-h400&id=aaa")
 
+    # Carta com mais artes que uma consulta deles aceita (a Forest tem 1288, e
+    # o MPC Fill recusa acima de 1000) sai em blocos, e não em erro.
+    sessao = ligar(*[RespostaFalsa(CARDS) for _ in range(3)])
+    muitos = [f"bloco{i:04d}" for i in range(mpcfill.IDS_POR_CONSULTA * 2 + 1)]
+    mpcfill.metadados(list(reversed(muitos)))
+    blocos = [json.loads(corpo)["cardIdentifiers"] for _, corpo in sessao.chamadas]
+    eq("mais ids que uma consulta aceita saem em blocos", len(blocos), 3)
+    check("nenhum bloco passa do que eles aceitam",
+          max(map(len, blocos)) <= mpcfill.IDS_POR_CONSULTA)
+    eq("e juntos os blocos são todos os ids, uma vez cada",
+       sorted(i for b in blocos for i in b), muitos)
+    mpcfill.metadados(muitos)
+    eq("em outra ordem, os mesmos blocos saem do cache", len(sessao.chamadas), 3)
+
+    antes = len(sessao.chamadas)
     try:
-        mpcfill.metadados(["x"] * (mpcfill.MAX_IDS + 1))
+        mpcfill.metadados([f"x{i}" for i in range(mpcfill.MAX_IDS + 1)])
         check("acima do teto de ids é recusado", False, "(passou)")
-    except mpcfill.MPCFillError:
+    except ValueError:
         check("acima do teto de ids é recusado", True)
+    eq("sem sair daqui", len(sessao.chamadas), antes)
 
     print("\n--- pares de dupla face ---")
 

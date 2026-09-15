@@ -507,6 +507,21 @@ def _ler_faixa(path: str, inicio: int, fim: int, bloco: int = 64 * 1024):
             yield pedaco
 
 
+class _ArquivoInteiro(FileResponse):
+    """O `FileResponse` sem olhar o `Range` do pedido.
+
+    Quem decide entre faixa e arquivo inteiro é o `_servir_pdf`. Do Starlette
+    0.39 em diante o `FileResponse` também lê o `Range`, e o que aqui ficou
+    decidido como arquivo inteiro sairia como multipart (várias faixas) ou 400
+    (unidade desconhecida, que o HTTP manda ignorar). Tirar o cabeçalho do
+    escopo faz ele responder igual em qualquer versão, e o `sendfile` fica.
+    """
+
+    async def __call__(self, scope, receive, send):
+        cabecalhos = [(k, v) for k, v in scope["headers"] if k.lower() != b"range"]
+        await super().__call__({**scope, "headers": cabecalhos}, receive, send)
+
+
 def _servir_pdf(request: Request, path: str, order_id: str,
                 falhas: int) -> Response:
     """Devolve a folha montada, com Range e revalidação.
@@ -562,8 +577,8 @@ def _servir_pdf(request: Request, path: str, order_id: str,
                      "Content-Length": str(fim - inicio + 1)},
         )
 
-    return FileResponse(path, media_type="application/pdf", stat_result=st,
-                        headers=cabecalhos)
+    return _ArquivoInteiro(path, media_type="application/pdf", stat_result=st,
+                           headers=cabecalhos)
 
 
 @app.get("/orders/{order_id}/pdf")
@@ -1099,6 +1114,8 @@ def artes_metadados(corpo: dict = Body(default={})):
         raise HTTPException(400, "Manda a lista de ids em `ids`.")
     try:
         return {"artes": mpcfill.metadados(ids)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     except mpcfill.MPCFillError as e:
         raise HTTPException(502, str(e))
 

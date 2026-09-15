@@ -67,18 +67,21 @@ LIGADO = os.environ.get("MPCFILL", "1") == "1"
 # O deck inteiro cabe numa busca. O teto existe pra impedir uma lista sem fim,
 # não pra policiar quem tem deck grande.
 MAX_NOMES = 120
-# Quantos ids por consulta de metadados. Alto de propósito, e medido: os 713
-# ids de Sol Ring — a carta com mais artes que se conhece — voltam com
-# metadados completos em 0,6 s numa requisição só.
+# Os metadados vêm de TODAS as artes da carta aberta, e não por página: é o que
+# faz o FILTRO funcionar. Carregar por página deixaria o filtro de edição
+# enxergando 24 arquivos de 713, filtrar por "Kaladesh" não acharia quase nada,
+# e nada na tela diria por quê. É uma chamada por carta ABERTA (não por deck),
+# e o cache de uma semana cobre a segunda visita.
 #
-# Isto não é detalhe de performance, é o que faz o FILTRO funcionar. Carregar
-# metadados por página deixaria o filtro de edição enxergando 24 arquivos de
-# 713: filtrar por "Kaladesh" não acharia quase nada, e nada na tela diria por
-# quê. Com tudo carregado, o filtro vê o conjunto inteiro.
-#
-# É UMA requisição por carta ABERTA (não por deck): quem abre a modal de três
-# cartas paga três, e o cache de uma semana cobre a segunda visita.
-MAX_IDS = 800
+# Quantos ids vão em cada consulta a eles. Medido em 15/09/2026: o MPC Fill
+# aceita até 1000 por requisição ("Invalid card count 1288. Must be less than
+# or equal to 1000"), e 800 deixa folga se o teto deles baixar. Carta com mais
+# artes que isso — os terrenos básicos: a Forest tem 1288 — sai em blocos, e
+# as 1288 voltam em duas consultas, 2,1 s.
+IDS_POR_CONSULTA = 800
+# Teto de ids de uma chamada inteira. A rota de metadados é pública, e sem ele
+# um pedido só viraria centenas de consultas ao serviço deles.
+MAX_IDS = 4000
 
 _freio = ritmo.Freio("mpcfill", DELAY_SEGUNDOS)
 
@@ -347,14 +350,23 @@ def metadados(ids: list[str]) -> dict[str, dict]:
 
     Id que eles não conhecem simplesmente não volta no dicionário — e é assim
     que se descobre arte que sumiu.
-    """
-    ids = [str(i).strip() for i in ids if str(i or "").strip()]
-    if not ids:
-        return {}
-    if len(ids) > MAX_IDS:
-        raise MPCFillError(f"são até {MAX_IDS} artes por consulta; vieram {len(ids)}.")
 
-    chave = _chave(sorted(ids))
+    Em blocos de `IDS_POR_CONSULTA`, cada um com o seu cache. Os ids saem
+    ordenados antes de dividir, então a mesma carta cai sempre nos mesmos
+    blocos, na ordem que for pedida. Levanta `ValueError` acima de `MAX_IDS`:
+    é pedido grande demais de quem chamou, não falha do MPC Fill.
+    """
+    ids = sorted({str(i).strip() for i in ids if str(i or "").strip()})
+    if len(ids) > MAX_IDS:
+        raise ValueError(f"São até {MAX_IDS} artes por consulta; vieram {len(ids)}.")
+    saida: dict[str, dict] = {}
+    for inicio in range(0, len(ids), IDS_POR_CONSULTA):
+        saida.update(_metadados_do_bloco(ids[inicio:inicio + IDS_POR_CONSULTA]))
+    return saida
+
+
+def _metadados_do_bloco(ids: list[str]) -> dict[str, dict]:
+    chave = _chave(ids)
     guardado = _do_cache("cards", chave)
     if guardado is not None:
         return guardado
