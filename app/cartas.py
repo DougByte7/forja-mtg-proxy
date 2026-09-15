@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     scryfall TEXT,
     imagem_verso TEXT,
     deitada INTEGER,
+    imagem_status TEXT,
     tokens TEXT
 )
 """
@@ -170,12 +171,13 @@ CREATE TABLE IF NOT EXISTS tokens (
     cores TEXT,
     imagem TEXT,
     imagem_verso TEXT,
-    scryfall TEXT
+    scryfall TEXT,
+    imagem_status TEXT
 )
 """
 
 _COLUNAS_TOKENS = ("id, nome, tipo, texto, poder, resistencia, cores, "
-                   "imagem, imagem_verso, scryfall")
+                   "imagem, imagem_verso, scryfall, imagem_status")
 _INTERROGACOES_TOKENS = ",".join("?" * len(_COLUNAS_TOKENS.split(",")))
 
 
@@ -201,17 +203,20 @@ def _conn() -> sqlite3.Connection:
 # Colunas que nasceram depois da primeira versão do banco. `init_db` só cria
 # a tabela QUANDO ELA NÃO EXISTE, então numa base já sincronizada elas nunca
 # apareceriam — e a primeira busca morreria com "no such column". Ficam vazias
-# até a próxima sincronização, o que a tela trata como "sem verso, não deita".
+# até a próxima sincronização, o que a tela trata como "sem verso, não deita",
+# e o `imagem_status` vazio como imagem boa — é o que ela quase sempre é.
 _COLUNAS_NOVAS = (("imagem_verso", "TEXT"), ("deitada", "INTEGER"),
-                  ("tokens", "TEXT"))
+                  ("tokens", "TEXT"), ("imagem_status", "TEXT"))
+_COLUNAS_NOVAS_TOKENS = (("imagem_status", "TEXT"),)
 
 
-def _completar_colunas(conn, tabela: str = "cartas") -> None:
+def _completar_colunas(conn, tabela: str = "cartas",
+                       novas=_COLUNAS_NOVAS) -> None:
     tem = {linha["name"]
            for linha in conn.execute(f"PRAGMA table_info({tabela})")}
     if not tem:                      # tabela ainda não existe: o CREATE cuida
         return
-    for nome, tipo in _COLUNAS_NOVAS:
+    for nome, tipo in novas:
         if nome not in tem:
             conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {nome} {tipo}")
 
@@ -222,6 +227,7 @@ def init_db():
         conn.execute(_ESQUEMA.format(tabela="cartas"))
         conn.execute(_ESQUEMA_TOKENS)
         _completar_colunas(conn)
+        _completar_colunas(conn, "tokens", _COLUNAS_NOVAS_TOKENS)
         for sql in _INDICES:
             conn.execute(sql.format(tabela="cartas"))
         conn.execute("CREATE TABLE IF NOT EXISTS meta "
@@ -456,6 +462,7 @@ def _linha_token(carta: dict) -> tuple | None:
         _imagem(carta),
         _imagem_verso(carta),
         carta.get("scryfall_uri") or "",
+        carta.get("image_status") or "",
     )
 
 
@@ -524,6 +531,9 @@ def _linha(carta: dict) -> tuple | None:
         carta.get("scryfall_uri") or "",
         _imagem_verso(carta),
         _deitada(carta),
+        # Se a imagem é scan de verdade: é o que o "usar a arte padrão" do
+        # deckbuilder confere antes de mandar a imagem pro papel.
+        carta.get("image_status") or "",
         _tokens_da_carta(carta),
     )
 
@@ -531,7 +541,7 @@ def _linha(carta: dict) -> tuple | None:
 _COLUNAS = ("id, nome, busca, busca_frente, mana_cost, cmc, tipo, texto, "
             "cores, identidade, legal, comandante, parceiro, basico, "
             "ilimitada, preco_usd, imagem, layout, scryfall, imagem_verso, "
-            "deitada, tokens")
+            "deitada, imagem_status, tokens")
 _INTERROGACOES = ",".join("?" * len(_COLUNAS.split(",")))
 
 

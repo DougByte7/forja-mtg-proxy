@@ -1,12 +1,18 @@
 /* =========================================================================
    ESCOLHER A ARTE
 
-   A frase que sustenta o desenho inteiro: SCRYFALL É O CATÁLOGO DO QUE
-   EXISTE; MPC FILL É O ARQUIVO QUE IMPRIME. A tira de cima mostra as
-   impressões oficiais — edição, ano, artista — e serve pra pessoa RECONHECER
-   a arte que quer; clicar nela não escolhe nada, só semeia o filtro da grade.
-   O que fica guardado é sempre um arquivo do MPC Fill, porque é dele que o
-   `pdf_generator` baixa desde sempre.
+   TRÊS ORIGENS, UM SEGMENTO PRA CADA. O que fica guardado é sempre um id que
+   o `pdf_generator` sabe imprimir (ver `arte_id.py`), e cada origem chega a
+   ele de um jeito:
+
+   * MPC FILL — a biblioteca de arquivos de impressão. A tira de cima mostra
+     as impressões oficiais da Scryfall — edição, ano, artista — e serve pra
+     RECONHECER a arte que se quer: clicar nela não escolhe nada, só filtra a
+     grade pelos arquivos daquela impressão.
+   * SCRYFALL — a imagem oficial de cada impressão, em resolução menor que a
+     do MPC Fill. Scan pequeno vem marcado como baixa resolução.
+   * ENVIAR — um arquivo do computador de quem monta, conferido pelo servidor
+     (ver `artes_enviadas.py`).
 
    DUAS REQUISIÇÕES POR DECK, E SÓ NO CLIQUE. A busca (`/artes/buscar`) traz
    os ids de todas as cartas de uma vez e é cara; os metadados vêm por carta
@@ -20,6 +26,10 @@
    CARTA DE DUAS FACES TEM DUAS ESCOLHAS. Frente e verso são dois arquivos
    no papel, e o MPC Fill indexa cada face pelo próprio nome — então cada lado
    tem a sua busca, a sua grade e a sua linha no servidor (`artes.FACES`).
+
+   CÓPIA TEM ESCOLHA PRÓPRIA QUANDO SE QUER. Com "Uma arte por cópia" ligado,
+   o que se escolhe vale pra cópia do seletor; a cópia sem escolha própria usa
+   a arte de todas (ver `artes.py`).
 
    FICHA SE ESCOLHE AQUI TAMBÉM. As fichas que o deck cria vão pro pedido
    junto com as cartas e passam pela mesma modal, com duas diferenças: a
@@ -39,25 +49,43 @@ const ARTES_POR_PAGINA = 24;
 // Guardado no navegador pelo mesmo motivo da coluna do maybeboard: é jeito de
 // trabalhar, e quem prefere a modal fechando sozinha prefere sempre.
 const CHAVE_FECHA_ARTE = "forja.deck.arte-fecha";
+// O PNG da Scryfall tem 745 px de largura, e a carta 2,48 pol (ver
+// `artes.DPI_SCRYFALL`).
+const DPI_SCRYFALL = 300;
+// O `image_status` da Scryfall sem imagem que se imprima (ver
+// `artes.STATUS_SEM_IMAGEM`).
+const STATUS_SEM_IMAGEM = ["missing", "placeholder"];
+const AVISO_BAIXA = "em baixa resolução: pode sair borrada no papel";
 
 const arte = {
   carta: null,        // a carta aberta agora
   face: "frente",     // "frente" | "verso": o lado que a grade está escolhendo
+  // O segmento aberto. Fica de uma carta pra outra: quem escolhe pela
+  // Scryfall costuma seguir nela.
+  origem: "mpcfill",  // "mpcfill" | "scryfall" | "enviar"
+  copia: 0,           // 0 = todas as cópias; n = a n-ésima (ver `artes.py`)
+  porCopia: false,    // o "Uma arte por cópia" desta carta
   busca: "",          // o nome que se pergunta ao MPC Fill por esse lado
   ids: [],            // todos os ids de arte dele, na ordem das fontes
+  carregandoIds: false,
+  erroIds: "",
   meta: {},           // id -> metadados, preenchido por carta aberta
   pagina: 0,
   // `impressao` = {k, sigla, artista} da impressão clicada na vitrine, ou
   // null. `k` é a posição dela na tira, pra a tira saber qual acender.
   filtro: {texto: "", fonte: "", dpi: 0, impressao: null},
   impressoes: null,   // null = buscando, false = não deu, array = ok
-  escolhas: {},       // nome achatado -> {frente:{...}, verso:{...}}
+  // As opções da grade da Scryfall como foram desenhadas: o clique acha a
+  // escolhida pela posição nesta lista.
+  opcoesScryfall: [],
+  escolhas: {},       // nome achatado -> {frente, verso, copias: {n: {frente, verso}}}
   fontes: [],
   // Os ids de arte já buscados, pelo nome que foi perguntado. `null` = ainda
   // não busquei nada; `buscandoDeck` segura a busca do deck inteiro em voo,
   // pra duas cartas abertas em seguida não pedirem o deck duas vezes.
   porNome: null,
   buscandoDeck: null,
+  enviando: false,
 };
 
 /* O nome achatado, do MESMO jeito que o `cartas.normalizar` do servidor:
@@ -73,7 +101,7 @@ const LIGATURAS_ARTE = {"æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe",
 function chaveDaArte(nome){
   return String(nome || "")
     .replace(/[æÆœŒøØßđ]/g, (c) => LIGATURAS_ARTE[c])
-    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFKD").replace(/[̀-ͯ]/g, "")
     .toLowerCase().replace(/['’ʼ]/g, "")
     .replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -87,10 +115,44 @@ export function nomeDaArte(carta){
 
 /* `escolhas` é o mapa de outro deck — o segundo deck do goldfish, que tem as
    artes dele. Sem ela, valem as do deck aberto. */
-export function arteEscolhida(carta, face, escolhas){
+function escolhasDaCarta(carta, escolhas){
+  return (escolhas || arte.escolhas)[chaveDaArte(nomeDaArte(carta))] || {};
+}
+
+/* Com `copia`, a arte daquela cópia: a dela, ou a de todas. Sem `copia`, a
+   de todas — ou, na carta que só tem escolha por cópia, a da primeira cópia
+   que tem, que é o que a linha do deck e a prévia do hover mostram. */
+export function arteEscolhida(carta, face, escolhas, copia){
   if (!carta) return null;
-  const mapa = escolhas || arte.escolhas;
-  return (mapa[chaveDaArte(nomeDaArte(carta))] || {})[face || "frente"] || null;
+  const daCarta = escolhasDaCarta(carta, escolhas);
+  const lado = face || "frente";
+  const copias = daCarta.copias || {};
+  if (copia) return (copias[copia] || {})[lado] || daCarta[lado] || null;
+  if (daCarta[lado]) return daCarta[lado];
+  const primeira = Object.keys(copias).map(Number).sort((a, b) => a - b)
+    .find(n => copias[n][lado]);
+  return primeira ? copias[primeira][lado] : null;
+}
+
+/* Se a carta tem escolha por cópia: é o que liga o "Uma arte por cópia" ao
+   abrir a modal, e o que faz a galeria separar as cópias. */
+export function temArtePorCopia(carta){
+  return Object.keys(escolhasDaCarta(carta).copias || {}).length > 0;
+}
+
+/* Se toda cópia de um lado tem arte pra imprimir — a conta do `artes.pedido`. */
+export function ladoPronto(carta, face, quantidade){
+  for (let n = 1; n <= (quantidade || 1); n++){
+    if (!arteEscolhida(carta, face, null, n)) return false;
+  }
+  return true;
+}
+
+/* Quantas cópias da carta vão pro papel. Comandante e ficha são uma. */
+function quantidadeNoPapel(carta){
+  if (!carta || carta.ficha) return 1;
+  const entrada = estado.cartas.find(e => e.carta && e.carta.nome === carta.nome);
+  return entrada ? entrada.quantidade : 1;
 }
 
 /* Duas faces DE PAPEL, e não de texto: carta partida e aventura têm duas
@@ -104,27 +166,61 @@ export function temVerso(carta){
    servidor desfaz o prefixo na hora de perguntar (ver `mpcfill._consulta`). */
 const PREFIXO_FICHA = "t:";
 
+/* O nome de um lado só: "Delver of Secrets" ou "Insectile Aberration". */
+function nomeDoLado(carta, face){
+  const partes = carta.nome.split(" // ");
+  return ((face === "verso" ? partes[1] : partes[0]) || carta.nome).trim();
+}
+
 /* O que se pergunta ao MPC Fill por um lado da carta. A frente vai com o nome
    inteiro, que o servidor corta no " // " (ver `mpcfill._consulta`); o verso
    vai só com o nome dele, porque a biblioteca deles indexa cada face pelo
    próprio nome. Ficha vai com o prefixo de ficha. */
 function nomeDaBusca(carta, face){
-  const nome = face !== "verso" ? carta.nome
-    : (carta.nome.split(" // ")[1] || "").trim() || carta.nome;
+  const nome = face !== "verso" ? carta.nome : nomeDoLado(carta, face);
   return carta.ficha ? PREFIXO_FICHA + nome : nome;
 }
 
-function miniaturaDoDrive(id, largura){
+/* A forma dos ids de arte e das URLs de imagem da Scryfall, as mesmas do
+   `arte_id.py`. */
+const ID_SCRYFALL = /^scryfall:([0-9a-f]{8}-[0-9a-f-]{27}):(front|back)$/;
+const ID_ENVIADA = /^enviada:([0-9a-f]{64})$/;
+const URL_SCRYFALL = /\/(front|back)\/[0-9a-f]\/[0-9a-f]\/([0-9a-f]{8}-[0-9a-f-]{27})\./;
+
+/* A miniatura de uma arte guardada, de onde o id disser. A da Scryfall vem
+   no tamanho mais próximo do pedido: `small`, `normal` e `large` têm 146, 488
+   e 672 px de largura. */
+function miniaturaDaArte(id, largura){
+  const scryfall = ID_SCRYFALL.exec(id || "");
+  if (scryfall){
+    const impressao = scryfall[1];
+    const tamanho = largura > 488 ? "large" : largura > 146 ? "normal" : "small";
+    return `https://cards.scryfall.io/${tamanho}/${scryfall[2]}/${impressao[0]}/${
+      impressao[1]}/${impressao}.jpg`;
+  }
+  const enviada = ID_ENVIADA.exec(id || "");
+  if (enviada) return `/artes/enviadas/${enviada[1]}/miniatura`;
   return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w${largura}`;
 }
 
-/* Um lado da carta do jeito que ele vai sair: o arquivo escolhido quando há,
-   e a arte padrão da Scryfall quando não. É o que a prévia do hover e a
+/* O id da Scryfall tirado de uma URL de imagem dela. É assim que a ficha,
+   que não tem lista de impressões, oferece a própria imagem. */
+function idDaImagemDaScryfall(url){
+  const achado = URL_SCRYFALL.exec(url || "");
+  return achado ? `scryfall:${achado[2]}:${achado[1]}` : "";
+}
+
+function rotuloDaEscolha(escolha){
+  return [escolha.arquivo || escolha.arte_id, escolha.fonte].filter(Boolean).join(" · ");
+}
+
+/* Um lado da carta do jeito que ele vai sair: a arte escolhida quando há, e
+   a arte padrão da Scryfall quando não. É o que a prévia do hover e a
    galeria mostram — ver a arte oficial no lugar da que se escolheu faria a
    escolha parecer não ter pegado. */
-export function imagemDaFace(carta, face, largura, escolhas){
-  const escolha = arteEscolhida(carta, face, escolhas);
-  if (escolha) return miniaturaDoDrive(escolha.drive_id, largura || 500);
+export function imagemDaFace(carta, face, largura, escolhas, copia){
+  const escolha = arteEscolhida(carta, face, escolhas, copia);
+  if (escolha) return miniaturaDaArte(escolha.arte_id, largura || 500);
   return (face === "verso" ? carta.imagem_verso : carta.imagem) || "";
 }
 
@@ -136,10 +232,10 @@ export function botaoDeArte(carta){
   const escolha = arteEscolhida(carta);
   const nome = escapar(carta.nome);
   const fundo = escolha
-    ? ` style="background-image:url('${escapar(miniaturaDoDrive(escolha.drive_id, 40))}')"` : "";
+    ? ` style="background-image:url('${escapar(miniaturaDaArte(escolha.arte_id, 40))}')"` : "";
   return `<button class="mini ${escolha ? "tem-arte" : ""}"
     data-arte-carta="${nome}"${fundo}
-    title="${escolha ? "Arte escolhida: " + escapar(escolha.arquivo || escolha.drive_id)
+    title="${escolha ? "Arte escolhida: " + escapar(rotuloDaEscolha(escolha))
                      : "Escolher a arte de " + nome}"
     aria-label="Escolher arte de ${nome}">${escolha ? "" : ico("image")}</button>`;
 }
@@ -176,7 +272,9 @@ function acharCartaDaArte(nome){
     fichasDoDeck().find(f => f.chaveArte === nome) || null;
 }
 
-export async function abrirEscolhaDeArte(nome, face){
+/* `copia` vem do quadro de uma cópia na galeria; sem ela, a modal abre na
+   arte de todas — ou na primeira cópia, se a carta já tem arte por cópia. */
+export async function abrirEscolhaDeArte(nome, face, copia){
   const carta = acharCartaDaArte(nome);
   if (!carta) return;
   if (!estado.id) return toast("Salve o deck antes de escolher artes.");
@@ -184,22 +282,28 @@ export async function abrirEscolhaDeArte(nome, face){
   arte.carta = carta;
   arte.meta = {};
   arte.filtro = {texto: "", fonte: "", dpi: 0, impressao: null};
-  // Ficha não tem vitrine de impressões: a Scryfall responde pelo nome, e
-  // "Soldier" seria a tira de todos os Soldier já impressos, de toda cor e
-  // corpo. O que ajuda é ver a ficha que o deck cria (`desenharVitrine`).
+  // Ficha não tem impressões: a Scryfall responde pelo nome, e "Soldier"
+  // seria a tira de todos os Soldier já impressos, de toda cor e corpo. O
+  // que ajuda é ver a ficha que o deck cria (`desenharVitrine`), e é ela que
+  // o segmento Scryfall oferece (`opcoesDaScryfall`).
   arte.impressoes = carta.ficha ? [] : null;
+  const quantidade = quantidadeNoPapel(carta);
+  arte.copia = Math.min(Number(copia) || 0, quantidade);
+  arte.porCopia = quantidade > 1 && (arte.copia > 0 || temArtePorCopia(carta));
+  arte.copia = arte.porCopia ? arte.copia || 1 : 0;
   $("arte-titulo").textContent = carta.ficha ? rotuloDaFicha(carta) : carta.nome;
   $("arte-busca").value = "";
   $("arte-fonte").value = "";
   $("arte-dpi").value = "0";
+  $("arte-envio-estado").textContent = "";
   // A prévia do hover fica presa embaixo da modal se não for dispensada: o
   // clique não move o mouse, e é movimento que a apaga.
   $("previa").classList.remove("mostra");
   $("arte-fundo").hidden = false;
   travarRolagem(true);
 
-  // As duas viajam juntas: a vitrine é da Scryfall e a grade é do MPC Fill,
-  // e nenhuma das duas precisa esperar a outra.
+  // As duas viajam juntas: as impressões são da Scryfall e a grade é do MPC
+  // Fill, e nenhuma das duas precisa esperar a outra.
   if (!carta.ficha) buscarImpressoes(carta.nome);
   mostrarFace(face === "verso" && temVerso(carta) ? "verso" : "frente");
 }
@@ -211,19 +315,25 @@ function mostrarFace(face){
   arte.face = face;
   arte.busca = nomeDaBusca(arte.carta, face);
   arte.ids = [];
+  arte.carregandoIds = true;
+  arte.erroIds = "";
   arte.pagina = 0;
-  $("arte-filtros").hidden = true;
-  $("arte-conta").textContent = "Procurando as artes…";
-  $("arte-grade").innerHTML = "";
-  $("arte-paginas").innerHTML = "";
-  desenharFaces();
-  desenharVitrine();
+  desenharLado();
   buscarArtesDaCarta(arte.busca);
 }
 
+/* O que depende do lado e da cópia abertos: os dois seletores e o segmento.
+   Trocar de cópia passa só por aqui — a grade é a mesma, e muda qual opção
+   está marcada. */
+function desenharLado(){
+  desenharFaces();
+  desenharCopias();
+  desenharOrigem();
+}
+
 /* O seletor de lado, só em carta de duas faces. O ✓ diz qual lado já tem
-   arquivo escolhido — sem ele, escolher a frente e fechar deixaria o verso
-   no padrão sem nada na tela contando. */
+   arte escolhida — sem ele, escolher a frente e fechar deixaria o verso no
+   padrão sem nada na tela contando. */
 function desenharFaces(){
   const seg = $("arte-faces");
   seg.hidden = !temVerso(arte.carta);
@@ -233,9 +343,57 @@ function desenharFaces(){
     const ativa = f === arte.face;
     b.classList.toggle("ativa", ativa);
     b.setAttribute("aria-pressed", String(ativa));
-    const feita = !!arteEscolhida(arte.carta, f);
+    const feita = !!arteEscolhida(arte.carta, f, null, arte.copia);
     b.title = feita ? "Arte escolhida pra este lado" : "Este lado está na arte padrão";
     b.innerHTML = (f === "verso" ? "Verso" : "Frente") + (feita ? " " + ico("check") : "");
+  }
+}
+
+/* "Uma arte por cópia" e o seletor de cópia, só com mais de uma cópia no
+   deck. O ✓ no seletor marca a cópia com arte própria neste lado; a sem ✓
+   sai com a arte das outras. */
+function desenharCopias(){
+  const quantidade = arte.carta ? quantidadeNoPapel(arte.carta) : 1;
+  const caixa = $("arte-copias");
+  caixa.hidden = quantidade <= 1;
+  $("arte-padrao").textContent = arte.copia ? "Igual às outras cópias" : "Voltar ao padrão";
+  if (caixa.hidden) return;
+  $("arte-por-copia").checked = arte.porCopia;
+  const seletor = $("arte-copia");
+  seletor.hidden = !arte.porCopia;
+  if (!arte.porCopia) return;
+  const copias = escolhasDaCarta(arte.carta).copias || {};
+  seletor.innerHTML = Array.from({length: quantidade}, (_, i) => {
+    const propria = (copias[i + 1] || {})[arte.face];
+    return `<option value="${i + 1}">Cópia ${i + 1}${propria ? " ✓" : ""}</option>`;
+  }).join("");
+  seletor.value = String(arte.copia);
+}
+
+/* O segmento aberto. As três origens dividem a contagem, a grade e o
+   paginador; a tira de impressões e os filtros são só do MPC Fill, e o envio
+   tem só a caixa dele. */
+function desenharOrigem(){
+  const origem = arte.origem;
+  for (const b of $("arte-origens").querySelectorAll("[data-origem]")){
+    const ativa = b.dataset.origem === origem;
+    b.classList.toggle("ativa", ativa);
+    b.setAttribute("aria-pressed", String(ativa));
+  }
+  const envio = origem === "enviar";
+  $("arte-vitrine").hidden = origem !== "mpcfill";
+  $("arte-filtros").hidden = origem !== "mpcfill" || !arte.ids.length;
+  $("arte-envio").hidden = !envio;
+  $("arte-conta").hidden = envio;
+  $("arte-grade").hidden = envio;
+  $("arte-paginas").hidden = envio;
+  if (origem === "mpcfill"){
+    desenharVitrine();
+    desenharGrade();
+  } else if (origem === "scryfall"){
+    desenharGradeScryfall();
+  } else {
+    desenharEnvio();
   }
 }
 
@@ -249,7 +407,8 @@ async function buscarImpressoes(nome){
     // vez" são coisas diferentes, e a tela diz as duas de formas diferentes.
     arte.impressoes = false;
   }
-  desenharVitrine();
+  if (arte.origem === "mpcfill") desenharVitrine();
+  if (arte.origem === "scryfall") desenharGradeScryfall();
 }
 
 /* A busca cobre o DECK INTEIRO na primeira vez, não a carta aberta.
@@ -265,7 +424,10 @@ async function buscarImpressoes(nome){
    a busca do deck não pergunta — é buscado sozinho, na hora em que abre.
 
    As fichas também ficam fora da busca do deck, e vão TODAS juntas na
-   primeira que se abre: quem abre uma costuma abrir as outras em seguida. */
+   primeira que se abre: quem abre uma costuma abrir as outras em seguida.
+
+   Roda com qualquer segmento aberto: é barata depois da primeira vez, e o
+   segmento do MPC Fill fica pronto pra quando a pessoa passar por ele. */
 async function buscarArtesDaCarta(busca){
   try {
     if (!arte.porNome){
@@ -283,8 +445,9 @@ async function buscarArtesDaCarta(busca){
     }
   } catch (e){
     if (arte.busca !== busca) return;
-    $("arte-conta").textContent = e.message;
-    $("arte-grade").innerHTML = "";
+    arte.carregandoIds = false;
+    arte.erroIds = e.message;
+    if (arte.origem === "mpcfill") desenharGrade();
     return;
   }
   if (arte.busca !== busca) return;   // trocou de carta ou de lado
@@ -304,9 +467,12 @@ async function pedirArtes(nomes){
 
 function aplicarIds(busca, ids){
   arte.ids = ids;
+  arte.carregandoIds = false;
   montarFiltroDeFonte();
-  $("arte-filtros").hidden = !ids.length;
-  desenharGrade();
+  if (arte.origem === "mpcfill"){
+    $("arte-filtros").hidden = !ids.length;
+    desenharGrade();
+  }
   carregarMetadados(busca, ids);
 }
 
@@ -329,12 +495,14 @@ async function carregarMetadados(busca, ids){
     });
     if (arte.busca !== busca) return;   // trocou de carta ou de lado
     Object.assign(arte.meta, r.artes || {});
-    desenharGrade();
+    if (arte.origem === "mpcfill") desenharGrade();
   } catch (e){
     // A grade já está desenhada com as miniaturas: sem metadados ela perde o
     // nome do arquivo e o DPI, e continua servindo pra escolher pela ARTE,
     // que é o que a pessoa veio fazer. O filtro é que fica sem serventia.
-    $("arte-conta").textContent += " — sem os detalhes (nome do arquivo e DPI)";
+    if (arte.origem === "mpcfill"){
+      $("arte-conta").textContent += " — sem os detalhes (nome do arquivo e DPI)";
+    }
   }
 }
 
@@ -392,7 +560,7 @@ function desenharVitrine(){
   const deitada = !!(arte.carta && arte.carta.deitada);
   const acesa = arte.filtro.impressao ? arte.filtro.impressao.k : -1;
   caixa.innerHTML = `<span class="arte-nota" style="max-width:120px">Estas são
-    as artes oficiais. Servem pra achar — o que imprime é o arquivo abaixo.</span>`
+    as artes oficiais. Clique numa pra ver só os arquivos dela.</span>`
     + arte.impressoes.slice(0, 24).map((i, k) => `
       <button class="arte-impressao ${deitada ? "deitada" : ""} ${k === acesa ? "ativa" : ""}"
         data-impressao="${k}"
@@ -476,12 +644,29 @@ function desenharPaginas(paginas){
     seta(atual + 1, atual >= paginas - 1, "Próxima página", "caret-right");
 }
 
+/* A página à vista de uma lista, e a contagem que diz qual pedaço é. */
+function paginar(lista, rotulo){
+  const paginas = Math.ceil(lista.length / ARTES_POR_PAGINA);
+  if (arte.pagina >= paginas) arte.pagina = 0;
+  const inicio = arte.pagina * ARTES_POR_PAGINA;
+  const daPagina = lista.slice(inicio, inicio + ARTES_POR_PAGINA);
+  $("arte-conta").textContent =
+    `${lista.length} ${rotulo} — mostrando ${inicio + 1}–${inicio + daPagina.length}`;
+  desenharPaginas(paginas);
+  return {inicio, daPagina};
+}
+
 function desenharGrade(){
-  const ids = idsFiltrados();
-  const total = ids.length;
   const grade = $("arte-grade");
   grade.classList.toggle("deitada", !!(arte.carta && arte.carta.deitada));
-  if (!total){
+  if (arte.carregandoIds || arte.erroIds){
+    $("arte-conta").textContent = arte.erroIds || "Procurando as artes…";
+    grade.innerHTML = "";
+    desenharPaginas(0);
+    return;
+  }
+  const ids = idsFiltrados();
+  if (!ids.length){
     const imp = arte.filtro.impressao;
     $("arte-conta").textContent = !arte.ids.length
       ? `O MPC Fill não tem arte pra ${arte.face === "verso" ? "o verso desta" : "esta"} ${
@@ -495,80 +680,279 @@ function desenharGrade(){
     desenharPaginas(0);
     return;
   }
-  const paginas = Math.ceil(total / ARTES_POR_PAGINA);
-  if (arte.pagina >= paginas) arte.pagina = 0;
-  const inicio = arte.pagina * ARTES_POR_PAGINA;
-  const daPagina = ids.slice(inicio, inicio + ARTES_POR_PAGINA);
-
-  $("arte-conta").textContent =
-    `${total} arte(s) — mostrando ${inicio + 1}–${inicio + daPagina.length}`;
-  desenharPaginas(paginas);
-
-  const escolhida = arteEscolhida(arte.carta, arte.face);
-  const marcado = escolhida ? escolhida.drive_id : "";
+  const {daPagina} = paginar(ids, "arte(s)");
+  const escolhida = arteEscolhida(arte.carta, arte.face, null, arte.copia);
+  const marcado = escolhida ? escolhida.arte_id : "";
   const deitada = !!arte.carta.deitada;
   grade.innerHTML = daPagina.map(id => {
     const m = arte.meta[id] || {};
     return `<button class="arte-op ${id === marcado ? "ativa" : ""}" data-arte-id="${escapar(id)}">
-      ${quadroHTML(m.miniatura || miniaturaDoDrive(id, 400), deitada)}
+      ${quadroHTML(m.miniatura || miniaturaDaArte(id, 400), deitada)}
       <small>${escapar(m.arquivo || "…")}${m.dpi ? ` · ${m.dpi} DPI` : ""}</small>
     </button>`;
   }).join("");
 }
 
+/* O que o segmento Scryfall oferece pro lado aberto: cada impressão oficial
+   com imagem desse lado. A ficha oferece a imagem dela mesma, a que o deck
+   cria (ver `abrirEscolhaDeArte`). */
+function opcoesDaScryfall(){
+  const carta = arte.carta, verso = arte.face === "verso";
+  if (carta.ficha){
+    const imagem = verso ? carta.imagem_verso : carta.imagem;
+    const id = idDaImagemDaScryfall(imagem);
+    return id ? [{id, imagem, status: "", legenda: "A ficha que o deck cria",
+                  arquivo: rotuloDaFicha(carta)}] : [];
+  }
+  return (Array.isArray(arte.impressoes) ? arte.impressoes : []).map(i => {
+    const imagem = verso ? i.imagem_verso : i.imagem;
+    if (!i.id || !imagem) return null;
+    return {
+      id: `scryfall:${i.id}:${verso ? "back" : "front"}`,
+      imagem, status: i.status_imagem || "", titulo: i.edicao,
+      legenda: [i.sigla, (i.lancamento || "").slice(0, 4), i.artista]
+        .filter(Boolean).join(" · "),
+      // Do jeito que os arquivos do MPC Fill costumam vir nomeados, "Sol Ring
+      // [MSC] {214}": é o nome que aparece no pedido e na revisão da folha.
+      arquivo: `${nomeDoLado(carta, arte.face)} [${i.sigla}] {${i.numero}}`,
+    };
+  }).filter(Boolean);
+}
+
+function desenharGradeScryfall(){
+  const grade = $("arte-grade");
+  const carta = arte.carta;
+  grade.classList.toggle("deitada", !!carta.deitada);
+  arte.opcoesScryfall = opcoesDaScryfall();
+  const vazio = arte.impressoes === null ? "Carregando as impressões oficiais…"
+    : arte.impressoes === false ? "Não consegui falar com a Scryfall agora."
+    : !arte.opcoesScryfall.length
+      ? `A Scryfall não tem imagem pra ${arte.face === "verso" ? "o verso desta" : "esta"} ${
+          carta.ficha ? "ficha" : "carta"}.`
+      : "";
+  if (vazio){
+    $("arte-conta").textContent = vazio;
+    grade.innerHTML = "";
+    desenharPaginas(0);
+    return;
+  }
+  const {inicio, daPagina} = paginar(arte.opcoesScryfall, "impressão(ões) oficial(is)");
+  const escolhida = arteEscolhida(carta, arte.face, null, arte.copia);
+  const marcado = escolhida ? escolhida.arte_id : "";
+  grade.innerHTML = daPagina.map((o, k) => {
+    const semImagem = STATUS_SEM_IMAGEM.includes(o.status);
+    const selo = o.status === "lowres"
+      ? `<span class="arte-selo">Baixa resolução</span>` : "";
+    return `<button class="arte-op ${o.id === marcado ? "ativa" : ""}"
+      data-scryfall="${inicio + k}" ${semImagem ? "disabled" : ""}
+      title="${escapar(o.titulo || o.legenda)}">
+      ${quadroHTML(o.imagem, !!carta.deitada, selo)}
+      <small>${escapar(o.legenda)}${semImagem ? " · sem imagem" : ""}</small>
+    </button>`;
+  }).join("");
+}
+
+/* O segmento de envio: a arte enviada que este lado já usa, quando é o caso,
+   e a caixa pra mandar outra. */
+function desenharEnvio(){
+  const escolha = arteEscolhida(arte.carta, arte.face, null, arte.copia);
+  const atual = $("arte-envio-atual");
+  if (!escolha || !ID_ENVIADA.test(escolha.arte_id)){
+    atual.innerHTML = "";
+    return;
+  }
+  atual.innerHTML = `<span class="arte-envio-quadro">${quadroHTML(
+      miniaturaDaArte(escolha.arte_id, 500), !!arte.carta.deitada)}</span>
+    <span class="arte-nota">Em uso: <b>${escapar(escolha.arquivo || "arquivo enviado")}</b>${
+      escolha.dpi ? ` · ${escolha.dpi} DPI` : ""}${escolha.baixa_resolucao
+      ? `<br><span class="arte-alerta">Baixa resolução: pode sair borrada no papel.</span>`
+      : ""}</span>`;
+}
+
 function irParaPagina(p){
   arte.pagina = p;
-  desenharGrade();
+  if (arte.origem === "scryfall") desenharGradeScryfall();
+  else desenharGrade();
   // A página nova começa do começo: trocar de página com a grade rolada até o
   // fim mostraria o fim da página seguinte.
   $("arte-grade").scrollTop = 0;
 }
 
-async function usarArte(id){
+/* A escolha na memória da tela, do jeito que o `artes.do_deck` a devolveria. */
+function gravarLocal(carta, face, copia, escolha){
+  const chave = chaveDaArte(nomeDaArte(carta));
+  const daCarta = Object.assign({}, arte.escolhas[chave]);
+  if (copia){
+    const copias = Object.assign({}, daCarta.copias);
+    copias[copia] = Object.assign({}, copias[copia], {[face]: escolha});
+    daCarta.copias = copias;
+  } else {
+    daCarta[face] = escolha;
+  }
+  arte.escolhas[chave] = daCarta;
+}
+
+/* `face` null tira todas as escolhas por cópia da carta, dos dois lados. */
+function apagarLocal(carta, face, copia){
+  const chave = chaveDaArte(nomeDaArte(carta));
+  const daCarta = Object.assign({}, arte.escolhas[chave]);
+  if (face === null){
+    delete daCarta.copias;
+  } else if (copia){
+    const copias = Object.assign({}, daCarta.copias);
+    const lados = Object.assign({}, copias[copia]);
+    delete lados[face];
+    if (Object.keys(lados).length) copias[copia] = lados;
+    else delete copias[copia];
+    if (Object.keys(copias).length) daCarta.copias = copias;
+    else delete daCarta.copias;
+  } else {
+    delete daCarta[face];
+  }
+  if (Object.keys(daCarta).length) arte.escolhas[chave] = daCarta;
+  else delete arte.escolhas[chave];
+}
+
+/* Grava no servidor o que um clique na grade escolheu. */
+async function guardarEscolha(escolha){
   // Guardados antes da rede: a modal pode fechar ou trocar de lado enquanto
   // o servidor responde, e a escolha é da carta e do lado que foram clicados.
-  const carta = arte.carta, face = arte.face;
-  const m = arte.meta[id] || {};
-  const escolha = {drive_id: id, arquivo: m.arquivo || "", fonte: m.fonte || "",
-                   dpi: m.dpi || 0};
+  const carta = arte.carta, face = arte.face, copia = arte.copia;
+  let r;
   try {
-    await api(`/decks/${estado.id}/artes`, {
+    r = await api(`/decks/${estado.id}/artes`, {
       method: "PUT",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(Object.assign({nome: nomeDaArte(carta), face}, escolha)),
+      body: JSON.stringify(Object.assign({nome: nomeDaArte(carta), face, copia}, escolha)),
     });
   } catch (e){
     return toast("Não consegui guardar: " + e.message);
   }
-  const chave = chaveDaArte(nomeDaArte(carta));
-  arte.escolhas[chave] = Object.assign({}, arte.escolhas[chave], {[face]: escolha});
+  concluirEscolha(carta, face, copia, r.escolha, "escolhida");
+}
+
+function concluirEscolha(carta, face, copia, escolha, verbo){
+  gravarLocal(carta, face, copia, escolha);
   redesenharArtes();
-  toast(face === "verso" ? "Arte do verso escolhida." : "Arte escolhida.");
+  const qual = copia ? `da cópia ${copia}` : face === "verso" ? "do verso" : "";
+  toast(["Arte", qual, verbo].filter(Boolean).join(" ") +
+        (escolha.baixa_resolucao ? `, ${AVISO_BAIXA}.` : "."));
   if ($("arte-fecha").checked) return fecharArte();
-  if (arte.carta !== carta || arte.face !== face) return;
-  desenharGrade();
-  desenharFaces();
+  if (arte.carta !== carta || arte.face !== face || arte.copia !== copia) return;
+  desenharLado();
+}
+
+function usarArte(id){
+  const m = arte.meta[id] || {};
+  guardarEscolha({arte_id: id, arquivo: m.arquivo || "", fonte: m.fonte || "",
+                  dpi: m.dpi || 0});
+}
+
+function usarScryfall(k){
+  const o = arte.opcoesScryfall[k];
+  if (!o || STATUS_SEM_IMAGEM.includes(o.status)) return;
+  const baixa = o.status === "lowres";
+  guardarEscolha({arte_id: o.id, arquivo: o.arquivo, fonte: "Scryfall",
+                  dpi: baixa ? 0 : DPI_SCRYFALL, baixa_resolucao: baixa});
+}
+
+async function enviarArquivo(arquivo){
+  if (!arquivo || !arte.carta || arte.enviando) return;
+  const carta = arte.carta, face = arte.face, copia = arte.copia;
+  const corpo = new FormData();
+  corpo.append("arquivo", arquivo);
+  corpo.append("nome", nomeDaArte(carta));
+  corpo.append("face", face);
+  corpo.append("copia", String(copia));
+  arte.enviando = true;
+  $("arte-envio-estado").textContent = "Enviando…";
+  let r;
+  try {
+    r = await api(`/decks/${estado.id}/artes/enviar`, {method: "POST", body: corpo});
+  } catch (e){
+    if (arte.carta === carta) $("arte-envio-estado").textContent = e.message;
+    return;
+  } finally {
+    arte.enviando = false;
+  }
+  $("arte-envio-estado").textContent = "";
+  concluirEscolha(carta, face, copia, r.escolha, "enviada");
 }
 
 async function voltarAoPadrao(){
   if (!arte.carta) return;
-  const carta = arte.carta, face = arte.face;
+  const carta = arte.carta, face = arte.face, copia = arte.copia;
   try {
     await api(`/decks/${estado.id}/artes?nome=${
-      encodeURIComponent(nomeDaArte(carta))}&face=${face}`, {method: "DELETE"});
+      encodeURIComponent(nomeDaArte(carta))}&face=${face}&copia=${copia}`, {method: "DELETE"});
   } catch (e){
     return toast("Não consegui: " + e.message);
   }
-  const chave = chaveDaArte(nomeDaArte(carta));
-  const faces = Object.assign({}, arte.escolhas[chave]);
-  delete faces[face];
-  if (Object.keys(faces).length) arte.escolhas[chave] = faces;
-  else delete arte.escolhas[chave];
+  apagarLocal(carta, face, copia);
   redesenharArtes();
-  toast(face === "verso" ? "O verso voltou pra arte padrão." : "Voltou pra arte padrão.");
-  if (arte.carta !== carta || arte.face !== face) return;
-  desenharGrade();
-  desenharFaces();
+  toast(copia ? `A cópia ${copia} voltou pra arte das outras.`
+    : face === "verso" ? "O verso voltou pra arte padrão." : "Voltou pra arte padrão.");
+  if (arte.carta !== carta || arte.face !== face || arte.copia !== copia) return;
+  desenharLado();
+}
+
+/* Desligar com cópias já escolhidas descarta essas escolhas — pergunta antes,
+   porque é trabalho que não volta. */
+async function mudarPorCopia(interruptor){
+  const carta = arte.carta;
+  if (!carta) return;
+  if (interruptor.checked){
+    arte.porCopia = true;
+    arte.copia = 1;
+    return desenharLado();
+  }
+  if (temArtePorCopia(carta)){
+    if (!confirm("As artes escolhidas pra cada cópia vão ser descartadas, e " +
+                 "todas as cópias passam a usar a mesma arte. Continuar?")){
+      interruptor.checked = true;
+      return;
+    }
+    try {
+      await api(`/decks/${estado.id}/artes/copias?nome=${
+        encodeURIComponent(nomeDaArte(carta))}`, {method: "DELETE"});
+    } catch (e){
+      interruptor.checked = true;
+      return toast("Não consegui: " + e.message);
+    }
+    apagarLocal(carta, null, 0);
+    redesenharArtes();
+    if (arte.carta !== carta) return;
+  }
+  arte.porCopia = false;
+  arte.copia = 0;
+  desenharLado();
+}
+
+/* O "Usar a arte padrão nas que faltam" da aba Artes (ver
+   `artes.aplicar_padrao`). */
+async function aplicarPadraoNasQueFaltam(){
+  if (!estado.id) return;
+  const botao = $("btn-artes-padrao");
+  botao.disabled = true;
+  let r;
+  try {
+    r = await api(`/decks/${estado.id}/artes/padrao`, {method: "POST"});
+  } catch (e){
+    return toast("Não consegui: " + e.message);
+  } finally {
+    botao.disabled = false;
+  }
+  arte.escolhas = r.escolhas || arte.escolhas;
+  redesenharArtes();
+  const partes = [r.aplicadas ? `${r.aplicadas} arte(s) padrão aplicada(s).`
+                              : "Nenhuma arte padrão aplicada."];
+  if (r.baixa_resolucao.length){
+    partes.push(`Em baixa resolução: ${r.baixa_resolucao.join(", ")}.`);
+  }
+  if (r.sem_imagem.length){
+    partes.push(`Sem imagem da Scryfall: ${r.sem_imagem.join(", ")}.`);
+  }
+  toast(partes.join(" "));
 }
 
 /* A página atrás não rola com a modal aberta: a roda do mouse que passa do
@@ -607,11 +991,25 @@ export function ligarArte(){
     if (b && arte.carta && b.dataset.face !== arte.face) mostrarFace(b.dataset.face);
   });
 
+  $("arte-origens").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-origem]");
+    if (!b || !arte.carta || b.dataset.origem === arte.origem) return;
+    arte.origem = b.dataset.origem;
+    arte.pagina = 0;
+    desenharOrigem();
+  });
+
+  $("arte-por-copia").addEventListener("change", (e) => mudarPorCopia(e.target));
+  $("arte-copia").addEventListener("change", (e) => {
+    arte.copia = Number(e.target.value) || 1;
+    desenharLado();
+  });
+
   $("arte-vitrine").addEventListener("click", (e) => {
     const b = e.target.closest("[data-impressao]");
     if (!b) return;
-    // Clicar numa impressão NÃO escolhe nada: ela é da Scryfall, e o que
-    // imprime é o arquivo do MPC Fill. O que ela faz é filtrar a grade pelos
+    // Clicar numa impressão aqui NÃO escolhe nada: a imagem oficial se
+    // escolhe no segmento Scryfall. O que ela faz é filtrar a grade pelos
     // arquivos daquela impressão (ver `casaImpressao`) — é assim que se acha
     // "a de Kaladesh" entre setecentas. Clicar de novo na mesma tira o filtro.
     const k = Number(b.dataset.impressao);
@@ -627,11 +1025,30 @@ export function ligarArte(){
   });
 
   $("arte-grade").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-arte-id]");
-    if (b) usarArte(b.dataset.arteId);
+    const doMpc = e.target.closest("[data-arte-id]");
+    if (doMpc) return usarArte(doMpc.dataset.arteId);
+    const daScryfall = e.target.closest("[data-scryfall]");
+    if (daScryfall) usarScryfall(Number(daScryfall.dataset.scryfall));
+  });
+
+  $("arte-arquivo").addEventListener("change", (e) => {
+    enviarArquivo(e.target.files[0]);
+    e.target.value = "";   // o mesmo arquivo de novo tem que disparar outra vez
+  });
+  const soltar = $("arte-soltar");
+  soltar.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    soltar.classList.add("sobre");
+  });
+  soltar.addEventListener("dragleave", () => soltar.classList.remove("sobre"));
+  soltar.addEventListener("drop", (e) => {
+    e.preventDefault();
+    soltar.classList.remove("sobre");
+    enviarArquivo(e.dataTransfer.files[0]);
   });
 
   $("arte-padrao").addEventListener("click", voltarAoPadrao);
+  $("btn-artes-padrao").addEventListener("click", aplicarPadraoNasQueFaltam);
   $("arte-paginas").addEventListener("click", (e) => {
     const b = e.target.closest("[data-pagina]");
     if (b && !b.disabled) irParaPagina(Number(b.dataset.pagina));

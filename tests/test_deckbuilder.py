@@ -455,9 +455,9 @@ try:
 
     # A prévia do hover mostra o arquivo escolhido, e não a arte oficial.
     previa = avaliar(
-        'arte.escolhas["sol ring"] = {frente: {drive_id: "id-sol"}};'
+        'arte.escolhas["sol ring"] = {frente: {arte_id: "id-sol"}};'
         'arte.escolhas["delver of secrets insectile aberration"] ='
-        ' {verso: {drive_id: "id-inseto"}};'
+        ' {verso: {arte_id: "id-inseto"}};'
         'JSON.stringify([ganchosDaPrevia(SOL_RING), ganchosDaPrevia(ELVES),'
         ' ganchosDaPrevia(DELVER)])')
     check("com arte escolhida, a prévia mostra o arquivo do MPC Fill",
@@ -471,7 +471,7 @@ try:
     galeria = avaliar(
         'estado.cartas.push({carta: DELVER, quantidade: 1, categoria: ""},'
         ' {carta: ROOM, quantidade: 1, categoria: ""});'
-        'arte.escolhas["sol ring"] = {frente: {drive_id: "id-sol"}};'
+        'arte.escolhas["sol ring"] = {frente: {arte_id: "id-sol"}};'
         'desenharGaleria(); JSON.stringify($("galeria-resultado").innerHTML)')
     quadros = re.findall(r'data-arte-carta="([^"]+)" data-arte-face="(\w+)"', galeria)
     eq("a galeria tem um quadro por arte: frente e verso da carta de duas faces",
@@ -499,13 +499,13 @@ try:
         'function foto(){ atualizarBotaoPedido(); var l = $("btn-pedido");'
         ' fotos.push([l.hidden, l.href || null, l.title]); }'
         'foto();'
-        'arte.escolhas["atraxa"] = {frente: {drive_id: "a"}};'
-        'arte.escolhas["sol ring"] = {frente: {drive_id: "s"}};'
+        'arte.escolhas["atraxa"] = {frente: {arte_id: "a"}};'
+        'arte.escolhas["sol ring"] = {frente: {arte_id: "s"}};'
         'arte.escolhas["delver of secrets insectile aberration"] ='
-        ' {frente: {drive_id: "d"}};'
+        ' {frente: {arte_id: "d"}};'
         'foto();'
         'arte.escolhas["delver of secrets insectile aberration"].verso ='
-        ' {drive_id: "i"};'
+        ' {arte_id: "i"};'
         'foto();'
         'estado.id = null; foto();'
         'JSON.stringify(fotos)')
@@ -531,12 +531,12 @@ try:
     fichas = avaliar(
         'estado.id = "abc123"; estado.tokens = %s;'
         'estado.cartas = [{carta: SOL_RING, quantidade: 1, categoria: ""}];'
-        'arte.escolhas["atraxa"] = {frente: {drive_id: "a"}};'
-        'arte.escolhas["sol ring"] = {frente: {drive_id: "s"}};'
-        'arte.escolhas["t wurm aaaa1111"] = {frente: {drive_id: "w"}};'
+        'arte.escolhas["atraxa"] = {frente: {arte_id: "a"}};'
+        'arte.escolhas["sol ring"] = {frente: {arte_id: "s"}};'
+        'arte.escolhas["t wurm aaaa1111"] = {frente: {arte_id: "w"}};'
         'var f = fichasDoDeck(); desenharGaleria(); atualizarBotaoPedido();'
         'var antes = $("btn-pedido").title;'
-        'arte.escolhas["t wurm bbbb2222"] = {frente: {drive_id: "v"}};'
+        'arte.escolhas["t wurm bbbb2222"] = {frente: {arte_id: "v"}};'
         'atualizarBotaoPedido();'
         'JSON.stringify({n: f.length, busca: nomeDaBusca(f[0], "frente"),'
         ' achada: acharCartaDaArte("t:Wurm bbbb2222").texto,'
@@ -557,6 +557,57 @@ try:
     eq("com uma ficha no padrão, o pedido não sai",
        fichas["antes"], "Faltam 1 arte(s) — escolha na aba Artes")
     eq("com as fichas escolhidas, sai", fichas["depois"], "/?deck=abc123")
+
+    # A miniatura sai de onde o id disser (ver `arte_id.py`).
+    imp = "6904ea20-e504-47da-95a0-08739fdde260"
+    minis = avaliar(
+        'JSON.stringify([miniaturaDaArte("1AbC", 400),'
+        ' miniaturaDaArte("scryfall:%s:back", 400),'
+        ' miniaturaDaArte("scryfall:%s:front", 40),'
+        ' miniaturaDaArte("enviada:%s", 400),'
+        ' idDaImagemDaScryfall("https://cards.scryfall.io/normal/front/6/9/%s.jpg?1")])'
+        % (imp, imp, "a" * 64, imp))
+    eq("cada origem com a sua miniatura, e a URL da Scryfall virando id", minis, [
+        "https://drive.google.com/thumbnail?id=1AbC&sz=w400",
+        f"https://cards.scryfall.io/normal/back/6/9/{imp}.jpg",
+        f"https://cards.scryfall.io/small/front/6/9/{imp}.jpg",
+        "/artes/enviadas/" + "a" * 64 + "/miniatura",
+        f"scryfall:{imp}:front"])
+
+    # Arte por cópia: as dez Florestas do deck de exemplo, a 2 e a 4 numa
+    # arte e as outras oito na de todas.
+    copias = avaliar(
+        'estado.id = "abc123"; var FLORESTA = estado.cartas[2].carta;'
+        'arte.escolhas = {"atraxa": {frente: {arte_id: "a"}},'
+        ' "sol ring": {frente: {arte_id: "s"}}, "ashnods altar": {frente: {arte_id: "t"}},'
+        ' "llanowar elves": {frente: {arte_id: "e"}},'
+        ' "swords to plowshares": {frente: {arte_id: "p"}},'
+        ' "forest": {frente: {arte_id: "todas"},'
+        '   copias: {"2": {frente: {arte_id: "outra"}}, "4": {frente: {arte_id: "outra"}}}}};'
+        'desenharGaleria(); atualizarBotaoPedido();'
+        'var r = {galeria: $("galeria-resultado").innerHTML,'
+        ' pedido: $("btn-pedido").href || null, atalho: $("btn-artes-padrao").hidden,'
+        ' da2: arteEscolhida(FLORESTA, "frente", null, 2).arte_id,'
+        ' da3: arteEscolhida(FLORESTA, "frente", null, 3).arte_id};'
+        'delete arte.escolhas.forest.frente; desenharGaleria(); atualizarBotaoPedido();'
+        'r.semTodas = $("btn-pedido").title; r.atalhoSemTodas = $("btn-artes-padrao").hidden;'
+        'r.naLinha = arteEscolhida(FLORESTA).arte_id;'
+        'JSON.stringify(r)')
+    eq("a galeria separa as cópias por arte, e o quadro abre na primeira delas",
+       re.findall(r'data-arte-carta="Forest" data-arte-face="frente" data-arte-copia="(\d+)"',
+                  copias["galeria"]), ["1", "2"])
+    check("cada quadro diz quantas e quais cópias",
+          "8×" in copias["galeria"] and "cópias 1, 3, 5–10" in copias["galeria"]
+          and "2×" in copias["galeria"] and "cópias 2, 4" in copias["galeria"])
+    eq("a cópia com arte própria usa a dela; a outra, a de todas",
+       [copias["da2"], copias["da3"]], ["outra", "todas"])
+    eq("com toda cópia coberta, o pedido sai e o atalho da arte padrão some",
+       [copias["pedido"], copias["atalho"]], ["/?deck=abc123", True])
+    eq("sem a arte de todas, as cópias sem arte própria faltam",
+       [copias["semTodas"], copias["atalhoSemTodas"]],
+       ["Faltam 1 arte(s) — escolha na aba Artes", False])
+    eq("a linha do deck mostra a arte da primeira cópia que tem",
+       copias["naLinha"], "outra")
 
     # --------------------------------------------- o paginador da busca
     print("\n--- o paginador da busca ---")

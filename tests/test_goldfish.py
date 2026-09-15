@@ -400,21 +400,21 @@ eq("o segundo deck traz as artes dele; o da tela usa as da aba Artes",
    rodar("""
      __mesa();
      var d = %s;
-     d.id = "d2"; d.escolhas = {krenko: {frente: {drive_id: "abc"}}};
+     d.id = "d2"; d.escolhas = {krenko: {frente: {arte_id: "abc"}}};
      porSegundoDeck(d);
-     [artesDoJogador(0) === null, artesDoJogador(1).krenko.frente.drive_id];
+     [artesDoJogador(0) === null, artesDoJogador(1).krenko.frente.arte_id];
    """ % DECK2), [True, "abc"])
 eq("e elas voltam com o desfazer, que não as leva na foto",
    rodar("""
      __mesa();
      var d = %s;
-     d.id = "d2"; d.escolhas = {krenko: {frente: {drive_id: "abc"}}};
+     d.id = "d2"; d.escolhas = {krenko: {frente: {arte_id: "abc"}}};
      porSegundoDeck(d);
      guardarMesa();
      tirarSegundoDeck();
      var foto = estado.mesaDesfazer[0].indexOf("abc") >= 0;
      desfazerUmPasso();
-     [foto, artesDoJogador(1).krenko.frente.drive_id];
+     [foto, artesDoJogador(1).krenko.frente.arte_id];
    """ % DECK2), [False, "abc"])
 
 eq("cada um tem o seu contador de mulligan",

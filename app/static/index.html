@@ -1910,17 +1910,30 @@
     return nome || (meta.query || '').trim() || meta.id;
   }
 
-  // Miniatura do Drive. Igual ao download do backend, não é API oficial —
+  // De onde vem a miniatura de uma arte, pelo prefixo do id (ver `arte_id.py`
+  // no backend). A do Drive, igual ao download do backend, não é API oficial —
   // por isso tem um endereço alternativo e, se os dois falharem, o nome da
   // carta aparece no lugar da arte (a prévia continua servindo pra conferir
   // as quantidades).
+  function fontesDaArte(id, largura){
+    const scryfall = /^scryfall:([0-9a-f]{8}-[0-9a-f-]{27}):(front|back)$/.exec(id);
+    if(scryfall){
+      const imp = scryfall[1];
+      return ['https://cards.scryfall.io/' + (largura > 488 ? 'large' : 'normal') + '/' +
+              scryfall[2] + '/' + imp[0] + '/' + imp[1] + '/' + imp + '.jpg'];
+    }
+    const enviada = /^enviada:([0-9a-f]{64})$/.exec(id);
+    if(enviada) return ['/artes/enviadas/' + enviada[1] + '/miniatura'];
+    return [
+      'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + largura,
+      'https://lh3.googleusercontent.com/d/' + encodeURIComponent(id) + '=w' + largura
+    ];
+  }
+
   function cardArt(meta, largura, classe){
     const box = document.createElement('div');
     box.className = 'art' + (classe ? ' ' + classe : '');
-    const fontes = [
-      'https://drive.google.com/thumbnail?id=' + encodeURIComponent(meta.id) + '&sz=w' + largura,
-      'https://lh3.googleusercontent.com/d/' + encodeURIComponent(meta.id) + '=w' + largura
-    ];
+    const fontes = fontesDaArte(meta.id, largura);
     let tentativa = 0;
     const img = document.createElement('img');
     img.loading = 'lazy';

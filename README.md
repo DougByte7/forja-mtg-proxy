@@ -301,6 +301,9 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `app/visitas.py` — quem está no sistema, e o palpite de pessoa ou bot.
 - `tests/test_bleed.py` — confere o recorte da sangria e o tamanho da carta no
   PDF (63 × 88 mm). Roda sem rede e sem pytest: `python tests/test_bleed.py`.
+- `tests/test_artes_enviadas.py` — a arte enviada e a da Scryfall: proporção,
+  arquivo quebrado, cantos transparentes no PDF e as rotas de envio:
+  `python tests/test_artes_enviadas.py`.
 - `tests/test_cotacao.py` — leitura da decklist do XML e a matemática da
   cotação: `python tests/test_cotacao.py`.
 - `tests/test_ligamagic.py` — decodificação do preço da LigaMagic contra uma
@@ -429,11 +432,15 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
 | `GET /deckbuilder` | você, no navegador | a tela de montar deck de Commander — ver *Deckbuilder de Commander* |
 | `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta. `pular` e `com_total` paginam o painel de adicionar, que só pagina com filtro ligado |
-| `GET /cartas/impressoes?nome=` | escolha de arte | as impressões oficiais da Scryfall (edição, ano, artista) — a vitrine. **Não** é o que vai pro papel |
+| `GET /cartas/impressoes?nome=` | escolha de arte | as impressões oficiais da Scryfall (edição, ano, artista, id e status da imagem) — a vitrine do MPC Fill e o segmento Scryfall |
 | `POST /artes/metadados` | escolha de arte | nome do arquivo, DPI e fonte de um punhado de ids do MPC Fill — só da página à vista |
-| `GET/PUT/DELETE /decks/{id}/artes` | escolha de arte | o que já foi escolhido; grava; volta ao padrão |
+| `GET/PUT/DELETE /decks/{id}/artes` | escolha de arte | o que já foi escolhido; grava (de todas as cópias ou de uma, com `copia`); volta ao padrão |
+| `DELETE /decks/{id}/artes/copias?nome=` | escolha de arte | desliga a arte por cópia de uma carta: fica a de todas |
+| `POST /decks/{id}/artes/enviar` | escolha de arte | sobe um arquivo (multipart) e já o escolhe. Recusa proporção fora da carta |
+| `POST /decks/{id}/artes/padrao` | aba Artes | a imagem oficial da Scryfall em tudo o que ainda não tem arte |
+| `GET /artes/enviadas/{sha}` e `…/miniatura` | grade, prévia, revisão da folha | o arquivo enviado, e a miniatura dele já sem sangria |
 | `POST /decks/{id}/artes/buscar` | escolha de arte | os ids de arte de cada carta. **Uma requisição cobre o deck inteiro**, e só no clique |
-| `POST /decks/{id}/artes/revalidar` | antes de imprimir | pergunta se os ids guardados ainda existem na biblioteca |
+| `POST /decks/{id}/artes/revalidar` | antes de imprimir | confere se as artes guardadas ainda existem: as do MPC Fill na biblioteca, as enviadas no disco |
 | `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
 | `GET /conta` | todas as telas | quem está logado, ou `{usuario: null}`. **200 pra anônimo**, não 401 |
 | `POST /conta/entrar` | /entrar | confere a senha e devolve o cookie de sessão. O login é o e-mail, pra quem se cadastrou |
@@ -1686,16 +1693,17 @@ até a carga seguinte.
 custo de trazer a escolha de arte pra dentro; os números continuam abaixo,
 porque foram eles que decidiram a forma da tela.
 
-A frase que sustenta o desenho: **Scryfall é o catálogo do que existe; MPC
-Fill é o arquivo que imprime.** Um botão em cada linha do deck abre a modal
-com duas listas — em cima, a tira das impressões oficiais (edição, ano,
-artista), que serve pra RECONHECER a arte que se quer e **não escolhe nada**;
-embaixo, a grade dos arquivos do MPC Fill, que é o que de fato vira papel.
-Clicar numa impressão semeia o filtro da grade, que é como se acha "a de
-Kaladesh" entre setecentas.
+Um botão em cada linha do deck abre a modal, e a escolha tem **três
+origens**, uma por segmento: a grade dos arquivos do MPC Fill, a imagem
+oficial da Scryfall e um arquivo enviado por quem monta. O que fica guardado é
+sempre um id que o `pdf_generator` sabe imprimir, e o prefixo diz de onde a
+arte vem (`arte_id.py`): id cru é do Drive, `scryfall:<impressão>:<lado>` é o
+PNG oficial, `enviada:<sha256>` é o arquivo no disco.
 
-O `pdf_generator.py` **não mudou uma linha**: ele recebe um id do Drive e não
-sabe que este recurso existe.
+No segmento do MPC Fill a Scryfall aparece também como catálogo: a tira das
+impressões oficiais (edição, ano, artista) serve pra RECONHECER a arte que se
+quer e **não escolhe nada** — clicar numa impressão semeia o filtro da grade,
+que é como se acha "a de Kaladesh" entre setecentas.
 
 #### As duas requisições, e por que a tela tem a forma que tem
 
@@ -1742,7 +1750,7 @@ de mostrar grade vazia, que se leria como "essa carta não tem arte".
 #### Onde a escolha mora, e por que não no deck
 
 Tabela própria (`artes_escolhidas`), chaveada por **deck + nome achatado +
-face**. Duas razões, e a primeira decide:
+face + cópia**. Duas razões, e a primeira decide:
 
 1. **A linha do deck é reescrita inteira pelo autosave, a cada tecla.** Uma
    arte gravada nela correria com um autosave em voo e sumiria — sem erro
@@ -1757,11 +1765,33 @@ Duplicar um deck leva as artes junto (é o trabalho mais chato; quem duplica
 quer a cópia igual); apagar um deck leva as artes embora (senão a tabela
 cresce pra sempre com linhas que ninguém consegue mais ver).
 
-**Uma arte por nome, não por cópia**, e isso é uma limitação conhecida: as 30
-Florestas recebem todas a mesma arte. Uma cópia não tem identidade estável num
-deck que guarda só nome e quantidade. O caminho de extensão, se um dia
-incomodar, é acrescentar `copia` à chave primária com o mesmo `ALTER` +
-`PRAGMA` do resto do projeto.
+**Uma arte por cópia, quando se quer.** Uma cópia não tem identidade num deck
+que guarda só nome e quantidade, então ela é o número dela: `copia` 1 é a
+primeira das 30 Florestas. `copia` 0 é a arte de todas, a que vale pra toda
+cópia sem escolha própria — aumentar a quantidade dá à cópia nova a arte de
+todas, e o pedido só sai com toda cópia coberta. Na aba Artes, as cópias
+aparecem juntas por arte (dez de uma, vinte de outra). O SQLite não muda
+chave primária com `ALTER`, então o `init_db` refaz a tabela antiga uma vez,
+com as escolhas que existiam virando a arte de todas.
+
+#### A imagem da Scryfall e o arquivo enviado
+
+As duas chegam fora do gabarito com sangria do MPC Fill, e o recorte do PDF já
+decidia pela proporção de cada imagem (ver `_crop_bleed`): a da carta passa
+inteira. O que mudou foi de onde baixar, e três cuidados:
+
+* **O PNG da Scryfall tem 745 px de largura — 300 DPI na carta**, contra 800
+  a 1200 dos arquivos do MPC Fill. A impressão de scan pequeno (`lowres`) vem
+  marcada como baixa resolução, e a sem scan (`placeholder`, `missing`) não se
+  deixa escolher. Os cantos vêm transparentes, com branco por baixo: o PDF os
+  pinta com a cor da borda da própria carta.
+* **O arquivo enviado só entra na proporção da carta, com ou sem sangria** —
+  qualquer outra sairia esticada. Fica no `ARTES_ENVIADAS_DIR`, com o sha256
+  do conteúdo como nome, e **nada o apaga**: o id vai no XML do pedido, e o
+  PDF é montado depois de a pessoa pagar.
+* **"Usar a arte padrão nas que faltam"**, na aba Artes, escolhe de uma vez a
+  imagem que a tela já mostrava como padrão — a URL dela, na base local, traz
+  o id da impressão — sem passar por cima do que já foi escolhido.
 
 #### O id do Drive envelhece
 
@@ -1770,9 +1800,9 @@ removido da biblioteca vira, no PDF, o retângulo vermelho de "FALHA NO
 DOWNLOAD" — e descobrir isso **depois de a pessoa ter pago** é o pior
 resultado que este sistema sabe produzir.
 
-Duas defesas. `POST /decks/{id}/artes/revalidar` pergunta ao MPC Fill se os
-ids guardados ainda existem e devolve as mortas com **o nome do arquivo
-junto** — que é o que permite dizer *qual* arte sumiu, em vez de um id de 33
+Duas defesas. `POST /decks/{id}/artes/revalidar` confere as artes guardadas —
+os ids do MPC Fill na biblioteca deles, os arquivos enviados no disco — e
+devolve as mortas com **o nome do arquivo junto** — que é o que permite dizer *qual* arte sumiu, em vez de um id de 33
 caracteres. E o `arquivo` fica guardado ao lado do id justamente pra isso: é
 metade do caminho de volta.
 

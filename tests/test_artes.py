@@ -16,6 +16,11 @@ elas parecendo "eu não escolhi ainda":
 3. **O deck duplicado nascendo pelado.** Quem duplica quer a cópia igual,
    inclusive nisso.
 
+E o que veio depois: a arte por cópia (a cópia sem escolha própria sai com a
+de todas, e o pedido só sai com toda cópia coberta), as três origens de arte,
+a tabela antiga virando a nova sem perder escolha, e o "usar a arte padrão"
+sem passar por cima do que já foi escolhido.
+
 E o inverso: deck apagado tem que levar as artes junto, senão a tabela cresce
 pra sempre com linhas de decks que ninguém consegue mais abrir.
 
@@ -39,8 +44,14 @@ os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
 os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
 os.environ["LOG_DIR"] = TMP
 os.environ["LOG_NIVEL"] = "ERROR"
+os.environ["ARTES_ENVIADAS_DIR"] = os.path.join(TMP, "enviadas")
 
-from app import artes, cartas, decks  # noqa: E402
+import io  # noqa: E402
+import sqlite3  # noqa: E402
+
+from PIL import Image  # noqa: E402
+
+from app import arte_id, artes, artes_enviadas, cartas, decks, mpcfill  # noqa: E402
 
 falhas = []
 
@@ -72,7 +83,7 @@ try:
                    arquivo="Sol Ring (Kaladesh).png", fonte="Chilli", dpi=800)
     escolhas = artes.do_deck(deck["id"])
     chave = cartas.normalizar("Sol Ring")
-    eq("a escolha é lida de volta", escolhas[chave]["frente"]["drive_id"], "drive-aaa")
+    eq("a escolha é lida de volta", escolhas[chave]["frente"]["arte_id"], "drive-aaa")
     eq("com o nome do arquivo junto",
        escolhas[chave]["frente"]["arquivo"], "Sol Ring (Kaladesh).png")
     eq("e o DPI", escolhas[chave]["frente"]["dpi"], 800)
@@ -89,13 +100,13 @@ try:
     artes.escolher(deck["id"], "Lim-Dûl's Vault", "drive-bbb")
     depois = artes.do_deck(deck["id"])
     eq("acento e apóstrofo casam com a mesma linha",
-       depois[cartas.normalizar("Lim-Dul's Vault")]["frente"]["drive_id"], "drive-bbb")
+       depois[cartas.normalizar("Lim-Dul's Vault")]["frente"]["arte_id"], "drive-bbb")
     eq("e não criam duas entradas", len(depois), 2)
 
     # Escolher de novo TROCA, não duplica: é o que "usar esta arte" faz.
     artes.escolher(deck["id"], "sol ring", "drive-ccc")
     eq("escolher de novo troca a arte",
-       artes.do_deck(deck["id"])[chave]["frente"]["drive_id"], "drive-ccc")
+       artes.do_deck(deck["id"])[chave]["frente"]["arte_id"], "drive-ccc")
     eq("e não duplica a linha", len(artes.do_deck(deck["id"])), 2)
 
     print("\n--- as duas faces ---")
@@ -103,7 +114,7 @@ try:
     artes.escolher(deck["id"], "Sol Ring", "drive-verso", face="verso")
     faces = artes.do_deck(deck["id"])[chave]
     eq("frente e verso convivem", sorted(faces), ["frente", "verso"])
-    eq("sem se sobrescrever", faces["frente"]["drive_id"], "drive-ccc")
+    eq("sem se sobrescrever", faces["frente"]["arte_id"], "drive-ccc")
 
     try:
         artes.escolher(deck["id"], "Sol Ring", "x", face="lateral")
@@ -126,7 +137,7 @@ try:
                  [{"nome": "Sol Ring", "quantidade": 4},
                   {"nome": "Forest", "quantidade": 10}])
     eq("gravar o deck por cima não mexe nas artes",
-       artes.do_deck(deck["id"])[chave]["frente"]["drive_id"], "drive-ccc")
+       artes.do_deck(deck["id"])[chave]["frente"]["arte_id"], "drive-ccc")
     eq("nem mudar a quantidade da carta", len(artes.do_deck(deck["id"])), 2)
 
     print("\n--- o que ainda está no padrão ---")
@@ -142,11 +153,11 @@ try:
 
     copia = decks.duplicar(deck["id"])
     eq("a cópia nasce com as artes do original",
-       artes.do_deck(copia["id"])[chave]["frente"]["drive_id"], "drive-ccc")
+       artes.do_deck(copia["id"])[chave]["frente"]["arte_id"], "drive-ccc")
     # E são independentes a partir daí: mexer numa não mexe na outra.
     artes.escolher(copia["id"], "Sol Ring", "drive-só-da-copia")
     eq("mas as duas seguem independentes",
-       artes.do_deck(deck["id"])[chave]["frente"]["drive_id"], "drive-ccc")
+       artes.do_deck(deck["id"])[chave]["frente"]["arte_id"], "drive-ccc")
 
     print("\n--- apagar o deck leva as artes ---")
 
@@ -204,9 +215,9 @@ try:
     eq("uma arte por lado de cada carta", montado["artes"], 6)
     eq("uma posição na folha por cópia", montado["cartas"], 8)
 
-    for nome, drive_id in (("Atraxa", "id-atraxa"), ("Sol Ring", "id-sol"),
-                           ("Lightning Bolt", "id-bolt"), (delver, "id-delver")):
-        artes.escolher(ped["id"], nome, drive_id, arquivo=f"{nome}.png")
+    for nome, ident in (("Atraxa", "id-atraxa"), ("Sol Ring", "id-sol"),
+                        ("Lightning Bolt", "id-bolt"), (delver, "id-delver")):
+        artes.escolher(ped["id"], nome, ident, arquivo=f"{nome}.png")
     artes.escolher(ped["id"], "Forest", "id-floresta")
     montado = artes.pedido(ped)
     eq("com o verso ainda no padrão, continua sem XML", montado["xml"], None)
@@ -355,6 +366,185 @@ try:
     eq("e diz que as deixou de fora",
        sorted(c["nome"] for c in fora if c["motivo"] == "token"),
        ["t:Dia", "t:Treasure", "t:Wurm"])
+
+    print("\n--- uma arte por cópia ---")
+
+    copiado = decks.criar("Cópias", ["Atraxa"], [{"nome": "Forest", "quantidade": 3}])
+    artes.escolher(copiado["id"], "Atraxa", "id-atraxa")
+    artes.escolher(copiado["id"], "Forest", "id-todas")
+    artes.escolher(copiado["id"], "Forest", "id-segunda", copia=2)
+    floresta = artes.do_deck(copiado["id"])["forest"]
+    eq("a arte de todas as cópias fica onde sempre esteve",
+       floresta["frente"]["arte_id"], "id-todas")
+    eq("e a de uma cópia, sob o número dela",
+       floresta["copias"]["2"]["frente"]["arte_id"], "id-segunda")
+    raiz = ET.fromstring(artes.pedido(copiado)["xml"])
+    eq("a cópia com arte própria sai no slot dela; as outras, com a de todas",
+       {c.findtext("id"): c.findtext("slots") for c in raiz.findall("fronts/card")},
+       {"id-atraxa": "0", "id-todas": "1,3", "id-segunda": "2"})
+
+    artes.limpar(copiado["id"], "Forest")
+    eq("sem a arte de todas, a cópia sem arte própria segura o pedido",
+       artes.pedido(copiado)["faltando"], [{"nome": "Forest", "face": "frente"}])
+    for n in (1, 3):
+        artes.escolher(copiado["id"], "Forest", f"id-copia-{n}", copia=n)
+    check("com toda cópia coberta, sai o XML mesmo sem a arte de todas",
+          bool(artes.pedido(copiado)["xml"]))
+
+    # A quantidade muda no autosave, e a escolha da cópia que saiu fica.
+    decks.salvar(copiado["id"], "Cópias", ["Atraxa"],
+                 [{"nome": "Forest", "quantidade": 2}])
+    raiz = ET.fromstring(artes.pedido(decks.obter(copiado["id"]))["xml"])
+    eq("cópia que saiu do deck não entra no pedido",
+       [c.findtext("id") for c in raiz.findall("fronts/card")],
+       ["id-atraxa", "id-copia-1", "id-segunda"])
+    check("e a escolha dela continua guardada",
+          "3" in artes.do_deck(copiado["id"])["forest"]["copias"])
+
+    duplicado = decks.duplicar(copiado["id"])
+    eq("duplicar leva as escolhas por cópia",
+       artes.do_deck(duplicado["id"])["forest"]["copias"]["2"]["frente"]["arte_id"],
+       "id-segunda")
+
+    eq("a cópia volta pra arte de todas",
+       artes.limpar(copiado["id"], "Forest", copia=3), True)
+    eq("desligar a arte por cópia tira as cópias que sobraram",
+       artes.limpar_copias(copiado["id"], "Forest"), 2)
+    check("e não mexe nas outras cartas", "atraxa" in artes.do_deck(copiado["id"]))
+
+    for ruim in (-1, decks.MAX_COPIAS + 1, "x"):
+        try:
+            artes.escolher(copiado["id"], "Forest", "id", copia=ruim)
+            check(f"cópia {ruim!r} é recusada", False, "(aceitou)")
+        except ValueError:
+            check(f"cópia {ruim!r} é recusada", True)
+
+    print("\n--- de onde vem a arte ---")
+
+    IMP = "6904ea20-e504-47da-95a0-08739fdde260"
+    eq("id sem prefixo é do MPC Fill", arte_id.origem("1AbC-xyz_9"), arte_id.MPCFILL)
+    eq("o da Scryfall diz a impressão e o lado",
+       arte_id.origem(f"scryfall:{IMP}:back"), arte_id.SCRYFALL)
+    eq("prefixo desconhecido não imprime", arte_id.origem("dropbox:abc"), None)
+    eq("nem Scryfall com lado inventado", arte_id.origem(f"scryfall:{IMP}:lado"), None)
+    eq("a URL da base local vira id",
+       arte_id.da_imagem_da_scryfall(
+           f"https://cards.scryfall.io/normal/back/6/9/{IMP}.jpg?1783908173"),
+       f"scryfall:{IMP}:back")
+    eq("e o id vira o PNG que o PDF baixa",
+       arte_id.url_da_scryfall(f"scryfall:{IMP}:back"),
+       f"https://cards.scryfall.io/png/back/6/9/{IMP}.png")
+    for ruim, porque in (("dropbox:abc", "de origem desconhecida"),
+                         ("enviada:" + "0" * 64, "que não foi enviado")):
+        try:
+            artes.escolher(copiado["id"], "Forest", ruim)
+            check(f"id {porque} é recusado", False, "(aceitou)")
+        except ValueError:
+            check(f"id {porque} é recusado", True)
+
+    print("\n--- a tabela antiga vira a de cópias ---")
+
+    antigo = os.path.join(TMP, "antigo.db")
+    conn = sqlite3.connect(antigo)
+    conn.execute("CREATE TABLE artes_escolhidas (deck_id TEXT, nome TEXT, face TEXT, "
+                 "drive_id TEXT, arquivo TEXT, fonte TEXT, dpi INTEGER, "
+                 "escolhido_em REAL, PRIMARY KEY (deck_id, nome, face))")
+    conn.execute("INSERT INTO artes_escolhidas VALUES "
+                 "('d1', 'sol ring', 'frente', 'drive-velho', 'Sol Ring.png', "
+                 "'Chilli', 800, 1.0)")
+    conn.commit()
+    conn.close()
+    atual, artes.DB_PATH = artes.DB_PATH, antigo
+    try:
+        artes.init_db()
+        artes.init_db()   # a subida seguinte encontra a tabela já nova
+        velha = artes.do_deck("d1")["sol ring"]["frente"]
+        eq("a escolha antiga vira a arte de todas as cópias",
+           (velha["arte_id"], velha["copia"], velha["arquivo"], velha["dpi"]),
+           ("drive-velho", 0, "Sol Ring.png", 800))
+        artes.escolher("d1", "Sol Ring", "drive-copia", copia=2)
+        eq("e a tabela nova aceita cópia",
+           len(artes.do_deck("d1")["sol ring"]["copias"]), 1)
+    finally:
+        artes.DB_PATH = atual
+
+    print("\n--- a arte padrão nas que faltam ---")
+
+    def impressa(nome, impressao, status="highres_scan"):
+        return {"oracle_id": "o-" + nome, "layout": "normal", "cmc": 1.0,
+                "name": nome, "type_line": "Artifact", "colors": [],
+                "color_identity": [], "legalities": {"commander": "legal"},
+                "image_status": status,
+                "image_uris": {"normal": f"https://cards.scryfall.io/normal/front/"
+                                         f"{impressao[0]}/{impressao[1]}/{impressao}.jpg?1"}}
+
+    IMP_A = "aaaaaaaa-0000-4000-8000-00000000000a"
+    IMP_B = "bbbbbbbb-0000-4000-8000-00000000000b"
+    IMP_C = "cccccccc-0000-4000-8000-00000000000c"
+    IMP_D = "dddddddd-0000-4000-8000-00000000000d"
+    porta_real = {
+        "oracle_id": "o-porta-real", "layout": "transform", "cmc": 2.0,
+        "name": "Porta Real // Sala Real", "colors": [], "color_identity": [],
+        "legalities": {"commander": "legal"}, "image_status": "highres_scan",
+        "card_faces": [
+            {"name": "Porta Real", "type_line": "Artifact", "image_uris": {
+                "normal": f"https://cards.scryfall.io/normal/front/d/d/{IMP_D}.jpg?1"}},
+            {"name": "Sala Real", "type_line": "Artifact", "image_uris": {
+                "normal": f"https://cards.scryfall.io/normal/back/d/d/{IMP_D}.jpg?1"}}]}
+    conn = cartas._conn()
+    for c in (impressa("Anel Solar", IMP_A), impressa("Mapa Borrado", IMP_B, "lowres"),
+              impressa("Carta Anunciada", IMP_C, "placeholder"), porta_real):
+        conn.execute(f"INSERT OR REPLACE INTO cartas ({cartas._COLUNAS}) "
+                     f"VALUES ({cartas._INTERROGACOES})", cartas._linha(c))
+    conn.commit()
+    conn.close()
+
+    padrao = decks.criar("Padrão", ["Atraxa"], [
+        {"nome": n, "quantidade": 1}
+        for n in ("Anel Solar", "Mapa Borrado", "Carta Anunciada",
+                  "Porta Real // Sala Real")] + [{"nome": "Forest", "quantidade": 2}])
+    artes.escolher(padrao["id"], "Anel Solar", "id-ja-escolhida")
+    feito = artes.aplicar_padrao(padrao)
+    eq("aplica em todo lado sem arte, verso incluído", feito["aplicadas"], 3)
+    eq("diz quais saíram em baixa resolução", feito["baixa_resolucao"], ["Mapa Borrado"])
+    eq("e quais não têm imagem pra imprimir", feito["sem_imagem"],
+       ["Atraxa", "Forest", "Carta Anunciada"])
+    escolhidas = artes.do_deck(padrao["id"])
+    eq("não passa por cima do que já foi escolhido",
+       escolhidas["anel solar"]["frente"]["arte_id"], "id-ja-escolhida")
+    verso = escolhidas[cartas.normalizar("Porta Real // Sala Real")]["verso"]
+    eq("o verso vai com o PNG do verso e o nome dele",
+       (verso["arte_id"], verso["arquivo"], verso["fonte"], verso["dpi"]),
+       (f"scryfall:{IMP_D}:back", "Sala Real", "Scryfall", artes.DPI_SCRYFALL))
+    borrado = escolhidas["mapa borrado"]["frente"]
+    eq("a de scan pequeno fica marcada",
+       (borrado["baixa_resolucao"], borrado["dpi"]), (True, 0))
+    check("a sem scan continua faltando", "carta anunciada" not in escolhidas)
+    eq("aplicar de novo não tem o que aplicar",
+       artes.aplicar_padrao(padrao)["aplicadas"], 0)
+
+    print("\n--- revalidar confere cada origem do seu jeito ---")
+
+    png = io.BytesIO()
+    Image.new("RGB", (745, 1040), (0, 0, 255)).save(png, format="PNG")
+    enviada = artes_enviadas.guardar(png.getvalue())["arte_id"]
+    confere = decks.criar("Revalidar", ["Atraxa"], [
+        {"nome": "Sol Ring", "quantidade": 1}, {"nome": "Forest", "quantidade": 2}])
+    artes.escolher(confere["id"], "Atraxa", "id-vivo")
+    artes.escolher(confere["id"], "Sol Ring", f"scryfall:{IMP}:front")
+    artes.escolher(confere["id"], "Forest", enviada)
+    artes.escolher(confere["id"], "Forest", "id-morto", copia=2)
+    perguntados = []
+    mpcfill.metadados = lambda lista: perguntados.extend(lista) or {
+        i: {} for i in lista if i == "id-vivo"}
+    os.remove(artes_enviadas.caminho(arte_id.sha_da_enviada(enviada)))
+    revalidado = artes.revalidar(confere["id"])
+    eq("só os ids do MPC Fill vão ao MPC Fill, os das cópias incluídos",
+       sorted(perguntados), ["id-morto", "id-vivo"])
+    eq("o arquivo que sumiu do disco e o id que morreu no Drive são as mortas",
+       sorted(m["arte_id"] for m in revalidado["mortas"]), sorted(["id-morto", enviada]))
+    check("a da Scryfall está viva sem pergunta nenhuma",
+          f"scryfall:{IMP}:front" in revalidado["vivas"])
 
 finally:
     shutil.rmtree(TMP, ignore_errors=True)

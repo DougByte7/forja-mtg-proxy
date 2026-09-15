@@ -261,11 +261,12 @@ export function ligarEventos(){
     if (sai) return tirar(sai.dataset.tirar, doTabuleiro(sai));
     const sugCarta = e.target.closest("[data-sug-carta]");
     if (sugCarta) return sugerirPelaCarta(sugCarta.dataset.sugCarta);
-    // O quadro de verso da galeria abre a modal já no verso; o botão da
-    // linha não diz lado nenhum e abre na frente.
+    // O quadro de verso da galeria abre a modal já no verso, e o de uma
+    // cópia já nela; o botão da linha não diz lado nenhum e abre na frente.
     const arteCarta = e.target.closest("[data-arte-carta]");
     if (arteCarta) return abrirEscolhaDeArte(arteCarta.dataset.arteCarta,
-                                             arteCarta.dataset.arteFace);
+                                             arteCarta.dataset.arteFace,
+                                             arteCarta.dataset.arteCopia);
     // O ⋯ da linha, que só aparece no celular: é lá que o menu da carta não
     // tem clique direito pra abrir.
     const menuCarta = e.target.closest("[data-menu-carta]");

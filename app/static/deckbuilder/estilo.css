@@ -741,6 +741,12 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .segmento.arte-faces{flex:none;}
 .segmento.arte-faces button{padding:5px 12px;display:inline-flex;
   align-items:center;gap:4px;}
+/* De onde vem a arte. Também do tamanho do que diz, encostado à esquerda,
+   logo abaixo do título: é a primeira decisão da modal. */
+.segmento.arte-origens{flex:none;align-self:flex-start;max-width:100%;}
+.segmento.arte-origens button{flex:none;padding:5px 14px;}
+.arte-copias{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.arte-copias .campo{width:auto;padding:5px 10px;font-size:12px;}
 
 /* A moldura de uma arte, na proporção da carta. Deitada (carta partida: os
    Rooms, Fire // Ice) ela toma a proporção da carta de lado, e a imagem, que
@@ -789,6 +795,14 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   text-align:center;}
 .arte-op:hover{border-color:var(--purple);}
 .arte-op.ativa{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
+.arte-op:disabled{opacity:.45;cursor:not-allowed;}
+.arte-op:disabled:hover{border-color:var(--border);}
+/* O aviso de baixa resolução em cima da miniatura: é o que se vê antes de
+   escolher, e não depois. */
+.arte-selo{position:absolute;left:5px;bottom:5px;padding:2px 7px;
+  border-radius:999px;background:var(--red);color:#fff;font-size:10px;
+  font-weight:600;line-height:1.4;}
+.arte-alerta{color:var(--red);}
 .arte-op small{display:block;font-size:9.5px;color:var(--text-muted);
   margin-top:3px;line-height:1.2;overflow:hidden;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
@@ -840,6 +854,22 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 }
 .arte-nota{font-size:11px;color:var(--text-muted);line-height:1.5;flex:none;}
 
+/* O envio ocupa o lugar da grade: a arte em uso, quando é enviada, e a caixa
+   de soltar o arquivo, que é um <label> — clicar em qualquer ponto dela abre
+   o seletor de arquivo. */
+.arte-envio{display:flex;flex-direction:column;gap:12px;flex:1;min-height:120px;
+  overflow-y:auto;}
+.arte-envio-atual{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;}
+.arte-envio-atual:empty{display:none;}
+.arte-envio-quadro{width:180px;flex:none;}
+.arte-soltar{position:relative;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:8px;padding:28px 16px;border:1px dashed var(--border);
+  border-radius:12px;background:var(--inset);text-align:center;cursor:pointer;
+  color:var(--text-muted);font-size:12.5px;}
+.arte-soltar:hover,.arte-soltar.sobre{border-color:var(--gold);color:var(--text);}
+.arte-soltar input{position:absolute;opacity:0;width:1px;height:1px;}
+.arte-soltar:focus-within{outline:2px solid var(--gold);outline-offset:2px;}
+
 /* O botão na linha do deck mostra ESTADO: contorno = arte padrão,
    miniatura = escolhida. Ver de relance quais cartas estão customizadas é
    metade do valor desta feature. */
@@ -851,6 +881,8 @@ select.campo option{background:var(--surface-2);color:var(--text);}
    largura da carta de lado (a altura da em pé), e numa grade de colunas
    iguais ela ficaria espremida numa coluna de carta em pé. */
 #galeria-resultado .progresso{margin-bottom:14px;}
+.galeria-acoes{margin-top:10px;}
+.galeria-acoes:has(> [hidden]:only-child){display:none;}
 .galeria-grupo{margin-bottom:16px;}
 .galeria-grupo:last-child{margin-bottom:0;}
 .galeria-grupo h3{margin:0 0 8px;font-size:12px;font-weight:600;

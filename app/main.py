@@ -13,8 +13,8 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (artes, calc, cambio, cartas, cleanup, cotacao_job, decks,
-               detalhe_carta, edhrec, estoque, fulfillment, importar, log, manabase,
+from . import (artes, artes_enviadas, calc, cambio, cartas, cleanup,
+               cotacao_job, decks, detalhe_carta, edhrec, estoque, fulfillment, importar, log, manabase,
                mpcfill, notify, pix, poder, printer, spellbook, storage, tinta,
                usuarios, visitas)
 
@@ -1073,14 +1073,11 @@ def cartas_detalhe(nome: str):
 
 @app.get("/cartas/impressoes")
 def cartas_impressoes(nome: str):
-    """As impressões oficiais de uma carta, pra vitrine da escolha de arte.
+    """As impressões oficiais de uma carta, pra escolha de arte: a vitrine do
+    MPC Fill e o segmento Scryfall (ver `detalhe_carta.impressoes`).
 
     Pública pelo mesmo motivo do `/cartas/detalhe`: é catálogo de carta de
     Magic, não dado de ninguém.
-
-    ISTO NÃO É O QUE VAI PRO PAPEL. Quem imprime é o arquivo do MPC Fill; a
-    Scryfall aqui responde "que artes existem", pra a pessoa saber qual quer
-    antes de procurar o arquivo dela.
     """
     lista = detalhe_carta.impressoes(nome)
     if lista is None:
@@ -1329,23 +1326,31 @@ def pedido_do_deck(deck_id: str):
     return {"deck": decks.resumo([deck["id"]])[0], **montado}
 
 
-@app.put("/decks/{deck_id}/artes")
-def escolher_arte(deck_id: str, corpo: dict = Body(default={}),
-                  quem: dict = Depends(exige_login_no_deck)):
-    """Grava a arte de uma carta deste deck.
-
-    Passa pela mesma regra do autosave: pede conta, e deck com dono só o dono
-    e o admin mexem. Escolher arte é editar o deck.
-    """
-    _deck_ou_404(deck_id)
+def _deck_das_artes(deck_id: str, quem: dict) -> dict:
+    """O deck, se quem chama pode mexer nas artes dele. É a mesma regra do
+    autosave — pede conta, e deck com dono só o dono e o admin mexem —,
+    porque escolher arte é editar o deck."""
+    deck = _deck_ou_404(deck_id)
     existe, dono = decks.dono_de(deck_id)
     if not _pode_mexer(dono, quem):
         raise _proibido()
+    return deck
+
+
+@app.put("/decks/{deck_id}/artes")
+def escolher_arte(deck_id: str, corpo: dict = Body(default={}),
+                  quem: dict = Depends(exige_login_no_deck)):
+    """Grava a arte de um lado de uma carta deste deck: a de todas as cópias,
+    ou, com `copia`, a de uma só (ver `artes.py`). `arte_id` diz de onde a
+    arte vem (ver `arte_id`)."""
+    _deck_das_artes(deck_id, quem)
     try:
         escolha = artes.escolher(
-            deck_id, corpo.get("nome", ""), corpo.get("drive_id", ""),
-            face=corpo.get("face", "frente"), arquivo=corpo.get("arquivo", ""),
-            fonte=corpo.get("fonte", ""), dpi=corpo.get("dpi", 0))
+            deck_id, corpo.get("nome", ""), corpo.get("arte_id", ""),
+            face=corpo.get("face", "frente"), copia=corpo.get("copia", 0),
+            arquivo=corpo.get("arquivo", ""), fonte=corpo.get("fonte", ""),
+            dpi=corpo.get("dpi", 0),
+            baixa_resolucao=corpo.get("baixa_resolucao", False))
     except ValueError as e:
         raise HTTPException(400, str(e))
     log.evento("artes", "escolheu", deck=deck_id, carta=escolha["nome"])
@@ -1353,14 +1358,82 @@ def escolher_arte(deck_id: str, corpo: dict = Body(default={}),
 
 
 @app.delete("/decks/{deck_id}/artes")
-def limpar_arte(deck_id: str, nome: str, face: str = "frente",
+def limpar_arte(deck_id: str, nome: str, face: str = "frente", copia: int = 0,
                 quem: dict = Depends(exige_login_no_deck)):
-    """Volta uma carta pra arte padrão."""
-    _deck_ou_404(deck_id)
-    existe, dono = decks.dono_de(deck_id)
-    if not _pode_mexer(dono, quem):
-        raise _proibido()
-    return {"ok": artes.limpar(deck_id, nome, face)}
+    """Volta um lado pra arte padrão — ou, com `copia`, uma cópia pra arte de
+    todas."""
+    _deck_das_artes(deck_id, quem)
+    return {"ok": artes.limpar(deck_id, nome, face, copia)}
+
+
+@app.delete("/decks/{deck_id}/artes/copias")
+def limpar_copias_da_arte(deck_id: str, nome: str,
+                          quem: dict = Depends(exige_login_no_deck)):
+    """Desliga o "uma arte por cópia" de uma carta: fica a arte de todas."""
+    _deck_das_artes(deck_id, quem)
+    return {"apagadas": artes.limpar_copias(deck_id, nome)}
+
+
+@app.post("/decks/{deck_id}/artes/padrao")
+def aplicar_arte_padrao(deck_id: str, quem: dict = Depends(exige_login_no_deck)):
+    """A imagem oficial da Scryfall em tudo o que ainda não tem arte (ver
+    `artes.aplicar_padrao`). As escolhas do deck voltam junto: a tela
+    redesenha tudo com elas, sem uma segunda ida ao servidor."""
+    deck = _deck_das_artes(deck_id, quem)
+    feito = artes.aplicar_padrao(deck)
+    log.evento("artes", "padrao-aplicado", deck=deck_id, aplicadas=feito["aplicadas"])
+    return {**feito, "escolhas": artes.do_deck(deck_id)}
+
+
+@app.post("/decks/{deck_id}/artes/enviar")
+def enviar_arte(deck_id: str, arquivo: UploadFile, nome: str = Form(...),
+                face: str = Form("frente"), copia: int = Form(0),
+                quem: dict = Depends(exige_login_no_deck)):
+    """Sobe um arquivo de imagem e já o escolhe como arte de um lado da carta.
+
+    Numa rota só, e não "sobe e depois escolhe": arquivo enviado sem escolha
+    ficaria no disco sem ninguém que o use (ver `artes_enviadas`). Rota
+    síncrona de propósito: conferir a imagem decodifica ela inteira, e numa
+    rota `async` isso seguraria o servidor todo enquanto dura.
+    """
+    _deck_das_artes(deck_id, quem)
+    dados = arquivo.file.read(artes_enviadas.TAMANHO_MAXIMO + 1)
+    try:
+        guardada = artes_enviadas.guardar(dados)
+        escolha = artes.escolher(
+            deck_id, nome, guardada["arte_id"], face=face, copia=copia,
+            arquivo=arquivo.filename or "", fonte="Enviada",
+            dpi=guardada["dpi"], baixa_resolucao=guardada["baixa_resolucao"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log.evento("artes", "enviou", deck=deck_id, carta=escolha["nome"],
+               dpi=escolha["dpi"])
+    return {"escolha": escolha}
+
+
+# O nome do arquivo enviado é o sha256 do conteúdo: o mesmo endereço nunca
+# muda de imagem, e o navegador pode guardar pra sempre.
+_ARTE_IMUTAVEL = {"Cache-Control": "public, max-age=31536000, immutable"}
+
+
+@app.get("/artes/enviadas/{sha}")
+def arte_enviada(sha: str):
+    """O arquivo enviado, como veio. Pública como o link do deck: quem abre o
+    deck vê as artes dele, e o endereço é o sha256 do conteúdo, que ninguém
+    adivinha."""
+    if not artes_enviadas.existe(sha):
+        raise HTTPException(404, "Arte não encontrada.")
+    return FileResponse(artes_enviadas.caminho(sha),
+                        media_type=artes_enviadas.tipo(sha), headers=_ARTE_IMUTAVEL)
+
+
+@app.get("/artes/enviadas/{sha}/miniatura")
+def miniatura_enviada(sha: str):
+    """A miniatura da arte enviada, já sem sangria — a da grade e da prévia."""
+    caminho = artes_enviadas.caminho_miniatura(sha)
+    if not caminho or not os.path.isfile(caminho):
+        raise HTTPException(404, "Arte não encontrada.")
+    return FileResponse(caminho, media_type="image/jpeg", headers=_ARTE_IMUTAVEL)
 
 
 @app.post("/decks/{deck_id}/artes/buscar")

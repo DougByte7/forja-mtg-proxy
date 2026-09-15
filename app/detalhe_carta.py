@@ -206,6 +206,11 @@ def _impressao(card: dict) -> dict:
     frente = _arte(card) or (_arte(faces[0]) if faces else "")
     verso = "" if _arte(card) or len(faces) < 2 else _arte(faces[1])
     return {
+        # O que deixa a impressão ser escolhida como arte: o id monta o PNG
+        # que o PDF baixa (ver `arte_id`), e o `image_status` diz se ele é um
+        # scan de verdade, um scan pequeno ou só um espaço reservado.
+        "id": card.get("id") or "",
+        "status_imagem": card.get("image_status") or "",
         "edicao": card.get("set_name") or "",
         "sigla": (card.get("set") or "").upper(),
         "numero": card.get("collector_number") or "",
@@ -227,11 +232,9 @@ def impressoes(nome: str) -> list[dict] | None:
     as 713 impressões de Sol Ring multiplicaria por muito um arquivo que já
     passa de 100 MB, pra responder uma pergunta que aparece uma vez por deck.
 
-    ISTO NÃO É O QUE VAI PRO PAPEL. Quem imprime é o arquivo do MPC Fill
-    (`mpcfill.py`); aqui é a vitrine — edição, ano, artista e a arte em tamanho
-    de olhar, pra a pessoa saber QUAL arte quer antes de procurar o arquivo
-    dela. As duas coisas moram em módulos separados porque são duas perguntas
-    separadas: "o que existe" e "o que imprime".
+    Serve a duas coisas na escolha de arte: a vitrine que ajuda a achar o
+    arquivo do MPC Fill (`mpcfill.py`) — edição, ano, artista —, e a própria
+    imagem oficial como arte, pelo `id` da impressão (ver `arte_id`).
 
     Ordenado do mais novo pro mais antigo, que é a ordem em que as pessoas
     reconhecem uma arte ("a nova do Secret Lair", "a original de Alpha").
@@ -240,9 +243,10 @@ def impressoes(nome: str) -> list[dict] | None:
     if not nome:
         return None
 
-    # O "-v2" é o formato com `imagem_verso`: sem ele, o cache de uma semana
-    # continuaria servindo a tira sem a arte das cartas de duas faces.
-    caminho = _caminho(nome, "-prints-v2")
+    # O sufixo é a versão do formato: o "-v3" trouxe `id` e `status_imagem`, e
+    # sem ele o cache de uma semana continuaria servindo impressões que não
+    # se deixam escolher como arte.
+    caminho = _caminho(nome, "-prints-v3")
     try:
         if time.time() - os.path.getmtime(caminho) <= TTL_IMPRESSOES:
             with open(caminho, encoding="utf-8") as f:

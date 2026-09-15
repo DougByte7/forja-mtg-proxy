@@ -1,6 +1,7 @@
 """
-Monta o PDF A4 (3x3 por página) pra impressão, baixando as imagens direto
-do Google Drive usando os IDs que já estão no XML do MPC Fill.
+Monta o PDF A4 (3x3 por página) pra impressão, buscando as imagens pelos ids
+que estão no XML do pedido: no Google Drive (MPC Fill), na Scryfall ou no
+disco, quando a pessoa enviou o arquivo (ver `arte_id`).
 
 As artes vêm no gabarito de impressão da MPC, maior que a carta: cada uma
 tem a sangria recortada aqui antes de entrar na folha, senão a carta sai
@@ -16,6 +17,7 @@ migrar pra API oficial do Google Drive com uma service account.
 """
 import io
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -31,6 +33,9 @@ from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
+
+from . import arte_id as ids
+from . import artes_enviadas
 
 # O reportlab embute os JPEGs sem recomprimir (o stream sai como DCTDecode, a
 # imagem passa intacta), mas por padrão ele codifica cada stream em ASCII85 —
@@ -272,17 +277,14 @@ def _backoff(drive_id: str, attempt: int, error: Exception, deadline: float) -> 
     time.sleep(delay)
 
 
-def _download(session: requests.Session, drive_id: str) -> bytes:
-    """Baixa um arquivo do Drive, tentando de novo se a conexão cair.
+def _baixar(session: requests.Session, url: str, rotulo: str,
+            dica_html: str = "") -> bytes:
+    """Baixa uma imagem por HTTP, tentando de novo se a conexão cair.
 
-    Vai direto no `drive.usercontent.google.com` com `confirm=t`: é pra onde
-    o velho `drive.google.com/uc` redireciona, e o `confirm` já pula a tela
-    de "não conseguimos verificar se tem vírus" que aparece em arquivo
-    grande — sem isso o Drive devolve um HTML e o Pillow estoura com um erro
-    que não diz nada sobre a causa real.
+    Serve ao Drive e à Scryfall com os mesmos tetos (`DRIVE_*`): nos dois é
+    download grande de servidor de fora, e o que muda é a URL e o que quer
+    dizer receber uma página HTML no lugar da imagem (`dica_html`).
     """
-    url = ("https://drive.usercontent.google.com/download"
-           f"?id={drive_id}&export=download&confirm=t")
     deadline = time.monotonic() + DRIVE_TOTAL_TIMEOUT
     last_error = None
 
@@ -297,9 +299,8 @@ def _download(session: requests.Session, drive_id: str) -> bytes:
                 resp.raise_for_status()
                 if "text/html" in resp.headers.get("Content-Type", ""):
                     raise RuntimeError(
-                        "o Drive devolveu uma página HTML em vez do arquivo — "
-                        "normalmente é limite de taxa ou o arquivo não está "
-                        "compartilhado com 'qualquer pessoa com o link'")
+                        "veio uma página HTML em vez da imagem"
+                        + (f" — {dica_html}" if dica_html else ""))
                 buf = io.BytesIO()
                 for chunk in resp.iter_content(_CHUNK):
                     buf.write(chunk)
@@ -309,7 +310,7 @@ def _download(session: requests.Session, drive_id: str) -> bytes:
                             f"com {buf.tell() / 1e6:.1f} MB baixados")
             data = buf.getvalue()
             if not data:
-                raise RuntimeError("o Drive devolveu uma resposta vazia")
+                raise RuntimeError("a resposta veio vazia")
             return data
         except requests.HTTPError as e:
             # 404/403 é id errado ou arquivo não compartilhado: insistir não
@@ -319,13 +320,45 @@ def _download(session: requests.Session, drive_id: str) -> bytes:
                 raise
             last_error = e
             if attempt < DRIVE_RETRIES:
-                _backoff(drive_id, attempt, e, deadline)
+                _backoff(rotulo, attempt, e, deadline)
         except Exception as e:
             last_error = e
             if attempt < DRIVE_RETRIES:
-                _backoff(drive_id, attempt, e, deadline)
+                _backoff(rotulo, attempt, e, deadline)
 
     raise last_error
+
+
+def _download(session: requests.Session, drive_id: str) -> bytes:
+    """Baixa um arquivo do Drive.
+
+    Vai direto no `drive.usercontent.google.com` com `confirm=t`: é pra onde
+    o velho `drive.google.com/uc` redireciona, e o `confirm` já pula a tela
+    de "não conseguimos verificar se tem vírus" que aparece em arquivo
+    grande — sem isso o Drive devolve um HTML e o Pillow estoura com um erro
+    que não diz nada sobre a causa real.
+    """
+    url = ("https://drive.usercontent.google.com/download"
+           f"?id={drive_id}&export=download&confirm=t")
+    return _baixar(session, url, drive_id,
+                   "normalmente é limite de taxa do Drive ou o arquivo não "
+                   "está compartilhado com 'qualquer pessoa com o link'")
+
+
+def _bytes_da_arte(session: requests.Session, arte_id: str) -> bytes:
+    """Os bytes de uma arte, de onde o id disser que ela vem (ver `arte_id`).
+    Id sem origem conhecida vai pro Drive, que é o que um XML do MPC Fill
+    subido à mão sempre foi."""
+    origem = ids.origem(arte_id)
+    if origem == ids.SCRYFALL:
+        return _baixar(session, ids.url_da_scryfall(arte_id, "png"), arte_id)
+    if origem == ids.ENVIADA:
+        try:
+            with open(artes_enviadas.caminho(ids.sha_da_enviada(arte_id)), "rb") as f:
+                return f.read()
+        except OSError:
+            raise RuntimeError("o arquivo enviado não está mais no servidor")
+    return _download(session, arte_id)
 
 
 def _crop_bleed(img: Image.Image, drive_id: str) -> Image.Image:
@@ -362,18 +395,45 @@ def _crop_bleed(img: Image.Image, drive_id: str) -> Image.Image:
     return img.crop((left, top, img.width - left, img.height - top))
 
 
-def _prepare_image(session: requests.Session, drive_id: str, cache_dir: str) -> str:
+def _sem_transparencia(img: Image.Image) -> Image.Image:
+    """A imagem em RGB, com o que era transparente pintado da cor da borda.
+
+    O PNG da Scryfall vem com os cantos arredondados transparentes, e por
+    baixo da transparência o pixel é branco: o `convert("RGB")` puro deixaria
+    quatro cantos brancos numa carta de borda preta, e o corte reto da folha
+    não os tira. A cor sai da própria borda — do meio de cada lado, longe dos
+    cantos — e não de um preto fixo, porque carta de borda branca existe.
+    """
+    transparente = img.mode in ("RGBA", "LA", "PA") or (
+        img.mode == "P" and "transparency" in img.info)
+    if not transparente:
+        return img.convert("RGB")
+    rgba = img.convert("RGBA")
+    w, h = rgba.size
+    dentro = max(1, round(min(w, h) * 0.01))
+    amostras = [rgba.getpixel(p) for p in ((w // 2, dentro), (w // 2, h - 1 - dentro),
+                                           (dentro, h // 2), (w - 1 - dentro, h // 2))]
+    opacas = [a[:3] for a in amostras if a[3] > 200] or [(0, 0, 0)]
+    cor = tuple(sorted(c[i] for c in opacas)[len(opacas) // 2] for i in range(3))
+    fundo = Image.new("RGBA", rgba.size, cor + (255,))
+    return Image.alpha_composite(fundo, rgba).convert("RGB")
+
+
+def _prepare_image(session: requests.Session, arte_id: str, cache_dir: str) -> str:
     """Baixa, tira a sangria, converte pra JPEG e devolve o caminho no cache
     do pedido.
 
     Converter em disco antes de desenhar mantém a memória sob controle: as
     artes chegam como PNG de 3264x4440, o que daria ~58 MB por imagem se
     todas ficassem descompactadas na RAM."""
-    path = os.path.join(cache_dir, f"{drive_id}.jpg")
-    img = Image.open(io.BytesIO(_download(session, drive_id))).convert("RGB")
+    # O id da Scryfall e o do arquivo enviado têm dois-pontos, que não é
+    # caractere de nome de arquivo em todo sistema.
+    nome = re.sub(r"[^A-Za-z0-9_-]", "_", arte_id)
+    path = os.path.join(cache_dir, f"{nome}.jpg")
+    img = _sem_transparencia(Image.open(io.BytesIO(_bytes_da_arte(session, arte_id))))
     # Antes do reamostrar: depois daqui a imagem cobre exatamente CARD_W x
     # CARD_H, que é o que a conta de DPI abaixo assume.
-    img = _crop_bleed(img, drive_id)
+    img = _crop_bleed(img, arte_id)
 
     if PRINT_DPI > 0:
         # Teto em pixels pro tamanho físico da carta. Só encolhe: imagem que
