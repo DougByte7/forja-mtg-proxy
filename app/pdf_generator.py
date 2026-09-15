@@ -30,7 +30,6 @@ from reportlab import rl_config
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 # O reportlab embute os JPEGs sem recomprimir (o stream sai como DCTDecode, a
@@ -480,8 +479,14 @@ def _draw_failure(c, x, y, drive_id: str):
     c.setFillColorRGB(0.75, 0.20, 0.10)
     c.setFont("Helvetica-Bold", 11)
     c.drawCentredString(x + CARD_W / 2, y + CARD_H / 2 + 6, "FALHA NO DOWNLOAD")
-    c.setFont("Helvetica", 6)
-    c.drawCentredString(x + CARD_W / 2, y + CARD_H / 2 - 8, drive_id[:28])
+    # O id vai INTEIRO: é com ele que se acha a carta no XML e se testa o
+    # link do Drive, e um id cortado parece válido mas não bate com nada.
+    # Encolhe a fonte até caber na largura da carta em vez de truncar.
+    tamanho, largura_max = 6, CARD_W - 4 * mm
+    while tamanho > 3 and c.stringWidth(drive_id, "Helvetica", tamanho) > largura_max:
+        tamanho -= 0.25
+    c.setFont("Helvetica", tamanho)
+    c.drawCentredString(x + CARD_W / 2, y + CARD_H / 2 - 8, drive_id)
     c.restoreState()
 
 
@@ -508,10 +513,6 @@ def _render_queue(print_queue: list[str], out_path: str, titulo: str,
     per_page = COLS * ROWS
     total_paginas = max(1, -(-len(print_queue) // per_page))
     failures = 0
-    # Um ImageReader por imagem distinta: assim o reportlab embute o
-    # JPEG uma vez só e as cópias repetidas apenas apontam pra ele, em
-    # vez de engordar o PDF a cada slot.
-    readers = {}
 
     for page_start in range(0, len(print_queue), per_page):
         page_items = print_queue[page_start:page_start + per_page]
@@ -522,13 +523,19 @@ def _render_queue(print_queue: list[str], out_path: str, titulo: str,
             result = images.get(drive_id)
             if isinstance(result, str):
                 try:
-                    reader = readers.get(drive_id)
-                    if reader is None:
-                        reader = readers[drive_id] = ImageReader(result)
+                    # Vai o CAMINHO, nunca um ImageReader. Com caminho, o
+                    # reportlab identifica a imagem pelo nome do arquivo:
+                    # embute o JPEG uma vez só, as cópias repetidas apontam
+                    # pra ele, e nada é decodificado. Com ImageReader ele
+                    # descompacta a imagem inteira em RGB só pra tirar um
+                    # hash e segura isso até o fim do PDF — ~26 MB por arte
+                    # distinta a 600 DPI, o que num combinado grande passa
+                    # de gigas e derruba a máquina.
+                    #
                     # A imagem já veio sem sangria de `_crop_bleed`, ou
                     # seja, é a carta de 63 x 88 mm inteira e nada mais:
                     # esticar até o slot é o tamanho certo, não um zoom.
-                    c.drawImage(reader, x, y, width=CARD_W, height=CARD_H)
+                    c.drawImage(result, x, y, width=CARD_W, height=CARD_H)
                 except Exception as e:
                     failures += 1
                     _draw_failure(c, x, y, drive_id)

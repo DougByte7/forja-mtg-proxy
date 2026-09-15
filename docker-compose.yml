@@ -4,6 +4,11 @@ services:
     container_name: forja-backend
     restart: unless-stopped
     env_file: .env
+    # Teto de RAM do container, sem swap além dele. Se a montagem de um PDF
+    # grande sair do controle, quem morre é o container (e o `restart` o traz
+    # de volta), não a máquina inteira atolada em swap.
+    mem_limit: ${FORJA_MEM_LIMIT:-3g}
+    memswap_limit: ${FORJA_MEM_LIMIT:-3g}
     volumes:
       - forja-data:/app/data
     ports:
