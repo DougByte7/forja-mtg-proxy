@@ -113,6 +113,19 @@ finally:
         else:
             os.environ[k] = v
 
+# A sessão que baixa as artes do PDF também tem que se apresentar. A Scryfall
+# responde 400 (`generic_user_agent`) a quem chega com o UA padrão do
+# `requests`, e ali o 400 não vira mensagem na tela: vira o retângulo de
+# "FALHA NO DOWNLOAD" no PDF, carta por carta.
+sessao_pdf = importlib.import_module("app.pdf_generator")._make_session()
+try:
+    ua_pdf = sessao_pdf.headers.get("User-Agent", "")
+finally:
+    sessao_pdf.close()
+check("o download das artes do PDF manda User-Agent próprio",
+      "python-requests" not in ua_pdf and "PDF de impressão" in ua_pdf,
+      f"(obtido {ua_pdf!r})")
+
 print()
 if falhas:
     print(f"{len(falhas)} checagem(ns) falharam: {', '.join(falhas)}")

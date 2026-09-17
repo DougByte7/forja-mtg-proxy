@@ -36,6 +36,7 @@ from reportlab.pdfgen import canvas
 
 from . import arte_id as ids
 from . import artes_enviadas
+from . import identidade as ident
 
 # O reportlab embute os JPEGs sem recomprimir (o stream sai como DCTDecode, a
 # imagem passa intacta), mas por padrão ele codifica cada stream em ASCII85 —
@@ -115,6 +116,10 @@ DRIVE_BACKOFF = float(os.environ.get("DRIVE_BACKOFF", "2"))  # segundos, dobra a
 # limite de taxa do Drive, e subir muito aqui piora em vez de melhorar.
 DRIVE_WORKERS = int(os.environ.get("DRIVE_WORKERS", "4"))
 _CHUNK = 256 * 1024
+# Como este download se apresenta. Vale pro Drive e pra Scryfall: é a mesma
+# sessão, e a Scryfall EXIGE um UA identificável (ver `identidade`).
+USER_AGENT = os.environ.get(
+    "SCRYFALL_USER_AGENT", ident.user_agent("PDF de impressão"))
 
 # --- Guias de corte (mesma ideia do proxyprint.taxiera.net) ---
 # As marcas ficam FORA das cartas, nas margens da folha, alinhadas com cada
@@ -253,6 +258,11 @@ def _make_session() -> requests.Session:
     retentativa do urllib3 só cobre até os cabeçalhos chegarem; cair no meio
     do corpo é tratado no laço de `_download`."""
     session = requests.Session()
+    # A Scryfall recusa com 400 (`generic_user_agent`) quem chega com o UA
+    # padrão da biblioteca HTTP: sem este cabeçalho toda arte da Scryfall sai
+    # como "FALHA NO DOWNLOAD" no PDF, e a mensagem do 400 nunca chega à tela.
+    # O mesmo UA honesto do resto do backend serve ao Drive (ver `identidade`).
+    session.headers["User-Agent"] = USER_AGENT
     # `read=0` de propósito: cair no meio do corpo é o caso comum aqui e quem
     # trata é o laço de `_download`. Deixar as duas camadas retentando faz o
     # número de tentativas se multiplicar e o pedido travar por minutos.
