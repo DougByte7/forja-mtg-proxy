@@ -32,6 +32,128 @@ pagar um Pix esperando receber carta em casa.
 Se um dia isso precisar virar trava de verdade, o caminho é pôr a criação de
 pedido atrás de autenticação — não endurecer o front-end.
 
+## Como rodar
+
+Dá pra subir de dois jeitos: **container** (podman ou docker com compose), que
+é como ele roda no servidor, ou **Python 3.12+ direto na máquina**, que é o
+jeito de mexer no código. A impressão é a única parte que exige mais alguém —
+um CUPS alcançável; sem ele todo o resto funciona e só o botão Imprimir falha.
+
+### 1. Preencha o `.env`
+
+Copie o `.env.example` (`cp .env.example .env`) e mexa no que é seu. Ele
+explica variável por variável, e quase tudo já vem com um padrão que serve; o
+que não dá pra deixar como está:
+
+- `PIX_KEY`, `MERCHANT_NAME`, `MERCHANT_CITY` — dados da sua cobrança Pix. Sem
+  a chave, `POST /orders` responde 500 dizendo isso, de propósito: melhor não
+  criar pedido nenhum do que criar um com cobrança que não existe.
+- `SMTP_*` e `NOTIFY_TO` — a conta que manda e pra onde vai o e-mail de aviso
+  de pagamento (senha de app se for Gmail/Outlook).
+- `PUBLIC_BASE_URL` — **importante**: a URL pública do backend, usada pra
+  montar o link Imprimir. Tem que ser um endereço que você consiga abrir do
+  celular (o domínio do Cloudflare Tunnel). Se ficar em `localhost`, o link só
+  funciona na máquina onde o serviço roda.
+- `LOCAL_BASE_URL` — opcional, o endereço do backend **na rede local**
+  (`http://192.168.x.y:8000`). Liga um link extra "Ver PDF (rede local)" no
+  e-mail e na tela do admin, pra conferir a folha de dentro de casa sem mandar
+  o arquivo pro túnel e trazer de volta. Veja *Como o PDF volta pro navegador*.
+- `CUPS_HOST` e `PRINTER_QUEUE` — endereço do CUPS na rede
+  (`IP-DO-SERVIDOR:631`, ou vazio pra falar pelo socket local) e o nome da fila
+  da sua impressora.
+- `ADMIN_TOKEN` — uma senha longa e aleatória só sua: ela assina os links Ver
+  PDF e Imprimir e libera as rotas `/admin`. Sem ela o botão do cliente falha.
+- `ADMIN_LOGIN` e `ADMIN_SENHA` — opcionais, criam a primeira conta **e só
+  enquanto não existir conta nenhuma**; depois disso mexer nelas não cria nada.
+  Veja *Conta e cadastro*.
+- `TINTA_ESTADO` — opcional, `baixo` liga na mão o aviso de que a impressão vai
+  demorar (veja *Aviso de tinta baixa*).
+
+O serviço não lê o `.env` por conta própria: quem lê é o `env_file` do compose.
+Rodando fora de container, as variáveis precisam estar no ambiente — é o que a
+seção 3 resolve.
+
+### 2. Suba em container
+
+```
+podman compose up -d --build     # docker compose também serve
+```
+
+O `docker-compose.yml` da pasta é o de teste local: publica a porta 8000 e
+guarda banco, PDFs e caches no volume `forja-data`, montado em `/app/data`.
+
+Pra colocar no servidor de vez, use o `docker-compose.snippet.yml` — cole o
+serviço dentro do compose que já roda lá. A diferença dele é montar
+`/run/cups`, pra falar com a impressora pelo socket local em vez de expor o
+cupsd na rede (e aí o `CUPS_HOST` fica **vazio** no `.env`).
+
+### 3. Ou rode direto, sem container
+
+```
+pip install -r requirements.txt
+```
+
+Os caminhos padrão do código são os de dentro do container (`/app/data/…`), que
+não existem na sua máquina. Então aponte-os pra uma pasta local — `data/` já
+está no `.gitignore`:
+
+```
+mkdir -p data
+DB_PATH=data/orders.db PDF_OUTPUT_DIR=data LOG_DIR=data/logs \
+CARTAS_DB_PATH=data/cartas.db ARTES_ENVIADAS_DIR=data/artes \
+MPCFILL_CACHE_DIR=data/mpcfill EDHREC_CACHE_DIR=data/edhrec \
+SPELLBOOK_CACHE_DIR=data/spellbook \
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+Junte a isso as variáveis do `.env` que o que você vai testar precisa (Pix,
+SMTP, `ADMIN_TOKEN`). O `--reload` cuida do Python; o HTML, o CSS e o
+JavaScript das telas são lidos do disco a cada pedido, então pra mexer no
+front basta recarregar o navegador.
+
+### 4. Abra a tela
+
+`http://localhost:8000/` (ou o IP/domínio de onde estiver rodando) já é a Forja
+de Proxies completa, falando com a API na mesma origem. `/deckbuilder` é a tela
+de montar deck e `/admin`, a de pedidos.
+
+Na primeira subida, a base de cartas da Scryfall (uns 30 MB) se monta em
+segundo plano — veja *A base de cartas é uma cópia local da Scryfall*. Até ela
+ficar pronta, a busca do deckbuilder não acha nada, e por isso a própria tela
+mostra um aviso com quantas cartas já leu, atualizando sozinho. Do terminal, é
+`GET /cartas/estado` que responde a mesma coisa.
+
+### 5. Teste antes de usar de verdade
+
+Marque o "Declaro que conheço o dono do sistema" (sem ele o botão de cobrança
+fica desabilitado), gere um pedido de teste, escaneie o QR com seu próprio
+celular (ou com um segundo app bancário) e confirme que o valor e a chave batem
+antes de mandar o endereço pra qualquer pessoa do grupo.
+
+### 6. Exponha na rede
+
+Quando for pro servidor de verdade, aponte o Cloudflare Tunnel pra
+`forja-backend:8000`, do jeito que os outros serviços já são expostos. Dali em
+diante, push na main publica sozinho — veja *Publicação automática*.
+
+### Rodar os testes
+
+Cada teste é um programa solto: roda com `python tests/test_x.py`, sem pytest e
+sem subir servidor, e quase todos sem rede. O que cada um cobre está na lista
+da seção *Estrutura*. Todos de uma vez, da raiz do projeto:
+
+```
+for t in tests/test_*.py; do python "$t" || echo "FALHOU: $t"; done
+bash tests/test_deploy.sh
+```
+
+Dois deles pedem mais do que o `requirements.txt` instala, porque não são
+dependência do serviço: `test_deckbuilder.py` precisa do `dukpy` (é ele quem
+roda o JavaScript da página num interpretador) e `test_modulos.py`, do
+`tree-sitter` com o `tree-sitter-javascript`. Sem essas bibliotecas os dois
+avisam e saem **sem acusar erro** — no `for` acima eles se parecem com teste
+que passou, então vale ler a saída procurando o "não está instalado".
+
 ## Como o pagamento é confirmado
 
 Sem passar por um provedor de pagamento (Mercado Pago, Asaas, EFI etc.), não
@@ -180,47 +302,6 @@ cancelamento que você faz por lá. A rota não tem token, pela mesma regra do
 dígitos hex, dá pra chutar — o estrago possível é anular a cobrança de um
 pedido que ninguém avisou como pago, e isso fica registrado no log
 (`pedido cancelado-pelo-cliente`) e no histórico.
-
-## Passo a passo
-
-1. **Preencha o `.env`** a partir do `.env.example`:
-   - `PIX_KEY`, `MERCHANT_NAME`, `MERCHANT_CITY` — dados da sua cobrança Pix.
-   - `SMTP_*` e `NOTIFY_TO` — a conta que manda e pra onde vai o e-mail de
-     aviso de pagamento (senha de app se for Gmail/Outlook).
-   - `PUBLIC_BASE_URL` — **importante**: a URL pública do backend, usada pra
-     montar o link Imprimir. Tem que ser um endereço que você consiga abrir
-     do celular (o domínio do Cloudflare Tunnel). Se ficar em `localhost`, o
-     link só funciona na máquina onde o serviço roda.
-   - `LOCAL_BASE_URL` — opcional, o endereço do backend **na rede local**
-     (`http://192.168.x.y:8000`). Liga um link extra "Ver PDF (rede local)"
-     no e-mail e na tela do admin, pra conferir a folha de dentro de casa sem
-     mandar o arquivo pro túnel e trazer de volta. Veja *Como o PDF volta pro
-     navegador*.
-   - `CUPS_HOST` e `PRINTER_QUEUE` — endereço do CUPS na rede
-     (`IP-DO-SERVIDOR:631`, ou vazio pra falar pelo socket local) e o nome da
-     fila da sua impressora.
-   - `TINTA_ESTADO` — opcional, `baixo` liga na mão o aviso de que a
-     impressão vai demorar (veja *Aviso de tinta baixa*).
-   - `ADMIN_TOKEN` — uma senha longa e aleatória só sua: ela assina o link
-     Imprimir e libera as rotas `/admin`. Sem ela o botão do cliente falha.
-
-2. **Suba o serviço** (pra teste local, tem um `docker-compose.yml` pronto na
-   própria pasta — `podman compose up -d --build` já funciona). Pra colocar
-   no servidor de vez, use `docker-compose.snippet.yml` (cole o serviço
-   dentro do compose que já roda lá).
-
-3. **Abra `http://localhost:8000/`** (ou o IP/domínio de onde estiver
-   rodando) — é a Forja de Proxies completa, já falando com essa API.
-
-4. **Exponha na rede/Cloudflare Tunnel** quando for pro servidor de verdade,
-   apontando pra `forja-backend:8000`, do jeito que os outros serviços já
-   são expostos.
-
-5. **Teste antes de usar de verdade**: marque o "Declaro que conheço o dono
-   do sistema" (sem ele o botão de cobrança fica desabilitado), gere um
-   pedido de teste, escaneie o QR com seu próprio celular (ou com um segundo
-   app bancário) e confirme que o valor e a chave batem antes de mandar pra
-   qualquer pessoa do grupo.
 
 ## Estrutura
 
