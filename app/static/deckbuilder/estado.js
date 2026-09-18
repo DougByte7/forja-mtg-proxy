@@ -66,7 +66,7 @@ export const NOME_DO_TIPO = Object.fromEntries(TIPOS);
    número na bolinha do botão. */
 export const FILTROS_VAZIOS = {
   tipo: "", texto: "", cores: "", cmcMin: "", cmcMax: "", precoMax: "",
-  ordem: "nome",
+  ordem: "nome", ineditas: false,
 };
 
 /* Tem algum filtro ligado? É a mesma pergunta que a bolinha do botão
@@ -74,10 +74,16 @@ export const FILTROS_VAZIOS = {
    decide se a lista de resultados é paginada: sem filtro ela é uma vitrine
    curta de cinco, com filtro é um recorte que a pessoa pediu e quer ver
    inteiro. Mora aqui, e não lá, porque quem pergunta é a busca — e a busca
-   já é importada por `filtros.js`. */
+   já é importada por `filtros.js`.
+
+   As inéditas ficam de fora da conta porque elas ALARGAM a lista em vez de
+   estreitá-la: deixar passar a coleção que ainda não saiu não é um recorte
+   que alguém pediu pra ver inteiro, e paginar por causa dele trocaria a
+   vitrine de cinco por um paginador que ninguém abriu. Na fita de etiquetas
+   ela aparece, porque lá a pergunta é outra: o que está ligado. */
 export function algumFiltro(){
   return Object.keys(FILTROS_VAZIOS)
-    .some(k => estado.filtros[k] !== FILTROS_VAZIOS[k]);
+    .some(k => k !== "ineditas" && estado.filtros[k] !== FILTROS_VAZIOS[k]);
 }
 
 export const estado = {

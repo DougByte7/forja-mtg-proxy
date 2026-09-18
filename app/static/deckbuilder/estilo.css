@@ -398,6 +398,9 @@ h2.secao{
 .heroi h1{font-family:'Cinzel',serif;font-size:24px;margin:0 0 8px;}
 .heroi p{color:var(--text-muted);font-size:13px;line-height:1.6;margin:0 auto 20px;max-width:430px;}
 .heroi .busca-caixa{max-width:440px;margin:0 auto;}
+/* O interruptor das inéditas fica colado na caixa de busca porque é ela que
+   ele muda — e centrado como todo o resto do herói. */
+.heroi .interruptor{margin-top:10px;}
 /* Menor e mais apagado que o parágrafo de cima: a pergunta da tela continua
    sendo o comandante, e esta linha é o atalho de quem já tem a resposta. */
 .heroi .ou-link{font-size:11.5px;margin:9px auto 0;max-width:440px;}
@@ -466,6 +469,22 @@ h2.secao{
   -webkit-mask:var(--ico-check) center/contain no-repeat;
           mask:var(--ico-check) center/contain no-repeat;
 }
+/* A carta que ainda não saiu.
+
+   Roxo, e não dourado nem vermelho: dourado aqui é "está ligado" (o botão de
+   filtros, o destaque do teclado) e vermelho é "está errado" — e esta carta
+   não é nenhum dos dois. Ela é uma carta normal que ainda não chegou.
+
+   Em toda lista ela é um item da linha, entre o nome e os símbolos de mana,
+   e nunca dentro do nome: o nome é a parte que encolhe com reticências, e um
+   selo que some junto com o fim do nome não avisa nada. */
+.selo-inedita{
+  flex:none;border:1px solid var(--purple);border-radius:999px;
+  padding:0 6px;font-size:9px;font-weight:700;line-height:15px;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--purple);
+  white-space:nowrap;cursor:help;
+}
+
 /* No maybeboard não é "já tem": é "você já olhou pra ela". Some menos que
    a do deck (ainda é uma carta que pode entrar) e a marca é outra. */
 .achado.no-talvez{opacity:.62;}
@@ -649,6 +668,15 @@ h2.secao{
 }
 .campo-grupo .ajuda{
   font-size:11px;color:var(--text-muted);line-height:1.5;margin:4px 0 0;
+}
+/* Um interruptor dentro de um grupo não é RÓTULO de campo: ele é o próprio
+   controle, e por isso não veste o mono maiúsculo dourado que nomeia os
+   outros. A regra de cima é mais específica que a `.interruptor`, então a
+   volta tem que ser dita aqui. */
+.campo-grupo > label.interruptor{
+  display:inline-flex;font-family:'Inter',sans-serif;font-size:12px;
+  font-weight:400;letter-spacing:normal;text-transform:none;
+  color:var(--text-muted);margin-bottom:0;
 }
 .campo-grupo textarea.campo{
   min-height:150px;resize:vertical;font-family:'IBM Plex Mono',monospace;

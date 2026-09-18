@@ -16,7 +16,7 @@ import {acharEntrada, adicionar, criarCategoria, definirQuantidade, desfazer,
         escolherComandante, tirar, tirarComandante} from "./edicao.js";
 import {estado} from "./estado.js";
 import {abrirGaveta, desenharBarraFiltros, fecharGaveta, gavetaAberta,
-        lerGavetaFiltros, limparFiltros, montarGavetaFiltros,
+        lerGavetaFiltros, limparFiltros, montarGavetaFiltros, mudarIneditas,
         preencherGavetaFiltros, tirarFiltro} from "./filtros.js";
 import {atalhoDaMesa, desfazerMesa, fecharModalGf,
         modalGfAberto} from "./goldfish-acoes.js";
@@ -37,6 +37,10 @@ import {concluirVersao, menuDaVersao} from "./versoes.js";
 export function ligarEventos(){
   $("busca").addEventListener("input", agendarBusca);
   $("busca-cmd").addEventListener("input", agendarBuscaComandante);
+  // O interruptor da abertura escreve no mesmo filtro da gaveta — por isso
+  // ele não tem tratador próprio aqui, e sim o de lá (ver `mudarIneditas`).
+  $("cmd-ineditas").addEventListener("change",
+    (e) => mudarIneditas(e.target.checked));
 
   // Achar no que já está montado. Sem atraso, ao contrário da busca da
   // esquerda: aqui não há rede nenhuma — é filtrar uma lista de 100 que já

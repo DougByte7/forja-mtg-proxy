@@ -149,6 +149,13 @@ ELVES = carta("Llanowar Elves", "Creature — Elf Druid", "G", "{G}", 1.0, 0.5)
 SWORDS = carta("Swords to Plowshares", "Instant", "W", "{W}", 1.0, 3.0)
 BOLT = carta("Lightning Bolt", "Instant", "R", "{R}", 1.0, 2.0)
 RHYSTIC = carta("Rhystic Study", "Enchantment", "U", "{2}{U}", 3.0, 30.0)
+# As duas cartas que chegam `legal: false` por motivos opostos: uma ainda não
+# saiu (e sai), a outra é banida.
+INEDITA = dict(carta("Dragão Que Vem Aí", "Creature — Dragon", "", "{4}{R}",
+                     5.0, 1.0),
+               legal=False, inedita=True, sai_em="2026-11-13")
+LOTUS = dict(carta("Black Lotus", "Artifact", "", "{0}", 0.0, 1.0),
+             legal=False)
 
 DECK = [
     entrada(SOL_RING, 1, "Combo principal"),
@@ -340,6 +347,30 @@ try:
           "identidade" not in fora_no_talvez["apontamentos"])
     check("nem marcada na linha",
           'class="linha problema"' not in fora_no_talvez["htmlTalvez"])
+
+    # Ilegal hoje, legal no dia do lançamento. A diferença entre esta carta e
+    # uma banida não está em nenhum campo que a linha desenhe — as duas chegam
+    # `legal: false` —, e tratá-las igual encheria de vermelho um deck que só
+    # está adiantado. A mesma divisão mora no `decks.validar`: quando a
+    # resposta do servidor chegar, ela tem que dizer isto também.
+    com_inedita = rodar("", deck=[entrada(INEDITA)], maybe=[])
+    check("carta que ainda não saiu é aviso, não banida",
+          "inedita" in com_inedita["apontamentos"]
+          and "banida" not in com_inedita["apontamentos"],
+          f"({com_inedita['apontamentos']})")
+    check("e a linha dela não é marcada como problema",
+          'class="linha problema"' not in com_inedita["htmlDeck"])
+    check("mas leva a etiqueta que diz por quê",
+          "selo-inedita" in com_inedita["htmlDeck"])
+    check("com a data de lançamento à mão",
+          "13/11/2026" in com_inedita["htmlDeck"], com_inedita["htmlDeck"])
+
+    banida = rodar("", deck=[entrada(LOTUS)], maybe=[])
+    check("a banida continua sendo erro",
+          "banida" in banida["apontamentos"], f"({banida['apontamentos']})")
+    check("e continua marcando a linha",
+          'class="linha problema"' in banida["htmlDeck"])
+    check("sem etiqueta de inédita", "selo-inedita" not in banida["htmlDeck"])
 
     # ---------------------------------------------------- mover e categorizar
     print("\n--- mover entre o deck e o maybeboard ---")

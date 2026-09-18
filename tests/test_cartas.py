@@ -422,6 +422,106 @@ try:
        [c["nome"] for c in cartas.buscar("sol ring", ordem="preco_desc")][0],
        "Sol Ring")
 
+    # ------------------------------------------- cartas que ainda não saíram
+    print("\n--- cartas inéditas (o interruptor da tela) ---")
+
+    # A coleção anunciada chega do bulk marcada `not_legal`, e é isso que a
+    # esconde da busca. O que o teste persegue é a diferença entre "ainda não
+    # saiu" e "não pode": as duas são ilegais hoje, e confundi-las faria o
+    # interruptor da tela virar porta dos fundos pro Black Lotus.
+    hoje = cartas._hoje()
+    depois, antes = "2999-01-01", "1999-01-01"
+    conn = cartas._conn()
+    conn.executemany(
+        f"INSERT OR REPLACE INTO cartas ({cartas._COLUNAS}) "
+        f"VALUES ({cartas._INTERROGACOES})",
+        [cartas._linha(c) for c in [
+            carta("Dragão Que Vem Aí", tipo="Creature — Dragon", cores="R",
+                  ident="R", cmc=5, legal="not_legal", released_at=depois),
+            carta("Comandante Que Vem Aí",
+                  tipo="Legendary Creature — Dragon", cores="R", ident="R",
+                  cmc=4, legal="not_legal", released_at=depois),
+            # Ilegal pra sempre (prata, Alchemy): a data dela já passou, e é
+            # ela que separa "não saiu ainda" de "nunca vai valer".
+            carta("Piada de Prata", tipo="Creature — Clown",
+                  legal="not_legal", released_at=antes),
+            # Carta velha e legal cuja impressão escolhida pelo bulk é um
+            # promo futuro. A data está no futuro e ela NÃO é inédita.
+            carta("Promo de Novembro", tipo="Artifact", cores="", ident="",
+                  released_at=depois),
+        ]])
+    conn.commit()
+    conn.close()
+
+    linha = dict(zip([c.strip() for c in cartas._COLUNAS.split(",")],
+                     cartas._linha(carta("Dragão Que Vem Aí",
+                                         legal="not_legal",
+                                         released_at=depois))))
+    eq("a data de lançamento é guardada pra carta ainda não legal",
+       linha["sai_em"], depois)
+    eq("carta legal não guarda data, mesmo com impressão futura",
+       dict(zip([c.strip() for c in cartas._COLUNAS.split(",")],
+                cartas._linha(carta("Promo de Novembro",
+                                    released_at=depois))))["sai_em"], "")
+    eq("carta banida não guarda data",
+       dict(zip([c.strip() for c in cartas._COLUNAS.split(",")],
+                cartas._linha(carta("Black Lotus", tipo="Artifact",
+                                    legal="banned",
+                                    released_at=depois))))["sai_em"], "")
+    check("hoje sai no formato da Scryfall",
+          len(hoje) == 10 and hoje.count("-") == 2, f"({hoje})")
+
+    achados = [c["nome"] for c in cartas.buscar("que vem aí")]
+    eq("por padrão a carta que não saiu continua fora", achados, [])
+    achados = [c["nome"] for c in cartas.buscar("que vem aí", ineditas=True)]
+    eq("com o interruptor ligado ela aparece",
+       sorted(achados), ["Comandante Que Vem Aí", "Dragão Que Vem Aí"])
+    eq("e contar concorda com a busca",
+       cartas.contar("que vem aí", ineditas=True), 2)
+
+    # As três coisas que o interruptor NÃO pode trazer junto.
+    ineditas = [c["nome"] for c in cartas.buscar(ineditas=True)]
+    check("banida continua fora com o interruptor ligado",
+          "Black Lotus" not in ineditas, f"({ineditas})")
+    check("ilegal de data passada continua fora",
+          "Piada de Prata" not in ineditas, f"({ineditas})")
+    check("carta legal continua aparecendo",
+          "Sol Ring" in ineditas)
+
+    # A marca que a tela desenha. Ela se calcula na hora da consulta, e não na
+    # sincronização: a carta de amanhã vira carta normal amanhã, sem esperar o
+    # bulk do dia seguinte.
+    def achar(nome, **kw):
+        return [c for c in cartas.buscar(nome, **kw) if c["nome"] == nome][0]
+
+    eq("a carta que não saiu vem marcada",
+       achar("Dragão Que Vem Aí", ineditas=True)["inedita"], True)
+    eq("e leva a data junto, que é o que a etiqueta diz",
+       achar("Dragão Que Vem Aí", ineditas=True)["sai_em"], depois)
+    eq("carta comum não vem marcada", achar("Sol Ring")["inedita"], False)
+    eq("promo futuro de carta legal não vem marcado",
+       achar("Promo de Novembro")["inedita"], False)
+    # Quem resolve o deck salvo é a `por_nomes`, e a tela desenha a etiqueta
+    # na lista do deck com o que ela devolve.
+    eq("a marca também chega pelo nome",
+       cartas.por_nomes(["Dragão Que Vem Aí"])["Dragão Que Vem Aí"]["inedita"],
+       True)
+
+    # Comandante: é a mesma busca com `comandante=True`, e é ela que a tela de
+    # abertura faz — a única acontecendo antes de existir deck.
+    eq("comandante inédito só com o interruptor",
+       [c["nome"] for c in cartas.buscar("que vem aí", comandante=True)], [])
+    eq("comandante inédito com o interruptor ligado",
+       [c["nome"] for c in cartas.buscar("que vem aí", comandante=True,
+                                         ineditas=True)],
+       ["Comandante Que Vem Aí"])
+
+    conn = cartas._conn()
+    conn.execute("DELETE FROM cartas WHERE sai_em <> '' OR nome = "
+                 "'Promo de Novembro'")
+    conn.commit()
+    conn.close()
+
     # ------------------------------------------------------------- páginas
     print("\n--- páginas (o paginador da tela) ---")
 

@@ -434,6 +434,11 @@ def identidade_de(comandantes: list[dict]) -> str:
     return "".join(c for c in base_cartas.CORES if c in cores)
 
 
+def _data_br(iso: str) -> str:
+    """"2026-11-13" vira "13/11/2026" — a data como ela é lida por aqui."""
+    return "/".join(reversed((iso or "").split("-")))
+
+
 def _cabe_na_identidade(carta: dict, identidade: str) -> bool:
     return all(c in identidade for c in (carta.get("identidade") or ""))
 
@@ -531,7 +536,17 @@ def validar(comandantes: list[str], cartas: list[dict]) -> dict:
                     f"singleton — só terreno básico (e as poucas cartas que "
                     f"dizem o contrário) repetem.", carta["nome"])
 
-        if not carta["legal"]:
+        if carta.get("inedita"):
+            # Carta de coleção anunciada e ainda não lançada. Ela é ilegal
+            # hoje e legal no dia do lançamento, então é AVISO e não erro: um
+            # deck montado com a coleção nova na mão não é um deck quebrado, e
+            # marcá-lo em vermelho por três semanas ensinaria a ignorar o
+            # vermelho. Quem escolheu ver essas cartas na busca sabe que elas
+            # ainda não estão nas lojas (ver `cartas._sai_em`).
+            apontar("aviso", "inedita",
+                    f"{carta['nome']} ainda não foi lançada — vale em mesa a "
+                    f"partir de {_data_br(carta['sai_em'])}.", carta["nome"])
+        elif not carta["legal"]:
             apontar("erro", "banida",
                     f"{carta['nome']} não é legal em Commander.", carta["nome"])
 

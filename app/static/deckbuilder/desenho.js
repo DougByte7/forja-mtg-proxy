@@ -15,8 +15,8 @@ import {desenharPoder} from "./poder.js";
 import {simboloDaTela} from "./preco.js";
 import {validacaoAtual} from "./salvar.js";
 import {cartasContadas, categoriaAutomatica, categoriaDe, ehPropria, ico,
-        identidadeDoDeck, manaHTML, ordemDasCategorias, semAcento,
-        totalCartas} from "./utilidades.js";
+        identidadeDoDeck, manaHTML, ordemDasCategorias, seloInedita,
+        semAcento, totalCartas} from "./utilidades.js";
 import {desenharVersao} from "./versoes.js";
 
 export function desenharTudo(){
@@ -82,6 +82,7 @@ export function desenharDeck(){
         <b>${escapar(c.nome)}</b>
         <small>${escapar(c.tipo)}</small>
       </span>
+      ${seloInedita(c)}
     </button>
     <div class="mana">${manaHTML(c.mana_cost)}</div>
     ${botaoDeArte(c)}
@@ -292,7 +293,12 @@ function linhaHTML(entrada, identidade, tabuleiro){
   // O maybeboard não acusa nada: é rascunho, e uma carta em dúvida marcada
   // de vermelho por estar fora da identidade seria alarme sobre uma decisão
   // que ainda não foi tomada.
-  const problema = tabuleiro === "deck" && (fora.length || repetida || !c.legal);
+  // A carta que ainda não saiu também é ilegal hoje, e não é problema: ela
+  // vira legal sozinha no dia do lançamento, e a etiqueta ao lado do nome já
+  // diz isso sem pintar a linha de vermelho por três semanas. Mesma divisão
+  // do `decks.validar`, que a aponta como aviso.
+  const problema = tabuleiro === "deck"
+    && (fora.length || repetida || (!c.legal && !c.inedita));
   let porque = "";
   if (problema && fora.length) porque = `fora da identidade (${fora.join("")})`;
   else if (problema && repetida) porque = "singleton: só uma cópia";
@@ -326,6 +332,7 @@ function linhaHTML(entrada, identidade, tabuleiro){
            title="Quantidade — zero tira a carta. Clique direito na linha pro menu.">
     <span class="nome"${ganchosDaPrevia(c)}>${nome}
       ${porque ? `<span class="porque">· ${porque}</span>` : ""}</span>
+    ${seloInedita(c)}
     ${manaHTML(c.mana_cost)}
     ${valorHTML(entrada)}
     <span class="ctrl">

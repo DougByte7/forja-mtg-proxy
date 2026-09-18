@@ -145,7 +145,8 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     imagem_verso TEXT,
     deitada INTEGER,
     imagem_status TEXT,
-    tokens TEXT
+    tokens TEXT,
+    sai_em TEXT
 )
 """
 
@@ -206,7 +207,8 @@ def _conn() -> sqlite3.Connection:
 # até a próxima sincronização, o que a tela trata como "sem verso, não deita",
 # e o `imagem_status` vazio como imagem boa — é o que ela quase sempre é.
 _COLUNAS_NOVAS = (("imagem_verso", "TEXT"), ("deitada", "INTEGER"),
-                  ("tokens", "TEXT"), ("imagem_status", "TEXT"))
+                  ("tokens", "TEXT"), ("imagem_status", "TEXT"),
+                  ("sai_em", "TEXT"))
 _COLUNAS_NOVAS_TOKENS = (("imagem_status", "TEXT"),)
 
 
@@ -466,6 +468,47 @@ def _linha_token(carta: dict) -> tuple | None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Carta que ainda não saiu
+#
+# O bulk traz as cartas das coleções ANUNCIADAS junto com as que já estão nas
+# lojas, e elas chegam `not_legal` em Commander — é o que a Scryfall responde
+# até o dia do lançamento. Sem nada a mais, o `legal = 1` da busca as esconde,
+# e quem quer montar o deck da coleção nova não acha carta nenhuma.
+#
+# O que se guarda é a DATA em que a carta sai, e só pra quem ainda não é legal:
+# a comparação com o hoje acontece na hora da consulta, então a carta entra na
+# busca normal no dia certo, sem esperar a sincronização seguinte.
+#
+# A legalidade entra na conta porque a data sozinha mente nos dois sentidos:
+#
+# * O `oracle_cards` escolhe UMA impressão por carta, e ela pode ser um promo
+#   futuro de uma carta velha — o Sol Ring não é inédito por ganhar arte nova
+#   em novembro, e ele é `legal`, então fica de fora daqui.
+# * Carta BANIDA também não é legal, mas saiu faz vinte anos: a Scryfall a
+#   marca `banned`, não `not_legal`, e a data dela já passou. Por isso "não
+#   legal" aqui é estreito de propósito — sem isso, o interruptor de inéditas
+#   viraria uma porta dos fundos pro Black Lotus.
+# ---------------------------------------------------------------------------
+
+
+def _sai_em(carta: dict, legalidades: dict) -> str:
+    """A data de lançamento, só pra carta que o formato ainda não aceita."""
+    if legalidades.get("commander") != "not_legal":
+        return ""
+    return carta.get("released_at") or ""
+
+
+def _hoje() -> str:
+    """O dia de hoje em UTC, no formato da Scryfall ("2026-10-02").
+
+    UTC, e não a hora da máquina, porque é o fuso em que a Scryfall escreve
+    `released_at` — e porque texto nesse formato se compara com `<` e `>`, que
+    é o que a consulta faz.
+    """
+    return time.strftime("%Y-%m-%d", time.gmtime())
+
+
 def _pode_ser_comandante(tipo_frente: str, texto: str) -> bool:
     """Regra do formato: criatura lendária, ou carta que diz que pode.
 
@@ -535,14 +578,19 @@ def _linha(carta: dict) -> tuple | None:
         # deckbuilder confere antes de mandar a imagem pro papel.
         carta.get("image_status") or "",
         _tokens_da_carta(carta),
+        _sai_em(carta, legalidades),
     )
 
 
 _COLUNAS = ("id, nome, busca, busca_frente, mana_cost, cmc, tipo, texto, "
             "cores, identidade, legal, comandante, parceiro, basico, "
             "ilimitada, preco_usd, imagem, layout, scryfall, imagem_verso, "
-            "deitada, imagem_status, tokens")
+            "deitada, imagem_status, tokens, sai_em")
 _INTERROGACOES = ",".join("?" * len(_COLUNAS.split(",")))
+# Onde a coluna `tokens` cai na tupla do `_linha`. A carga precisa lê-la de
+# dentro da linha que acabou de montar, e fazer isso contando posição na mão
+# transforma "acrescentei uma coluna no fim" em ficha que some calada.
+_IX_TOKENS = [c.strip() for c in _COLUNAS.split(",")].index("tokens")
 
 
 # ---------------------------------------------------------------------------
@@ -763,7 +811,7 @@ def _carregar() -> dict:
                 linha = _linha(carta)
                 if linha is None:
                     continue
-                citados.update(json.loads(linha[-1] or "[]"))
+                citados.update(json.loads(linha[_IX_TOKENS] or "[]"))
                 lote.append(linha)
                 if len(lote) >= LOTE:
                     _gravar(conn, lote)
@@ -977,8 +1025,8 @@ def _filtro_cores(cores: str | None, onde: list, params: list):
 def _condicoes(termo: str, identidade: str | None, tipo: str,
                comandante: bool, so_legais: bool, texto: str,
                cmc_min: float | None, cmc_max: float | None,
-               cores: str | None,
-               preco_max: float | None) -> tuple[str, list[str], list]:
+               cores: str | None, preco_max: float | None,
+               ineditas: bool = False) -> tuple[str, list[str], list]:
     """O WHERE da busca, num lugar só: `buscar` e `contar` pedem o mesmo.
 
     Devolve `(alvo, onde, params)`. O `alvo` é o nome normalizado, e volta
@@ -987,7 +1035,13 @@ def _condicoes(termo: str, identidade: str | None, tipo: str,
     alvo = normalizar(termo)
     onde, params = [], []
 
-    if so_legais:
+    if so_legais and ineditas:
+        # A carta que ainda não saiu entra POR CIMA do filtro de legalidade,
+        # não no lugar dele: quem ligou o interruptor quer ver a coleção nova,
+        # não as banidas (ver `_sai_em`).
+        onde.append("(legal = 1 OR sai_em > ?)")
+        params.append(_hoje())
+    elif so_legais:
         onde.append("legal = 1")
     if comandante:
         onde.append("comandante = 1")
@@ -1021,7 +1075,8 @@ def _condicoes(termo: str, identidade: str | None, tipo: str,
 def contar(termo: str = "", identidade: str | None = None, tipo: str = "",
            comandante: bool = False, so_legais: bool = True, texto: str = "",
            cmc_min: float | None = None, cmc_max: float | None = None,
-           cores: str | None = None, preco_max: float | None = None) -> int:
+           cores: str | None = None, preco_max: float | None = None,
+           ineditas: bool = False) -> int:
     """Quantas cartas a mesma busca acha — sem teto e sem página.
 
     É o denominador do paginador da tela ("1 / 8") e o total que ela escreve
@@ -1031,7 +1086,7 @@ def contar(termo: str = "", identidade: str | None = None, tipo: str = "",
     """
     _, onde, params = _condicoes(termo, identidade, tipo, comandante,
                                  so_legais, texto, cmc_min, cmc_max, cores,
-                                 preco_max)
+                                 preco_max, ineditas)
     sql = "SELECT COUNT(*) FROM cartas"
     if onde:
         sql += " WHERE " + " AND ".join(onde)
@@ -1049,12 +1104,16 @@ def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
            limite: int = 40, texto: str = "", cmc_min: float | None = None,
            cmc_max: float | None = None, cores: str | None = None,
            preco_max: float | None = None, ordem: str = "",
-           pular: int = 0) -> list[dict]:
+           pular: int = 0, ineditas: bool = False) -> list[dict]:
     """Busca por nome, com os filtros da tela.
 
     `identidade` é a do comandante já escolhido: passando `"WG"`, some da
     lista toda carta que o deck não poderia jogar. Passar `None` não filtra —
     é o estado de antes de escolher comandante.
+
+    `ineditas` deixa passar também a carta que ainda não saiu — a da coleção
+    anunciada, que chega `not_legal` da Scryfall e sem isto some da busca. Ver
+    `_sai_em`; a carta banida continua de fora.
 
     `texto` é a busca por EFEITO — ver `_filtro_texto`. Ela é o único filtro
     daqui que varre coluna sem índice; o custo é uma varredura de ~35 mil
@@ -1074,7 +1133,7 @@ def buscar(termo: str = "", identidade: str | None = None, tipo: str = "",
     """
     alvo, onde, params = _condicoes(termo, identidade, tipo, comandante,
                                     so_legais, texto, cmc_min, cmc_max,
-                                    cores, preco_max)
+                                    cores, preco_max, ineditas)
 
     sql = f"SELECT {_COLUNAS} FROM cartas"
     if onde:
@@ -1249,6 +1308,11 @@ def _dict(linha: sqlite3.Row) -> dict:
     carta = dict(linha)
     for campo in ("legal", "comandante", "parceiro", "basico", "ilimitada"):
         carta[campo] = bool(carta.get(campo))
+    # "Ainda não saiu" é uma pergunta sobre HOJE, e por isso se responde aqui e
+    # não na sincronização: a carta de amanhã vira carta normal amanhã, e a
+    # `sai_em` viaja junto pra tela poder dizer QUANDO (ver `_sai_em`).
+    carta["inedita"] = bool(carta.get("sai_em")
+                            and carta["sai_em"] > _hoje())
     # A lista de ids de ficha é detalhe de armazenamento: quem quer as fichas
     # chama `tokens_de`, que devolve as fichas inteiras. Aqui vira só o sim ou
     # não que a tela usa pra marcar a carta na lista.

@@ -74,6 +74,7 @@ def carta(nome, tipo="Creature — Elf", texto="", ident="G", **extra):
         "mana_cost": extra.pop("custo", "{1}{G}"),
         "colors": list(ident), "color_identity": list(ident),
         "legalities": {"commander": extra.pop("legal", "legal")},
+        "released_at": extra.pop("released_at", "2010-01-01"),
         "prices": {"usd": "1.00"}, "layout": "normal",
         "image_uris": {"normal": "http://exemplo/arte.jpg"},
     }
@@ -99,6 +100,11 @@ try:
               texto="A deck can have any number of cards named Rat Colony."),
         carta("Black Lotus", tipo="Artifact", ident="", custo="{0}",
               legal="banned"),
+        # Ilegal hoje pelo motivo oposto ao do Black Lotus: ela ainda não
+        # saiu. A data está lá na frente de propósito — quem responde "já
+        # saiu?" é a consulta, não a sincronização (ver `cartas._sai_em`).
+        carta("Dragão Que Vem Aí", tipo="Creature — Dragon", ident="G",
+              legal="not_legal", released_at="2999-01-01"),
     ]
     conn = cartas._conn()
     conn.executemany(
@@ -174,6 +180,21 @@ try:
 
     banida = decks.validar(["Atraxa"], [{"nome": "Black Lotus", "quantidade": 1}])
     check("carta banida acusa", "banida" in tipos_de(banida))
+
+    # A carta que ainda não saiu chega igualzinho à banida — `legal` falso nas
+    # duas —, e a diferença é toda a questão: uma vira legal sozinha no dia do
+    # lançamento, a outra não vira nunca. Um deck montado com a coleção nova
+    # na mão não é um deck quebrado, então é aviso, e o deck continua `ok`.
+    inedita = decks.validar(["Atraxa"], [{"nome": "Dragão Que Vem Aí",
+                                          "quantidade": 1}])
+    check("carta que ainda não saiu não é acusada de banida",
+          "banida" not in tipos_de(inedita), f"({tipos_de(inedita)})")
+    eq("ela é aviso, não erro",
+       [a["nivel"] for a in inedita["apontamentos"] if a["tipo"] == "inedita"],
+       ["aviso"])
+    check("e o aviso diz a data em que ela vale",
+          any("01/01/2999" in a["mensagem"] for a in inedita["apontamentos"]),
+          f"({[a['mensagem'] for a in inedita['apontamentos']]})")
 
     repetido = decks.validar(["Atraxa"], [{"nome": "Atraxa", "quantidade": 1}])
     check("comandante repetido nas 99 acusa",

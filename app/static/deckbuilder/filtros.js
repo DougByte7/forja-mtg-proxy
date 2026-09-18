@@ -5,7 +5,7 @@
    armadilha em tela de toque, onde o ✕ fica longe do polegar. */
 
 import {$, escapar} from "../comum/dom.js";
-import {agendarBusca, buscarDoComeco} from "./busca.js";
+import {agendarBusca, buscarComandante, buscarDoComeco} from "./busca.js";
 import {estado, FILTROS_VAZIOS, NOME_DO_TIPO, TIPOS} from "./estado.js";
 import {simboloDaTela} from "./preco.js";
 import {ico} from "./utilidades.js";
@@ -54,6 +54,11 @@ function filtrosLigados(){
   }
   if (f.precoMax !== "") ligados.push({chave:"precoMax",
     rotulo: `até ${simboloDaTela()} ${f.precoMax}`});
+  // Este não estreita a lista, alarga (ver `algumFiltro`) — mas está ligado,
+  // e a fita é onde se vê o que está ligado. Sem ele aqui, a carta que ainda
+  // não saiu apareceria na busca sem nada dizendo por quê, e sem o ✕ que a
+  // tira de volta.
+  if (f.ineditas) ligados.push({chave:"ineditas", rotulo:"inéditas"});
   if (f.ordem && f.ordem !== "nome"){
     // O chip da ordenação é a única coisa da barra em que a seta É o
     // conteúdo: "preço" sozinho não diz se a mais cara vem antes. Por isso
@@ -112,6 +117,12 @@ export function preencherGavetaFiltros(){
   $("f-cmc-max").value = f.cmcMax;
   $("f-preco").value = f.precoMax;
   $("f-ordem").value = f.ordem;
+  // O mesmo filtro tem dois interruptores: o da gaveta e o da tela de
+  // abertura, que existe porque lá a gaveta ainda não está na tela — sem
+  // comandante não há painel de busca. Os dois mostram o mesmo estado, senão
+  // um deles mentiria assim que o outro fosse tocado.
+  $("f-ineditas").checked = f.ineditas;
+  $("cmd-ineditas").checked = f.ineditas;
   [...$("f-cores").children].forEach(b => {
     const ligada = f.cores.includes(b.dataset.cor);
     b.classList.toggle("ativo", ligada);
@@ -138,19 +149,37 @@ export function lerGavetaFiltros(){
     cmcMax: numero("f-cmc-max"),
     precoMax: numero("f-preco"),
     ordem: $("f-ordem").value,
+    ineditas: $("f-ineditas").checked,
   };
   desenharBarraFiltros();
   agendarBusca();
 }
 
+/* O interruptor da tela de abertura. O da gaveta não passa por aqui — lá o
+   `lerGavetaFiltros` já lê todos os controles de uma vez —, e o que este tem
+   de diferente é a busca que ele refaz: a de comandante, que é a única
+   acontecendo enquanto essa tela está no ar. */
+export function mudarIneditas(ligado){
+  estado.filtros.ineditas = ligado;
+  preencherGavetaFiltros();
+  desenharBarraFiltros();
+  // Só refaz a busca se houver o que buscar: com a caixa vazia a lista está
+  // vazia de propósito, e enchê-la de vinte e cinco lendários porque alguém
+  // mexeu num interruptor seria responder uma pergunta que ninguém fez.
+  if ($("busca-cmd").value.trim()) buscarComandante();
+}
+
 export function tirarFiltro(chave){
   if (chave === "cmc"){
+    // A única etiqueta que fala por dois controles: "custo 2–4" é o par.
     estado.filtros.cmcMin = "";
     estado.filtros.cmcMax = "";
-  } else if (chave === "ordem"){
-    estado.filtros.ordem = "nome";
   } else {
-    estado.filtros[chave] = "";
+    // Tirar um filtro é devolvê-lo ao estado neutro da gaveta, e quem sabe
+    // qual é ele é o `FILTROS_VAZIOS` — a ordenação volta pra "nome" e o
+    // interruptor das inéditas pra desligado, sem uma lista de exceções aqui
+    // que envelhece a cada filtro novo.
+    estado.filtros[chave] = FILTROS_VAZIOS[chave];
   }
   preencherGavetaFiltros();
   desenharBarraFiltros();

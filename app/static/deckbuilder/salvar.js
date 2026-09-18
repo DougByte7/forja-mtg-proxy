@@ -12,7 +12,7 @@ import {atualizarBotaoPedido} from "./galeria.js";
 import {analisarManabase} from "./manabase.js";
 import {agendarCotacao} from "./orcamento.js";
 import {buscarTokens} from "./tokens.js";
-import {identidadeDoDeck, totalCartas} from "./utilidades.js";
+import {dataBR, identidadeDoDeck, totalCartas} from "./utilidades.js";
 import {buscarHistorico, desenharVersao} from "./versoes.js";
 function validarLocal(){
   const identidade = identidadeDoDeck();
@@ -42,7 +42,15 @@ function validarLocal(){
       apontamentos.push({nivel:"erro", tipo:"singleton", carta:carta.nome,
         mensagem:`${carta.nome}: ${quantidade} cópias. Commander é singleton.`});
     }
-    if (!carta.legal){
+    // Ainda não lançada é AVISO, não erro: a carta vira legal sozinha no dia
+    // do lançamento, e um deck montado com a coleção nova na mão não é um
+    // deck quebrado. Mesma regra do `decks.validar` — quando a resposta do
+    // servidor chega, ela tem que dizer a mesma coisa que esta.
+    if (carta.inedita){
+      apontamentos.push({nivel:"aviso", tipo:"inedita", carta:carta.nome,
+        mensagem:`${carta.nome} ainda não foi lançada — vale em mesa a partir de ${
+          dataBR(carta.sai_em)}.`});
+    } else if (!carta.legal){
       apontamentos.push({nivel:"erro", tipo:"banida", carta:carta.nome,
         mensagem:`${carta.nome} não é legal em Commander.`});
     }

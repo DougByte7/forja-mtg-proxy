@@ -158,6 +158,29 @@ export function preco(carta){
   return carta.preco_usd ? moeda(carta.preco_usd) : "";
 }
 
+/* "2026-11-13" vira "13/11/2026". */
+export function dataBR(iso){
+  return String(iso || "").split("-").reverse().join("/");
+}
+
+/* A marca da carta que ainda não saiu.
+
+   Ela é a única carta da lista que não se pode comprar nem jogar hoje, e nada
+   no nome, no tipo ou no custo diz isso — o preço, que seria a pista, vem
+   vazio como o de qualquer carta sem oferta. Então é uma etiqueta com
+   palavra, e não um ícone: quem ligou o interruptor há uma hora não vai
+   lembrar o que um símbolo novo significa, e a data de lançamento fica no
+   `title` pra quem quiser saber QUANDO.
+
+   Devolve vazio pra carta comum, pra poder ser interpolada em qualquer
+   linha sem um `if` em volta. */
+export function seloInedita(carta){
+  if (!carta || !carta.inedita) return "";
+  return `<span class="selo-inedita" title="Ainda não lançada${
+    carta.sai_em ? " — sai em " + escapar(dataBR(carta.sai_em)) : ""
+  }">inédita</span>`;
+}
+
 /* Texto reduzido ao que se digita de fato: minúsculo e sem acento. Quem
    procura "jotun" no deck quer achar o Jötun Grunt — o trema está no nome da
    carta, não no teclado de quem busca. */

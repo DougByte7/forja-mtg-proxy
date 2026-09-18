@@ -6,8 +6,8 @@ import {adicionar, escolherComandante, ondeEsta} from "./edicao.js";
 import {algumFiltro, CATEGORIA_SIDEBOARD, estado} from "./estado.js";
 import {precoMaxEmUsd} from "./preco.js";
 import {api} from "./salvar.js";
-import {fonteDoLink, ico, identidadeDoDeck, manaHTML, preco, toast,
-        todasAsCategorias} from "./utilidades.js";
+import {fonteDoLink, ico, identidadeDoDeck, manaHTML, preco, seloInedita,
+        toast, todasAsCategorias} from "./utilidades.js";
 
 let buscaTimer = null;
 
@@ -116,6 +116,7 @@ export async function buscar(){
   if (f.cmcMax !== "") params.set("cmc_max", f.cmcMax);
   if (f.precoMax !== "") params.set("preco_max", precoMaxEmUsd(f.precoMax));
   if (f.ordem && f.ordem !== "nome") params.set("ordem", f.ordem);
+  if (f.ineditas) params.set("ineditas", "true");
   try {
     const r = await api("/cartas/busca?" + params);
     estado.buscaTotal = paginada ? (r.total ?? r.cartas.length) : 0;
@@ -153,6 +154,10 @@ export async function buscarComandante(){
       <b>··· › Importar lista</b>.</span></div>`);
   }
   const params = new URLSearchParams({q: termo, comandante: "true", limite: "25"});
+  // O mesmo interruptor da gaveta, ligado aqui pelo da abertura: quem monta o
+  // deck da coleção nova começa pelo comandante dela, e é esta busca que
+  // responde antes de existir deck (ver `mudarIneditas`, em `filtros.js`).
+  if (estado.filtros.ineditas) params.set("ineditas", "true");
   try {
     const r = await api("/cartas/busca?" + params);
     mostrarResultados($("res-cmd"), r.cartas, escolherComandante,
@@ -229,6 +234,7 @@ function mostrarResultados(caixa, cartas, aoClicar,
         <b>${escapar(c.nome)}</b>
         <small>${escapar(c.tipo)}</small>
       </span>
+      ${seloInedita(c)}
       ${manaHTML(c.mana_cost)}
       <span class="preco">${preco(c)}</span>
     </button>`;

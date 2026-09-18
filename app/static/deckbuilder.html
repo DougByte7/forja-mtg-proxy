@@ -111,6 +111,17 @@
         <input class="campo" id="busca-cmd" autocomplete="off" spellcheck="false"
                placeholder="Buscar comandante… (ex.: Atraxa, Muldrotha)">
       </div>
+      <!-- A coleção anunciada e ainda não lançada chega da Scryfall como
+           ilegal, e por isso não aparece na busca. Quem está montando o deck
+           dela precisa dizer isso UMA vez, e o lugar de dizer é aqui: o
+           comandante é a primeira carta escolhida, antes de a gaveta de
+           filtros existir na tela. O interruptor é o mesmo filtro de lá. -->
+      <label class="interruptor"
+             title="Cartas de coleção anunciada, que ainda não está nas lojas">
+        <input type="checkbox" id="cmd-ineditas">
+        <span class="trilho-int" aria-hidden="true"></span>
+        Incluir cartas inéditas
+      </label>
       <!-- A mesma caixa aceita o link do deck pronto: quem chega com um deck
            no Archidekt ou no Moxfield não vai procurar o "···" pra descobrir
            isso, cola onde está o cursor. Dizer aqui é o que faz a caixa ser
@@ -547,6 +558,19 @@
       </select>
       <p class="ajuda">Vale quando a caixa de busca está vazia. Com nome
         digitado, quem manda é a relevância.</p>
+    </div>
+
+    <div class="campo-grupo">
+      <label class="interruptor">
+        <input type="checkbox" id="f-ineditas">
+        <span class="trilho-int" aria-hidden="true"></span>
+        Incluir cartas inéditas
+      </label>
+      <p class="ajuda">Cartas das coleções já anunciadas e ainda não
+        lançadas. Elas vêm marcadas como <b>não legais</b> até o dia do
+        lançamento, e por isso ficam fora da busca — ligado, aparecem com a
+        etiqueta <b>inédita</b> na lista. Carta <b>banida</b> continua de
+        fora.</p>
     </div>
 
   </div>

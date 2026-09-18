@@ -512,7 +512,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
 | `GET /deckbuilder` | você, no navegador | a tela de montar deck de Commander — ver *Deckbuilder de Commander* |
-| `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta. `pular` e `com_total` paginam o painel de adicionar, que só pagina com filtro ligado |
+| `GET /cartas/busca` | deckbuilder | busca na base local. Além de `q`/`identidade`/`tipo`: `texto` (efeito, palavra a palavra no oracle em inglês), `cores`, `cmc_min`, `cmc_max`, `preco_max` e `ordem` — os filtros da gaveta. `ineditas` traz também a coleção anunciada e ainda não lançada. `pular` e `com_total` paginam o painel de adicionar, que só pagina com filtro ligado |
 | `GET /cartas/impressoes?nome=` | escolha de arte | as impressões oficiais da Scryfall (edição, ano, artista, id e status da imagem) — a vitrine do MPC Fill e o segmento Scryfall |
 | `POST /artes/metadados` | escolha de arte | nome do arquivo, DPI e fonte de um punhado de ids do MPC Fill — só da página à vista |
 | `GET/PUT/DELETE /decks/{id}/artes` | escolha de arte | o que já foi escolhido; grava (de todas as cópias ou de uma, com `copia`); volta ao padrão |
@@ -774,7 +774,9 @@ deckbuilder  ──(decklist em texto)──►  MPC Fill  ──(XML com as art
 2. **Busque e clique.** A busca da direita já sai filtrada pela identidade do
    comandante: carta que o deck não poderia jogar não aparece. `/` põe o
    cursor na busca, Enter adiciona o primeiro resultado, `Ctrl+Z` desfaz. O
-   botão **Filtros** abre a gaveta com busca por efeito, cor, custo e preço.
+   botão **Filtros** abre a gaveta com busca por efeito, cor, custo e preço —
+   e com o interruptor que inclui as cartas **inéditas**, da coleção anunciada
+   e ainda não lançada.
 3. **Organize.** Cada carta pode ir pra uma **categoria sua** ("combo
    principal", "sac outlet") pelo `⋯` da linha ou arrastando; o que ainda
    está em dúvida vai pro **maybeboard**, na coluna da esquerda. Ver
@@ -1043,6 +1045,7 @@ comeriam a lista de resultados que eles existem pra filtrar.
 | **Custo (de/até)** | faixa de custo de mana convertido |
 | **Preço máximo** | teto em dólar, pela base local |
 | **Ordenar por** | nome, custo ou preço — só vale com a caixa de busca vazia |
+| **Incluir cartas inéditas** | deixa passar a coleção anunciada que ainda não saiu (veja abaixo) |
 
 O que está ligado aparece **fora** da gaveta, numa fita de etiquetas com ✕ em
 cada uma; sem isso, uma busca filtrada pareceria uma busca quebrada. A gaveta
@@ -1066,6 +1069,38 @@ manda é a relevância — senão "sol" ordenado por preço esconderia o Sol Rin
 atrás do Solemn Simulacrum. E a chave de ordenação nunca chega crua no SQL:
 `ORDER BY` não aceita parâmetro, e concatenar texto de fora numa rota pública
 sem token seria injeção.
+
+### Cartas inéditas: a coleção que ainda não saiu
+
+A Scryfall publica as cartas de uma coleção assim que elas são reveladas, e
+até o dia do lançamento elas chegam com a legalidade em `not_legal`. Como a
+busca só mostra o que é legal em Commander, quem quer montar o deck da coleção
+nova não achava carta nenhuma — e o motivo não aparecia em lugar nenhum da
+tela.
+
+O interruptor **Incluir cartas inéditas** deixa essas cartas passarem. Ele está
+em **dois lugares**, porque a pergunta aparece em dois momentos: na tela de
+abertura, onde o comandante é escolhido antes de existir painel de filtros, e
+na gaveta, pro resto do deck. É **o mesmo filtro** nos dois — ligar num liga no
+outro, e a fita de etiquetas mostra `inéditas` com o ✕ que desliga.
+
+**Ele não abre a porta pras banidas.** As duas coisas chegam à tela iguais
+(`legal: false`), e a diferença é toda a questão: uma vira legal sozinha no dia
+do lançamento, a outra não vira nunca. O que separa uma da outra é a Scryfall
+marcar a banida como `banned` e a inédita como `not_legal` — a base guarda a
+data de lançamento **só** desta última, na coluna `sai_em`, e a comparação com
+o hoje acontece na hora da consulta. Assim a carta entra na busca normal no dia
+certo, sem depender da sincronização seguinte, e uma carta velha e legal cuja
+impressão escolhida pelo bulk seja um promo futuro não é confundida com
+novidade.
+
+Na lista, a carta que ainda não saiu leva a etiqueta **inédita** (roxa: aqui
+dourado é "está ligado" e vermelho é "está errado", e ela não é nenhum dos
+dois), com a data de lançamento no `title`. E no deck ela é **aviso, não
+erro**: a linha não fica vermelha e o deck continua `ok` — um deck montado com
+a coleção nova na mão não é um deck quebrado, e um alarme que fica três semanas
+ligado é um alarme que se aprende a ignorar. A regra vale nos dois lados, como
+toda regra de formato daqui: `decks.validar` e o `validarLocal` da tela.
 
 ### Onde cada coisa fica na tela
 
