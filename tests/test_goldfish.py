@@ -7,7 +7,7 @@ a mesa continua desenhando normalmente. Um goldfish que duplica carta MENTE
 sobre o deck — a pessoa conclui que a mão anda quando ela não anda, que é
 exatamente o oposto do que a ferramenta existe pra responder.
 
-Seis coisas que este teste persegue:
+Sete coisas que este teste persegue:
 
 1. **A conservação das cartas.** Depois de qualquer sequência de jogadas, a
    soma das zonas de todos os jogadores tem que ser o mesmo multiconjunto do
@@ -31,6 +31,10 @@ Seis coisas que este teste persegue:
    religa as cartas pelo registro na volta — se a religação falhar, a mesa
    volta cheia de buracos, e é o tipo de erro que só aparece três jogadas
    depois.
+7. **A marca de combo diz onde a peça está, e só do deck da tela.** Errar a
+   zona manda procurar no lugar errado; marcar o segundo deck, que nunca foi
+   perguntado ao Spellbook, inventa combo que ninguém viu. E sem busca
+   nenhuma a mesa não marca nada — "não perguntei" não pode virar "não tem".
 
 COMO ELE RODA. Igual ao `test_deckbuilder.py`: o JavaScript da página (os
 módulos da página, achatados na ordem em que o navegador os avalia) roda num
@@ -922,6 +926,118 @@ eq("entrada sem carta na base é ignorada, não vira buraco",
      __mesa();
      __j().baralho.length + __j().mao.length;
    """ % json.dumps(SOL_RING)), 2)
+
+
+print("\n--- os combos na mesa ---")
+
+# A resposta do Spellbook como `combos.js` a guarda. Dois combos que se cruzam
+# no Sol Ring: um com uma peça que o baralho tem (Llanowar Elves) e outro com
+# uma que ele não tem (Kitchen Finks, que nem entrou no deck deste teste).
+# A mesa já comprou a mão de abertura, então a carta procurada pode estar em
+# qualquer zona — procurar só no baralho acha ou não acha conforme o
+# embaralhamento do dia.
+PEGA = """
+  function __pega(nome, i){
+    var j = __j(i), saida = [];
+    ["campo","mao","baralho","cemiterio","exilio","comando"].forEach(function(z){
+      j[z].forEach(function(c){ if (c.carta && c.carta.nome === nome) saida.push(c); });
+    });
+    return saida;
+  }
+"""
+
+COMBOS = json.dumps({"no_deck": [
+    {"pecas": [{"nome": "Sol Ring", "no_deck": True},
+               {"nome": "Llanowar Elves", "no_deck": True}],
+     "requer": [], "produz": ["Mana infinita"], "mana": "{1}",
+     "prerequisitos": "Sol Ring desvirado", "faltam": []},
+    {"pecas": [{"nome": "Sol Ring", "no_deck": True},
+               {"nome": "Kitchen Finks", "no_deck": True}],
+     "requer": ["uma criatura com vigilância"], "produz": ["Vida infinita"],
+     "mana": "", "prerequisitos": "", "faltam": []},
+]})
+
+# Sem busca, nenhuma marca. "Não perguntei" e "não tem combo" são opostos, e
+# um selo aqui contaria o segundo no lugar do primeiro.
+eq("sem busca de combos, nenhuma carta é peça",
+   rodar("""
+     __mesa();
+     estado.combos = null;
+     __j().baralho.map(quantosCombos).reduce(function(a, b){return a + b;}, 0);
+   """), 0)
+
+eq("com a busca, a peça sabe de quantos combos ela é",
+   rodar("""
+     __mesa(); estado.combos = %s; %s
+     quantosCombos(__pega("Sol Ring")[0]);
+   """ % (COMBOS, PEGA)), 2)
+
+eq("e a carta que não é peça de nada não ganha selo",
+   rodar("""
+     __mesa(); estado.combos = %s; %s
+     quantosCombos(__pega("Forest")[0]);
+   """ % (COMBOS, PEGA)), 0)
+
+# O que a aba de combos NÃO responde: onde a peça está agora.
+eq("cada peça vem com a zona onde está",
+   rodar("""
+     __mesa(); estado.combos = %s; %s
+     var sol = __pega("Sol Ring")[0];
+     gfMover(sol.uid, "campo");
+     __pega("Llanowar Elves").forEach(function(c){ gfMover(c.uid, "mao"); });
+     combosDaCarta(sol)[0].pecas.map(function(p){ return p.nome + ":" + p.zona; });
+   """ % (COMBOS, PEGA)), ["Sol Ring:campo", "Llanowar Elves:mao"])
+
+# Quatro Elfos no deck: um no campo e três no baralho é "no campo". A zona
+# atrasada responderia "compre um Elfo" pra quem já tem um em jogo.
+eq("com mais de uma cópia, vale a zona mais adiantada",
+   rodar("""
+     __mesa(); estado.combos = %s; %s
+     var elfos = __pega("Llanowar Elves");
+     elfos.forEach(function(c){ gfMover(c.uid, "cemiterio"); });
+     gfMover(elfos[0].uid, "campo");
+     combosDaCarta(__pega("Sol Ring")[0])[0].pecas[1].zona;
+   """ % (COMBOS, PEGA)), "campo")
+
+# Kitchen Finks está no combo mas não no deck deste teste: a mesa não tem onde
+# achá-la, e fingir uma zona seria mandar a pessoa procurar no lugar errado.
+eq("peça que não está na mesa não ganha zona inventada",
+   rodar("""
+     __mesa(); estado.combos = %s; %s
+     var achados = combosDaCarta(__pega("Sol Ring")[0]).filter(function(a){
+       return a.combo.produz[0] === "Vida infinita"; });
+     achados[0].pecas[1].zona;
+   """ % (COMBOS, PEGA)), None)
+
+# O combo a uma jogada não pode ficar embaixo do que está a três compras.
+eq("o combo mais adiantado vem primeiro",
+   rodar("""
+     __mesa(); estado.combos = %s; %s
+     var sol = __pega("Sol Ring")[0];
+     gfMover(sol.uid, "campo");
+     gfMover(__pega("Llanowar Elves")[0].uid, "campo");
+     combosDaCarta(sol).map(function(a){ return a.combo.produz[0]; });
+   """ % (COMBOS, PEGA)), ["Mana infinita", "Vida infinita"])
+
+# Ficha com nome de carta não é a carta. Marcá-la diria que a peça está no
+# campo quando o que está lá é uma cópia que some ao sair.
+eq("ficha não é peça de combo",
+   rodar("""
+     __mesa(); estado.combos = %s;
+     criarFicha(0, {nome: "Sol Ring", tipo: "Token Artifact"}, 1);
+     var ficha = __j().campo.filter(function(c){ return c.ficha; })[0];
+     quantosCombos(ficha);
+   """ % COMBOS), 0)
+
+# A resposta é do deck da tela. O segundo deck entrou pelo id e nunca foi
+# perguntado — e "nenhum combo" e "não perguntei" continuam sendo opostos.
+eq("o segundo deck não ganha marcação",
+   rodar("""
+     __mesa(); estado.combos = %s;
+     porSegundoDeck(%s);
+     estado.mesa.jogadores[1].baralho.map(quantosCombos)
+       .reduce(function(a, b){return a + b;}, 0);
+   """ % (COMBOS, DECK2)), 0)
 
 
 print()

@@ -30,7 +30,9 @@
      como número; pagar ou não é decisão de quem joga.
 
    O que ele SABE são as regras do formato que mudam a mão: o primeiro mulligan
-   é grátis e quem começa jogando compra no turno 1.
+   é grátis e quem começa jogando compra no turno 1. E sabe ONDE estão as peças
+   dos combos que a aba de combos já buscou — onde, não se dá pra fazer, que é
+   outra vez a mesma fronteira (ver "os combos na mesa", mais abaixo).
 
    OS JOGADORES SÃO UMA LISTA, de um ou de dois. Mesmo com um só: um jogador
    solto mais um "segundo" opcional faria toda ação existir em duas versões, e
@@ -657,6 +659,123 @@ const GRUPOS_DO_CAMPO = [
 
 export function grupoDoCampo(c){
   return GRUPOS_DO_CAMPO.find(([, casa]) => casa(c))[0];
+}
+
+/* -------------------------------------------------- os combos na mesa */
+
+/* Onde estão as peças dos combos do deck — a pergunta que se faz no meio de
+   um goldfish: "isto que acabei de comprar fecha alguma coisa?".
+
+   A RESPOSTA JÁ ESTÁ NA TELA. `estado.combos` é o que o Commander Spellbook
+   devolveu quando alguém clicou em procurar (ver `combos.js`), e cruzar
+   aquela lista com as zonas da mesa é conta local. Nenhuma requisição nova
+   sai daqui: uma partida compra uma carta por turno, e perguntar a cada
+   compra seria uma requisição por clique num serviço gratuito — a mesma
+   regra que faz a busca de combos só acontecer no botão.
+
+   TRÊS LIMITES, e os três aparecem na tela em vez de virarem silêncio:
+
+   * A resposta é do DECK DA TELA. O segundo deck entrou pelo id e nunca foi
+     perguntado, então não há combo dele pra marcar. `j.deck === null` é o
+     deck da tela — o mesmo sentido que `artesDoJogador` já dá ao campo.
+   * Só os combos FECHADOS (`no_deck`). Os que faltam uma carta são lista de
+     compras, e no meio de uma partida a carta que não está no baralho não vai
+     aparecer de jeito nenhum.
+   * A MESA NÃO JULGA se o combo dá pra fazer. Mana disponível, permanente
+     desvirado, oponente com criatura em jogo — isso é motor de regras, que
+     esta tela recusa de propósito (ver o cabeçalho). Daqui sai ONDE cada peça
+     está; o requisito vai pra tela como o texto que o Spellbook escreveu, e
+     quem decide é quem joga. */
+
+/* A ordem é a da jogada, não a das zonas: da peça que já está em jogo até a
+   que precisaria voltar do exílio. Com mais de uma cópia da mesma carta, é a
+   mais adiantada que conta — três Florestas no baralho e uma no campo é "no
+   campo", porque é o campo que responde a pergunta. */
+const GF_PERTO_DA_JOGADA = ["campo", "mao", "comando", "baralho", "cemiterio", "exilio"];
+
+let gfComboFonte = null;    // a lista de quem o índice foi feito
+let gfComboIndice = null;   // nome em minúsculas -> combos que citam a carta
+
+/* O índice é refeito quando a lista TROCA, e não a cada carta desenhada:
+   `fecharCombosCom` monta um array novo ao mover um combo de lista, então
+   comparar a referência pega toda mudança que importa. */
+function indiceDeCombos(){
+  const lista = (estado.combos && estado.combos.no_deck) || null;
+  if (!lista){ gfComboFonte = null; gfComboIndice = null; return null; }
+  if (gfComboFonte === lista) return gfComboIndice;
+  const indice = new Map();
+  for (const combo of lista){
+    for (const peca of combo.pecas || []){
+      const chave = peca.nome.toLowerCase();
+      if (!indice.has(chave)) indice.set(chave, []);
+      indice.get(chave).push(combo);
+    }
+  }
+  gfComboFonte = lista;
+  gfComboIndice = indice;
+  return indice;
+}
+
+/* Quantos combos do deck esta carta serve. É o que o selo da carta mostra, e
+   por isso não varre zona nenhuma: o desenho chama isto uma vez por carta da
+   mesa, a cada repintura.
+
+   Ficha fica de fora mesmo com nome de carta: uma ficha de Ashaya não é a
+   Ashaya, e marcá-la diria que a peça está no campo quando ela não está. */
+export function quantosCombos(c){
+  const indice = indiceDeCombos();
+  if (!indice || !c || c.ficha) return 0;
+  const j = estado.mesa && estado.mesa.jogadores[c.dono];
+  if (!j || j.deck) return 0;   // só o deck da tela tem resposta do Spellbook
+  return (indice.get(nomeDaCarta(c).toLowerCase()) || []).length;
+}
+
+/* Onde cada carta do jogador está, pelo nome. Um mapa só por consulta em vez
+   de uma varredura por peça: um combo de quatro peças num deck de cem cartas
+   varreria as seis zonas quatro vezes pra responder a mesma coisa. */
+function zonasPorNome(j){
+  const onde = new Map();
+  for (const zona of GF_ZONAS){
+    for (const c of j[zona]){
+      if (c.ficha) continue;
+      const chave = nomeDaCarta(c).toLowerCase();
+      const atual = onde.get(chave);
+      if (atual === undefined || GF_PERTO_DA_JOGADA.indexOf(zona)
+                               < GF_PERTO_DA_JOGADA.indexOf(atual)){
+        onde.set(chave, zona);
+      }
+    }
+  }
+  return onde;
+}
+
+/* Os combos desta carta, com a zona de cada peça e os mais adiantados na
+   frente.
+
+   A DISTÂNCIA é a soma das zonas das peças na escala da jogada: um combo com
+   as duas peças no campo dá zero, e um com tudo no baralho dá o máximo. Não é
+   número pra mostrar — é só o que decide a ordem, pra o combo que está a uma
+   jogada não ficar embaixo do que está a três compras.
+
+   Peça sem zona nenhuma acontece por dois motivos, e nenhum dos dois é erro:
+   o deck mudou depois da busca de combos e a carta saiu (o mais comum), ou a
+   base local não conhece a carta e `baralhoDoDeck` a pulou. A tela diz "fora
+   da mesa" em vez de fingir um lugar pra ela. */
+export function combosDaCarta(c){
+  if (!quantosCombos(c)) return [];
+  const esta = nomeDaCarta(c).toLowerCase();
+  const onde = zonasPorNome(estado.mesa.jogadores[c.dono]);
+  const longe = GF_PERTO_DA_JOGADA.length;
+  return indiceDeCombos().get(esta).map(combo => {
+    const pecas = (combo.pecas || []).map(p => ({
+      nome: p.nome,
+      zona: onde.get(p.nome.toLowerCase()) || null,
+      esta: p.nome.toLowerCase() === esta,
+    }));
+    const distancia = pecas.reduce((soma, p) => soma + (p.zona === null
+      ? longe : GF_PERTO_DA_JOGADA.indexOf(p.zona)), 0);
+    return {combo, pecas, distancia};
+  }).sort((a, b) => a.distancia - b.distancia);
 }
 
 /* ------------------------------------------------------------- desfazer */

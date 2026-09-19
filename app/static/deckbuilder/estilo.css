@@ -1119,6 +1119,14 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   line-height:1;text-shadow:0 1px 3px #000;}
 .gf-carta.atacando{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
 .gf-carta.bloqueando{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
+/* O selo de peça de combo, no canto de cima à esquerda — o único canto livre
+   entre os marcadores (cima à direita) e a marca de combate (baixo à
+   esquerda). Redondo e roxo pra não ser confundido com marcador: marcador é
+   dourado e retangular, e os dois são números pequenos numa carta pequena. */
+.gf-carta .gf-combo-selo{position:absolute;top:4px;left:4px;width:18px;
+  height:18px;border-radius:50%;background:var(--purple);color:#fff;
+  font-size:10.5px;font-weight:700;line-height:18px;text-align:center;
+  font-family:'IBM Plex Mono',monospace;box-shadow:0 1px 3px rgba(0,0,0,.6);}
 /* Ficha não é carta: a borda tracejada diz que ela some quando sair do campo. */
 .gf-carta.ficha{border-style:dashed;}
 .gf-carta.arrastando{opacity:.45;}
@@ -1159,6 +1167,46 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   background:var(--inset);border:1px solid var(--border);color:var(--text);}
 .gf-detalhe-face + .gf-detalhe-face{border-top:1px solid var(--border);
   margin-top:4px;padding-top:8px;}
+/* Os combos da carta, no pé do painel. Separados do texto da carta por uma
+   régua porque não são a carta: são o que o DECK faz com ela. */
+.gf-combos{border-top:1px solid var(--border);margin-top:6px;padding-top:8px;}
+.gf-combos-titulo{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-muted);margin-bottom:6px;}
+.gf-combos-titulo b{font-family:'IBM Plex Mono',monospace;color:var(--text);
+  letter-spacing:0;}
+.gf-combo + .gf-combo{border-top:1px solid var(--inset);margin-top:7px;
+  padding-top:7px;}
+.gf-combo-pecas{font-size:12px;line-height:1.5;}
+.gf-combo .mais{color:var(--text-muted);margin:0 4px;}
+/* A peça leva a zona onde está, colada nela: "Krenko campo" num bloco só,
+   porque nome e lugar respondem juntos a uma pergunta só. O rótulo vem
+   capitalizado de `NOME_DA_ZONA` (é título de área na mesa) e desce pra
+   minúscula aqui, onde ele é aposto de uma frase, não título. */
+.gf-peca{white-space:nowrap;}
+.gf-peca i{font-style:normal;text-transform:lowercase;font-size:10.5px;
+  margin-left:4px;padding:1px 5px;border-radius:999px;background:var(--inset);
+  border:1px solid var(--border);color:var(--text-muted);}
+/* Só as duas zonas de onde se joga ganham cor. O resto — baralho, cemitério,
+   exílio — fica neutro de propósito: colorir seis zonas faria a linha piscar
+   sem dizer qual delas importa. */
+.gf-peca.z-campo i{border-color:var(--green);color:#A8D8BC;}
+.gf-peca.z-mao i{border-color:var(--gold);color:var(--gold-light);}
+.gf-peca.z-fora i{border-color:var(--red);color:#F2AFA1;cursor:help;}
+/* A carta que abriu o painel, entre as peças: sem isto um combo de quatro
+   nomes vira uma lista em que se procura qual deles é o que está na mão. */
+.gf-peca.esta{color:var(--text);font-weight:600;
+  text-decoration:underline;text-decoration-color:var(--purple);
+  text-underline-offset:3px;}
+.gf-peca.generica{color:var(--text-muted);font-style:italic;cursor:help;
+  white-space:normal;}
+/* Condição e consequência, na mesma ordem e com a mesma separação da aba de
+   combos: o que o combo PEDE fica na barra à esquerda, o que ele PRODUZ vem
+   depois e em verde. */
+.gf-combo-precisa{font-size:11px;color:var(--text-muted);margin-top:5px;
+  line-height:1.45;padding-left:8px;border-left:2px solid var(--border);}
+.gf-combo-precisa b{color:var(--text);font-weight:600;}
+.gf-combo-produz{font-size:11px;color:#A8D8BC;margin-top:4px;line-height:1.45;}
+.gf-combo-velho{font-size:11px;color:var(--gold-light);margin-bottom:6px;}
 /* Os atalhos da mesa. Fora da tela cheia eles vão numa linha embaixo da
    mesa; na tela cheia, no pé da coluna do painel. */
 .gf-atalhos{margin-top:10px;font-size:11.5px;color:var(--text-muted);}
@@ -1195,7 +1243,8 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   body.gf-cheia .gf-detalhe{position:static;flex:1 1 auto;min-height:0;
     width:auto;max-height:none;background:none;border-color:transparent;
     box-shadow:none;}
-  body.gf-cheia .gf-atalhos,body.gf-cheia .gf-log{flex:none;margin:0;
+  body.gf-cheia .gf-atalhos,body.gf-cheia .gf-log,
+  body.gf-cheia .gf-nota-combos{flex:none;margin:0;
     padding:10px 12px 12px;border-top:1px dashed var(--border);}
   body.gf-cheia .gf-log{padding-bottom:10px;}
   body.gf-cheia .gf-atalhos dl{display:grid;grid-template-columns:max-content 1fr;
@@ -1266,6 +1315,13 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
    Fechado por padrão: é conferência depois do fato, não o assunto da tela.
    Fora da tela cheia vai embaixo da mesa; na tela cheia, na coluna do
    painel, em cima dos atalhos. */
+/* A nota dos combos, na coluna: uma linha sobre a MESA, não sobre uma carta.
+   Fica acima do log porque o log é conferência depois do fato, e ela é
+   contexto de antes. */
+.gf-nota-combos{margin-top:12px;font-size:11.5px;line-height:1.5;
+  color:var(--text-muted);}
+.gf-nota-combos:empty{display:none;}
+.gf-nota-combos b{color:var(--text);}
 .gf-log{margin-top:12px;border-top:1px solid var(--border);padding-top:8px;}
 .gf-log:empty{display:none;}
 .gf-log-cabeca{background:none;border:none;color:var(--text-muted);font:inherit;

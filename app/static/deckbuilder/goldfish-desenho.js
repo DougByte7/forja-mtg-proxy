@@ -20,9 +20,11 @@
 import {$, escapar} from "../comum/dom.js";
 import {imagemDaFace} from "./artes.js";
 import {detalheDaCarta} from "./carta.js";
+import {assinaturaDoDeck} from "./combos.js";
 import {CORES, estado, NOME_COR} from "./estado.js";
-import {artesDoJogador, atacantes, cartaPorUid, devolveAoManterDe, ehTerreno,
-        grupoDoCampo, nomeDaCarta, resumoDaMao} from "./goldfish.js";
+import {artesDoJogador, atacantes, cartaPorUid, combosDaCarta, devolveAoManterDe,
+        ehTerreno, grupoDoCampo, nomeDaCarta, NOME_DA_ZONA, quantosCombos,
+        resumoDaMao} from "./goldfish.js";
 import {manaEmTexto, manaHTML} from "./utilidades.js";
 
 /* A arte de uma carta da mesa: a escolhida no deck DO DONO, e a padrão quando
@@ -69,10 +71,19 @@ function gfCartaHTML(c, zona){
     ? `<span class="gf-nome">${escapar(carta.nome || "")}${
         c.ficha && carta.poder ? ` ${carta.poder}/${carta.resistencia}` : ""}</span>`
     : "";
+  // A carta que é peça de combo se anuncia SEM hover: o painel responde
+  // "quais combos", mas ninguém passa o mouse numa carta que não deu sinal de
+  // ter o que contar. Carta virada pra baixo não ganha selo — ela está
+  // escondida, e o selo a entregaria.
+  const quantos = c.virada ? 0 : quantosCombos(c);
+  const selo = quantos
+    ? `<span class="gf-combo-selo" title="Peça de ${quantos} combo(s) do deck"
+        >${quantos}</span>`
+    : "";
   return `<button class="${classes.join(" ")}" data-gf-uid="${c.uid}" draggable="true"
     title="${escapar(carta.nome || "")}"
     ${arte ? `style="background-image:url('${escapar(arte)}')"` : ""}>
-    ${marcasDaCartaHTML(c)}${marca}${rotulo}
+    ${marcasDaCartaHTML(c)}${selo}${marca}${rotulo}
   </button>`;
 }
 
@@ -125,6 +136,70 @@ function estadoDaCartaHTML(c){
    resistência, lealdade e defesa, que a base local não guarda. Antes dele o
    painel mostra o que a carta já traz; carta de duas faces vem da base com o
    texto emendado por "//", e com o detalhe ganha uma face por bloco. */
+/* Os combos desta carta, no painel. A peça vem com a zona onde está — campo,
+   mão, baralho —, e é isso que responde a pergunta do meio da partida: não
+   "este deck tem o combo" (a aba de combos já diz), e sim "quanto falta pra
+   ele acontecer AGORA".
+
+   A carta que abriu o painel se marca entre as peças: sem isso um combo de
+   quatro nomes vira uma lista em que a pessoa procura qual deles ela está
+   olhando.
+
+   O que o combo PEDE (mana, estado de jogo) vem como o texto do Spellbook, e
+   fica visualmente separado do que ele PRODUZ — um é condição, o outro é
+   consequência, e trocar os dois é ler o combo ao contrário. A mesa não
+   confere nenhum dos dois: ela não soma mana (ver o cabeçalho de
+   `goldfish.js`), e um "pode fazer" daqui seria palpite com cara de regra.
+
+   Sem link pro Spellbook de propósito: o painel é `pointer-events:none` —
+   ele é leitura, e não pode roubar o hover da carta que o abriu —, então um
+   link aqui seria um link que não clica. */
+function pecaDoComboHTML(p){
+  const zona = p.zona
+    ? `<i>${escapar(NOME_DA_ZONA[p.zona])}</i>`
+    : `<i title="Esta peça não foi embaralhada: ou saiu do deck depois da busca
+        de combos, ou a base local não conhece a carta.">fora da mesa</i>`;
+  return `<span class="gf-peca z-${p.zona || "fora"}${p.esta ? " esta" : ""}"
+    >${escapar(p.nome)}${zona}</span>`;
+}
+
+function comboDoPainelHTML(achado){
+  const combo = achado.combo;
+  const pecas = achado.pecas.map(pecaDoComboHTML).join('<span class="mais">+</span>');
+  // Peça GENÉRICA ("uma criatura com vigilância") é critério, não carta: não
+  // tem zona porque não tem uma carta específica pra procurar na mesa. Quem
+  // decide se alguma coisa em jogo serve é quem está jogando.
+  const genericas = (combo.requer || []).map(r =>
+    `<span class="mais">+</span><span class="gf-peca generica"
+      title="Critério, não carta: qualquer carta do deck que se encaixe serve."
+     >${escapar(r)}</span>`).join("");
+
+  const precisa = [];
+  if (combo.mana) precisa.push(`<b>Mana:</b> ${manaEmTexto(combo.mana)}`);
+  if (combo.prerequisitos) precisa.push(escapar(combo.prerequisitos));
+
+  return `<div class="gf-combo">
+    <div class="gf-combo-pecas">${pecas}${genericas}</div>
+    ${precisa.length ? `<div class="gf-combo-precisa">${precisa.join("<br>")}</div>` : ""}
+    ${combo.produz && combo.produz.length
+      ? `<div class="gf-combo-produz">${escapar(combo.produz.join(", "))}</div>` : ""}
+  </div>`;
+}
+
+function combosDaCartaHTML(c){
+  const achados = combosDaCarta(c);
+  if (!achados.length) return "";
+  // A lista fecha com o deck de quando a busca rodou, não com o de agora —
+  // mesma ressalva que a aba de combos faz, e pelo mesmo motivo: a mesa foi
+  // embaralhada de um deck que pode ter mudado desde então.
+  const velho = estado.combosAssinatura !== assinaturaDoDeck()
+    ? `<div class="gf-combo-velho">O deck mudou desde a busca de combos.</div>` : "";
+  return `<div class="gf-combos">
+    <div class="gf-combos-titulo">Combos <b>${achados.length}</b></div>
+    ${velho}${achados.map(comboDoPainelHTML).join("")}
+  </div>`;
+}
+
 function painelDaCartaHTML(c, d){
   const carta = c.carta || {};
   const faces = d && d.faces && d.faces.length ? d.faces : [{
@@ -136,7 +211,8 @@ function painelDaCartaHTML(c, d){
   return `<div class="gf-detalhe-topo"><b>${escapar(carta.nome || "")}</b>${
       manaHTML(carta.mana_cost)}</div>
     ${estadoDaCartaHTML(c)}
-    ${faces.map(f => faceDoPainelHTML(f, duas)).join("")}`;
+    ${faces.map(f => faceDoPainelHTML(f, duas)).join("")}
+    ${combosDaCartaHTML(c)}`;
 }
 
 const PAINEL_LARGO = 288;   // o `width` de `.gf-detalhe` no CSS
@@ -494,6 +570,35 @@ function logHTML(m){
     ${m.logAberto ? `<ol class="gf-log-lista">${linhas}</ol>` : ""}`;
 }
 
+/* ------------------------------------------------ a nota dos combos */
+
+/* Uma linha só sobre os combos, na coluna. O selo da carta é silencioso, e
+   silêncio não distingue "este deck não tem combo" de "ninguém procurou" —
+   são opostos que se parecem numa mesa sem marca nenhuma.
+
+   Ela mora aqui, e não no painel de cada carta, porque é uma frase sobre a
+   MESA: repetida em cada carta que se olha, viraria aviso que se aprende a
+   não ler. */
+function notaDeCombosHTML(m){
+  if (!estado.combos){
+    return `A mesa marca as peças de combo nas cartas — procure os combos do
+      deck na aba <b>Combos</b> pra ligar as marcas.`;
+  }
+  const n = (estado.combos.no_deck || []).length;
+  // As duas ressalvas são sobre o que a marcação NÃO cobre, e nenhuma delas
+  // dá pra deduzir olhando a mesa: um deck editado depois da busca e o
+  // segundo deck, que entrou pelo id e nunca foi perguntado.
+  const ressalvas = [];
+  if (estado.combosAssinatura !== assinaturaDoDeck()){
+    ressalvas.push("o deck mudou desde a busca");
+  }
+  if (m.jogadores.length > 1) ressalvas.push("o segundo deck não foi perguntado");
+  return (n
+    ? `<b>${n}</b> combo(s) do deck — as peças estão marcadas nas cartas.`
+    : `O Spellbook não achou combo fechado neste deck.`)
+    + (ressalvas.length ? ` ${ressalvas.join("; ")}.` : "");
+}
+
 function tituloDoTurno(m){
   const j = m.jogadores[m.ativo];
   const vez = m.jogadores.length > 1 ? ` · vez de ${j.nome}` : "";
@@ -515,6 +620,7 @@ export function desenharMesa(){
   if (!m){
     $("gf-turno").textContent = "";
     $("gf-log").innerHTML = "";
+    $("gf-nota-combos").innerHTML = "";
     alvo.innerHTML = `<div class="gf-vazio">Clique em <b>Embaralhar</b> pra
       começar. O comandante vai pra zona de comando; o sideboard e o maybeboard
       ficam de fora, como em toda análise desta tela.</div>`;
@@ -533,5 +639,6 @@ export function desenharMesa(){
     `<div class="gf-jogadores${dois ? " dois" : ""}">${ordem.map(ij =>
       jogadorHTML(m.jogadores[ij], ij, m, dois && ij === 1)).join("")}</div>`;
   $("gf-log").innerHTML = logHTML(m);
+  $("gf-nota-combos").innerHTML = notaDeCombosHTML(m);
   atualizarPainel();
 }
