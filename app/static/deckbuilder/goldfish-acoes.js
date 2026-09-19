@@ -21,7 +21,7 @@ import {ajustarDanoCmd, ajustarMarca, ajustarMarcaCarta, ajustarVida,
         mulliganLondon, nomeDaCarta, NOME_DA_ZONA, passarTurno, porSegundoDeck,
         reposicionar, resumoDaPartida, tirarSegundoDeck, zonaDaCarta} from "./goldfish.js";
 import {desenharMesa, esconderPainel, mostrarPainel,
-        painelFlutua} from "./goldfish-desenho.js";
+        painelFlutua, rolarPainel} from "./goldfish-desenho.js";
 import {api, lidos} from "./salvar.js";
 import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
 import {cartasContadas, toast} from "./utilidades.js";
@@ -681,6 +681,22 @@ export function ligarGoldfish(){
   mesa.addEventListener("dragstart", () => {
     if (painelFlutua()) esconderPainel();
   });
+
+  // A roda com o cursor numa carta rola o painel, não a página (ver
+  // `rolarPainel`). No documento pelo mesmo motivo do `mouseover`, e com
+  // `passive:false` porque segurar a rolagem da página exige `preventDefault`,
+  // que o navegador ignora num ouvinte passivo.
+  //
+  // O gesto só é tomado enquanto o painel tem pra onde andar: no fim do texto
+  // a página volta a rolar, senão o cursor parado sobre uma carta prenderia a
+  // tela inteira.
+  document.addEventListener("wheel", (e) => {
+    if (!e.target.closest?.("#gf-mesa [data-gf-uid]")) return;
+    // `deltaMode` 1 conta LINHAS, não pixels: sem a conversão a roda andaria
+    // três pixels por clique nos navegadores que reportam assim.
+    const passo = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    if (rolarPainel(passo)) e.preventDefault();
+  }, {passive: false});
 
   mesa.addEventListener("click", (e) => {
     const acao = e.target.closest("[data-gf-acao]");

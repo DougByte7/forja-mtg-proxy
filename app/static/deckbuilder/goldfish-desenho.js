@@ -232,6 +232,42 @@ export function esconderPainel(){
   $("gf-detalhe").classList.remove("mostra");
 }
 
+/* Marca se ainda há texto embaixo do que está à vista. É o que acende a
+   franja no pé do painel flutuante — lá a barra de rolagem fica escondida (ver
+   `.gf-detalhe.flutua`), e sem nenhum sinal a pessoa não tem como saber que a
+   carta continua. Some ao chegar no fim, senão prometeria um resto que não
+   existe. */
+function marcarSobra(){
+  const corpo = $("gf-detalhe-corpo");
+  const fim = corpo.scrollHeight - corpo.clientHeight;
+  $("gf-detalhe").classList.toggle("tem-mais", fim > 1 && corpo.scrollTop < fim - 1);
+}
+
+/* A roda do mouse rola o painel FLUTUANTE, porque a barra dele não tem como
+   ser agarrada: ele não pega o ponteiro (senão fecharia a carta que o abriu,
+   ver `.gf-detalhe`), e a mão de quem lê está na carta, do outro lado da
+   mesa. Rolar dali é o único caminho até o texto que não coube — e era por
+   isso que carta de texto longo, ou peça de muitos combos, terminava cortada
+   na borda sem jeito de chegar no resto.
+
+   Devolve `true` só quando o painel de fato andou. No fim da rolagem ele
+   devolve o gesto ao documento, senão parar no último combo prenderia a
+   página inteira embaixo do cursor.
+
+   Na tela cheia esta função não faz nada: lá o painel mora numa coluna, pega
+   o ponteiro e rola pela barra como qualquer texto. */
+export function rolarPainel(quanto){
+  const painel = $("gf-detalhe");
+  if (!painel.classList.contains("mostra") || !painelFlutua()) return false;
+  const corpo = $("gf-detalhe-corpo");
+  const fim = corpo.scrollHeight - corpo.clientHeight;
+  if (fim <= 0) return false;
+  const antes = corpo.scrollTop;
+  corpo.scrollTop = Math.max(0, Math.min(fim, antes + quanto));
+  marcarSobra();
+  return corpo.scrollTop !== antes;
+}
+
 /* Hover numa carta da mesa — de qualquer zona — abre a carta grande com o
    que decide a jogada. Flutuando, o painel fica preso à mesa e não ao
    cursor: as cartas são grandes, e seguindo o mouse ele cobriria as vizinhas
@@ -256,13 +292,22 @@ export async function mostrarPainel(uid){
   img.classList.toggle("vazia", !src);
   $("gf-detalhe-corpo").innerHTML = painelDaCartaHTML(c, null);
 
-  if (painelFlutua()){
+  // O modo é do CSS, mas a franja e a barra escondida precisam dele como
+  // classe: `painelFlutua` lê a posição calculada, e seletor nenhum pergunta
+  // isso. `body.gf-cheia` não serve no lugar — a tela cheia só vira coluna
+  // acima de certa largura, e abaixo dela o painel continua flutuando.
+  const flutua = painelFlutua();
+  painel.classList.toggle("flutua", flutua);
+  if (flutua){
     const mesa = $("gf-mesa").getBoundingClientRect();
     painel.style.left = Math.max(8, mesa.left - PAINEL_LARGO - PAINEL_VAO) + "px";
   } else {
     painel.style.left = "";
   }
   painel.classList.add("mostra");
+  // Depois de `mostra`: painel escondido não tem altura, e a medida da sobra
+  // sairia zero.
+  marcarSobra();
 
   // Ficha inventada na hora não existe na Scryfall.
   const nome = c.ficha ? "" : (c.carta || {}).nome;
@@ -275,7 +320,15 @@ export async function mostrarPainel(uid){
   }
   // A carta pode ter mudado enquanto o detalhe vinha (um marcador, o verso).
   const agora = painelUid === uid && cartaPorUid(uid);
-  if (agora) $("gf-detalhe-corpo").innerHTML = painelDaCartaHTML(agora, d);
+  if (!agora) return;
+  // A rolagem sobrevive à segunda pintura. Trocar o `innerHTML` zera o
+  // `scrollTop`, e quem já tinha descido até os combos enquanto a Scryfall
+  // respondia voltaria ao topo sozinho, sem nada na tela explicando por quê.
+  const corpo = $("gf-detalhe-corpo");
+  const onde = corpo.scrollTop;
+  corpo.innerHTML = painelDaCartaHTML(agora, d);
+  corpo.scrollTop = onde;
+  marcarSobra();
 }
 
 /* A mesa foi redesenhada. Flutuando, o painel fecha: o elemento sob o mouse
