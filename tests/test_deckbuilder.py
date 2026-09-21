@@ -643,30 +643,54 @@ try:
     # --------------------------------------------- o paginador da busca
     print("\n--- o paginador da busca ---")
 
-    # Ele só existe com filtro ligado, e essa é a decisão inteira: sem filtro
-    # a lista é uma vitrine de cinco, e passar página nela seria folhear a
-    # base de carta em carta. A pergunta "tem filtro?" mora no `estado.js`, e
-    # tem que dar a mesma resposta que a bolinha do botão dá em número — daí
-    # `cmcMin: "0"` contar como filtro: ele também vira chip na fita.
+    # Ele existe quando a pessoa fez uma pergunta — escreveu um nome ou ligou
+    # um filtro —, e não existe com a caixa vazia e nenhum filtro, onde
+    # paginar seria folhear a base de cinco em cinco. A parte "tem filtro?"
+    # mora no `estado.js` e tem que dar a mesma resposta que a bolinha do
+    # botão dá em número — daí `cmcMin: "0"` contar como filtro: ele também
+    # vira chip na fita. As inéditas ficam de fora porque ALARGAM a lista.
     pag = avaliar("""
     var vazio = {tipo:"", texto:"", cores:"", cmcMin:"", cmcMax:"",
-                 precoMax:"", ordem:"nome"};
-    function com(mudanca){
+                 precoMax:"", ordem:"nome", ineditas:false};
+    function com(mudanca, termo){
       estado.filtros = Object.assign({}, vazio, mudanca);
-      return algumFiltro();
+      return listaPaginada(termo || "");
     }
     JSON.stringify({
       semNada: com({}),
+      soNome: com({}, "bolt"),
       tipo: com({tipo:"creature"}),
       cor: com({cores:"G"}),
       cmcZero: com({cmcMin:"0"}),
-      ordem: com({ordem:"preco_desc"})
+      ordem: com({ordem:"preco_desc"}),
+      soIneditas: com({ineditas:true})
     });
     """)
-    eq("sem filtro, a lista não pagina", pag["semNada"], False)
+    eq("caixa vazia e nenhum filtro: a lista não pagina", pag["semNada"], False)
+    eq("um nome escrito já pagina a lista", pag["soNome"], True)
     eq("cada filtro ligado liga o paginador",
        [pag["tipo"], pag["cor"], pag["cmcZero"], pag["ordem"]],
        [True, True, True, True])
+    eq("só as inéditas não paginam: elas alargam a lista",
+       pag["soIneditas"], False)
+
+    # A frase do fim da vitrine só aparece sem paginador, e ela diz o que
+    # fazer: com nome escrito, estreitar o que já se escreveu; sem nome, que é
+    # o estado de abertura do painel, começar a escrever.
+    frases = avaliar("""
+    var lista = [];
+    for (var i = 0; i < 24; i++) lista.push({nome:"Carta " + i, tipo:"Instant",
+      mana_cost:"{1}", preco_usd:1, imagem:"", identidade:"", legal:true});
+    mostrarResultados(__el("r1"), lista, function(){}, {termo:"bolt"});
+    mostrarResultados(__el("r2"), lista, function(){}, {termo:""});
+    JSON.stringify({comNome: __el("r1").innerHTML,
+                    semNome: __el("r2").innerHTML});
+    """)
+    check("com nome escrito, a frase manda escrever mais uma letra",
+          "Escreva mais uma letra" in frases["comNome"], frases["comNome"][-200:])
+    check("sem nome, ela manda escrever um nome ou usar os filtros",
+          "Escreva um nome ou use os filtros" in frases["semNome"],
+          frases["semNome"][-200:])
 
     # O denominador vem do total que o servidor contou, e não do tamanho da
     # página: 37 cartas de 5 em 5 são 8 páginas, e a oitava tem duas.

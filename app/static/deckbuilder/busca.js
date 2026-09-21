@@ -93,12 +93,23 @@ export function agendarBuscaComandante(){
   buscaTimer = setTimeout(buscarComandante, 220);
 }
 
+/* A lista é uma página, ou é a vitrine curta com a frase no fim?
+
+   Página, quando a pessoa fez uma pergunta: escreveu um nome na caixa ou
+   ligou um filtro na gaveta. "Bolt" casa com dezenas de cartas e "criatura
+   verde de até 3" com dezenas de outras — nos dois casos o recorte é o ponto,
+   e ver só os cinco primeiros é ficar sem a resposta.
+
+   Vitrine, com a caixa vazia e nenhum filtro: aí não há pergunta, e paginar
+   seria folhear a base inteira de cinco em cinco. */
+function listaPaginada(termo){
+  return termo !== "" || algumFiltro();
+}
+
 export async function buscar(){
   const termo = $("busca").value.trim();
   const identidade = estado.comandantes.length ? identidadeDoDeck() : null;
-  // Com filtro ligado a lista vira página; sem filtro continua a vitrine de
-  // cinco com a frase no fim. Ver `algumFiltro`, em `estado.js`.
-  const paginada = algumFiltro();
+  const paginada = listaPaginada(termo);
   const params = new URLSearchParams({
     q: termo,
     limite: paginada ? String(estado.buscaPorPagina) : "24",
@@ -128,7 +139,7 @@ export async function buscar(){
       return buscar();
     }
     mostrarResultados($("res"), r.cartas, adicionarPeloDestino,
-                      {rodape: paginada ? paginadorDaBusca() : ""});
+                      {rodape: paginada ? paginadorDaBusca() : "", termo});
   } catch (e){
     $("res").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
   }
@@ -161,7 +172,7 @@ export async function buscarComandante(){
   try {
     const r = await api("/cartas/busca?" + params);
     mostrarResultados($("res-cmd"), r.cartas, escolherComandante,
-                      {comandantes: true});
+                      {comandantes: true, termo});
   } catch (e){
     $("res-cmd").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
   }
@@ -201,7 +212,7 @@ export let ultimosResultados = [];
 const TETO_RESULTADOS = 5;
 
 function mostrarResultados(caixa, cartas, aoClicar,
-                           {comandantes = false, rodape = ""} = {}){
+                           {comandantes = false, rodape = "", termo = ""} = {}){
   ultimosResultados = cartas;
   caixa.aoClicar = aoClicar;
   // A lista trocou: o índice destacado apontava pra outra carta.
@@ -212,14 +223,16 @@ function mostrarResultados(caixa, cartas, aoClicar,
     return;
   }
   // Paginada, a lista já veio do tamanho da página: o teto seria um segundo
-  // corte por cima do que a pessoa pediu, e o rodapé é o paginador em vez da
-  // frase que manda usar os filtros — que ela já está usando.
+  // corte por cima do que a pessoa pediu, e o fim da lista é o paginador.
   const teto = rodape ? cartas.length : TETO_RESULTADOS;
   const sobrando = cartas.length - teto;
+  // Sem paginador, o fim da lista é a frase que diz o que fazer pra estreitá-la
+  // — e o que fazer depende de já haver nome escrito ou não.
+  const mais = `${sobrando}${cartas.length >= 24 ? "+" : ""} carta(s)`;
   const resto = rodape || (sobrando > 0
-    ? `<div class="demais">E mais ${sobrando}${
-        cartas.length >= 24 ? "+" : ""} carta(s) casam. Escreva mais uma letra
-       ou use os filtros pra chegar na certa.</div>`
+    ? `<div class="demais">${termo
+        ? `E mais ${mais} casam. Escreva mais uma letra pra chegar na certa.`
+        : `E mais ${mais} na base. Escreva um nome ou use os filtros.`}</div>`
     : "");
   // Três estados, não dois: uma carta que já está no maybeboard não é uma
   // carta nova nem uma carta do deck, e mostrá-la como qualquer um dos dois
@@ -243,11 +256,10 @@ function mostrarResultados(caixa, cartas, aoClicar,
 
 /* ------------------------------------------------------ o paginador
 
-   Ele só existe com filtro ligado, e é por isso que ele existe: sem filtro a
-   lista é uma vitrine de cinco e passar página nela seria folhear a base
-   inteira de carta em carta. Com filtro, a lista é um recorte que a pessoa
-   pediu — "criatura verde de até 3 por menos de 5 reais" — e aí ver as 37 que
-   casam é o ponto, não um consolo.
+   Ele existe quando a lista é um recorte que a pessoa pediu — "bolt", ou
+   "criatura verde de até 3 por menos de 5 reais" —, e aí ver as 37 que casam
+   é o ponto, não um consolo. Quando não há pedido nenhum ele não aparece;
+   quem decide é `listaPaginada`.
 
    Quantos por página é escolha de quem olha: cinco cabem sem rolagem na
    coluna, quinze pedem rolagem mas mostram o recorte quase inteiro de uma
