@@ -1127,6 +1127,39 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   height:18px;border-radius:50%;background:var(--purple);color:#fff;
   font-size:10.5px;font-weight:700;line-height:18px;text-align:center;
   font-family:'IBM Plex Mono',monospace;box-shadow:0 1px 3px rgba(0,0,0,.6);}
+/* Deitar e endireitar num clique, sem passar pelo menu (ver `gfCartaHTML`).
+   Vai no canto de baixo à direita, o único que sobra: marcadores em cima à
+   direita, selo de combo em cima à esquerda, marca de combate embaixo à
+   esquerda. Aparece sempre, apagado, e fica sólido com o mouse na carta —
+   ícone que só existe no hover ninguém descobre, e ícone opaco em quarenta
+   cartas é ruído. */
+.gf-carta .gf-tap{position:absolute;right:4px;bottom:4px;width:20px;height:20px;
+  border-radius:50%;background:rgba(15,13,23,.72);color:var(--text);
+  font-size:13px;line-height:20px;text-align:center;opacity:.5;
+  transition:opacity .12s,background .12s,transform .12s;}
+.gf-carta:hover .gf-tap{opacity:1;background:var(--purple);color:#fff;}
+.gf-carta .gf-tap:hover{transform:scale(1.15);}
+/* A carta deitada é desenhada girada, e o ícone gira junto: o giro ao
+   contrário é o que deixa a seta em pé pra quem lê. Deitada a carta ainda
+   perde metade da opacidade, e o ícone apagado sumiria — mas endireitar é o
+   que se faz com carta deitada, então ali ele é o cheio: o que sobra da
+   translucidez da carta já é a dose certa. */
+.gf-carta.deitada .gf-tap{transform:rotate(-90deg);opacity:1;
+  background:var(--purple);color:#fff;}
+.gf-carta.deitada .gf-tap:hover{transform:rotate(-90deg) scale(1.15);}
+/* No monte, o canto de baixo à direita é da contagem (`×4`), que passa por
+   cima de qualquer carta: o ícone anda pra dentro pra caber ao lado dela. */
+.gf-monte .gf-carta .gf-tap{right:40px;}
+/* E só a carta da frente do monte traz o ícone: nove terrenos deitados dariam
+   nove ícones em fileira, e a pergunta que se faz ao monte é uma só
+   ("endireita um"). A carta que o mouse levanta traz o dela, que é como se
+   escolhe qual. */
+.gf-monte .gf-carta:not(:last-of-type):not(:hover) .gf-tap{display:none;}
+/* Sem mouse não há hover pra revelar nada: no toque o ícone fica sempre
+   legível, que é onde ele mais serve. */
+@media (hover:none){
+  .gf-carta .gf-tap{opacity:.95;background:rgba(15,13,23,.88);}
+}
 /* Ficha não é carta: a borda tracejada diz que ela some quando sair do campo. */
 .gf-carta.ficha{border-style:dashed;}
 .gf-carta.arrastando{opacity:.45;}

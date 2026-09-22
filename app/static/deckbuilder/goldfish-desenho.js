@@ -80,10 +80,19 @@ function gfCartaHTML(c, zona){
     ? `<span class="gf-combo-selo" title="Peça de ${quantos} combo(s) do deck"
         >${quantos}</span>`
     : "";
+  // Deitar e endireitar é o gesto que mais se repete na mesa — um terreno por
+  // mana, uma criatura por ataque —, e abrir o menu pra ele custa dois cliques
+  // e uma leitura. O ícone faz no lugar, em um. Ele é um `span` porque a carta
+  // já é o botão, e botão dentro de botão é HTML inválido: quem chega pelo
+  // teclado continua pelo menu, que é onde o item existe com nome.
+  const tap = zona === "campo"
+    ? `<span class="gf-tap" data-gf-tap="${c.uid}" aria-hidden="true"
+        title="${c.deitada ? "Endireitar" : "Deitar"}">${c.deitada ? "↺" : "↻"}</span>`
+    : "";
   return `<button class="${classes.join(" ")}" data-gf-uid="${c.uid}" draggable="true"
     title="${escapar(carta.nome || "")}"
     ${arte ? `style="background-image:url('${escapar(arte)}')"` : ""}>
-    ${marcasDaCartaHTML(c)}${selo}${marca}${rotulo}
+    ${marcasDaCartaHTML(c)}${selo}${marca}${rotulo}${tap}
   </button>`;
 }
 

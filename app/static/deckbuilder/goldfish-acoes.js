@@ -705,6 +705,16 @@ export function ligarGoldfish(){
       return desenharMesa();
     }
 
+    // O ícone de deitar age na hora, antes de a carta virar menu: ele existe
+    // justamente pra o gesto mais repetido da mesa não passar pelo menu.
+    const tap = e.target.closest("[data-gf-tap]");
+    if (tap){
+      fecharMenuGf();
+      guardarMesa();
+      alternarDeitada(Number(tap.dataset.gfTap));
+      return desenharMesa();
+    }
+
     const carta = e.target.closest("[data-gf-uid]");
     if (!carta) return;
     const uid = Number(carta.dataset.gfUid);
