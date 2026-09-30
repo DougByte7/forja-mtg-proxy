@@ -8,7 +8,8 @@ O que se está travando aqui é o que dói se quebrar em silêncio:
    mesmo pedido nunca baixa duas vezes — é o descompasso que faria o saldo
    derreter sem ninguém ter impresso nada.
 2. **O plástico conta folhas cobertas**: um lado, 1 plástico a cada 2 folhas
-   (arredondando pra cima); dois lados, 1 por folha.
+   (arredondando pra cima); dois lados e foil, 1 por folha. O foil tira a
+   folha do papel foil, não do fotográfico.
 3. **A folha combinada devolve a sobra**, uma vez só por combinação.
 4. **O custo de uma folha** soma papel, plástico e as quatro tintas.
 5. **O preço cobrado** muda o pedido novo e não mexe no que já existe.
@@ -167,6 +168,21 @@ check("dois lados: 1 plástico por folha", saldo() == (499, 99), saldo())
 status(dupla, "cancelado")
 check("e cancelado devolve", saldo() == (500, 100), saldo())
 
+
+def saldo_foil():
+    return {i["id"]: i["quantidade"] for i in resumo()["itens"]}["papel_foil"]
+
+
+cliente.post("/admin/estoque/papel_foil/entrada", headers=AUTH,
+             json={"quantidade": 50})
+foil = semear("Lia Castro", 18, laminacao="foil")   # 2 folhas, foil
+status(foil, "paid")
+check("foil tira do papel foil, não do fotográfico",
+      saldo_foil() == 48 and saldo() == (500, 98), (saldo_foil(), saldo()))
+status(foil, "cancelado")
+check("e o estorno volta pro papel foil",
+      saldo_foil() == 50 and saldo() == (500, 100), (saldo_foil(), saldo()))
+
 avisado = semear("Carla Reis", 9)
 storage.mark_notified(avisado)
 cliente.delete(f"/admin/pedidos/{avisado}", headers=AUTH)
@@ -247,6 +263,11 @@ check("um lado = papel + meio plástico + tinta",
       round(custo["single"]["total"], 4) == 1.45, custo["single"])
 check("dois lados = papel + um plástico + tinta",
       round(custo["double"]["total"], 4) == 1.85, custo["double"])
+cliente.post("/admin/estoque/papel_foil/ajustes", headers=AUTH,
+             json={"custo_unitario": "2,5"})
+custo = resumo()["custo_folha"]
+check("foil = papel foil + um plástico + tinta",
+      round(custo["foil"]["total"], 4) == 4.3, custo["foil"])
 
 r = cliente.post("/admin/estoque/tinta", headers=AUTH, json={
     "magenta": {"preco_garrafa": 99}, "ciano": {"ml_garrafa": 0}})
@@ -257,7 +278,8 @@ check("e nada daquela chamada foi salvo",
 # --- 7. o preço cobrado --------------------------------------------------
 check("nasce com o preço padrão",
       cliente.get("/precos").json() == {"single": calc.PRICE_SINGLE_SIDE,
-                                        "double": calc.PRICE_DOUBLE_SIDE_PER_PAGE})
+                                        "double": calc.PRICE_DOUBLE_SIDE_PER_PAGE,
+                                        "foil": 8.0})
 r = cliente.post("/admin/estoque/custos", headers=AUTH,
                  json={"preco_um_lado": "3,00"})
 check("muda o preço de um lado", r.status_code == 200, r.text[:80])
@@ -272,6 +294,11 @@ check("pedido novo sai com o preço novo",
       r.status_code == 200 and r.json()["amount"] == 6.0, r.text[:120])
 check("pedido antigo mantém o valor com que foi criado",
       storage.get_order(duas)["amount"] == 5.0, storage.get_order(duas)["amount"])
+
+r = cliente.post("/orders", data={"lamination": "foil", "customer_name": "Rui"},
+                 files={"xml_file": ("deck.xml", xml_de("rui", 10), "text/xml")})
+check("pedido foil cobra 8,00 por página",
+      r.status_code == 200 and r.json()["amount"] == 16.0, r.text[:120])
 
 for corpo in ({"preco_um_lado": "0"}, {"preco_dois_lados": "abc"},
               {"folhas_por_plastico_um_lado": 0}):

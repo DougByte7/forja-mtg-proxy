@@ -2355,7 +2355,7 @@ def admin_estoque_ajustes(item: str, corpo: dict = Body(default={}),
 def admin_estoque_custos(corpo: dict = Body(default={}),
                          x_admin_token: str | None = Header(default=None),
                          quem: dict | None = Depends(quem_e)):
-    """Preço cobrado por página e folhas por plástico, nos dois acabamentos.
+    """Preço cobrado por página e folhas por plástico, em cada acabamento.
 
     O preço vale pra pedido novo; pedido que já existe guarda o valor dele.
     """

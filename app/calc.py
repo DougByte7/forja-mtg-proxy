@@ -12,6 +12,11 @@ CARDS_PER_PAGE = 9
 # (`estoque.precos_por_pagina`), que nasce com estes valores.
 PRICE_SINGLE_SIDE = 2.50
 PRICE_DOUBLE_SIDE_PER_PAGE = 3.3333
+PRICE_FOIL = 8.00
+
+# Acabamentos que o pedido aceita. `foil` sai no papel foil em vez do
+# fotográfico (ver `estoque.item_de_papel`).
+LAMINACOES = ("single", "double", "foil")
 
 # Como a tela do MPC Fill escreve uma busca de ficha: "t:Treasure". É a forma
 # do nome de ficha em todo o caminho daqui — a busca que o deckbuilder manda
@@ -82,10 +87,10 @@ def compute_deck_hash(xml_text: str) -> str:
 
 def compute_cost(qty: int, backs_count: int, lamination: str,
                  precos: dict | None = None) -> dict:
-    """`precos` é `{"single", "double"}` em reais por página; sem ele, vale
-    o preço padrão deste módulo."""
-    if lamination not in ("single", "double"):
-        raise ValueError("lamination precisa ser 'single' ou 'double'")
+    """`precos` é `{"single", "double", "foil"}` em reais por página; sem
+    ele, vale o preço padrão deste módulo."""
+    if lamination not in LAMINACOES:
+        raise ValueError("lamination precisa ser 'single', 'double' ou 'foil'")
 
     slots_needed = qty + backs_count
     pages = math.ceil(slots_needed / CARDS_PER_PAGE)
@@ -93,7 +98,8 @@ def compute_cost(qty: int, backs_count: int, lamination: str,
     blanks = 0 if slots_needed % CARDS_PER_PAGE == 0 else CARDS_PER_PAGE - last_filled
 
     precos = precos or {"single": PRICE_SINGLE_SIDE,
-                        "double": PRICE_DOUBLE_SIDE_PER_PAGE}
+                        "double": PRICE_DOUBLE_SIDE_PER_PAGE,
+                        "foil": PRICE_FOIL}
     total = round(pages * float(precos[lamination]), 2)
 
     return {

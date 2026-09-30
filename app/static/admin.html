@@ -422,7 +422,7 @@ const ESTADOS = {
   paid:      {nome: "Pago e impresso"},
   cancelado: {nome: "Cancelado"},
 };
-const LAMINACAO = {single: "Um lado", double: "Dois lados"};
+const LAMINACAO = {single: "Um lado", double: "Dois lados", foil: "Foil"};
 
 let aba = "pedidos";       // "pedidos" | "decks" | "estoque" — o que a lista mostra
 let filtro = "";           // "" = todos
@@ -639,7 +639,7 @@ function desenharDecks() {
 /* ------------------------------------------------------------- estoque
 
    Papel e plástico, com a baixa que os pedidos fazem sozinhos, e o custo de
-   material de UMA folha nos dois acabamentos, ao lado do preço cobrado por
+   material de UMA folha em cada acabamento, ao lado do preço cobrado por
    página. As contas são do backend (`estoque.resumo`); aqui é só desenho. */
 
 const MOTIVOS = {
@@ -707,11 +707,12 @@ function desenharEstoque() {
   }
   lista.appendChild(grade);
 
-  const um = estoque.custo_folha.single, dois = estoque.custo_folha.double;
+  const acabamentos = ["single", "double", "foil"].map((l) => estoque.custo_folha[l]);
   const cfg = estoque.config;
-  const linha = (rotulo, a, b, classe) => `<tr class="${classe || ""}"><td>${rotulo}</td>` +
-    `<td class="${a < 0 ? "negativo" : ""}">${dinheiroFino(a)}</td>` +
-    `<td class="${b < 0 ? "negativo" : ""}">${dinheiroFino(b)}</td></tr>`;
+  const linha = (rotulo, campo, classe) => `<tr class="${classe || ""}"><td>${rotulo}</td>` +
+    acabamentos.map((c) =>
+      `<td class="${c[campo] < 0 ? "negativo" : ""}">${dinheiroFino(c[campo])}</td>`).join("") +
+    `</tr>`;
   const custo = document.createElement("div");
   custo.className = "bloco-estoque";
   custo.innerHTML = `
@@ -720,19 +721,20 @@ function desenharEstoque() {
       <button class="btn-sec" data-estoque="custos">Preço e plástico</button>
     </div>
     <div class="rolagem"><table class="custo-folha">
-      <thead><tr><th></th><th>Um lado</th><th>Dois lados</th></tr></thead>
+      <thead><tr><th></th><th>Um lado</th><th>Dois lados</th><th>Foil</th></tr></thead>
       <tbody>
-        ${linha("Papel", um.papel, dois.papel)}
-        ${linha("Plástico", um.plastico, dois.plastico)}
-        ${linha("Tinta", um.tinta, dois.tinta)}
-        ${linha("Material", um.total, dois.total, "total")}
-        ${linha("Cobrado", um.cobrado, dois.cobrado)}
-        ${linha("Sobra", um.margem, dois.margem)}
+        ${linha("Papel", "papel")}
+        ${linha("Plástico", "plastico")}
+        ${linha("Tinta", "tinta")}
+        ${linha("Material", "total", "total")}
+        ${linha("Cobrado", "cobrado")}
+        ${linha("Sobra", "margem")}
       </tbody>
     </table></div>
     <div class="nota-bloco">1 plástico a cada ${inteiro(cfg.folhas_por_plastico_um_lado)}
-      folha(s) no um lado e a cada ${inteiro(cfg.folhas_por_plastico_dois_lados)}
-      no dois lados</div>`;
+      folha(s) no um lado, a cada ${inteiro(cfg.folhas_por_plastico_dois_lados)}
+      no dois lados e a cada ${inteiro(cfg.folhas_por_plastico_foil)} no foil.
+      O foil sai no papel foil.</div>`;
   lista.appendChild(custo);
 
   const tintas = document.createElement("div");
@@ -860,12 +862,16 @@ function acaoDeEstoque(acao, id) {
       campos: [
         {nome: "preco_um_lado", rotulo: "Um lado — R$ por página", modo: "decimal",
          valor: campoDecimal(cfg.preco_um_lado)},
-        {nome: "preco_dois_lados", rotulo: "Dois lados — R$ por página", modo: "decimal",
-         valor: campoDecimal(cfg.preco_dois_lados)},
         {nome: "folhas_por_plastico_um_lado", rotulo: "Um lado — folhas por plástico",
          modo: "numeric", valor: String(cfg.folhas_por_plastico_um_lado)},
+        {nome: "preco_dois_lados", rotulo: "Dois lados — R$ por página", modo: "decimal",
+         valor: campoDecimal(cfg.preco_dois_lados)},
         {nome: "folhas_por_plastico_dois_lados", rotulo: "Dois lados — folhas por plástico",
          modo: "numeric", valor: String(cfg.folhas_por_plastico_dois_lados)},
+        {nome: "preco_foil", rotulo: "Foil — R$ por página", modo: "decimal",
+         valor: campoDecimal(cfg.preco_foil)},
+        {nome: "folhas_por_plastico_foil", rotulo: "Foil — folhas por plástico",
+         modo: "numeric", valor: String(cfg.folhas_por_plastico_foil)},
       ],
       ok: "Salvar",
       aoConfirmar: (v) => salvarEstoque("/admin/estoque/custos", v,

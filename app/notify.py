@@ -23,7 +23,7 @@ def _send(msg: EmailMessage):
         s.send_message(msg)
 
 
-LAM_LABELS = {"single": "Um lado", "double": "Dois lados"}
+LAM_LABELS = {"single": "Um lado", "double": "Dois lados", "foil": "Foil"}
 
 
 def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,

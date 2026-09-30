@@ -1,5 +1,5 @@
 """
-Estoque de material da impressão (papel e plástico), o custo de uma folha e o
+Estoque de material da impressão (papel fotográfico, papel foil e plástico), o custo de uma folha e o
 preço cobrado por página.
 
 Três coisas moram aqui:
@@ -11,7 +11,8 @@ Três coisas moram aqui:
 2. **Quanto custa uma folha.** Papel e plástico têm o preço por unidade da
    última compra. Tinta não tem estoque: cada cor tem o preço e o volume da
    garrafa e quantos ml uma folha gasta, e o custo da folha é a soma das
-   quatro. A conta é sempre de UMA folha, nos dois acabamentos.
+   quatro. A conta é sempre de UMA folha, em cada acabamento. O foil sai no
+   papel foil; os outros dois, no fotográfico.
 
 3. **Quanto se cobra por página.** É o preço que `calc.compute_cost` usa pra
    cobrar pedido novo. Pedido que já existe guarda o valor com que foi criado.
@@ -38,6 +39,7 @@ DB_PATH = os.environ.get("DB_PATH", "/app/data/orders.db")
 
 ITENS = {
     "papel": {"nome": "Papel fotográfico A4", "unidade": "folhas"},
+    "papel_foil": {"nome": "Papel foil A4", "unidade": "folhas"},
     "plastico": {"nome": "Plástico de plastificação", "unidade": "unidades"},
 }
 
@@ -68,9 +70,19 @@ MOTIVOS = ("pedido", "estorno", "combinado", "entrada", "contagem")
 _CONFIG_PADRAO = {
     "preco_um_lado": calc.PRICE_SINGLE_SIDE,
     "preco_dois_lados": calc.PRICE_DOUBLE_SIDE_PER_PAGE,
-    # Quantas folhas um plástico cobre: no um lado, duas; no dois lados, uma.
+    "preco_foil": calc.PRICE_FOIL,
+    # Quantas folhas um plástico cobre: no um lado, duas; no dois lados e no
+    # foil, uma.
     "folhas_por_plastico_um_lado": 2.0,
     "folhas_por_plastico_dois_lados": 1.0,
+    "folhas_por_plastico_foil": 1.0,
+}
+
+# Chaves da configuração por acabamento: `(preço, folhas por plástico)`.
+_CHAVES = {
+    "single": ("preco_um_lado", "folhas_por_plastico_um_lado"),
+    "double": ("preco_dois_lados", "folhas_por_plastico_dois_lados"),
+    "foil": ("preco_foil", "folhas_por_plastico_foil"),
 }
 
 
@@ -114,6 +126,12 @@ def criar_tabelas(conn) -> None:
             criado_em REAL NOT NULL
         )
     """)
+    # `papel` é quantas folhas saíram; `item_papel`, de qual papel — é pra lá
+    # que o estorno devolve.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(estoque_baixas)")}
+    if "item_papel" not in cols:
+        conn.execute("ALTER TABLE estoque_baixas ADD COLUMN "
+                     "item_papel TEXT NOT NULL DEFAULT 'papel'")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estoque_config (
             chave TEXT PRIMARY KEY,
@@ -161,9 +179,17 @@ def _config(conn) -> dict:
     return valores
 
 
+def _chaves(lamination: str) -> tuple[str, str]:
+    return _CHAVES.get(lamination, _CHAVES["single"])
+
+
 def _folhas_por_plastico(config: dict, lamination: str) -> float:
-    return (config["folhas_por_plastico_dois_lados"] if lamination == "double"
-            else config["folhas_por_plastico_um_lado"])
+    return config[_chaves(lamination)[1]]
+
+
+def item_de_papel(lamination: str) -> str:
+    """O item de estoque de onde sai a folha nesse acabamento."""
+    return "papel_foil" if lamination == "foil" else "papel"
 
 
 def _consumo(config: dict, pages, lamination: str) -> tuple[int, int]:
@@ -190,21 +216,23 @@ def sincronizar(conn, order_ids: list[str]) -> None:
             "SELECT status, pages, lamination FROM orders WHERE id = ?",
             (order_id,)).fetchone()
         baixa = conn.execute(
-            "SELECT papel, plastico FROM estoque_baixas WHERE pedido = ?",
-            (order_id,)).fetchone()
+            "SELECT papel, plastico, item_papel FROM estoque_baixas "
+            "WHERE pedido = ?", (order_id,)).fetchone()
         consome = bool(pedido) and pedido[0] in STATUS_COM_BAIXA
 
         if consome and not baixa:
             papel, plastico = _consumo(config, pedido[1], pedido[2])
+            item = item_de_papel(pedido[2])
             conn.execute("INSERT INTO estoque_baixas "
-                         "(pedido, papel, plastico, criado_em) VALUES (?,?,?,?)",
-                         (order_id, papel, plastico, time.time()))
-            _mover(conn, "papel", -papel, "pedido", order_id)
+                         "(pedido, papel, plastico, item_papel, criado_em) "
+                         "VALUES (?,?,?,?,?)",
+                         (order_id, papel, plastico, item, time.time()))
+            _mover(conn, item, -papel, "pedido", order_id)
             _mover(conn, "plastico", -plastico, "pedido", order_id)
         elif not consome and baixa:
             conn.execute("DELETE FROM estoque_baixas WHERE pedido = ?",
                          (order_id,))
-            _mover(conn, "papel", baixa[0], "estorno", order_id)
+            _mover(conn, baixa[2], baixa[0], "estorno", order_id)
             _mover(conn, "plastico", baixa[1], "estorno", order_id)
 
 
@@ -245,11 +273,12 @@ def devolver_combinacao(combo_id: str, pedidos: list[dict]) -> tuple[int, int]:
             "SELECT COALESCE(SUM(papel), 0), COALESCE(SUM(plastico), 0) "
             f"FROM estoque_baixas WHERE pedido IN ({','.join('?' * len(ids))})",
             ids).fetchone()
-        gasto = _consumo(_config(conn), resumo["paginas_combinadas"],
-                         pedidos[0].get("lamination"))
+        # O combo só junta pedidos da mesma laminação, então é um papel só.
+        lamination = pedidos[0].get("lamination")
+        gasto = _consumo(_config(conn), resumo["paginas_combinadas"], lamination)
         papel = max(0, baixado[0] - gasto[0])
         plastico = max(0, baixado[1] - gasto[1])
-        _mover(conn, "papel", papel, "combinado", combo_id)
+        _mover(conn, item_de_papel(lamination), papel, "combinado", combo_id)
         _mover(conn, "plastico", plastico, "combinado", combo_id)
         conn.commit()
         return papel, plastico
@@ -261,7 +290,7 @@ def devolver_combinacao(combo_id: str, pedidos: list[dict]) -> tuple[int, int]:
 
 
 def precos_por_pagina() -> dict:
-    """`{"single", "double"}`: reais por página em cada acabamento.
+    """`{"single", "double", "foil"}`: reais por página em cada acabamento.
 
     Banco sem as tabelas ainda (antes do `init_db`) cai no preço padrão do
     `calc`, em vez de impedir a cobrança.
@@ -274,8 +303,7 @@ def precos_por_pagina() -> dict:
             conn.close()
     except sqlite3.OperationalError:
         config = dict(_CONFIG_PADRAO)
-    return {"single": config["preco_um_lado"],
-            "double": config["preco_dois_lados"]}
+    return {lam: config[chaves[0]] for lam, chaves in _CHAVES.items()}
 
 
 # --- Operações da tela --------------------------------------------------------
@@ -365,14 +393,15 @@ def ajustar_item(item: str, minimo=None, custo_unitario=None) -> None:
 
 
 def ajustar_custos(corpo: dict) -> None:
-    """Preço cobrado por página e folhas por plástico, nos dois acabamentos.
+    """Preço cobrado por página e folhas por plástico, em cada acabamento.
     Chave ausente ou vazia fica como está."""
     novos = {}
     for chave, nome in (("preco_um_lado", "O preço de um lado"),
-                        ("preco_dois_lados", "O preço de dois lados")):
+                        ("preco_dois_lados", "O preço de dois lados"),
+                        ("preco_foil", "O preço do foil")):
         if not _vazio(corpo.get(chave)):
             novos[chave] = _decimal(corpo[chave], nome, positivo=True)
-    for chave in ("folhas_por_plastico_um_lado", "folhas_por_plastico_dois_lados"):
+    for _, chave in _CHAVES.values():
         if not _vazio(corpo.get(chave)):
             novos[chave] = _inteiro(corpo[chave], "Folhas por plástico", minimo=1)
     if not novos:
@@ -430,12 +459,11 @@ def _tintas(conn) -> list[dict]:
 
 def _custo_folha(itens: dict, config: dict, tinta: float,
                  lamination: str) -> dict:
-    papel = itens["papel"]["custo_unitario"]
+    papel = itens[item_de_papel(lamination)]["custo_unitario"]
     plastico = (itens["plastico"]["custo_unitario"]
                 / _folhas_por_plastico(config, lamination))
     total = papel + plastico + tinta
-    cobrado = config["preco_dois_lados" if lamination == "double"
-                     else "preco_um_lado"]
+    cobrado = config[_chaves(lamination)[0]]
     return {"papel": round(papel, 4), "plastico": round(plastico, 4),
             "tinta": round(tinta, 4), "total": round(total, 4),
             "cobrado": round(cobrado, 4), "margem": round(cobrado - total, 4)}
@@ -443,7 +471,7 @@ def _custo_folha(itens: dict, config: dict, tinta: float,
 
 def resumo(movimentos: int = 30) -> dict:
     """Tudo que a aba Estoque mostra: saldo de cada item, tintas, o custo de
-    uma folha nos dois acabamentos e os últimos movimentos."""
+    uma folha em cada acabamento e os últimos movimentos."""
     conn = _conn()
     try:
         linhas = conn.execute("SELECT id, quantidade, minimo, custo_unitario, "
@@ -470,10 +498,8 @@ def resumo(movimentos: int = 30) -> dict:
         "itens": [itens[i] for i in ITENS if i in itens],
         "config": config,
         "tintas": tintas,
-        "custo_folha": {
-            "single": _custo_folha(itens, config, tinta, "single"),
-            "double": _custo_folha(itens, config, tinta, "double"),
-        },
+        "custo_folha": {lam: _custo_folha(itens, config, tinta, lam)
+                        for lam in _CHAVES},
         "movimentos": [dict(zip(("item", "delta", "saldo", "motivo",
                                  "referencia", "criado_em"), m)) for m in movs],
     }
