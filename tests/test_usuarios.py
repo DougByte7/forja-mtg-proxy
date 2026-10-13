@@ -180,7 +180,7 @@ try:
 
     print("\n--- freio de tentativa ---")
 
-    usuarios._tentativas.clear()
+    usuarios.zerar_freio()
     for _ in range(usuarios.MAX_TENTATIVAS):
         usuarios.entrar("ana", "errada-de-proposito")
     try:
@@ -190,11 +190,19 @@ try:
     except PermissionError:
         check("depois de N erros, freia mesmo com a senha certa", True)
 
+    # O freio mora no banco (vale entre processos), mas sem dizer quem errou:
+    # quem lê o banco não pode tirar dali a lista de logins que existem.
+    conn = usuarios._conn()
+    chaves = [r[0] for r in conn.execute("SELECT chave FROM login_freio")]
+    conn.close()
+    check("o freio fica no banco", len(chaves) == 1, chaves)
+    check("sem o login em claro", all("ana" not in c for c in chaves), chaves)
+
     # O freio é por login: travar a Ana não pode travar o Beto.
     check("o freio de um login não trava outro",
           usuarios.entrar("beto", "senha-nova-do-beto") is not None)
 
-    usuarios._tentativas.clear()
+    usuarios.zerar_freio()
     check("e solta quando a espera passa",
           usuarios.entrar("ana", "senha-da-ana-1") is not None)
 

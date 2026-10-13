@@ -31,7 +31,7 @@ export async function cotar(){
    saída (erro ao começar, erro no meio, erro do servidor, pronto) e cada um
    precisa desligar o giro, guardar o resultado e redesenhar. */
 function terminarCotacao(resultado, erro){
-  clearInterval(cotacaoTimer);
+  clearTimeout(cotacaoTimer);
   estado.cotacaoRodando = false;
   estado.cotacaoErro = erro || null;
   if (resultado) estado.cotacao = resultado;
@@ -46,12 +46,19 @@ function terminarCotacao(resultado, erro){
   agendarCotacao();
 }
 
+/* Uma pergunta de cada vez, 2s depois da resposta anterior — e não de 2 em
+   2s cravados. Cada pergunta faz a cotação andar um pedaço no servidor e
+   pode levar alguns segundos pra voltar; com intervalo fixo elas se
+   empilhariam. */
 function acompanharCotacao(jobId){
-  clearInterval(cotacaoTimer);
+  clearTimeout(cotacaoTimer);
   const passo = async () => {
     try {
       const r = await api(`/cotacao/${jobId}`);
-      if (r.estado === "cotando") return;
+      if (r.estado === "cotando") {
+        cotacaoTimer = setTimeout(passo, 2000);
+        return;
+      }
       if (r.estado === "erro") terminarCotacao(null, r.detalhe);
       else terminarCotacao(r.resultado, null);
     } catch (e){
@@ -59,7 +66,6 @@ function acompanharCotacao(jobId){
     }
   };
   passo();
-  cotacaoTimer = setInterval(passo, 2000);
 }
 
 /* O detalhe da cotação, no painel que abre embaixo do número. Só o que não

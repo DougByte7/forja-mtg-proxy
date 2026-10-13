@@ -43,7 +43,12 @@ def _arquivo(nome: str) -> logging.Handler | None:
     Log que não grava NÃO pode derrubar o backend — um diretório sem
     permissão viraria erro na importação do módulo e o serviço não subiria.
     Nesse caso fica só o stdout, que é melhor que nada.
+
+    `LOG_DIR` vazio é o "só stdout" de propósito, sem aviso: é o caso da
+    Vercel, onde o disco some com o processo e quem guarda o log é ela.
     """
+    if not DIR:
+        return None
     try:
         os.makedirs(DIR, exist_ok=True)
         h = RotatingFileHandler(os.path.join(DIR, nome), maxBytes=MAX_BYTES,

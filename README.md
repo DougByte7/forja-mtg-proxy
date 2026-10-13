@@ -554,7 +554,12 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   perde na rede e volta sem reimprimir, folha combinada e a porta do worker.
   Sem rede nem impressora: `python tests/test_fila_impressao.py`.
 - `tests/test_tarefas.py` — os comandos avulsos (`migrar`, `cartas`,
-  `faxina`) e o site sem thread de fundo: `python tests/test_tarefas.py`.
+  `faxina`) e o site configurado como na Vercel: sem thread de fundo, sem
+  contagem de visitas, IP vindo do `x-real-ip`: `python tests/test_tarefas.py`.
+- `tests/test_cotacao_job.py` — a cotação que anda nas perguntas da tela:
+  uma fatia por pergunta, nenhuma carta pedida duas vezes, falha com fim, a
+  reserva da fatia e o cotar de novo vindo do cache. Fontes de mentira, sem
+  rede: `python tests/test_cotacao_job.py`.
 
 ### Rotas
 
@@ -2054,7 +2059,8 @@ por carta, o menor preço em duas fontes lado a lado, e o total de cada uma.
 3. Clique em **Cotar preços das cartas**. Só o clique dispara a consulta —
    subir o XML sozinho não faz acesso nenhum.
 4. Deck grande leva minutos (uma requisição por carta, com intervalo entre
-   elas). A página mostra o andamento e pode ficar aberta.
+   elas). A página mostra o andamento e pode ficar aberta — e se fechar, o
+   que já foi cotado não se perde: cotar de novo continua de onde parou.
 
 A tabela mostra as **10 cartas mais caras** e esconde o resto atrás de um
 "ver mais" — um Commander cotado inteiro passa de 60 linhas e empurraria o
@@ -2074,10 +2080,26 @@ quebra essa comparação.
 As duas coisas aparecem listadas embaixo da tabela, com o motivo. Elas não
 somem caladas: um total que não cobre o deck inteiro precisa dizer por quê.
 
+### A cotação anda nas perguntas da tela
+
+Não há thread de fundo nem job em memória: a tela pergunta o andamento a cada
+2 s (`GET /cotacao/{id}`), e **cada pergunta cota as cartas que faltam por
+até `COTACAO_FATIA_SEGUNDOS` (15)** e responde quanto andou. Quando toda carta
+tem resposta, a mesma pergunta monta o resultado. É assim que a cotação
+funciona num servidor em que cada requisição pode ser um processo novo (a
+Vercel) e nunca esbarra no teto de tempo de uma requisição.
+
+O job mora no banco de cartas (`cotacao_jobs`) e guarda a lista, as falhas e
+o resultado; o progresso em si é o cache por carta. Duas perguntas ao mesmo
+tempo (duas abas) não trabalham as duas: a fatia é reservada no banco, e quem
+não a pegou só responde o andamento. Carta cuja busca falha (rede, 429) é
+tentada `COTACAO_TENTATIVAS` (2) vezes e depois sai como faltando, com o
+motivo. A faxina diária apaga job com mais de um dia.
+
 ### Cache
 
-As ofertas ficam em cache **por carta**, compartilhado pelas
-duas fontes, por 12 h. Isso significa que trocar uma carta da lista só custa
+As ofertas ficam em cache **por carta**, no banco de cartas (o descartável),
+compartilhado pelas duas fontes, por 12 h. Isso significa que trocar uma carta da lista só custa
 aquela carta, e que dois decks parecidos aproveitam um o cache do outro —
 importante porque cada carta nova é um acesso a mais na LigaMagic.
 
@@ -2534,7 +2556,8 @@ tocadas. `FORJA_PRUNE=0` desliga.
 Duas saídas: o `stdout` (que é o `docker logs -f forja-backend`) e arquivos
 rotativos em `LOG_DIR`, que por padrão é `/app/data/logs` — dentro do volume,
 pra sobreviver ao restart do container. Se o diretório não puder ser criado,
-fica só o stdout: log que não grava não derruba o backend.
+fica só o stdout: log que não grava não derruba o backend. `LOG_DIR` vazio é
+"só stdout" de propósito — é o caso da Vercel, que guarda o log ela mesma.
 
 Dois arquivos, porque as visitas são muitas e repetitivas e afogariam o log
 de erro se ficassem juntas:
@@ -2576,9 +2599,20 @@ requisição, conta **visita**: mesmo IP + mesmo User-Agent dentro de
 `VISITA_JANELA_MINUTOS` são a mesma pessoa, anunciada uma vez (`chegou`) e
 resumida uma vez quando esfria (`saiu`, com o que ela fez e quanto ficou).
 
-O IP real vem do `CF-Connecting-IP` — `request.client.host` seria o IP do
-túnel da Cloudflare, igual pra todo mundo, e faria todas as visitas virarem
-uma só. `VISITA_ANONIMIZAR_IP=1` corta o último octeto se você preferir.
+O IP real vem do cabeçalho de quem está na frente do backend
+(`IP_CABECALHO`: `cf-connecting-ip` atrás do túnel da Cloudflare, `x-real-ip`
+na Vercel) — `request.client.host` seria o IP do proxy, igual pra todo mundo,
+e faria todas as visitas virarem uma só. Cabeçalho de outro proxy é forjável,
+por isso só vale o configurado. `VISITA_ANONIMIZAR_IP=1` corta o último octeto
+se você preferir.
+
+**Na Vercel a contagem fica desligada** (`REGISTRAR_VISITAS=0`): cada
+requisição pode cair num processo novo, e a visita em memória viraria uma por
+requisição. Quem conta lá é o **Vercel Analytics** (o script já está nas
+páginas públicas; fora da Vercel ele só dá um 404 inofensivo). O log continua
+com as ações (`pediu orçamento`, `avisou que pagou`…) e os erros, com o IP no
+lugar do id da visita, e `GET /admin/visitas` diz que a contagem está
+desligada.
 
 A classificação é **palpite**, e o log diz em que sinal se baseou justamente
 pra ninguém tratar como fato:

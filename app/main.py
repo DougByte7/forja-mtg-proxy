@@ -175,6 +175,13 @@ def _acao(metodo: str, caminho: str) -> str | None:
     return None
 
 
+# Contar visitas é coisa do processo que vive dias (o homelab). Na Vercel quem
+# conta é o Vercel Analytics: cada requisição pode cair num processo novo, e
+# a "visita" em memória viraria uma por requisição. Lá isto fica em 0 — e o
+# que sobra aqui é só o log das ações e dos erros.
+REGISTRAR_VISITAS = os.environ.get("REGISTRAR_VISITAS", "1") == "1"
+
+
 @app.middleware("http")
 async def registrar_visita(request: Request, call_next):
     """Anota quem está no sistema e quanto cada requisição demorou.
@@ -191,9 +198,14 @@ async def registrar_visita(request: Request, call_next):
         ip = visitas.ip_do_pedido(request)
         ua = request.headers.get("user-agent", "")
         classe, sinal = visitas.classificar(ua, request.headers)
-        visita = visitas.registro.registrar(
-            ip, ua, request.url.path, classe, sinal,
-            pais=request.headers.get("cf-ipcountry", ""))
+        if not REGISTRAR_VISITAS:
+            # Sem registro: a linha de ação/erro lá embaixo leva o IP no
+            # lugar do id da visita.
+            visita = {"id": ip, "nova": False}
+        else:
+            visita = visitas.registro.registrar(
+                ip, ua, request.url.path, classe, sinal,
+                pais=request.headers.get(visitas.PAIS_CABECALHO, ""))
         if visita["nova"]:
             log.evento("visita", "chegou", id=visita["id"], ip=ip,
                        classe=classe, sinal=sinal,
@@ -218,7 +230,7 @@ async def registrar_visita(request: Request, call_next):
     try:
         ms = int((time.monotonic() - inicio) * 1000)
         acao = _acao(request.method, request.url.path)
-        if acao and visita:
+        if acao and visita and REGISTRAR_VISITAS:
             visitas.registro.anotar(visita["id"], acao)
         if acao or resposta.status_code >= 400:
             log.evento("acesso", acao or "erro",
@@ -579,8 +591,8 @@ async def start_cotacao(xml_file: UploadFile, commander: str = Form(default=""))
     `excluidas`, pra tela poder dizer o que ficou de fora do total.
 
     Responde na hora com o `job_id` e o andamento; o resultado sai no GET
-    abaixo. Deck grande leva minutos, e esperar dentro da requisição estoura
-    o teto do túnel (mesma história do PDF).
+    abaixo, que é quem cota de fato, um pedaço por chamada. Deck grande leva
+    minutos, e esperar dentro de uma requisição só estoura qualquer teto.
     """
     try:
         xml_text = (await xml_file.read()).decode("utf-8")
@@ -595,11 +607,12 @@ async def start_cotacao(xml_file: UploadFile, commander: str = Form(default=""))
 @app.get("/cotacao/{job_id}")
 def get_cotacao(job_id: str):
     """Andamento ou resultado de uma cotação. A tela chama isso em laço
-    enquanto o estado for "cotando"."""
+    enquanto o estado for "cotando" — e é cada uma dessas chamadas que faz a
+    cotação andar um pedaço (ver `cotacao_job`)."""
     atual = cotacao_job.estado(job_id)
     if not atual:
-        raise HTTPException(404, "Cotação não encontrada (ou o backend "
-                                 "reiniciou). Clique em cotar de novo.")
+        raise HTTPException(404, "Cotação não encontrada (ou já foi "
+                                 "apagada). Clique em cotar de novo.")
     return atual
 
 
@@ -1649,6 +1662,10 @@ def list_visitas(x_admin_token: str | None = Header(default=None),
     A janela é `VISITA_JANELA_MINUTOS`.
     """
     _check_admin(x_admin_token, quem)
+    if not REGISTRAR_VISITAS:
+        return {"desligado": True,
+                "nota": "Contagem de visitas desligada (REGISTRAR_VISITAS=0): "
+                        "veja o Vercel Analytics."}
     ativas = visitas.registro.ativas()
     return {
         "janela_minutos": visitas.JANELA_MINUTOS,

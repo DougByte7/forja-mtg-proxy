@@ -30,6 +30,8 @@ os.environ["ADMIN_TOKEN"] = "token-de-teste"
 # O site como fica na Vercel: sem migrar no startup e sem thread de fundo.
 os.environ["MIGRAR_NO_STARTUP"] = "0"
 os.environ["TAREFAS_EM_SEGUNDO_PLANO"] = "0"
+os.environ["REGISTRAR_VISITAS"] = "0"
+os.environ["IP_CABECALHO"] = "x-real-ip"
 
 try:
     from fastapi.testclient import TestClient
@@ -103,6 +105,30 @@ with TestClient(app) as cliente:
     check("o botão de sincronizar manda pro cron (409)", r.status_code == 409,
           r.status_code)
     check("e diz onde", "GitHub Actions" in r.text, r.text[:120])
+
+# --- 5. visitas e IP como na Vercel -------------------------------------------
+from types import SimpleNamespace  # noqa: E402
+
+from app import visitas  # noqa: E402
+
+
+def pedido_falso(**cab):
+    return SimpleNamespace(headers=cab, client=SimpleNamespace(host="10.0.0.1"))
+
+
+check("o IP vem do cabeçalho de quem está na frente",
+      visitas.ip_do_pedido(pedido_falso(**{"x-real-ip": "200.1.2.3"})) == "200.1.2.3")
+check("e o da Cloudflare, que aqui é forjável, é ignorado",
+      visitas.ip_do_pedido(pedido_falso(**{"x-real-ip": "200.1.2.3",
+                                           "cf-connecting-ip": "6.6.6.6"}))
+      == "200.1.2.3")
+with TestClient(app) as cliente:
+    r = cliente.get("/admin/visitas", headers={"X-Admin-Token": "token-de-teste"})
+    check("sem contagem de visitas, o admin diz onde olhar",
+          r.json().get("desligado") is True and "Analytics" in r.json()["nota"],
+          r.json())
+    check("e as páginas continuam abrindo", cliente.get("/").status_code == 200)
+check("ninguém foi registrado em memória", visitas.registro.ativas() == [])
 
 if falhas:
     print(f"\n{len(falhas)} checagem(ns) falharam.")

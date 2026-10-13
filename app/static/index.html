@@ -539,6 +539,11 @@
   @media (prefers-reduced-motion: reduce){*{transition:none !important;}}
   @media (max-width:420px){.lam-options{grid-template-columns:1fr;}}
 </style>
+<!-- Vercel Analytics: é ele que conta as visitas quando o site roda na
+     Vercel (lá o REGISTRAR_VISITAS fica em 0). Fora dela o script não existe
+     e o navegador só registra um 404, sem efeito na página. -->
+<script>window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 <div class="wrap">

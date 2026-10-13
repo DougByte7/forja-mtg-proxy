@@ -10,7 +10,7 @@ termina. Então as duas coisas viram comando:
 
     python -m app.tarefas migrar               # tabelas, colunas novas, admin inicial
     python -m app.tarefas cartas [--forcar]    # base de cartas, se estiver velha
-    python -m app.tarefas faxina               # sessões vencidas
+    python -m app.tarefas faxina               # sessões, preços e cotações vencidos
 
 Quem roda `cartas` e `faxina` todo dia é o GitHub Actions
 (`.github/workflows/tarefas.yml`); `migrar` roda a cada deploy que muda o
@@ -22,7 +22,8 @@ No homelab nada disto é obrigatório: `MIGRAR_NO_STARTUP` e
 """
 import sys
 
-from . import artes, cartas, decks, log, storage, usuarios
+from . import (artes, cache_precos, cartas, cotacao_job, decks, log, storage,
+               usuarios)
 
 
 def migrar() -> None:
@@ -31,6 +32,8 @@ def migrar() -> None:
     storage.init_db()
     decks.init_db()
     cartas.init_db()
+    cache_precos.criar_tabela()
+    cotacao_job.criar_tabela()
     usuarios.init_db()
     artes.init_db()
     # Só faz alguma coisa se não existir conta nenhuma — ver `semear_admin`.
@@ -51,9 +54,15 @@ def sincronizar_cartas(forcar: bool = False) -> dict | None:
 
 
 def faxina() -> int:
-    """Sessões vencidas. Os PDFs ficam de fora: na Vercel o site não guarda
-    PDF nenhum, e os do worker ele mesmo apaga."""
-    return usuarios.podar_sessoes()
+    """Sessões vencidas, preços vencidos no cache e cotações velhas. Os PDFs
+    ficam de fora: o site não guarda PDF nenhum, e os do worker ele mesmo
+    apaga."""
+    sessoes = usuarios.podar_sessoes()
+    precos = cache_precos.podar()
+    cotacoes = cotacao_job.podar()
+    log.evento("tarefas", "faxina", sessoes=sessoes, precos=precos,
+               cotacoes=cotacoes)
+    return sessoes
 
 
 def main(argv: list[str]) -> int:

@@ -118,17 +118,25 @@ def classificar(user_agent: str, cabecalhos) -> tuple[str, str]:
     return "suspeito", "sem cabeçalho de navegador"
 
 
-def ip_do_pedido(request) -> str:
-    """O IP real do visitante, atrás do túnel da Cloudflare.
+# Quem diz o IP de verdade depende de quem está na frente. No homelab é o
+# túnel da Cloudflare (`cf-connecting-ip`); na Vercel é a própria Vercel
+# (`x-real-ip`). Cabeçalho de quem NÃO está na frente é forjável por qualquer
+# um — por isso é configuração, e não "o primeiro que aparecer".
+IP_CABECALHO = os.environ.get("IP_CABECALHO", "cf-connecting-ip").strip().lower()
+PAIS_CABECALHO = os.environ.get("PAIS_CABECALHO", "cf-ipcountry").strip().lower()
 
-    `request.client.host` seria o IP do túnel — o mesmo pra todo mundo, o que
-    faria todas as visitas virarem uma só. O `CF-Connecting-IP` é posto pela
-    Cloudflare e é o único confiável AQUI, porque este backend só é alcançado
-    através dela. Num outro deploy, esse cabeçalho seria forjável.
+
+def ip_do_pedido(request) -> str:
+    """O IP real do visitante, atrás de quem estiver na frente.
+
+    `request.client.host` seria o IP do proxy — o mesmo pra todo mundo, o que
+    faria todas as visitas virarem uma só. O cabeçalho de `IP_CABECALHO` é
+    posto pelo proxy e é o único confiável, porque este backend só é
+    alcançado através dele. Ver o comentário acima.
     """
-    cf = request.headers.get("cf-connecting-ip")
+    cf = request.headers.get(IP_CABECALHO) if IP_CABECALHO else None
     if cf:
-        ip = cf.strip()
+        ip = cf.split(",")[0].strip()
     else:
         encaminhado = request.headers.get("x-forwarded-for", "")
         ip = (encaminhado.split(",")[0].strip()

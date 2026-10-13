@@ -48,7 +48,6 @@ import os
 import re
 import secrets
 import sqlite3
-import threading
 import time
 import uuid
 
@@ -77,14 +76,18 @@ CADASTRO_TOKEN = os.environ.get("CADASTRO_TOKEN", "")
 # e-mail, e o que o login precisa é de um texto único que a pessoa lembre.
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-# Freio de tentativa, em memória. Não vai pro banco de propósito: reiniciar o
-# processo limpar o freio é aceitável (quem reinicia o container é o dono), e
-# gravar cada senha errada num arquivo daria a quem lê o banco um mapa de
-# quais logins existem.
+# Freio de tentativa, no banco (`login_freio`). Já foi em memória, e lá ele
+# não serviria mais: num servidor em que cada requisição pode cair num
+# processo diferente, o contador de um não vê os erros do outro, e o freio
+# deixaria de frear.
+#
+# A chave NÃO vai crua: gravar cada login que errou a senha daria a quem lê o
+# banco um mapa de quais logins existem. Vai como HMAC com a `ADMIN_TOKEN`,
+# que não se desfaz sem o segredo. A linha some quando a pessoa acerta, e a
+# faxina diária leva as velhas.
 MAX_TENTATIVAS = int(os.environ.get("LOGIN_TENTATIVAS", "5"))
 ESPERA_SEGUNDOS = float(os.environ.get("LOGIN_ESPERA", "30"))
-_tentativas: dict[str, list] = {}     # chave -> [quantas, quando_libera]
-_trava = threading.Lock()
+_SEGREDO_FREIO = (os.environ.get("ADMIN_TOKEN", "") or "forja").encode("utf-8")
 
 
 class SenhaFraca(ValueError):
@@ -130,6 +133,14 @@ def init_db():
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sessoes_usuario "
                      "ON sessoes(usuario_id)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS login_freio (
+                chave TEXT PRIMARY KEY,
+                quantas INTEGER NOT NULL DEFAULT 0,
+                libera_em REAL NOT NULL DEFAULT 0,
+                em REAL
+            )
+        """)
         conn.commit()
     finally:
         conn.close()
@@ -297,27 +308,70 @@ def apagar(usuario_id: str) -> bool:
 # Freio de tentativa
 # ---------------------------------------------------------------------------
 
+def _chave_freio(chave: str) -> str:
+    return hmac.new(_SEGREDO_FREIO, chave.encode("utf-8"),
+                    hashlib.sha256).hexdigest()
+
+
 def _freado(chave: str) -> float:
-    """Quantos segundos faltam pra esta chave poder tentar de novo. 0 = pode."""
-    with _trava:
-        registro = _tentativas.get(chave)
-        if not registro:
-            return 0.0
-        return max(0.0, registro[1] - time.time())
+    """Quantos segundos faltam pra esta chave poder tentar de novo. 0 = pode.
+
+    Banco fora responde 0: o login em si também precisa do banco, então
+    frear aqui só trocaria um erro por outro.
+    """
+    conn = _conn()
+    try:
+        linha = conn.execute("SELECT libera_em FROM login_freio WHERE chave=?",
+                             (_chave_freio(chave),)).fetchone()
+    except sqlite3.Error:
+        return 0.0
+    finally:
+        conn.close()
+    return max(0.0, float(linha[0]) - time.time()) if linha else 0.0
 
 
 def _errou(chave: str) -> None:
-    with _trava:
-        registro = _tentativas.setdefault(chave, [0, 0.0])
-        registro[0] += 1
-        if registro[0] >= MAX_TENTATIVAS:
-            registro[0] = 0
-            registro[1] = time.time() + ESPERA_SEGUNDOS
+    """Conta um erro. No N-ésimo, zera a conta e marca a espera — numa
+    instrução só, pra dois erros simultâneos não se atropelarem."""
+    agora = time.time()
+    conn = _conn()
+    try:
+        conn.execute(
+            "INSERT INTO login_freio (chave, quantas, libera_em, em) "
+            "VALUES (?, 1, 0, ?) ON CONFLICT(chave) DO UPDATE SET "
+            "quantas = CASE WHEN quantas + 1 >= ? THEN 0 ELSE quantas + 1 END, "
+            "libera_em = CASE WHEN quantas + 1 >= ? THEN ? ELSE libera_em END, "
+            "em = excluded.em",
+            (_chave_freio(chave), agora, MAX_TENTATIVAS, MAX_TENTATIVAS,
+             agora + ESPERA_SEGUNDOS))
+        conn.commit()
+    except sqlite3.Error as e:
+        log.aviso("usuarios", "freio-nao-gravou", motivo=str(e))
+    finally:
+        conn.close()
 
 
 def _acertou(chave: str) -> None:
-    with _trava:
-        _tentativas.pop(chave, None)
+    conn = _conn()
+    try:
+        conn.execute("DELETE FROM login_freio WHERE chave=?",
+                     (_chave_freio(chave),))
+        conn.commit()
+    except sqlite3.Error:
+        pass
+    finally:
+        conn.close()
+
+
+def zerar_freio() -> None:
+    """Solta todo mundo. É o que reiniciar o processo fazia quando o freio
+    morava na memória; aqui serve aos testes e a quem precisar na mão."""
+    conn = _conn()
+    try:
+        conn.execute("DELETE FROM login_freio")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -497,11 +551,14 @@ def encerrar_todas(usuario_id: str) -> int:
 
 
 def podar_sessoes() -> int:
-    """Apaga as sessões vencidas. Chamada pela faxina diária."""
+    """Apaga as sessões vencidas — e o freio de login esquecido há um dia,
+    que já não segura ninguém. Chamada pela faxina diária."""
     conn = _conn()
     try:
         cur = conn.execute("DELETE FROM sessoes WHERE expira_em < ?",
                            (time.time(),))
+        conn.execute("DELETE FROM login_freio WHERE em < ?",
+                     (time.time() - 86400,))
         conn.commit()
     finally:
         conn.close()

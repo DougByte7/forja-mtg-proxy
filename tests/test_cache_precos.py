@@ -4,8 +4,10 @@ Confere o cache de ofertas por carta.
 Motivo de existir: cada carta nova custa uma requisição à LigaMagic, num
 site que pede pra gente não fazer isso (veja `ligamagic.py`). Um cache que
 erra o alvo — que não acha o que guardou, ou que devolve o que já venceu —
-vira acesso a mais lá. E um cache que EXPLODE (arquivo corrompido, disco
-cheio) não pode derrubar a cotação junto.
+vira acesso a mais lá. E um cache que EXPLODE (linha corrompida, banco fora)
+não pode derrubar a cotação junto.
+
+O cache mora no banco de cartas (arquivo, ou o Turso com `CARTAS_DB_URL`).
 
 O cache é por CARTA, não por deck: trocar uma carta da lista não pode jogar
 fora o trabalho das outras.
@@ -26,9 +28,11 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
-# O diretório é lido na importação do módulo, então tem que vir antes dele.
+# O banco é lido na importação do módulo, então tem que vir antes dele.
 TMP = tempfile.mkdtemp(prefix="teste-cache-precos-")
-os.environ["COTACAO_CACHE_DIR"] = TMP
+os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
+os.environ["LOG_DIR"] = TMP
+os.environ["LOG_NIVEL"] = "ERROR"
 
 from app import cache_precos  # noqa: E402
 from app.cotacao import Oferta  # noqa: E402
@@ -85,35 +89,65 @@ try:
        cache_precos.ler("liga", "Sensei's Divining Top")[0].preco, 140.25)
     longo = "Secret Lair " + "x" * 300
     cache_precos.gravar("liga", longo, [Oferta(loja="Y", preco=1.0)])
-    eq("nome absurdamente longo não estoura o sistema de arquivos",
+    eq("nome absurdamente longo vai e volta",
        cache_precos.ler("liga", longo)[0].loja, "Y")
+    eq("caixa e espaço não fazem outra carta",
+       len(cache_precos.ler("liga", "sol   RING")), 2)
+
+    # Em lote: é o que a cotação usa pra saber quanto já andou.
+    varios = cache_precos.ler_varios("liga", ["Sol Ring", "Cultivate",
+                                              "Nunca Vista", "Carta Fantasma"])
+    eq("ler_varios traz só o que tem",
+       sorted(varios), ["Carta Fantasma", "Cultivate", "Sol Ring"])
+    eq("com as ofertas de cada uma", varios["Sol Ring"], OFERTAS)
+    eq("ler_varios de lista vazia", cache_precos.ler_varios("liga", []), {})
+
+    def mexer(sql, params):
+        conn = cache_precos._conn()
+        conn.execute(sql, params)
+        conn.commit()
+        conn.close()
 
     # Vencido conta como ausente.
-    caminho = cache_precos._caminho("liga", "Sol Ring")
     velho = time.time() - cache_precos.TTL - 60
-    os.utime(caminho, (velho, velho))
+    mexer("UPDATE cache_precos SET em=? WHERE chave=?",
+          (velho, cache_precos.chave("Sol Ring")))
     eq("cache vencido devolve None", cache_precos.ler("liga", "Sol Ring"), None)
+    check("e some do lote também",
+          "Sol Ring" not in cache_precos.ler_varios("liga", ["Sol Ring"]))
+    eq("a faxina apaga o vencido", cache_precos.podar() >= 1, True)
 
     # Cache quebrado nunca derruba a cotação — devolve None e a busca refaz.
-    with open(cache_precos._caminho("liga", "Cultivate"), "w") as f:
-        f.write("{isso nao e json")
-    eq("arquivo corrompido devolve None", cache_precos.ler("liga", "Cultivate"), None)
+    mexer("UPDATE cache_precos SET ofertas=? WHERE chave=?",
+          ("{isso nao e json", cache_precos.chave("Cultivate")))
+    eq("linha corrompida devolve None", cache_precos.ler("liga", "Cultivate"), None)
+    eq("e o lote pula ela", cache_precos.ler_varios("liga", ["Cultivate"]), {})
 
-    with open(cache_precos._caminho("liga", "Formato Velho"), "w") as f:
-        f.write('[{"campo_que_nao_existe_mais": 1}]')
+    cache_precos.gravar("liga", "Formato Velho", [])
+    mexer("UPDATE cache_precos SET ofertas=? WHERE chave=?",
+          ('[{"campo_que_nao_existe_mais": 1}]', cache_precos.chave("Formato Velho")))
     eq("formato antigo devolve None",
        cache_precos.ler("liga", "Formato Velho"), None)
 
-    # Gravar num lugar impossível avisa no log e segue a vida.
-    salvo = cache_precos.DIR
+    # Banco que não abre avisa no log e segue a vida. A falha vem da própria
+    # conexão, pra valer igual com arquivo e com o Turso.
+    import sqlite3
+
+    def banco_fora():
+        raise sqlite3.OperationalError("banco fora (dublê)")
+
+    salvo = cache_precos._conn
     try:
-        cache_precos.DIR = "/proc/nao-da-pra-escrever-aqui"
+        cache_precos._conn = banco_fora
         cache_precos.gravar("liga", "Qualquer", OFERTAS)
         check("falha ao gravar não levanta exceção", True)
+        eq("e ler num banco que não abre é só ausência",
+           cache_precos.ler("liga", "Qualquer"), None)
     except Exception as e:
         check("falha ao gravar não levanta exceção", False, f"({e})")
+        eq("e o lote também", cache_precos.ler_varios("liga", ["Sol Ring"]), {})
     finally:
-        cache_precos.DIR = salvo
+        cache_precos._conn = salvo
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 
