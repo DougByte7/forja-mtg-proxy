@@ -13,7 +13,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (artes, artes_enviadas, calc, cambio, cartas, cleanup,
+from . import (artes, artes_enviadas, blob, calc, cambio, cartas, cleanup,
                cotacao_job, decks, detalhe_carta, edhrec, estoque, fulfillment, importar, log, manabase,
                mpcfill, notify, pix, poder, spellbook, storage, tarefas,
                usuarios, visitas)
@@ -1248,6 +1248,45 @@ def enviar_arte(deck_id: str, arquivo: UploadFile, nome: str = Form(...),
     return {"escolha": escolha}
 
 
+@app.post("/decks/{deck_id}/artes/enviar/inicio")
+def iniciar_envio_de_arte(deck_id: str,
+                          quem: dict = Depends(exige_login_no_deck)):
+    """Primeiro passo de subir uma arte: diz ao navegador COMO subir.
+
+    `{"modo": "direto"}` é o POST de sempre (`/artes/enviar`, pro disco).
+    Com o Vercel Blob ligado, devolve um token que só serve pra subir UM
+    arquivo de imagem num caminho só, e o navegador manda o arquivo direto
+    pra lá — uma função da Vercel não aceita corpo maior que 4,5 MB, e a arte
+    do MPC passa disso. Ver `artes_enviadas.iniciar_envio`.
+    """
+    _deck_das_artes(deck_id, quem)
+    return artes_enviadas.iniciar_envio()
+
+
+@app.post("/decks/{deck_id}/artes/enviar/blob")
+def concluir_envio_de_arte(deck_id: str, corpo: dict = Body(default={}),
+                           quem: dict = Depends(exige_login_no_deck)):
+    """Segundo passo, com o Blob: o arquivo já está lá. O site confere a
+    imagem igual ao envio direto e já a escolhe como arte daquele lado da
+    carta. `corpo`: `{url, nome, face, copia, arquivo}`."""
+    _deck_das_artes(deck_id, quem)
+    try:
+        guardada = artes_enviadas.registrar_do_blob(str(corpo.get("url") or ""))
+        escolha = artes.escolher(
+            deck_id, str(corpo.get("nome") or ""), guardada["arte_id"],
+            face=str(corpo.get("face") or "frente"),
+            copia=int(corpo.get("copia") or 0),
+            arquivo=str(corpo.get("arquivo") or "")[:200], fonte="Enviada",
+            dpi=guardada["dpi"], baixa_resolucao=guardada["baixa_resolucao"])
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+    except blob.BlobError as e:
+        raise HTTPException(502, str(e))
+    log.evento("artes", "enviou", deck=deck_id, carta=escolha["nome"],
+               dpi=escolha["dpi"], via="blob")
+    return {"escolha": escolha}
+
+
 # O nome do arquivo enviado é o sha256 do conteúdo: o mesmo endereço nunca
 # muda de imagem, e o navegador pode guardar pra sempre.
 _ARTE_IMUTAVEL = {"Cache-Control": "public, max-age=31536000, immutable"}
@@ -1258,6 +1297,12 @@ def arte_enviada(sha: str):
     """O arquivo enviado, como veio. Pública como o link do deck: quem abre o
     deck vê as artes dele, e o endereço é o sha256 do conteúdo, que ninguém
     adivinha."""
+    no_blob = artes_enviadas.url(sha)
+    if no_blob:
+        # O endereço do Blob nunca muda pra este sha, então o redirecionamento
+        # também pode ficar no cache. O worker da impressora chega aqui e
+        # segue o redirecionamento sozinho.
+        return RedirectResponse(no_blob, status_code=307, headers=_ARTE_IMUTAVEL)
     if not artes_enviadas.existe(sha):
         raise HTTPException(404, "Arte não encontrada.")
     return FileResponse(artes_enviadas.caminho(sha),
@@ -1267,6 +1312,9 @@ def arte_enviada(sha: str):
 @app.get("/artes/enviadas/{sha}/miniatura")
 def miniatura_enviada(sha: str):
     """A miniatura da arte enviada, já sem sangria — a da grade e da prévia."""
+    no_blob = artes_enviadas.url_miniatura(sha)
+    if no_blob:
+        return RedirectResponse(no_blob, status_code=307, headers=_ARTE_IMUTAVEL)
     caminho = artes_enviadas.caminho_miniatura(sha)
     if not caminho or not os.path.isfile(caminho):
         raise HTTPException(404, "Arte não encontrada.")

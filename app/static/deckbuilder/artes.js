@@ -856,19 +856,63 @@ function usarScryfall(k){
                   dpi: baixa ? 0 : DPI_SCRYFALL, baixa_resolucao: baixa});
 }
 
+/* Sobe o arquivo direto pro Vercel Blob, com o token que o site assinou pra
+   este caminho só (ver `app/blob.py`). Uma função da Vercel não aceita corpo
+   maior que 4,5 MB, e a arte do MPC passa disso — por isso o arquivo não
+   atravessa o site. Devolve o endereço público do arquivo. */
+async function subirProBlob(arquivo, envio){
+  const loja = envio.token.split("_")[3];
+  const resp = await fetch(
+    `${envio.api}/?pathname=${encodeURIComponent(envio.pathname)}`, {
+      method: "PUT",
+      body: arquivo,
+      headers: {
+        "authorization": `Bearer ${envio.token}`,
+        "x-api-version": envio.api_version,
+        "x-vercel-blob-store-id": loja,
+        "x-vercel-blob-access": "public",
+        "x-content-type": arquivo.type || "application/octet-stream",
+        "x-content-length": String(arquivo.size),
+        "x-add-random-suffix": "0",
+      },
+    });
+  if (!resp.ok) {
+    throw new Error(resp.status === 400 || resp.status === 403
+      ? "O armazenamento recusou o arquivo (tamanho ou formato)."
+      : `O armazenamento não aceitou o envio (${resp.status}).`);
+  }
+  return (await resp.json()).url;
+}
+
 async function enviarArquivo(arquivo){
   if (!arquivo || !arte.carta || arte.enviando) return;
   const carta = arte.carta, face = arte.face, copia = arte.copia;
-  const corpo = new FormData();
-  corpo.append("arquivo", arquivo);
-  corpo.append("nome", nomeDaArte(carta));
-  corpo.append("face", face);
-  corpo.append("copia", String(copia));
   arte.enviando = true;
   $("arte-envio-estado").textContent = "Enviando…";
   let r;
   try {
-    r = await api(`/decks/${estado.id}/artes/enviar`, {method: "POST", body: corpo});
+    // O site diz como subir: direto pra ele (disco, no homelab) ou pro Blob.
+    const envio = await api(`/decks/${estado.id}/artes/enviar/inicio`, {method: "POST"});
+    if (envio.modo === "blob") {
+      if (arquivo.size > envio.maximo_bytes) {
+        throw new Error(`O arquivo passa de ${Math.round(envio.maximo_bytes / 1048576)} MB.`);
+      }
+      const url = await subirProBlob(arquivo, envio);
+      $("arte-envio-estado").textContent = "Conferindo a imagem…";
+      r = await api(`/decks/${estado.id}/artes/enviar/blob`, {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: JSON.stringify({url, nome: nomeDaArte(carta), face, copia,
+                              arquivo: arquivo.name || ""}),
+      });
+    } else {
+      const corpo = new FormData();
+      corpo.append("arquivo", arquivo);
+      corpo.append("nome", nomeDaArte(carta));
+      corpo.append("face", face);
+      corpo.append("copia", String(copia));
+      r = await api(`/decks/${estado.id}/artes/enviar`, {method: "POST", body: corpo});
+    }
   } catch (e){
     if (arte.carta === carta) $("arte-envio-estado").textContent = e.message;
     return;

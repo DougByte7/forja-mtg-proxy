@@ -461,6 +461,10 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `tests/test_artes_enviadas.py` — a arte enviada e a da Scryfall: proporção,
   arquivo quebrado, cantos transparentes no PDF e as rotas de envio:
   `python tests/test_artes_enviadas.py`.
+- `tests/test_blob.py` — a arte enviada pelo Vercel Blob: o formato e as
+  amarras do token, a porta contra endereço de fora, a mesma conferência do
+  disco e o redirecionamento. Blob de mentira, sem rede:
+  `python tests/test_blob.py`.
 - `tests/test_cotacao.py` — leitura da decklist do XML e a matemática da
   cotação: `python tests/test_cotacao.py`.
 - `tests/test_ligamagic.py` — decodificação do preço da LigaMagic contra uma
@@ -1986,9 +1990,21 @@ inteira. O que mudou foi de onde baixar, e três cuidados:
   deixa escolher. Os cantos vêm transparentes, com branco por baixo: o PDF os
   pinta com a cor da borda da própria carta.
 * **O arquivo enviado só entra na proporção da carta, com ou sem sangria** —
-  qualquer outra sairia esticada. Fica no `ARTES_ENVIADAS_DIR`, com o sha256
-  do conteúdo como nome, e **nada o apaga**: o id vai no XML do pedido, e o
-  PDF é montado depois de a pessoa pagar.
+  qualquer outra sairia esticada. O id é o sha256 do conteúdo, e **nada apaga
+  um arquivo aceito**: o id vai no XML do pedido, e o PDF é montado depois de
+  a pessoa pagar. Onde ele mora depende do `.env`:
+  * **Disco** (`ARTES_ENVIADAS_DIR`), sem `BLOB_READ_WRITE_TOKEN`: o navegador
+    manda o arquivo pro site num POST só (`/decks/{id}/artes/enviar`).
+  * **Vercel Blob**, com `BLOB_READ_WRITE_TOKEN`. Uma função da Vercel não
+    aceita corpo maior que 4,5 MB, então o arquivo não passa pelo site: a tela
+    pede um token (`/artes/enviar/inicio`), que o site assina pra UM caminho,
+    até `ARTE_ENVIADA_MAX_MB` e só imagem; sobe direto pro Blob; e avisa
+    (`/artes/enviar/blob`). O site baixa, confere igual ao disco, sobe a
+    miniatura e anota o endereço na tabela `artes_enviadas`. Arquivo recusado
+    (ou repetido) sai do Blob. `GET /artes/enviadas/{sha}` redireciona pro
+    Blob — inclusive pro worker da impressora, que segue o redirecionamento.
+    Não há SDK em Python: o protocolo (token, upload, apagar) está em
+    `app/blob.py`, lido do `@vercel/blob`.
 * **"Usar a arte padrão nas que faltam"**, na aba Artes, escolhe de uma vez a
   imagem que a tela já mostrava como padrão — a URL dela, na base local, traz
   o id da impressão — sem passar por cima do que já foi escolhido.

@@ -22,8 +22,8 @@ No homelab nada disto é obrigatório: `MIGRAR_NO_STARTUP` e
 """
 import sys
 
-from . import (artes, cache_precos, cartas, cotacao_job, decks, log, storage,
-               usuarios)
+from . import (artes, artes_enviadas, cache_precos, cartas, cotacao_job,
+               decks, log, storage, usuarios)
 
 
 def migrar() -> None:
@@ -36,6 +36,7 @@ def migrar() -> None:
     cotacao_job.criar_tabela()
     usuarios.init_db()
     artes.init_db()
+    artes_enviadas.criar_tabela()
     # Só faz alguma coisa se não existir conta nenhuma — ver `semear_admin`.
     usuarios.semear_admin()
     log.evento("tarefas", "migrou")
