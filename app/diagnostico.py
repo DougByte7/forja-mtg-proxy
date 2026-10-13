@@ -8,7 +8,9 @@ costuma desconfiar disso — ou barrar de vez. Se uma fonte barrar, a cotação
 ou a importação daquela fonte para de funcionar sem erro nenhum na cara.
 
 Então: uma requisição a cada fonte, do jeito que o módulo dela faz (mesmo
-User-Agent), e um veredito por fonte:
+User-Agent), e um veredito por fonte (mesmos cabeçalhos do módulo, senão o teste mede
+outra coisa — a Scryfall, por exemplo, recusa com 400 quem não manda
+`Accept`):
 
 * `responde` — 2xx, 3xx ou 404 (o 404 é a fonte respondendo "não tem isso",
   que prova que chegamos nela);
@@ -36,9 +38,11 @@ def _fontes() -> list[dict]:
     return [
         {"id": "ligamagic", "uso": "cotação (preço no Brasil)",
          "url": ligamagic.url_da_carta("Sol Ring"), "ua": ligamagic.USER_AGENT},
+        # A Scryfall responde 400 a quem não manda `Accept` — o módulo dela
+        # manda (`scryfall._sessao`), então o teste manda igual.
         {"id": "scryfall", "uso": "cotação (preço lá fora) e nomes",
          "url": f"{scryfall.BASE}/cards/named?exact=Sol%20Ring",
-         "ua": scryfall.USER_AGENT},
+         "ua": scryfall.USER_AGENT, "extra": {"Accept": "application/json"}},
         {"id": "edhrec", "uso": "sugestões de carta",
          "url": f"{edhrec.BASE}/commanders/atraxa-praetors-voice.json",
          "ua": edhrec.USER_AGENT},
@@ -71,6 +75,7 @@ def _veredito(r: requests.Response) -> tuple[str, str]:
 def _testar(fonte: dict) -> dict:
     inicio = time.monotonic()
     cabecalhos = {"User-Agent": fonte["ua"]} if fonte["ua"] else {}
+    cabecalhos.update(fonte.get("extra") or {})
     try:
         r = requests.get(fonte["url"], headers=cabecalhos, timeout=TIMEOUT,
                          allow_redirects=True)
