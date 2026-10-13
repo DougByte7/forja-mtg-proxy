@@ -44,8 +44,7 @@ from .poder import NOME_DO_BRACKET
 
 BASE = os.environ.get("EDHREC_URL", "https://json.edhrec.com/pages")
 SITE = os.environ.get("EDHREC_SITE", "https://edhrec.com")
-USER_AGENT = os.environ.get(
-    "EDHREC_USER_AGENT", ident.user_agent("sugestões de deck"))
+USER_AGENT = ident.do_ambiente("EDHREC_USER_AGENT", "sugestões de deck")
 TIMEOUT = float(os.environ.get("EDHREC_TIMEOUT", "20"))
 TENTATIVAS = int(os.environ.get("EDHREC_TENTATIVAS", "3"))
 BACKOFF = float(os.environ.get("EDHREC_BACKOFF", "2"))

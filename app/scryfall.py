@@ -29,8 +29,7 @@ from .cotacao import Oferta, face_da_frente
 BASE = "https://api.scryfall.com"
 # A Scryfall pede um User-Agent identificável — é regra deles, não gentileza.
 # O e-mail de contato sai do .env, não do código — ver `identidade.py`.
-USER_AGENT = os.environ.get(
-    "SCRYFALL_USER_AGENT", identidade.user_agent("cotador de deck"))
+USER_AGENT = identidade.do_ambiente("SCRYFALL_USER_AGENT", "cotador de deck")
 # Eles pedem 50-100 ms entre requisições, mas na prática cortam bem antes
 # disso, e o corte NÃO parece ser só por taxa: medindo aqui, o 429 chega
 # depois de ~20 requisições mesmo a 0,25 s, e com o IP "descansado" demora

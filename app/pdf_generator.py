@@ -104,8 +104,7 @@ DRIVE_WORKERS = int(os.environ.get("DRIVE_WORKERS", "4"))
 _CHUNK = 256 * 1024
 # Como este download se apresenta. Vale pro Drive e pra Scryfall: é a mesma
 # sessão, e a Scryfall EXIGE um UA identificável (ver `identidade`).
-USER_AGENT = os.environ.get(
-    "SCRYFALL_USER_AGENT", ident.user_agent("PDF de impressão"))
+USER_AGENT = ident.do_ambiente("SCRYFALL_USER_AGENT", "PDF de impressão")
 
 # --- Guias de corte (mesma ideia do proxyprint.taxiera.net) ---
 # As marcas ficam FORA das cartas, nas margens da folha, alinhadas com cada

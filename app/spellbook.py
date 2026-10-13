@@ -43,8 +43,7 @@ from . import identidade as ident, log, plataforma, ritmo
 
 BASE = os.environ.get("SPELLBOOK_URL", "https://backend.commanderspellbook.com")
 SITE = os.environ.get("SPELLBOOK_SITE", "https://commanderspellbook.com")
-USER_AGENT = os.environ.get(
-    "SPELLBOOK_USER_AGENT", ident.user_agent("busca de combos"))
+USER_AGENT = ident.do_ambiente("SPELLBOOK_USER_AGENT", "busca de combos")
 TIMEOUT = float(os.environ.get("SPELLBOOK_TIMEOUT", "20"))
 TENTATIVAS = int(os.environ.get("SPELLBOOK_TENTATIVAS", "3"))
 BACKOFF = float(os.environ.get("SPELLBOOK_BACKOFF", "1"))

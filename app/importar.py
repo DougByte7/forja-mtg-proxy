@@ -74,7 +74,8 @@ MOXFIELD_API = os.environ.get("MOXFIELD_API", "https://api2.moxfield.com/v3")
 # Só pro dia em que o Moxfield pedir um identificador combinado. Vazio manda
 # o User-Agent honesto de sempre, que é o que funciona hoje — ver o topo,
 # "passar por navegador é o que leva 403".
-MOXFIELD_USER_AGENT = os.environ.get("MOXFIELD_USER_AGENT", "")
+# `strip()` e vazio = "use o padrão" — ver `identidade.do_ambiente`.
+MOXFIELD_USER_AGENT = (os.environ.get("MOXFIELD_USER_AGENT") or "").strip()
 
 # Teto de linhas distintas que aceitamos de fora. É o mesmo espírito do
 # `decks.MAX_ENTRADAS`: impedir que um link estranho vire uma lista de 50 mil

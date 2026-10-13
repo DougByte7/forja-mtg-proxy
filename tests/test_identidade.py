@@ -74,6 +74,16 @@ try:
        liga, "ForjaDeProxies/1.0 (cotador de deck; contato: fulano@exemplo.com)")
     eq("as duas fontes se apresentam igual", scry, liga)
 
+    # Variável VAZIA é ausente, não "User-Agent em branco". O `.env.example`
+    # traz estas linhas vazias, e na Vercel o site saiu sem UA nenhum — a
+    # Scryfall recusou tudo com 400 (`generic_user_agent`).
+    liga, scry = recarregar(LIGAMAGIC_USER_AGENT="", SCRYFALL_USER_AGENT="  ")
+    check("UA vazio no ambiente cai no padrão do projeto",
+          liga.startswith("ForjaDeProxies/1.0") and scry.startswith("ForjaDeProxies/1.0"),
+          (liga, scry))
+    liga, _ = recarregar(LIGAMAGIC_USER_AGENT="Outro/2.0 (teste)")
+    eq("UA preenchido continua mandando", liga, "Outro/2.0 (teste)")
+
     # Quem manda de uma conta de serviço e lê em outra cai aqui.
     liga, scry = recarregar(NOTIFY_TO="reserva@exemplo.com")
     check("sem SMTP_USER, o contato vem do NOTIFY_TO",

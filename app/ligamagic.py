@@ -40,8 +40,7 @@ BASE = "https://www.ligamagic.com.br/"
 # Identifica quem está batendo, com contato. Se eles quiserem falar com a
 # gente (ou bloquear), que seja pelo caminho fácil em vez de a gente se
 # passar por navegador anônimo. O e-mail sai do .env — ver `identidade.py`.
-USER_AGENT = os.environ.get(
-    "LIGAMAGIC_USER_AGENT", identidade.user_agent("cotador de deck"))
+USER_AGENT = identidade.do_ambiente("LIGAMAGIC_USER_AGENT", "cotador de deck")
 
 # Segundos entre requisições PRA LIGAMAGIC (o sprite vem de outro host e não
 # entra nessa conta). O robots.txt pede 360; ver o aviso no topo do arquivo.

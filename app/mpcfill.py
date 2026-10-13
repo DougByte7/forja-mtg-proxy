@@ -45,8 +45,7 @@ import requests
 from . import calc, identidade as ident, log, plataforma, ritmo
 
 BASE = os.environ.get("MPCFILL_URL", "https://mpcfill.com")
-USER_AGENT = os.environ.get(
-    "MPCFILL_USER_AGENT", ident.user_agent("escolha de arte"))
+USER_AGENT = ident.do_ambiente("MPCFILL_USER_AGENT", "escolha de arte")
 TIMEOUT = float(os.environ.get("MPCFILL_TIMEOUT", "30"))
 TENTATIVAS = int(os.environ.get("MPCFILL_TENTATIVAS", "3"))
 BACKOFF = float(os.environ.get("MPCFILL_BACKOFF", "1"))

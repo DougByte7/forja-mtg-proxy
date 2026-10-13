@@ -48,3 +48,16 @@ def user_agent(componente: str) -> str:
         print("[identidade] SMTP_USER/NOTIFY_TO vazios no .env — as consultas "
               "de preço vão sair sem e-mail de contato no User-Agent.")
     return f"{PROJETO} ({componente})"
+
+
+def do_ambiente(variavel: str, componente: str) -> str:
+    """O User-Agent de uma variável do `.env`, ou o padrão do projeto.
+
+    VAZIO conta como ausente, de propósito. O `.env.example` traz estas
+    variáveis em branco (`SCRYFALL_USER_AGENT=`), e um `.env` copiado dele —
+    ou importado inteiro no painel da Vercel — faz o `os.environ.get(VAR,
+    padrão)` devolver o texto vazio em vez do padrão. Foi assim que o site na
+    Vercel saiu sem User-Agent nenhum e a Scryfall passou a recusar tudo com
+    400 (`generic_user_agent`).
+    """
+    return (os.environ.get(variavel) or "").strip() or user_agent(componente)

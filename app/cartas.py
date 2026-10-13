@@ -48,8 +48,7 @@ BASE = "https://api.scryfall.com"
 # `default_cards` traz cada impressão de cada edição (~500 mil) e serviria só
 # pra quem escolhe arte, que não é o caso aqui.
 BULK = os.environ.get("CARTAS_BULK", "oracle_cards")
-USER_AGENT = os.environ.get(
-    "SCRYFALL_USER_AGENT", ident.user_agent("base de cartas"))
+USER_AGENT = ident.do_ambiente("SCRYFALL_USER_AGENT", "base de cartas")
 TIMEOUT = float(os.environ.get("CARTAS_TIMEOUT", "60"))
 # De quanto em quanto tempo a base se atualiza sozinha. A Scryfall republica
 # o bulk uma vez por dia, então não adianta pedir mais que isso.
