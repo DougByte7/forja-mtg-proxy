@@ -26,26 +26,18 @@ def _send(msg: EmailMessage):
 LAM_LABELS = {"single": "Um lado", "double": "Dois lados", "foil": "Foil"}
 
 
-def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,
-                             pdf_fresh_url: str,
-                             pdf_local_url: str | None = None):
+def send_payment_claim_email(order: dict, print_url: str):
     """
     O cliente clicou em "Pagamento realizado, enviar notificação".
 
     Isso é só um AVISO — nada foi verificado com o banco. O e-mail traz o
-    resumo do pedido, um link "Ver PDF" pra conferir a folha antes de gastar
-    papel e um link "Imprimir" que só deve ser clicado depois de conferir no
-    app do banco que o Pix caiu mesmo. É o clique em Imprimir que marca o
-    pedido como pago e manda pra impressora.
+    resumo do pedido e um link "Imprimir" que só deve ser clicado depois de
+    conferir no app do banco que o Pix caiu mesmo. É o clique em Imprimir que
+    confirma o pagamento e põe o pedido na fila da impressora.
 
-    O PDF vai como link, não como anexo: pedido grande passa fácil do limite
-    de 25 MB do Gmail.
-
-    `pdf_local_url` (opcional, vem do LOCAL_BASE_URL) é a MESMA folha pelo IP
-    do homelab. Vale a pena quando o e-mail é aberto de dentro de casa: o link
-    público sobe o arquivo até a Cloudflare e traz de volta, e o PDF de um
-    pedido grande tem centenas de MB. Sem LOCAL_BASE_URL o e-mail sai igual ao
-    de antes, com dois botões.
+    A folha não vai no e-mail nem tem link: ela é montada pelo worker da
+    impressora e se confere no painel dele, na rede de casa. O site não sabe
+    onde fica esse painel, e por isso o e-mail só diz que ele existe.
     """
     lam = LAM_LABELS.get(order["lamination"], order["lamination"])
 
@@ -67,31 +59,10 @@ def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,
         f"Espaços em branco na última página: {order['blanks']}\n"
         f"Laminação: {lam}\n"
         f"Valor cobrado: R$ {order['amount']:.2f}\n\n"
-        f"1) Confere a folha antes de gastar papel:\n{pdf_url}\n"
-        + (f"   Em casa, direto pelo IP (bem mais rápido, não passa pelo "
-           f"túnel):\n   {pdf_local_url}\n" if pdf_local_url else "")
-        + "\n"
-        f"2) Se o Pix caiu e o PDF está certo, imprime:\n{print_url}\n\n"
-        f"Só abrir o PDF não marca nada como pago. Quem faz isso — e manda pra "
-        f"fila da impressora — é o link 2.\n\n"
-        f"Alguma carta saiu como \"FALHA NO DOWNLOAD\"? Gera o PDF de novo:\n"
-        f"{pdf_fresh_url}"
+        f"A folha já está sendo montada no worker: confira no painel dele, na "
+        f"rede de casa, antes de gastar papel.\n\n"
+        f"Se o Pix caiu e a folha está certa, imprime:\n{print_url}\n"
     )
-
-    # Botão e explicação extras só quando há LOCAL_BASE_URL configurada; sem
-    # ela o e-mail sai exatamente como antes. Tracejado de propósito, pra não
-    # competir com o "Ver PDF" de fora, que é o que funciona de qualquer lugar.
-    botao_local = (
-        f"""<a href="{pdf_local_url}"
-       style="background:#ffffff;color:#1b1730;text-decoration:none;
-              border:2px dashed #1b1730;padding:12px 22px;border-radius:8px;
-              font-weight:bold;display:inline-block;margin:0 8px 10px 0;">Ver PDF (rede local)</a>"""
-        if pdf_local_url else "")
-    nota_local = (
-        """<b>Ver PDF (rede local)</b> é a mesma folha pelo IP do homelab —
-    em casa abre bem mais rápido, porque não sobe pelo túnel e volta. Fora
-    de casa esse link não funciona.<br>"""
-        if pdf_local_url else "")
 
     msg.add_alternative(
         f"""\
@@ -110,23 +81,15 @@ def send_payment_claim_email(order: dict, pdf_url: str, print_url: str,
     <tr><td>Valor cobrado</td><td><b>R$ {order['amount']:.2f}</b></td></tr>
   </table>
   <p style="margin:24px 0;">
-    <a href="{pdf_url}"
-       style="background:#ffffff;color:#1b1730;text-decoration:none;
-              border:2px solid #1b1730;padding:12px 22px;border-radius:8px;
-              font-weight:bold;display:inline-block;margin:0 8px 10px 0;">Ver PDF</a>
-    {botao_local}
     <a href="{print_url}"
        style="background:#C9A227;color:#1A1408;text-decoration:none;
               padding:14px 24px;border:2px solid #C9A227;border-radius:8px;
               font-weight:bold;display:inline-block;margin:0 0 10px 0;">Imprimir</a>
   </p>
   <p style="font-size:12px;color:#666;line-height:1.6;">
-    <b>Ver PDF</b> abre a folha pra você conferir antes de gastar papel — não
-    marca nada como pago.<br>
-    {nota_local}
-    <b>Imprimir</b> marca o pedido como pago e manda pra fila da impressora.<br>
-    Alguma carta saiu como "FALHA NO DOWNLOAD"?
-    <a href="{pdf_fresh_url}" style="color:#666;">Gerar o PDF de novo.</a>
+    A folha já está sendo montada no worker: confira no painel dele, na rede
+    de casa, antes de gastar papel.<br>
+    <b>Imprimir</b> confirma o pagamento e põe o pedido na fila da impressora.
   </p>
 </body></html>
 """,

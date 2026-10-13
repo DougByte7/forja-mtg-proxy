@@ -18,20 +18,25 @@ A cada volta do laço:
    operador confere o Pix, pra impressão sair na hora do clique. Um só por
    volta pra que um pedido grande montando não segure uma impressão que
    chegou depois.
-3. **Batida.** De `BATIDA_SEGUNDOS` em `BATIDA_SEGUNDOS`: tinta e filas do
+3. **Painel.** O que alguém pediu no painel da rede local (`worker/painel.py`):
+   montar ou refazer a folha de um pedido pra conferir antes de imprimir.
+4. **Batida.** De `BATIDA_SEGUNDOS` em `BATIDA_SEGUNDOS`: tinta e filas do
    CUPS, que o site mostra no aviso público e no admin.
-4. **Faxina.** Os PDFs velhos (`app/cleanup.py`), uma vez por dia.
+5. **Faxina.** Os PDFs velhos (`app/cleanup.py`), uma vez por dia.
 
-É um processo de uma linha só, de propósito: duas montagens do mesmo PDF ao
-mesmo tempo escreviam no mesmo arquivo (ver o comentário da trava em
-`app/fulfillment.py`), e aqui não há como isso acontecer.
+Quem MONTA é sempre este laço, de uma linha só, de propósito: duas montagens
+do mesmo PDF ao mesmo tempo escreviam no mesmo arquivo e saíam corrompidas.
+O painel roda numa thread ao lado, mas só lê o disco e deixa pedidos numa
+fila (`pedir_montagem`) — e acorda o laço pra ele não esperar a próxima volta.
 
 Rodar:
 
     FORJA_API_URL=https://forja.exemplo.com WORKER_TOKEN=... python -m worker
 """
 import os
+import queue
 import sys
+import threading
 import time
 
 import requests
@@ -56,6 +61,15 @@ TIMEOUT = float(os.environ.get("WORKER_TIMEOUT_SEGUNDOS", "30"))
 READIANTAR_SEGUNDOS = float(os.environ.get("WORKER_READIANTAR_SEGUNDOS", "3600"))
 
 _ROTA = {"pedido": "pedidos", "combo": "combos"}
+TIPOS = tuple(_ROTA)
+
+# Acorda o laço antes do fim da espera: o painel pediu uma montagem.
+_acordar = threading.Event()
+# O que o painel pediu pra montar: `(tipo, id, refazer)`.
+_pedidos_do_painel: "queue.Queue[tuple[str, str, bool]]" = queue.Queue()
+# Como vai cada montagem, pro painel mostrar. Só o laço escreve.
+_trava = threading.Lock()
+_montagens: dict[str, dict] = {}   # "tipo:id" -> {estado, feitas, total, ...}
 
 
 class Api:
@@ -97,23 +111,88 @@ def _pronto(tipo: str, item_id: str) -> bool:
     return os.path.exists(path) and not os.path.exists(_marcador(path))
 
 
+def falhas_no_disco(tipo: str, item_id: str) -> int:
+    """Quantas cartas saíram como quadro de falha na folha que está no disco."""
+    try:
+        with open(_marcador(_caminho(tipo, item_id))) as f:
+            return int(f.read().strip() or 0)
+    except (OSError, ValueError):
+        return 0
+
+
+def _chave(tipo: str, item_id: str) -> str:
+    return f"{tipo}:{item_id}"
+
+
+def montagem(tipo: str, item_id: str) -> dict | None:
+    """Como vai a montagem desta folha nesta rodada do worker, ou None."""
+    with _trava:
+        atual = _montagens.get(_chave(tipo, item_id))
+        return dict(atual) if atual else None
+
+
+def _anotar(tipo: str, item_id: str, **campos) -> None:
+    with _trava:
+        _montagens.setdefault(_chave(tipo, item_id), {}).update(campos)
+
+
 def montar(api: Api, tipo: str, item_id: str) -> tuple[str, int]:
     """Monta a folha a partir do que o site devolve. `(caminho, falhas)`."""
-    if tipo == "pedido":
-        pedido = api.get(f"/worker/pedidos/{item_id}")
-        path, falhas = pdf_generator.generate_pdf(pedido["xml_text"],
-                                                  order_id=item_id)
-    else:
-        combo = api.get(f"/worker/combos/{item_id}")
-        path, falhas, _mapa = pdf_generator.generate_combined_pdf(
-            combo["pedidos"], combo_id=item_id)
+    _anotar(tipo, item_id, estado="montando", feitas=0, total=0,
+            inicio=time.time(), detalhe=None)
+
+    def andou(feitas: int, total: int):
+        _anotar(tipo, item_id, feitas=feitas, total=total)
+
+    try:
+        if tipo == "pedido":
+            pedido = api.get(f"/worker/pedidos/{item_id}")
+            path, falhas = pdf_generator.generate_pdf(
+                pedido["xml_text"], order_id=item_id, on_progress=andou)
+        else:
+            combo = api.get(f"/worker/combos/{item_id}")
+            path, falhas, _mapa = pdf_generator.generate_combined_pdf(
+                combo["pedidos"], combo_id=item_id, on_progress=andou)
+    except Exception as e:
+        _anotar(tipo, item_id, estado="erro", detalhe=f"{e}")
+        raise
     marcador = _marcador(path)
     if falhas:
         with open(marcador, "w") as f:
             f.write(str(falhas))
     elif os.path.exists(marcador):
         os.remove(marcador)
+    _anotar(tipo, item_id, estado="pronto", falhas=falhas, fim=time.time())
     return path, falhas
+
+
+def pedir_montagem(tipo: str, item_id: str, refazer: bool = False) -> None:
+    """O painel pediu esta folha. Quem monta é o laço — ver o topo."""
+    if tipo not in TIPOS:
+        raise ValueError(f"tipo desconhecido: {tipo!r}")
+    _anotar(tipo, item_id, estado="na-fila", detalhe=None)
+    _pedidos_do_painel.put((tipo, item_id, refazer))
+    _acordar.set()
+
+
+def atender_painel(api: Api) -> None:
+    """Monta tudo o que o painel pediu até agora."""
+    while True:
+        try:
+            tipo, item_id, refazer = _pedidos_do_painel.get_nowait()
+        except queue.Empty:
+            return
+        if not refazer and _pronto(tipo, item_id):
+            _anotar(tipo, item_id, estado="pronto",
+                    falhas=0, fim=time.time())
+            continue
+        try:
+            _path, falhas = montar(api, tipo, item_id)
+            log.evento("worker", "montou-pelo-painel", tipo=tipo, id=item_id,
+                       falhas=falhas, refez=refazer)
+        except Exception as e:
+            log.aviso("worker", "painel-nao-montou", tipo=tipo, id=item_id,
+                      motivo=f"{type(e).__name__}: {e}")
 
 
 def garantir(api: Api, tipo: str, item_id: str) -> tuple[str, int]:
@@ -249,7 +328,28 @@ def uma_volta(api: Api) -> None:
     fila = api.get("/worker/fila")
     for item in fila.get("imprimir", []):
         imprimir(api, item["tipo"], item["id"])
+    atender_painel(api)
     adiantar(api, fila.get("adiantar", []))
+
+
+# O painel da rede local (`worker/painel.py`). 0 desliga.
+PAINEL_PORTA = int(os.environ.get("WORKER_PAINEL_PORTA", "8001"))
+
+
+def _subir_painel() -> None:
+    """O painel numa thread ao lado do laço. Ver `worker/painel.py`."""
+    import uvicorn
+
+    from .painel import criar_app
+
+    # Uma `Api` própria: a `Session` do requests não é feita pra ser dividida
+    # entre threads, e o painel pergunta a lista pro site enquanto o laço
+    # trabalha.
+    app = criar_app(Api(API, TOKEN))
+    servidor = uvicorn.Server(uvicorn.Config(
+        app, host="0.0.0.0", port=PAINEL_PORTA, log_level="warning"))
+    threading.Thread(target=servidor.run, daemon=True).start()
+    log.evento("worker", "painel", porta=PAINEL_PORTA)
 
 
 def rodar() -> None:
@@ -260,6 +360,8 @@ def rodar() -> None:
     api = Api(API, TOKEN)
     log.evento("worker", "subiu", api=API, fila=printer.PRINTER_QUEUE or None,
                intervalo=INTERVALO)
+    if PAINEL_PORTA:
+        _subir_painel()
 
     ultima_batida = 0.0
     ultima_faxina = 0.0
@@ -278,4 +380,7 @@ def rodar() -> None:
                 agora - ultima_faxina >= cleanup.CLEANUP_INTERVAL_HOURS * 3600:
             ultima_faxina = agora
             faxina()
-        time.sleep(INTERVALO)
+        # Espera a próxima volta, ou o painel pedir alguma coisa — o que vier
+        # primeiro.
+        _acordar.wait(INTERVALO)
+        _acordar.clear()

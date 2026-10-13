@@ -15,7 +15,8 @@ services:
       - "8000:8000"
 
   # O worker da impressora (worker/main.py). Pergunta a fila pro site e
-  # imprime; o site nunca fala com ele. Por isso não tem porta nenhuma.
+  # imprime; o site nunca fala com ele. A única porta é a do painel da rede
+  # de casa.
   #
   # Volume PRÓPRIO de propósito: o worker não lê o banco do site (só a API), e
   # os PDFs dele não podem dividir pasta com os que o site ainda monta pro
@@ -33,6 +34,11 @@ services:
       PDF_OUTPUT_DIR: /app/data/pdfs
       LOG_DIR: /app/data/logs
     command: ["python", "-m", "worker"]
+    # O painel de conferir a folha (worker/painel.py), pra rede de casa. Não
+    # exponha esta porta pra fora: o site não precisa dela, e ninguém de fora
+    # também não.
+    ports:
+      - "8001:8001"
     mem_limit: ${FORJA_MEM_LIMIT:-3g}
     memswap_limit: ${FORJA_MEM_LIMIT:-3g}
     volumes:

@@ -12,11 +12,12 @@ O que se está travando aqui é o que dói se quebrar em silêncio:
    acabamento de metade das pessoas e não tem desfazer depois de plastificado;
    pedido cancelado não pode gastar papel.
 3. **A folha que sai.** As cartas de todos os pedidos, na ordem, sem página
-   nova entre um e outro — e com a legenda dizendo de quem é cada posição.
+   nova entre um e outro — e com a legenda dizendo de quem é cada posição. A
+   folha é montada pelo worker da impressora (o site não monta PDF), com os
+   pedidos na ordem que o site entrega em `GET /worker/combos/{id}`.
 4. **Imprimir confirma TODOS.** É um papel só com carta de várias pessoas:
    ou o conjunto inteiro entra na fila de impressão, ou nenhum.
-5. **A porta.** Toda rota nova de /admin exige o token, e o link assinado de
-   um pedido não abre a folha combinada.
+5. **A porta.** Toda rota nova de /admin exige o token.
 
 O Drive fica de fora: `_fetch_all` é trocado por imagens de mentira, então o
 teste roda sem rede.
@@ -156,7 +157,6 @@ check("branco que não fecha folha não vira economia",
 ROTAS = [
     ("POST", "/admin/combos"),
     ("GET", "/admin/combos/qualquer"),
-    ("POST", "/admin/combos/qualquer/pdf"),
     ("POST", "/admin/combos/qualquer/imprimir"),
     ("DELETE", "/admin/combos/qualquer"),
 ]
@@ -197,9 +197,8 @@ check("economiza a folha prometida",
 # desconto retroativo pra quem já fechou preço.
 check("soma o valor dos pedidos, sem desconto pela folha economizada",
       round(combo["valor_total"], 2) == 10.00, combo["valor_total"])
-check("o link da folha sai assinado e relativo",
-      combo["pdf_url"].startswith(f"/combos/{combo['id']}/pdf?token="),
-      combo["pdf_url"])
+check("o site não devolve link de PDF nenhum",
+      not any(k.startswith("pdf_url") for k in combo), list(combo))
 check("nenhum XML de deck vaza na resposta", "xml_text" not in r.text)
 
 # O id sai do CONJUNTO: marcar na outra ordem tem que cair na mesma folha,
@@ -218,18 +217,26 @@ check("combinação inventada = 404",
       cliente.get("/admin/combos/naoexiste", headers=AUTH).status_code == 404)
 
 # --- 5. a folha que sai ---------------------------------------------------
-estado = cliente.post(f"/admin/combos/{combo['id']}/pdf", headers=AUTH).json()
-esperar = time.time() + 30
-while estado["estado"] == "montando" and time.time() < esperar:
-    time.sleep(0.2)
-    estado = cliente.post(f"/admin/combos/{combo['id']}/pdf", headers=AUTH).json()
-check("a folha combinada monta", estado["estado"] == "pronto", estado)
-check("sem carta faltando", estado.get("falhas") == 0, estado)
-check("e a resposta traz o mapa de quem é quem",
-      [m["id"] for m in estado.get("mapa", [])] == [ana, bruno, carla],
-      estado.get("mapa"))
+# Quem monta é o worker, com o que o site entrega nesta rota — na ordem de
+# impressão, com o XML de cada pedido.
+os.environ.setdefault("WORKER_TOKEN", "token-do-worker")
+import app.main as site  # noqa: E402
+site.WORKER_TOKEN = site.WORKER_TOKEN or "token-do-worker"
+WAUTH = {"Authorization": f"Bearer {site.WORKER_TOKEN}"}
+entregue = cliente.get(f"/worker/combos/{combo['id']}", headers=WAUTH).json()
+check("o site entrega os pedidos do combo na ordem de impressão",
+      [p["id"] for p in entregue["pedidos"]] == [ana, bruno, carla],
+      [p["id"] for p in entregue["pedidos"]])
+caminho, falhas_pdf, mapa = pdf_generator.generate_combined_pdf(
+    entregue["pedidos"], combo_id=combo["id"])
+check("a folha combinada monta, sem carta faltando", falhas_pdf == 0, falhas_pdf)
+check("e o mapa diz de quem é quem",
+      [m["id"] for m in mapa] == [ana, bruno, carla], mapa)
+check("o mesmo mapa que a tela recebe ao combinar",
+      [(m["id"], m["inicio"], m["fim"]) for m in mapa]
+      == [(m["id"], m["inicio"], m["fim"]) for m in combo["mapa"]],
+      (mapa, combo["mapa"]))
 
-caminho = os.path.join(pdf_generator.OUTPUT_DIR, f"combo-{combo['id']}.pdf")
 bytes_pdf = open(caminho, "rb").read()
 paginas = len(re.findall(rb"/Type\s*/Page[^s]", bytes_pdf))
 check("a folha combinada tem 3 páginas", paginas == 3, paginas)
@@ -242,7 +249,7 @@ for pedido in (ana, bruno, carla):
 check("contra 4 páginas imprimindo um por um", separadas == 4, separadas)
 
 # A legenda da margem é o que diz de quem é cada carta depois do corte.
-rotulo = pdf_generator._rotulo_combinado(combo["id"], estado["mapa"])
+rotulo = pdf_generator._rotulo_combinado(combo["id"], mapa)
 primeira = rotulo(1, 3, 0, 9)
 check("a legenda da folha 1 nomeia os dois pedidos que caem nela",
       f"#{ana}" in primeira and f"#{bruno}" in primeira and f"#{carla}" not in primeira,
@@ -252,21 +259,6 @@ check("e dá a posição DENTRO da folha, de 1 a 9",
 check("a legenda aguenta nome que a fonte do PDF não escreve",
       pdf_generator._texto_seguro("Ana 🂡 Prado") == "Ana ? Prado",
       pdf_generator._texto_seguro("Ana 🂡 Prado"))
-
-# --- 6. o link assinado ---------------------------------------------------
-r = cliente.get(combo["pdf_url"])
-check("o link assinado abre a folha", r.status_code == 200, r.status_code)
-check("e vem como PDF", r.headers["content-type"] == "application/pdf",
-      r.headers.get("content-type"))
-check("sem token não abre",
-      cliente.get(f"/combos/{combo['id']}/pdf").status_code == 401)
-# O token do pedido é assinado sobre outro assunto (`combo:<id>`), então não
-# pode servir de chave pra folha combinada — e vice-versa.
-token_do_pedido = cliente.get("/admin/pedidos", headers=AUTH).json()["pedidos"][0]
-token_do_pedido = token_do_pedido["pdf_url"].split("token=")[1]
-check("o token de um pedido não abre a folha combinada",
-      cliente.get(f"/combos/{combo['id']}/pdf?token={token_do_pedido}"
-                  ).status_code == 401)
 
 # --- 7. imprimir confirma TODOS ------------------------------------------
 check("antes de imprimir, ninguém está pago",
@@ -287,9 +279,9 @@ check("a resposta diz quais pedidos foram confirmados",
 
 # --- 8. desfazer ----------------------------------------------------------
 r = cliente.delete(f"/admin/combos/{combo['id']}", headers=AUTH)
-check("desfaz a combinação", r.status_code == 200 and r.json()["pdf_apagado"],
+check("desfaz a combinação", r.status_code == 200 and r.json()["ok"],
       r.text[:90])
-check("a folha some do disco", not os.path.exists(caminho))
+check("a combinação some do banco", storage.get_combo(combo["id"]) is None)
 check("mas os pedidos continuam lá, pagos",
       all(storage.get_order(i) and storage.get_order(i)["status"] == "a_imprimir"
           for i in (ana, bruno, carla)))
@@ -347,9 +339,7 @@ check("a limpeza reconhece combo-*.pdf",
 check("e continua sem encostar no banco",
       not cleanup._is_ours("orders.db") and not cleanup._is_ours("combo.pdf"))
 
-# --- 11. montar a folha combinada não mexeu no que já existia ------------
-check("o PDF de um pedido só continua saindo",
-      cliente.post(f"/admin/pedidos/{ana}/pdf", headers=AUTH).status_code == 200)
+# --- 11. o resto continua de pé -------------------------------------------
 check("a listagem do admin continua de pé",
       cliente.get("/admin/pedidos", headers=AUTH).status_code == 200)
 

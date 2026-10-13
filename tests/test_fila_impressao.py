@@ -274,7 +274,31 @@ r = cliente.post(f"/admin/pedidos/{eva}/status", data={"status": "notified"},
 check("tirar um pedido do combo da fila solta ele do combo",
       storage.get_order(eva)["impressao_combo"] is None)
 
-# --- 10. batida -------------------------------------------------------------------
+# --- 10. o painel pede, o laço monta ------------------------------------------
+gil = semear("Gil Rocha", "gg")
+storage.mark_notified(gil)
+caminho_gil = os.path.join(pdf_generator.OUTPUT_DIR, f"pedido-{gil}.pdf")
+worker.pedir_montagem("pedido", gil, refazer=True)
+check("pedido do painel fica na fila do laço",
+      worker.montagem("pedido", gil)["estado"] == "na-fila")
+antes = len(impressos)
+worker.atender_painel(api)
+check("o laço monta o que o painel pediu", os.path.exists(caminho_gil))
+check("e o painel vê a folha pronta",
+      worker.montagem("pedido", gil)["estado"] == "pronto")
+check("montar pelo painel não imprime nada", len(impressos) == antes)
+check("nem tira o pedido de onde estava", status_de(gil) == "notified")
+conferir = cliente.get("/worker/conferir", headers=WAUTH).json()
+check("a lista de conferir traz quem avisou que pagou",
+      gil in [p["id"] for p in conferir["pedidos"]])
+check("e as folhas combinadas recentes, com os nomes",
+      any(c["id"] == combo["id"] and "Eva Souza" in c["nomes"]
+          for c in conferir["combos"]), conferir["combos"])
+check("sem XML nenhum", "xml_text" not in str(conferir))
+check("a lista de conferir é do worker",
+      cliente.get("/worker/conferir").status_code == 401)
+
+# --- 11. batida -------------------------------------------------------------------
 worker.tinta.estado = lambda: {"estado": "baixo", "nivel": 12, "marcadores": [],
                                "fonte": "impressora"}
 worker.tinta.diagnostico = lambda: {"fila": "fila-de-teste", "informa_nivel": True}

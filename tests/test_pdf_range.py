@@ -1,23 +1,24 @@
 """
-Confere como o backend ENTREGA o PDF pronto (`GET /orders/{id}/pdf`).
+Confere como o PDF montado volta pro navegador — hoje pelo painel do worker
+da impressora (`worker/painel.py`, `GET /pdf/{tipo}/{id}`), que é o único
+lugar onde a folha é vista antes de ir pro papel.
 
 Não é sobre montar a folha — é sobre os bytes voltarem de um jeito que o
 visualizador consiga usar. O arquivo é grande (centenas de MB num pedido
-grande) e sobe por um link doméstico, então duas coisas mudam "lento" pra
-"parece travado", e é isso que está travado aqui:
+grande), então duas coisas mudam "lento" pra "parece travado", e é isso que
+está travado aqui:
 
 1. **Range.** Sem `Accept-Ranges` e sem 206, o visualizador não consegue ler o
    índice no fim do arquivo pra desenhar a primeira página antes do resto:
    ele baixa tudo e só então mostra alguma coisa, e conexão que cai recomeça
    do zero. O `FileResponse` do Starlette 0.38 não faz isso sozinho, então
-   quem faz é o `_servir_pdf` — se alguém trocar de volta por um FileResponse
-   pelado, estes testes caem.
-2. **Revalidação.** Antes era `no-store`, e reabrir o mesmo PDF pagava o
-   download inteiro de novo. Agora vale ETag: 304 enquanto o arquivo for o
-   mesmo, bytes novos depois do "Refazer PDF".
+   quem faz é o `worker/entrega.py` — se alguém trocar de volta por um
+   FileResponse pelado, estes testes caem.
+2. **Revalidação.** ETag: 304 enquanto o arquivo for o mesmo, bytes novos
+   depois do "Refazer".
 
-A montagem em si (Drive, reportlab) fica de fora de propósito: aqui o PDF é
-um arquivo qualquer plantado no lugar onde o `fulfillment` procura.
+E o resto do painel: a senha, a lista que vem do site, e o "Montar" que só
+deixa pedido na fila do laço do worker (quem monta é sempre o laço).
 
     python tests/test_pdf_range.py
 """
@@ -29,12 +30,12 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
-TOKEN = "token-de-teste-123"
-os.environ["ADMIN_TOKEN"] = TOKEN
-os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(), "orders.db")
+SENHA = "senha-do-painel"
 os.environ["PDF_OUTPUT_DIR"] = tempfile.mkdtemp()
 os.environ["LOG_DIR"] = tempfile.mkdtemp()
 os.environ["LOG_NIVEL"] = "ERROR"
+os.environ["FORJA_API_URL"] = "http://site-de-teste"
+os.environ["WORKER_PAINEL_SENHA"] = SENHA
 
 try:
     from fastapi.testclient import TestClient
@@ -44,8 +45,8 @@ except ImportError:
 
 os.chdir(RAIZ)
 
-from app import fulfillment, storage  # noqa: E402
-from app.main import app  # noqa: E402
+from worker import main as worker  # noqa: E402
+from worker.painel import criar_app  # noqa: E402
 
 falhas = []
 
@@ -56,28 +57,52 @@ def check(nome, condicao, detalhe=""):
         falhas.append(nome)
 
 
-storage.init_db()
-cliente = TestClient(app)
+pedido = "abc12345"
 
-pedido = storage.create_order(
-    "<order><details/></order>", "single", "Ana Prado", "abc123",
-    {"total": 12.5, "qty": 9, "backs_count": 0, "pages": 1, "blanks": 0},
-)[0]
+
+class ApiFalsa:
+    """O site, do jeito que o painel o vê: só a lista de conferir."""
+    fora = False
+
+    def get(self, caminho):
+        if self.fora:
+            raise ConnectionError("site fora (dublê)")
+        assert caminho == "/worker/conferir", caminho
+        return {"pedidos": [{"id": pedido, "status": "notified",
+                             "customer_name": "Ana <Prado>", "pages": 1,
+                             "lamination": "single", "deck_hash": "abc123"},
+                            {"id": "naomontado", "status": "a_imprimir",
+                             "customer_name": "Bruno", "pages": 2,
+                             "lamination": "double", "deck_hash": "def456"}],
+                "combos": []}
+
+
+def basic(usuario, senha):
+    import base64
+    return {"Authorization": "Basic " + base64.b64encode(
+        f"{usuario}:{senha}".encode()).decode()}
+
+
+api = ApiFalsa()
+cliente = TestClient(criar_app(api), headers=basic("qualquer", SENHA))
+sem_senha = TestClient(criar_app(api))
 
 # O "PDF": conteúdo qualquer, só precisa ser reconhecível byte a byte. O
-# `fulfillment` considera pronto todo arquivo que existe sem o marcador
+# worker considera pronto todo arquivo que existe sem o marcador
 # `.incompleto` do lado.
 CORPO = bytes(range(256)) * 40          # 10 240 bytes
-Path(fulfillment.pdf_path(pedido)).write_bytes(CORPO)
+CAMINHO = worker._caminho("pedido", pedido)
+Path(CAMINHO).write_bytes(CORPO)
 
-URL = fulfillment.pdf_url(pedido, base="")
-AUTH = {"X-Admin-Token": TOKEN}
+URL = f"/pdf/pedido/{pedido}"
 
-# --- 1. a porta continua fechada ----------------------------------------
-check("sem token = 401",
-      cliente.get(f"/orders/{pedido}/pdf").status_code == 401)
-check("token errado = 401",
-      cliente.get(f"/orders/{pedido}/pdf?token=chute").status_code == 401)
+# --- 1. a porta ----------------------------------------------------------
+check("sem senha = 401", sem_senha.get(URL).status_code == 401)
+check("e pede usuário e senha ao navegador",
+      "Basic" in sem_senha.get(URL).headers.get("www-authenticate", ""))
+check("senha errada = 401",
+      TestClient(criar_app(api), headers=basic("x", "chute")).get(URL).status_code == 401)
+check("a lista também é fechada", sem_senha.get("/").status_code == 401)
 
 # --- 2. resposta inteira -------------------------------------------------
 r = cliente.get(URL)
@@ -160,17 +185,44 @@ check("If-Range diferente = arquivo inteiro",
 
 # --- 6. remontar a folha invalida o cache -------------------------------
 NOVO = CORPO[::-1]
-Path(fulfillment.pdf_path(pedido)).write_bytes(NOVO)
-os.utime(fulfillment.pdf_path(pedido), (0, 0))  # mtime diferente, garantido
+Path(CAMINHO).write_bytes(NOVO)
+os.utime(CAMINHO, (0, 0))  # mtime diferente, garantido
 r = cliente.get(URL, headers={"If-None-Match": etag})
 check("PDF remontado não volta 304",
       r.status_code == 200 and r.content == NOVO, r.status_code)
 check("e o ETag mudou", r.headers.get("etag") != etag, r.headers.get("etag"))
 
-# --- 7. o header de admin também abre -----------------------------------
-r = cliente.get(f"/orders/{pedido}/pdf", headers=AUTH)
-check("X-Admin-Token serve no lugar do link assinado",
-      r.status_code == 200, r.status_code)
+# --- 7. o que não é folha não sai ---------------------------------------
+check("folha não montada = 404",
+      cliente.get("/pdf/pedido/naomontado").status_code == 404)
+check("tipo inventado = 404", cliente.get(f"/pdf/outro/{pedido}").status_code == 404)
+check("id com cara de caminho = 404",
+      cliente.get("/pdf/pedido/..%2F..%2Fetc").status_code == 404)
+
+# --- 8. a lista ----------------------------------------------------------
+r = cliente.get("/")
+check("a lista abre", r.status_code == 200, r.status_code)
+check("com o nome escapado (veio do cliente)",
+      "Ana &lt;Prado&gt;" in r.text and "Ana <Prado>" not in r.text)
+check("folha pronta tem Ver PDF", f'href="/pdf/pedido/{pedido}"' in r.text)
+check("e a não montada tem Montar", f'action="/montar/pedido/naomontado"' in r.text)
+api.fora = True
+r = cliente.get("/")
+check("site fora: a página abre e diz o que houve",
+      r.status_code == 200 and "Não consegui falar com o site" in r.text)
+api.fora = False
+
+# --- 9. Montar só deixa na fila do laço ---------------------------------
+r = cliente.post("/montar/pedido/naomontado", data={"refazer": "0"},
+                 follow_redirects=False)
+check("Montar volta pra lista (303)", r.status_code == 303, r.status_code)
+check("e deixa o pedido na fila do laço",
+      worker._pedidos_do_painel.get_nowait() == ("pedido", "naomontado", False))
+check("e acorda o laço", worker._acordar.is_set())
+check("a lista mostra que está na fila",
+      "Na fila do worker" in cliente.get("/").text)
+check("montar tipo inventado = 404",
+      cliente.post("/montar/outro/x", data={"refazer": "0"}).status_code == 404)
 
 print()
 if falhas:

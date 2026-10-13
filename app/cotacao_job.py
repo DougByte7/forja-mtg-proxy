@@ -1,8 +1,7 @@
 """
 Roda a cotação em segundo plano e guarda o andamento pra tela acompanhar.
 
-Mesmo motivo do PDF (ver `fulfillment.request_pdf`): a cotação de um deck
-grande leva minutos — a LigaMagic é uma requisição por carta com intervalo
+A cotação de um deck grande leva minutos — a LigaMagic é uma requisição por carta com intervalo
 mínimo entre elas — e esperar isso DENTRO da requisição HTTP estoura o teto
 do túnel da Cloudflare. Então quem pede não espera: dispara a thread e vai
 perguntando como está.

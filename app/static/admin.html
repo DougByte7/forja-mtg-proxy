@@ -364,6 +364,7 @@
   <p class="rodape" id="rodapePedidos">
     <b>Imprimir</b> confirma o Pix e põe o pedido na fila da impressora — é a única ação que gasta papel.<br>
     Marque dois ou mais pedidos pra juntá-los numa folha só e aproveitar o papel.<br>
+    A folha se confere no painel do worker, na rede de casa — o site não monta PDF.<br>
     Conferir o Pix no app do banco continua sendo com você.
   </p>
   <p class="rodape" id="rodapeDecks" hidden>
@@ -383,9 +384,7 @@
   <div class="combo-dentro">
     <div class="combo-conta" id="comboConta"></div>
     <div class="combo-acoes">
-      <button class="btn-ouro" id="comboMontar">Montar PDF combinado</button>
-      <button class="btn-sec" id="comboVer" hidden>Ver PDF</button>
-      <button class="btn-sec" id="comboVerLocal" hidden>Ver PDF (rede local)</button>
+      <button class="btn-ouro" id="comboMontar">Combinar</button>
       <button class="btn-sec" id="comboImprimir" hidden>Imprimir</button>
       <button class="btn-sec" id="comboLimpar">Limpar</button>
     </div>
@@ -452,7 +451,7 @@ let ocupado = 0;           // ações longas em andamento (montagem, impressão)
    dos dados de TODOS os marcados, não só dos visíveis. */
 const selecionados = new Set();
 const conhecidos = {};     // id -> pedido, acumulado entre recargas
-let comboAtual = null;     // {id, chave, pdf_url, pdf_url_local} já montado
+let comboAtual = null;     // {id, chave} da combinação já criada
 let comboNota = null;      // {tipo, texto} mostrado na barra
 let comboMapa = null;      // quem cai em qual folha, do backend
 
@@ -1105,20 +1104,6 @@ function acoesDoPedido(p) {
   div.className = "p-acoes";
   const aberto = p.status === "pending" || p.status === "notified";
 
-  if (p.pdf_url) {
-    div.appendChild(botao("Ver PDF", () => window.open(p.pdf_url, "_blank")));
-  }
-  // Mesma folha pelo IP do homelab (LOCAL_BASE_URL no .env). O botão acima é
-  // relativo, então já vai direto quando esta tela foi aberta pela rede local
-  // — mas quando ela vem pelo túnel, o PDF inteiro sobe e volta por ele. Este
-  // atalho tira o túnel do caminho, e some quando não há LOCAL_BASE_URL.
-  if (p.pdf_url_local) {
-    div.appendChild(botao("Ver PDF (rede local)",
-                          () => window.open(p.pdf_url_local, "_blank")));
-  }
-  div.appendChild(botao("Montar PDF", (b) => montarPdf(p, b)));
-  div.appendChild(botao("Refazer PDF", (b) => montarPdf(p, b, true)));
-
   const rotuloImprimir = {impresso: "Imprimir de novo",
                          erro_impressao: "Tentar de novo"}[p.status];
   if (aberto || rotuloImprimir) {
@@ -1173,40 +1158,6 @@ async function mudarStatus(p, status, mensagem) {
     await carregar();
   } catch (e) {
     if (e.message !== "401") anotar(p.id, "erro", e.message);
-  }
-}
-
-/* Monta a folha sem sair da tela.
-   Vale a pena adiantar: são dezenas de imagens de ~10 MB vindas do Drive, e
-   é bem melhor descobrir que uma carta não baixa AGORA do que na hora que o
-   cliente estiver esperando. */
-async function montarPdf(p, botaoEl, fresh) {
-  botaoEl.disabled = true;
-  ocupado++;
-  try {
-    const q = fresh ? "?fresh=true" : "";
-    let estado = await api(`/admin/pedidos/${p.id}/pdf${q}`, {method: "POST"});
-    while (estado.estado === "montando") {
-      const onde = estado.total
-        ? `${estado.feitas} de ${estado.total} imagens baixadas`
-        : "lendo a lista de cartas";
-      anotar(p.id, "andando", `Montando o PDF — ${onde}.`);
-      await new Promise((r) => setTimeout(r, 4000));
-      estado = await api(`/admin/pedidos/${p.id}/pdf`, {method: "POST"});
-    }
-    if (estado.estado === "erro") {
-      anotar(p.id, "erro", "Não consegui montar o PDF: " + estado.detalhe);
-    } else if (estado.falhas) {
-      anotar(p.id, "erro", `PDF pronto, mas ${estado.falhas} carta(s) não ` +
-             `baixaram do Drive e viraram quadro de falha. Confira antes de imprimir.`);
-    } else {
-      anotar(p.id, "ok", "PDF pronto — abra em Ver PDF pra conferir.");
-    }
-  } catch (e) {
-    if (e.message !== "401") anotar(p.id, "erro", e.message);
-  } finally {
-    ocupado--;
-    botaoEl.disabled = false;
   }
 }
 
@@ -1277,8 +1228,8 @@ function confirmarImpressao(p) {
 function confirmarApagar(p) {
   abrirModal({
     titulo: "Apagar de vez?",
-    texto: `O pedido <b>#${escapar(p.id)}</b> sai do banco junto com o XML do deck e o ` +
-           `PDF montado — isso não tem volta. Pra tirar da fila sem perder o ` +
+    texto: `O pedido <b>#${escapar(p.id)}</b> sai do banco junto com o XML do deck ` +
+           `— isso não tem volta. Pra tirar da fila sem perder o ` +
            `histórico, use <b>Cancelar</b>. Digite o id pra confirmar:`,
     ok: "Apagar",
     perigo: true,
@@ -1343,7 +1294,7 @@ function resumoLocal(lista) {
 }
 
 /* A chave identifica a SELEÇÃO, não a ordem do clique — igual ao id que o
-   backend deriva do conjunto. É com ela que se sabe se o PDF já montado ainda
+   backend deriva do conjunto. É com ela que se sabe se a combinação já criada ainda
    corresponde ao que está marcado agora. */
 const chaveDaSelecao = () => [...selecionados].sort().join(",");
 
@@ -1386,7 +1337,7 @@ function atualizarCombo() {
   const lista = pedidosMarcados();
   const n = selecionados.size;
 
-  // Mudou a seleção? O PDF montado é de outro conjunto e não serve mais.
+  // Mudou a seleção? A combinação criada é de outro conjunto e não serve mais.
   if (comboAtual && comboAtual.chave !== chaveDaSelecao()) {
     comboAtual = null;
     comboMapa = null;
@@ -1435,13 +1386,12 @@ function atualizarCombo() {
   $("comboConta").innerHTML = conta;
 
   const impedido = poucos || misturado;
+  // Combinar é só a conta oficial e o mapa. A folha em si é montada pelo
+  // worker, que a adianta assim que a combinação existe — e é no painel dele,
+  // na rede de casa, que ela se confere antes de imprimir.
   $("comboMontar").disabled = impedido;
-  $("comboMontar").textContent = comboAtual ? "Refazer PDF combinado"
-                                            : "Montar PDF combinado";
-  const pronto = !!(comboAtual && comboAtual.pronto);
-  $("comboVer").hidden = !pronto;
-  $("comboVerLocal").hidden = !(pronto && comboAtual.pdf_url_local);
-  $("comboImprimir").hidden = !pronto;
+  $("comboMontar").hidden = !!comboAtual;
+  $("comboImprimir").hidden = !comboAtual || impedido;
   desenharComboExtra();
 }
 
@@ -1451,54 +1401,25 @@ async function criarCombo() {
   const corpo = new FormData();
   corpo.append("ids", [...selecionados].join(","));
   const combo = await api("/admin/combos", {method: "POST", body: corpo});
-  comboAtual = {id: combo.id, chave: chaveDaSelecao(), pronto: false,
-                pdf_url: combo.pdf_url, pdf_url_local: combo.pdf_url_local};
+  comboAtual = {id: combo.id, chave: chaveDaSelecao()};
   comboMapa = combo.mapa;
   return combo;
 }
 
-async function montarCombo(refazer) {
+async function combinar() {
   $("comboMontar").disabled = true;
   ocupado++;
   try {
-    // Sempre passa por aqui: criar é só a conta e o mapa, e o mesmo conjunto
-    // sempre cai na mesma combinação — então isto revalida a seleção contra o
-    // banco (pedido apagado, cancelado, laminação trocada) antes de gastar
-    // minutos baixando arte do Drive.
+    // O mesmo conjunto sempre cai na mesma combinação, então isto também
+    // revalida a seleção contra o banco (pedido apagado, cancelado,
+    // laminação trocada) antes de liberar o Imprimir.
     const combo = await criarCombo();
-    // Some com Ver/Imprimir enquanto remonta: até a folha nova ficar pronta,
-    // o que existe no disco é a antiga, e mandar essa pra impressora é
-    // exatamente o que o "Refazer" está tentando corrigir.
-    atualizarCombo();
-    const id = comboAtual.id;
-    if (!combo.brancos_evitados) {
-      anotarCombo("andando", "Montando — esta seleção não aproveita nenhum " +
-                  "espaço em branco, mas sai tudo num arquivo só.");
-    }
-    const q = refazer ? "?fresh=true" : "";
-    let estado = await api(`/admin/combos/${id}/pdf${q}`, {method: "POST"});
-    while (estado.estado === "montando") {
-      const onde = estado.total
-        ? `${estado.feitas} de ${estado.total} imagens baixadas`
-        : "lendo a lista de cartas";
-      anotarCombo("andando", `Montando a folha combinada — ${onde}.`);
-      await new Promise((r) => setTimeout(r, 4000));
-      estado = await api(`/admin/combos/${id}/pdf`, {method: "POST"});
-    }
-    if (estado.estado === "erro") {
-      anotarCombo("erro", "Não consegui montar: " + estado.detalhe);
-      return;
-    }
-    if (estado.mapa) comboMapa = estado.mapa;
-    comboAtual.pronto = true;
-    if (estado.falhas) {
-      anotarCombo("erro", `Folha pronta, mas ${estado.falhas} carta(s) não ` +
-        `baixaram do Drive e viraram quadro de falha. Confira antes de imprimir.`);
-    } else {
-      anotarCombo("ok", "Folha combinada pronta — confira em Ver PDF antes de " +
-        "imprimir. Cada folha sai com uma legenda na margem dizendo de quem " +
-        "é cada carta.");
-    }
+    anotarCombo(combo.brancos_evitados ? "ok" : "andando",
+      (combo.brancos_evitados ? "" : "Esta seleção não aproveita nenhum " +
+        "espaço em branco, mas sai tudo numa fila só. ") +
+      "O worker já está montando a folha: confira no painel dele, na rede " +
+      "de casa, antes de imprimir. Cada folha sai com uma legenda na margem " +
+      "dizendo de quem é cada carta.");
   } catch (e) {
     if (e.message !== "401") anotarCombo("erro", e.message);
   } finally {
@@ -1544,12 +1465,7 @@ function confirmarImpressaoCombinada() {
   });
 }
 
-$("comboMontar").addEventListener("click",
-  () => montarCombo(!!(comboAtual && comboAtual.pronto)));
-$("comboVer").addEventListener("click",
-  () => window.open(comboAtual.pdf_url, "_blank"));
-$("comboVerLocal").addEventListener("click",
-  () => window.open(comboAtual.pdf_url_local, "_blank"));
+$("comboMontar").addEventListener("click", combinar);
 $("comboImprimir").addEventListener("click", confirmarImpressaoCombinada);
 $("comboLimpar").addEventListener("click", () => {
   selecionados.clear();

@@ -1,14 +1,15 @@
 """
 Limpeza automática dos PDFs antigos em PDF_OUTPUT_DIR.
 
-Os PDFs ficam em cache no disco pra que "Ver PDF" e "Imprimir" usem
-exatamente o mesmo arquivo (ver fulfillment.ensure_pdf). Como nada nunca
-apagava esses arquivos, o volume só crescia.
+Os PDFs ficam em cache no disco do worker da impressora, pra que conferir no
+painel e imprimir usem exatamente o mesmo arquivo. Como nada nunca apagava
+esses arquivos, o volume só crescia. Quem roda esta faxina é o worker; o site
+só aproveita a mesma passada pra podar sessões.
 
 A regra é por idade do arquivo, não por status do pedido, porque **apagar é
 sempre reversível**: o `xml_text` continua guardado no banco pra sempre, e
-abrir o link "Ver PDF" ou "Imprimir" de um pedido antigo simplesmente monta
-a folha de novo. O único custo é baixar as imagens do Drive outra vez.
+montar ou imprimir de novo um pedido antigo simplesmente monta a folha de
+novo. O único custo é baixar as imagens do Drive outra vez.
 
 Só toca em arquivos com cara de folha montada (`pedido-XXXX.pdf`,
 `combo-XXXX.pdf` e o marcador `.incompleto` que anda junto). O `orders.db`
@@ -20,8 +21,10 @@ import re
 import threading
 import time
 
-from . import pdf_generator
 
+# Onde as folhas montadas ficam — a mesma variável do `pdf_generator`, lida
+# aqui direto pra quem só poda sessões (o site) não carregar o reportlab.
+OUTPUT_DIR = os.environ.get("PDF_OUTPUT_DIR", "/tmp")
 # Dias que um PDF fica no disco depois de gerado. 0 desliga a limpeza.
 PDF_KEEP_DAYS = float(os.environ.get("PDF_KEEP_DAYS", "30"))
 # De quanto em quanto tempo a faxina roda.
@@ -64,7 +67,7 @@ def run_once(podar_sessoes: bool = True) -> dict:
         return {"desligado": True, "removidos": 0, "liberado_mb": 0.0,
                 "sessoes_podadas": sessoes}
 
-    directory = pdf_generator.OUTPUT_DIR
+    directory = OUTPUT_DIR
     if not os.path.isdir(directory):
         return {"removidos": 0, "liberado_mb": 0.0, "mantidos": 0,
                 "sessoes_podadas": sessoes}

@@ -350,8 +350,8 @@ def notify_payment(order_id: str):
     resumo do pedido e o link "Imprimir", pro operador conferir o Pix no app
     do banco e decidir.
 
-    O que já acontece aqui é a montagem do PDF, disparada em segundo plano
-    junto com o aviso — ver o comentário lá embaixo.
+    A folha não é montada aqui: o pedido em `notified` aparece na fila do
+    worker da impressora, que adianta o PDF dele do lado de lá.
     """
     order = storage.get_order(order_id)
     if not order:
@@ -368,31 +368,12 @@ def notify_payment(order_id: str):
     if not notify.is_configured():
         raise HTTPException(500, "SMTP não configurado no backend (.env).")
     try:
-        links = (fulfillment.pdf_url(order_id),
-                 fulfillment.print_url(order_id),
-                 fulfillment.pdf_url(order_id, fresh=True))
-        pdf_local = fulfillment.pdf_url_local(order_id)
+        link_imprimir = fulfillment.print_url(order_id)
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
-    # Começa a montar o PDF agora, em segundo plano. Baixar as artes do Drive
-    # leva minutos num pedido grande, e esse é justamente o tempo que leva a
-    # conferência do Pix no app do banco — quando o link "Ver PDF" for aberto,
-    # na maioria das vezes o arquivo já está pronto, em vez de cair na página
-    # de "montando" e esperar.
-    #
-    # `request_pdf` só dispara a thread e volta na hora, então o aviso não
-    # atrasa; e se ele falhar aqui, o link do e-mail continua montando sob
-    # demanda como antes, então isso não pode derrubar o e-mail.
     try:
-        fulfillment.request_pdf(order_id)
-    except Exception as e:
-        log.aviso("pedido", "pdf-antecipado-falhou", pedido=order_id,
-                  motivo=f"{type(e).__name__}: {e}",
-                  nota="o link do e-mail monta sob demanda")
-
-    try:
-        notify.send_payment_claim_email(order, *links, pdf_local_url=pdf_local)
+        notify.send_payment_claim_email(order, link_imprimir)
     except Exception as e:
         raise HTTPException(502, f"Não consegui enviar o e-mail de aviso: {e}")
 
@@ -467,218 +448,6 @@ def _authorize(purpose: str, order_id: str, token: str | None,
     if not order:
         raise HTTPException(404, "Pedido não encontrado.")
     return order
-
-
-# Quanto o navegador pode reaproveitar o PDF já baixado. Aqui era `no-store`,
-# e isso fazia cada reabertura pagar o arquivo inteiro de novo — num pedido
-# grande, centenas de MB subindo pelo link de casa só pra mostrar a mesma
-# folha. Com revalidação ele pergunta antes e recebe 304 (uns poucos bytes)
-# enquanto nada mudou. Não dá pra guardar por tempo fixo porque o "Refazer
-# PDF" troca o arquivo debaixo da mesma URL; o ETag sai do mtime + tamanho,
-# então uma remontagem invalida o cache sozinha.
-PDF_CACHE_CONTROL = "private, max-age=0, must-revalidate"
-
-_FAIXA_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
-# `_faixa_pedida` devolve isto quando a faixa existe mas não cabe no arquivo:
-# é 416, e não o arquivo inteiro.
-FAIXA_INVALIDA = "faixa-invalida"
-
-
-def _faixa_pedida(header: str | None, tamanho: int):
-    """Interpreta o cabeçalho `Range` do pedido.
-
-    Devolve `(inicio, fim)` — inclusivos nos dois lados, como manda o HTTP —
-    pra faixa que dá pra atender; `None` quando o arquivo inteiro é a resposta
-    certa (não veio Range, ou veio numa forma que não vale a pena tratar, como
-    várias faixas de uma vez — mandar tudo é resposta legítima); e
-    `FAIXA_INVALIDA` quando pediram pedaço que não existe no arquivo.
-    """
-    if not header:
-        return None
-    casou = _FAIXA_RE.match(header.strip())
-    if not casou:
-        return None
-    inicio_txt, fim_txt = casou.groups()
-    if inicio_txt:
-        inicio = int(inicio_txt)
-        fim = int(fim_txt) if fim_txt else tamanho - 1
-    elif fim_txt:
-        # `bytes=-500` são os ÚLTIMOS 500 bytes. É por aí que o visualizador
-        # de PDF começa: o índice do arquivo fica no fim.
-        inicio = max(0, tamanho - int(fim_txt))
-        fim = tamanho - 1
-    else:
-        return None  # "bytes=-" não quer dizer nada
-    fim = min(fim, tamanho - 1)
-    if inicio > fim or inicio >= tamanho:
-        return FAIXA_INVALIDA
-    return inicio, fim
-
-
-def _ler_faixa(path: str, inicio: int, fim: int, bloco: int = 64 * 1024):
-    """Lê só o pedaço pedido, em blocos, sem carregar o arquivo na memória."""
-    with open(path, "rb") as f:
-        f.seek(inicio)
-        restante = fim - inicio + 1
-        while restante > 0:
-            pedaco = f.read(min(bloco, restante))
-            if not pedaco:
-                break  # arquivo encolheu embaixo da leitura; o que veio, veio
-            restante -= len(pedaco)
-            yield pedaco
-
-
-class _ArquivoInteiro(FileResponse):
-    """O `FileResponse` sem olhar o `Range` do pedido.
-
-    Quem decide entre faixa e arquivo inteiro é o `_servir_pdf`. Do Starlette
-    0.39 em diante o `FileResponse` também lê o `Range`, e o que aqui ficou
-    decidido como arquivo inteiro sairia como multipart (várias faixas) ou 400
-    (unidade desconhecida, que o HTTP manda ignorar). Tirar o cabeçalho do
-    escopo faz ele responder igual em qualquer versão, e o `sendfile` fica.
-    """
-
-    async def __call__(self, scope, receive, send):
-        cabecalhos = [(k, v) for k, v in scope["headers"] if k.lower() != b"range"]
-        await super().__call__({**scope, "headers": cabecalhos}, receive, send)
-
-
-def _servir_pdf(request: Request, path: str, order_id: str,
-                falhas: int) -> Response:
-    """Devolve a folha montada, com Range e revalidação.
-
-    Duas coisas que o `FileResponse` do Starlette 0.38 não faz — e que aqui
-    custam caro, porque o arquivo é grande e sobe por um link doméstico:
-
-    * **Range.** Sem `Accept-Ranges`, o visualizador de PDF não consegue
-      buscar o índice no fim do arquivo pra desenhar a primeira página antes
-      do resto: ele baixa TUDO e só então mostra alguma coisa. E conexão que
-      cai no meio recomeça do zero em vez de retomar de onde parou.
-    * **304.** Ver o comentário do `PDF_CACHE_CONTROL`.
-
-    Starlette novo já traz as duas, mas subir a dependência mexe em muito mais
-    coisa do que estas poucas linhas.
-    """
-    st = os.stat(path)
-    # Mesma ideia do ETag do Starlette: mtime + tamanho. Remontar a folha muda
-    # os dois, então o cache do navegador cai sozinho.
-    etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
-    cabecalhos = {
-        "Content-Disposition": f'inline; filename="pedido-{order_id}.pdf"',
-        "Cache-Control": PDF_CACHE_CONTROL,
-        "ETag": etag,
-        "Accept-Ranges": "bytes",
-        "X-Imagens-Com-Falha": str(falhas),
-    }
-
-    faixa = _faixa_pedida(request.headers.get("range"), st.st_size)
-
-    if faixa is FAIXA_INVALIDA:
-        return Response(status_code=416, headers={
-            **cabecalhos, "Content-Range": f"bytes */{st.st_size}"})
-
-    # If-Range: o cliente só quer o pedaço se o arquivo ainda for o mesmo que
-    # ele já tem pela metade. Se o "Refazer PDF" remontou a folha no meio do
-    # download, emendar pedaços de dois arquivos diferentes daria um PDF
-    # corrompido — nesse caso manda inteiro e ele começa de novo.
-    if faixa and request.headers.get("if-range") not in (None, etag):
-        faixa = None
-
-    if faixa is None and request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers=cabecalhos)
-
-    if faixa:
-        inicio, fim = faixa
-        return StreamingResponse(
-            _ler_faixa(path, inicio, fim),
-            status_code=206,
-            media_type="application/pdf",
-            headers={**cabecalhos,
-                     "Content-Range": f"bytes {inicio}-{fim}/{st.st_size}",
-                     "Content-Length": str(fim - inicio + 1)},
-        )
-
-    return _ArquivoInteiro(path, media_type="application/pdf", stat_result=st,
-                           headers=cabecalhos)
-
-
-@app.get("/orders/{order_id}/pdf")
-def view_pdf(request: Request, order_id: str, token: str | None = None,
-             fresh: bool = False,
-             x_admin_token: str | None = Header(default=None),
-             quem: dict | None = Depends(quem_e)):
-    """
-    Link "Ver PDF" do e-mail. Monta a folha (se ainda não existir) e devolve
-    o arquivo inline, pra abrir direto no navegador ou no visualizador do
-    celular — sem anexo, pra não esbarrar no limite do Gmail.
-
-    Se o PDF ainda não existe, a montagem começa em segundo plano e a
-    resposta é uma página que se atualiza sozinha até o arquivo ficar pronto.
-    Esperar dentro da requisição estourava o teto do túnel da Cloudflare em
-    pedido grande (ver `fulfillment.request_pdf`).
-
-    Só conferir NÃO marca o pedido como pago nem imprime nada.
-    """
-    _authorize("view", order_id, token, x_admin_token, quem)
-    estado = fulfillment.request_pdf(order_id, fresh=fresh)
-
-    if estado["estado"] == "erro":
-        return HTMLResponse(_status_page(
-            "Falhou", f"Não consegui montar o PDF do pedido {order_id}: "
-                      f"{estado['detalhe']}", ok=False
-        ), status_code=500)
-
-    if estado["estado"] == "montando":
-        return HTMLResponse(_montando_page(order_id, estado, token))
-
-    return _servir_pdf(request, estado["path"], order_id, estado["falhas"])
-
-
-@app.get("/combos/{combo_id}/pdf")
-def view_combo_pdf(request: Request, combo_id: str, token: str | None = None,
-                   fresh: bool = False,
-                   x_admin_token: str | None = Header(default=None),
-                   quem: dict | None = Depends(quem_e)):
-    """A folha combinada (vários pedidos num papel só), pra conferir.
-
-    Mesmo comportamento do `/orders/{id}/pdf`: monta em segundo plano se ainda
-    não existir, devolve uma página que se atualiza sozinha enquanto monta, e
-    serve o arquivo inline quando fica pronto.
-
-    O token é assinado sobre `combo:<id>`, então o link de conferir um pedido
-    não abre a folha combinada e vice-versa. Conferir não imprime nada nem
-    marca pedido nenhum como pago.
-    """
-    # As mesmas três chaves do `_authorize`: sessão de admin, token da casa e
-    # o link assinado do e-mail.
-    autorizado = bool(quem and quem.get("perfil") == "admin")
-    if not autorizado and x_admin_token and ADMIN_TOKEN:
-        autorizado = hmac.compare_digest(str(x_admin_token), ADMIN_TOKEN)
-    if not autorizado:
-        try:
-            autorizado = fulfillment.check_combo_token("view", combo_id, token)
-        except RuntimeError as e:
-            raise HTTPException(500, str(e))
-    if not autorizado:
-        raise HTTPException(401, "Link inválido ou expirado.")
-    if not storage.get_combo(combo_id):
-        raise HTTPException(404, "Combinação não encontrada.")
-
-    estado = fulfillment.request_combo_pdf(combo_id, fresh=fresh)
-
-    if estado["estado"] == "erro":
-        return HTMLResponse(_status_page(
-            "Falhou", f"Não consegui montar a folha combinada {combo_id}: "
-                      f"{estado['detalhe']}", ok=False
-        ), status_code=500)
-
-    if estado["estado"] == "montando":
-        return HTMLResponse(_montando_page(
-            combo_id, estado, token, caminho=f"/combos/{combo_id}/pdf",
-            rotulo=f"Folha combinada {combo_id}"))
-
-    return _servir_pdf(request, estado["path"], f"combinado-{combo_id}",
-                       estado["falhas"])
 
 
 @app.get("/orders/{order_id}/print", response_class=HTMLResponse)
@@ -769,47 +538,6 @@ def print_progress(order_id: str, token: str | None = None,
         "Fora da fila",
         f"{resumo} Esse pedido não está na fila de impressão (estado: "
         f"{status}).", ok=False))
-
-
-def _montando_page(order_id: str, estado: dict, token: str | None,
-                   caminho: str | None = None,
-                   rotulo: str | None = None) -> str:
-    """Página que se atualiza sozinha enquanto o PDF é montado.
-
-    O refresh aponta pra URL SEM o `fresh=1`: senão cada atualização pediria
-    uma remontagem nova e o pedido nunca chegaria ao fim.
-
-    `caminho` troca a rota do refresh e `rotulo` troca o nome que aparece na
-    tela — é o que a folha combinada usa, que mora em `/combos/{id}/pdf` e não
-    é "o pedido tal".
-    """
-    feitas, total = estado.get("feitas", 0), estado.get("total", 0)
-    decorrido = int(time.time() - estado.get("inicio", time.time()))
-    onde = (f"{feitas} de {total} imagens baixadas" if total
-            else "lendo a lista de cartas")
-    destino = (caminho or f"/orders/{order_id}/pdf") + (f"?token={token}" if token else "")
-    quem = rotulo or f"Pedido {order_id}"
-    return f"""<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="5;url={destino}">
-<title>Montando o PDF — Forja de Proxies</title></head>
-<body style="margin:0;min-height:100vh;display:flex;align-items:center;
-             justify-content:center;background:#0F0D17;color:#EDE6D6;
-             font-family:system-ui,sans-serif;padding:24px;">
-  <div style="max-width:460px;background:#1B1730;border:1px solid #382F5C;
-              border-radius:14px;padding:28px;">
-    <h1 style="margin:0 0 12px;font-size:20px;color:#C9A227;">Montando o PDF</h1>
-    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#A79BC7;">
-      {quem}: {onde} ({decorrido}s). As artes vêm do Google Drive e
-      têm ~10 MB cada, então pedido grande leva alguns minutos.
-    </p>
-    <p style="margin:0;font-size:13px;color:#6F6490;">
-      Esta página se atualiza sozinha — pode deixar aberta. Não precisa
-      recarregar na mão.
-    </p>
-  </div>
-</body></html>"""
 
 
 def _status_page(title: str, message: str, ok: bool = True,
@@ -1969,23 +1697,10 @@ def admin_list_orders(status: str | None = None, busca: str | None = None,
                       x_admin_token: str | None = Header(default=None),
                       quem: dict | None = Depends(quem_e)):
     """Todos os pedidos, do mais novo pro mais antigo, com os contadores por
-    estado e o link assinado de conferir o PDF de cada um.
-
-    O link vai relativo (`base=""`): a tela está no mesmo servidor, e o
-    PUBLIC_BASE_URL é o domínio de fora, que num acesso pela rede local pode
-    nem resolver.
-    """
+    estado. A folha de cada um se confere no painel do worker, na rede de
+    casa — o site não monta nem guarda PDF."""
     _check_admin(x_admin_token, quem)
     pedidos = storage.list_orders(status=status, busca=busca, limite=limite)
-    for pedido in pedidos:
-        try:
-            pedido["pdf_url"] = fulfillment.pdf_url(pedido["id"], base="")
-            pedido["pdf_url_local"] = fulfillment.pdf_url_local(pedido["id"])
-        except RuntimeError:
-            # Sem ADMIN_TOKEN não dá pra assinar link nenhum — mas aí nem se
-            # chega aqui, porque o _check_admin já teria barrado. Fica pelo
-            # caso de a configuração mudar com o processo no ar.
-            pedido["pdf_url"] = pedido["pdf_url_local"] = None
     return {"contagem": storage.count_by_status(), "pedidos": pedidos}
 
 
@@ -2086,11 +1801,6 @@ def admin_get_order(order_id: str,
     pedido = storage.get_order(order_id)
     if not pedido:
         raise HTTPException(404, "Pedido não encontrado.")
-    try:
-        pedido["pdf_url"] = fulfillment.pdf_url(order_id, base="")
-        pedido["pdf_url_local"] = fulfillment.pdf_url_local(order_id)
-    except RuntimeError:
-        pedido["pdf_url"] = pedido["pdf_url_local"] = None
     return pedido
 
 
@@ -2117,25 +1827,6 @@ def admin_set_status(order_id: str, status: str = Form(...),
         raise HTTPException(404, "Pedido não encontrado.")
     log.evento("admin", "mudou-status", pedido=order_id, status=status)
     return storage.get_order(order_id)
-
-
-@app.post("/admin/pedidos/{order_id}/pdf")
-def admin_build_pdf(order_id: str, fresh: bool = False,
-                    x_admin_token: str | None = Header(default=None),
-                    quem: dict | None = Depends(quem_e)):
-    """Manda montar a folha (ou diz como está a montagem em andamento).
-
-    Devolve o mesmo `{"estado": "pronto"|"montando"|"erro"}` do link do
-    e-mail, e a tela fica chamando isto enquanto for "montando" pra mostrar o
-    progresso — pedido grande leva minutos baixando as artes do Drive.
-    """
-    _check_admin(x_admin_token, quem)
-    if not storage.get_order(order_id):
-        raise HTTPException(404, "Pedido não encontrado.")
-    estado = fulfillment.request_pdf(order_id, fresh=fresh)
-    # O caminho no disco não interessa pra tela e é caminho de dentro do
-    # container — sai da resposta.
-    return {k: v for k, v in estado.items() if k != "path"}
 
 
 @app.post("/admin/pedidos/{order_id}/imprimir")
@@ -2213,11 +1904,6 @@ def _pedidos_do_combo(order_ids: list[str]) -> list[dict]:
 def _resposta_combo(combo_id: str, pedidos: list[dict]) -> dict:
     """O que a tela precisa saber de uma combinação."""
     resumo = calc.resumo_combinado(pedidos)
-    try:
-        url = fulfillment.combo_pdf_url(combo_id, base="")
-        url_local = fulfillment.combo_pdf_url_local(combo_id)
-    except RuntimeError:
-        url = url_local = None
     return {
         "id": combo_id,
         "lamination": pedidos[0]["lamination"] if pedidos else None,
@@ -2225,8 +1911,6 @@ def _resposta_combo(combo_id: str, pedidos: list[dict]) -> dict:
                      "status": p["status"], "pages": p["pages"],
                      "amount": p["amount"]} for p in pedidos],
         "valor_total": round(sum(float(p["amount"] or 0) for p in pedidos), 2),
-        "pdf_url": url,
-        "pdf_url_local": url_local,
         **resumo,
     }
 
@@ -2272,27 +1956,6 @@ def admin_get_combo(combo_id: str,
     return resposta
 
 
-@app.post("/admin/combos/{combo_id}/pdf")
-def admin_build_combo_pdf(combo_id: str, fresh: bool = False,
-                          x_admin_token: str | None = Header(default=None),
-                          quem: dict | None = Depends(quem_e)):
-    """Manda montar a folha combinada (ou diz como vai a montagem).
-
-    Mesmo `{"estado": "pronto"|"montando"|"erro"}` da folha de um pedido só,
-    e a tela fica chamando isto enquanto for "montando".
-    """
-    _check_admin(x_admin_token, quem)
-    if not storage.get_combo(combo_id):
-        raise HTTPException(404, "Combinação não encontrada.")
-    estado = fulfillment.request_combo_pdf(combo_id, fresh=fresh)
-    resposta = {k: v for k, v in estado.items() if k != "path"}
-    if estado["estado"] == "pronto":
-        mapa = fulfillment.mapa_combo(combo_id)
-        if mapa:
-            resposta["mapa"] = mapa
-    return resposta
-
-
 @app.post("/admin/combos/{combo_id}/imprimir")
 def admin_print_combo(combo_id: str,
                       x_admin_token: str | None = Header(default=None),
@@ -2326,25 +1989,25 @@ def admin_print_combo(combo_id: str,
 def admin_delete_combo(combo_id: str,
                        x_admin_token: str | None = Header(default=None),
                        quem: dict | None = Depends(quem_e)):
-    """Esquece a combinação e apaga a folha montada dela.
+    """Esquece a combinação.
 
     Os pedidos NÃO são tocados: desfazer uma combinação é só jogar fora um
-    arranjo de papel, e cada pedido continua com o estado que tinha.
+    arranjo de papel, e cada pedido continua com o estado que tinha. A folha
+    montada, se houver, fica no disco do worker até a faxina dele.
     """
     _check_admin(x_admin_token, quem)
-    existia = storage.delete_combo(combo_id)
-    tinha_pdf = fulfillment.descartar_combo_pdf(combo_id)
-    if not existia and not tinha_pdf:
+    if not storage.delete_combo(combo_id):
         raise HTTPException(404, "Combinação não encontrada.")
-    log.evento("admin", "desfez-combinado", combo=combo_id, pdf=tinha_pdf)
-    return {"ok": True, "pdf_apagado": tinha_pdf}
+    log.evento("admin", "desfez-combinado", combo=combo_id)
+    return {"ok": True}
 
 
 @app.delete("/admin/pedidos/{order_id}")
 def admin_delete_order(order_id: str,
                        x_admin_token: str | None = Header(default=None),
                        quem: dict | None = Depends(quem_e)):
-    """Apaga o pedido de vez, junto com o PDF montado.
+    """Apaga o pedido de vez. A folha montada, se houver, fica no disco do
+    worker até a faxina dele.
 
     O XML do deck vive só aqui, então isso não tem volta — por isso a tela
     pede o id digitado antes de chamar. Pra tirar da frente sem perder o
@@ -2353,9 +2016,8 @@ def admin_delete_order(order_id: str,
     _check_admin(x_admin_token, quem)
     if not storage.delete_order(order_id):
         raise HTTPException(404, "Pedido não encontrado.")
-    tinha_pdf = fulfillment.descartar_pdf(order_id)
-    log.evento("admin", "apagou-pedido", pedido=order_id, pdf=tinha_pdf)
-    return {"ok": True, "pdf_apagado": tinha_pdf}
+    log.evento("admin", "apagou-pedido", pedido=order_id)
+    return {"ok": True}
 
 
 # --- Estoque de material (aba Estoque da tela do admin) --------------------
@@ -2460,7 +2122,8 @@ def admin_estoque_tinta(corpo: dict = Body(default={}),
 @app.post("/admin/cleanup")
 def run_cleanup(x_admin_token: str | None = Header(default=None),
                 quem: dict | None = Depends(quem_e)):
-    """Roda a faxina dos PDFs antigos na hora, sem esperar o ciclo diário."""
+    """Roda a faxina na hora (sessões vencidas e PDFs velhos que este
+    processo ainda tenha), sem esperar o ciclo diário."""
     _check_admin(x_admin_token, quem)
     return cleanup.run_once()
 
@@ -2517,6 +2180,13 @@ def worker_combo(combo_id: str):
         raise HTTPException(409, "Pedido apagado depois que a combinação foi "
                                  f"montada: {', '.join(sorted(faltando))}.")
     return {**combo, "pedidos": pedidos}
+
+
+@app.get("/worker/conferir", dependencies=[Depends(_check_worker)])
+def worker_conferir():
+    """O que o painel do worker lista pra conferir a folha antes de imprimir:
+    pedidos e folhas combinadas que interessam agora, sem XML."""
+    return storage.lista_para_conferir()
 
 
 _RESERVAR = {"pedidos": storage.reservar, "combos": storage.reservar_combo}

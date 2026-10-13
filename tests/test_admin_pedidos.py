@@ -83,7 +83,6 @@ ROTAS = [
     ("GET", "/admin/sessao"),
     ("GET", "/admin/pedidos"),
     ("GET", f"/admin/pedidos/{ana}"),
-    ("POST", f"/admin/pedidos/{ana}/pdf"),
     ("POST", f"/admin/pedidos/{ana}/imprimir"),
     ("DELETE", f"/admin/pedidos/{ana}"),
 ]
@@ -118,9 +117,14 @@ check("contagem por status",
       dados["contagem"])
 primeiro = dados["pedidos"][0]
 check("o XML do deck não vai junto", "xml_text" not in primeiro, list(primeiro))
-check("o link do PDF sai assinado e relativo",
-      primeiro["pdf_url"].startswith(f"/orders/{carla}/pdf?token="),
-      primeiro["pdf_url"])
+# O site não monta nem serve PDF: a folha se confere no painel do worker.
+check("nenhum link de PDF sai do site",
+      not any(k.startswith("pdf_url") for k in primeiro), list(primeiro))
+check("e a rota antiga de montar a folha não existe mais",
+      cliente.post(f"/admin/pedidos/{carla}/pdf", headers=AUTH).status_code
+      in (404, 405))
+check("nem a de ver a folha",
+      cliente.get(f"/orders/{carla}/pdf", headers=AUTH).status_code in (404, 405))
 
 filtrado = cliente.get("/admin/pedidos?status=notified", headers=AUTH).json()
 check("filtro por status", [p["id"] for p in filtrado["pedidos"]] == [bruno])

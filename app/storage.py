@@ -600,7 +600,7 @@ def fila_do_worker() -> dict:
     `imprimir`: pedidos soltos e folhas combinadas em `a_imprimir`.
     `adiantar`: pedidos em `notified` — o cliente disse que pagou, e montar o
     PDF enquanto o operador confere o Pix é o que faz a impressão sair na hora
-    do clique.
+    do clique — e folhas combinadas recém-criadas.
     """
     conn = _conn()
     try:
@@ -613,13 +613,66 @@ def fila_do_worker() -> dict:
         avisados = conn.execute(
             "SELECT id FROM orders WHERE status='notified' "
             "ORDER BY notified_at").fetchall()
+        # Folha combinada recém-criada e ainda fora da fila: o operador
+        # juntou os pedidos pra decidir se imprime, e vai querer conferir.
+        recentes = conn.execute(
+            "SELECT id FROM combos WHERE status IS NULL AND created_at > ? "
+            "ORDER BY created_at", (time.time() - COMBO_RECENTE_SEGUNDOS,)
+        ).fetchall()
     finally:
         conn.close()
     return {
         "imprimir": [{"tipo": "pedido", "id": r[0]} for r in soltos]
                     + [{"tipo": "combo", "id": r[0]} for r in combos],
-        "adiantar": [{"tipo": "pedido", "id": r[0]} for r in avisados],
+        "adiantar": [{"tipo": "pedido", "id": r[0]} for r in avisados]
+                    + [{"tipo": "combo", "id": r[0]} for r in recentes],
     }
+
+
+# Até quando uma folha combinada ainda interessa ao painel do worker (e a
+# folha dela vale a pena ser adiantada) sem ter ido pra fila.
+COMBO_RECENTE_SEGUNDOS = 2 * 86400
+# Impresso há menos que isto continua na lista de conferir: é a janela de
+# "saiu torto, deixa eu ver a folha de novo".
+IMPRESSO_RECENTE_SEGUNDOS = 3 * 86400
+
+
+def lista_para_conferir() -> dict:
+    """O que o painel do worker mostra: pedidos e folhas combinadas que
+    alguém pode querer conferir agora. Sem XML.
+
+    Pedidos: avisou que pagou, na fila, imprimindo, com erro, e os impressos
+    nos últimos dias. Combos: os que estão na fila ou foram criados há pouco.
+    """
+    agora = time.time()
+    campos = ["id", "status", "customer_name", "deck_hash", "pages",
+              "lamination", "created_at", "notified_at", "impresso_em",
+              "impressao_combo"]
+    conn = _conn()
+    try:
+        pedidos = [dict(zip(campos, r)) for r in conn.execute(
+            f"SELECT {','.join(campos)} FROM orders "
+            "WHERE status IN ('notified','a_imprimir','imprimindo','erro_impressao') "
+            "OR (status='impresso' AND impresso_em > ?) "
+            "ORDER BY COALESCE(notified_at, created_at) DESC LIMIT 100",
+            (agora - IMPRESSO_RECENTE_SEGUNDOS,))]
+        combos = [_combo(r) for r in conn.execute(
+            f"SELECT {','.join(_CAMPOS_COMBO)} FROM combos "
+            "WHERE status IN ('a_imprimir','imprimindo','erro_impressao') "
+            "OR created_at > ? OR impresso_em > ? "
+            "ORDER BY created_at DESC LIMIT 30",
+            (agora - COMBO_RECENTE_SEGUNDOS, agora - IMPRESSO_RECENTE_SEGUNDOS))]
+        ids = sorted({i for c in combos for i in c["order_ids"]})
+        nomes = {}
+        if ids:
+            nomes = dict(conn.execute(
+                f"SELECT id, customer_name FROM orders WHERE id IN "
+                f"({','.join('?' * len(ids))})", ids))
+    finally:
+        conn.close()
+    for c in combos:
+        c["nomes"] = [nomes.get(i) or "(sem nome)" for i in c["order_ids"]]
+    return {"pedidos": pedidos, "combos": combos}
 
 
 def _trocar(conn, tabela: str, chave: str, valor: str, de: str, para: str,

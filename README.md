@@ -55,9 +55,9 @@ que não dá pra deixar como está:
   celular (o domínio do Cloudflare Tunnel). Se ficar em `localhost`, o link só
   funciona na máquina onde o serviço roda.
 - `LOCAL_BASE_URL` — opcional, o endereço do backend **na rede local**
-  (`http://192.168.x.y:8000`). Liga um link extra "Ver PDF (rede local)" no
-  e-mail e na tela do admin, pra conferir a folha de dentro de casa sem mandar
-  o arquivo pro túnel e trazer de volta. Veja *Como o PDF volta pro navegador*.
+  (`http://192.168.x.y:8000`). Hoje só entra na lista de origens do CORS; a
+  folha se confere no painel do worker (ver *Conferir a folha: o painel do
+  worker*).
 - `CUPS_HOST` e `PRINTER_QUEUE` — endereço do CUPS na rede
   (`IP-DO-SERVIDOR:631`, ou vazio pra falar pelo socket local) e o nome da fila
   da sua impressora.
@@ -164,42 +164,27 @@ existe uma API que confirme "foi pago" — e o banco não notifica nada. Então
    cobrança Pix.
 2. Ele paga no app do banco dele e clica em **"Pagamento realizado, enviar
    notificação"** — na hora, ou depois, pela tela
-   **[Meus Pedidos](#meus-pedidos-do-lado-do-cliente)**. Esse clique já dispara
-   a montagem do PDF em segundo plano, pra folha estar pronta quando você for
-   conferir.
+   **[Meus Pedidos](#meus-pedidos-do-lado-do-cliente)**. O pedido vai pra
+   `notified`, e o worker da impressora já começa a montar a folha dele.
 3. Você recebe um e-mail com o resumo do pedido (nome, código do deck,
-   cartas, páginas, laminação, valor) e dois botões: **Ver PDF** e
-   **Imprimir**.
-4. **Ver PDF** abre a folha montada direto no navegador (ou no visualizador
-   do celular) pra você conferir antes de gastar papel. Só olhar não marca
-   nada como pago nem imprime.
+   cartas, páginas, laminação, valor) e o botão **Imprimir**.
+4. A folha se confere no **painel do worker**, na rede de casa
+   (`http://IP-DO-HOMELAB:8001`) — ver *Conferir a folha: o painel do
+   worker*. O site não monta nem guarda PDF, e por isso o e-mail não traz
+   link de folha nenhum.
 5. Você confere no app do banco se o Pix caiu mesmo e **só então** clica em
    **Imprimir**. Esse clique confirma o pagamento e põe o pedido na **fila
    de impressão** (`a_imprimir`). Quem imprime é o worker da impressora, que
    pega a fila em até ~30 s — ver *A fila de impressão e o worker*. A página
    que abre acompanha a fila sozinha até dizer se o CUPS aceitou.
 
-O PDF vai como **link, não como anexo**: um pedido grande passaria fácil do
-limite de 25 MB do Gmail. Como o arquivo abre no celular, dá pra imprimir
-por ali também, pelo app da impressora, em vez de usar o botão Imprimir.
+O link Imprimir é assinado com HMAC da `ADMIN_TOKEN`. Ele não expira — dá
+pra reabrir e reimprimir, o que é útil quando enrosca papel. Se vazar, troque
+a `ADMIN_TOKEN` e todos os links antigos deixam de valer de uma vez.
 
-Os dois links são assinados com HMAC da `ADMIN_TOKEN`, com **tokens
-diferentes** pra cada um: quem tem o link de conferir não consegue disparar
-sua impressora. Eles não expiram — dá pra reabrir e reimprimir, o que é útil
-quando enrosca papel. Se vazar, troque a `ADMIN_TOKEN` e todos os links
-antigos deixam de valer de uma vez.
-
-O PDF fica em cache no disco (`PDF_OUTPUT_DIR`), pra não baixar tudo do Drive
-de novo entre conferir e imprimir. A exceção é quando alguma imagem falha no
-download: aí a folha sai com um quadro vermelho **"FALHA NO DOWNLOAD"** no
-lugar da carta, o arquivo não é reaproveitado, e o link *"Gerar o PDF de
-novo"* no rodapé do e-mail tenta baixar outra vez (falha de taxa do Drive
-costuma ser temporária).
-
-Precisa disparar na mão? Dá pra chamar as mesmas rotas com o header do admin:
+Precisa disparar na mão? Dá pra chamar a mesma rota com o header do admin:
 
 ```
-curl -H "X-Admin-Token: SEU_TOKEN" https://SEU-BACKEND/orders/ID/pdf -o folha.pdf
 curl -H "X-Admin-Token: SEU_TOKEN" https://SEU-BACKEND/orders/ID/print
 ```
 
@@ -248,8 +233,9 @@ papel** ou **Tirar da fila** resolvem — quem decide é quem está do lado da
 impressora. Se a rede cair depois de o CUPS aceitar, o worker guarda o
 resultado e reenvia na volta seguinte, sem imprimir de novo.
 
-Além de imprimir, o worker **adianta** o PDF de quem está em `notified` (um
-por volta, pra um pedido grande montando não segurar uma impressão), manda a
+Além de imprimir, o worker **adianta** o PDF de quem está em `notified` e das
+folhas combinadas recém-criadas (um por volta, pra um pedido grande montando
+não segurar uma impressão), serve o painel de conferir a folha, manda a
 **tinta** e as **filas do CUPS** pro site de 5 em 5 min
 (`WORKER_BATIDA_SEGUNDOS`) e faz a faxina dos PDFs dele. O admin diz
 "a impressora não dá sinal" quando o worker some por mais de
@@ -275,8 +261,9 @@ e lê a configuração da impressora de sempre (`PRINTER_QUEUE`, `CUPS_HOST`,
 `FORJA_API_URL`).
 
 No `docker-compose.yml` ele é o serviço `forja-worker`: mesma imagem, outro
-comando (`python -m worker`), **sem porta nenhuma**, com volume próprio e o
-`/run/cups` montado. Enquanto o site mora na mesma máquina, ele fala com o
+comando (`python -m worker`), volume próprio, o `/run/cups` montado e uma
+porta só, a do painel de conferir a folha (8001, pra rede de casa — ver
+*Conferir a folha: o painel do worker*). Enquanto o site mora na mesma máquina, ele fala com o
 site pela rede interna do compose (`http://forja-backend:8000`). O
 `deploy/atualizar.sh` reconstrói o worker junto com o site quando o serviço
 existe no compose; compose sem ele publica só o site, como antes.
@@ -289,6 +276,7 @@ existe no compose; compose sem ele publica só o site, como antes.
 | `POST /worker/{pedidos\|combos}/{id}/concluir` | `imprimindo → impresso`, com `mensagem` e `falhas` |
 | `POST /worker/{pedidos\|combos}/{id}/falhar` | `imprimindo → erro_impressao`, com `mensagem` |
 | `POST /worker/batida` | `tinta`, `tinta_diagnostico` e `filas`, pro aviso público e pro admin |
+| `GET /worker/conferir` | o que o painel do worker lista: pedidos e folhas combinadas que interessam agora, sem XML |
 
 ## Revisar o pedido antes de pagar
 
@@ -576,7 +564,6 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /orders/{id}` | front | status do pedido |
 | `POST /orders/{id}/notify-payment` | botão do cliente | manda o e-mail de aviso e já começa a montar o PDF (não imprime) |
 | `POST /orders/{id}/cancel` | tela **Meus Pedidos** | o cliente desiste. Só vale em `pending`; depois do aviso volta 409. Não apaga: vira `cancelado` no histórico |
-| `GET /orders/{id}/pdf?token=…` | botão **Ver PDF** | monta e devolve a folha inline pra conferir (`&fresh=1` regera) |
 | `GET /orders/{id}/print?token=…` | botão **Imprimir** | confirma o Pix, põe na fila da impressora e redireciona pra página abaixo |
 | `GET /orders/{id}/impressao?token=…` | depois do **Imprimir** | onde o pedido está na fila. Só lê, e se atualiza sozinha até sair |
 | `GET /admin` | você, no navegador | a tela de pedidos (é só HTML: os dados vêm das rotas abaixo, todas com token) |
@@ -584,12 +571,10 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /admin/pedidos` | tela de pedidos | todos os pedidos, do mais novo pro mais antigo, com contagem por estado. Aceita `status=` e `busca=` |
 | `GET /admin/pedidos/{id}` | tela de pedidos | um pedido só |
 | `POST /admin/pedidos/{id}/status` | tela de pedidos | muda o estado na mão (`pending`, `notified`, `impresso`, `cancelado`). Os estados da fila não se escrevem por aqui |
-| `POST /admin/pedidos/{id}/pdf` | tela de pedidos | manda montar a folha (ou diz como vai a montagem). `?fresh=true` remonta do zero |
 | `POST /admin/pedidos/{id}/imprimir` | tela de pedidos | mesmo efeito do link **Imprimir** do e-mail: confirma o Pix e põe na fila. Também é o "imprimir de novo" |
 | `DELETE /admin/pedidos/{id}` | tela de pedidos | apaga o pedido e o PDF de vez |
 | `POST /admin/combos` | tela de pedidos | junta os pedidos de `ids` (separados por vírgula) numa folha só e devolve quanto papel isso economiza. Não monta PDF nenhum |
 | `GET /admin/combos/{id}` | tela de pedidos | uma combinação já criada, com os pedidos dela no estado de agora |
-| `POST /admin/combos/{id}/pdf` | tela de pedidos | manda montar a folha combinada (ou diz como vai a montagem). `?fresh=true` remonta |
 | `POST /admin/combos/{id}/imprimir` | tela de pedidos | põe a folha na fila e confirma o Pix de **todos** os pedidos dela |
 | `DELETE /admin/combos/{id}` | tela de pedidos | desfaz a combinação e apaga a folha. Os pedidos não são tocados |
 | `GET /admin/estoque` | aba **Estoque** | saldo de papel e plástico, tintas, custo de uma folha e os últimos movimentos |
@@ -599,7 +584,6 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /admin/estoque/custos` | aba **Estoque** | preço cobrado por página e folhas por plástico, em cada acabamento |
 | `POST /admin/estoque/tinta` | aba **Estoque** | preço e ml de cada garrafa e ml por folha, por cor |
 | `GET /precos` | tela do cliente | reais por página em cada acabamento (público) |
-| `GET /combos/{id}/pdf?token=…` | botão **Ver PDF** da barra | a folha combinada, pra conferir antes de imprimir |
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
 | `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, como o worker viu na última batida — pra descobrir o `PRINTER_QUEUE` certo |
 | `POST /admin/cleanup` | você (`X-Admin-Token`) | roda a faxina dos PDFs antigos na hora |
@@ -680,10 +664,6 @@ estado e uma busca que casa com nome, id do pedido ou código do deck.
 
 | Botão | O que faz |
 |---|---|
-| **Ver PDF** | abre a folha montada numa aba nova (mesmo link assinado do e-mail) |
-| **Ver PDF (rede local)** | a mesma folha pelo IP do homelab, sem passar pelo túnel. Só aparece com `LOCAL_BASE_URL` no `.env` — ver *Como o PDF volta pro navegador* |
-| **Montar PDF** | manda montar antes da hora e mostra o progresso ali mesmo (`12 de 60 imagens baixadas`) |
-| **Refazer PDF** | remonta do zero — é o que se usa depois de arrumar uma arte no Drive |
 | **Imprimir** | confirma o Pix e põe na fila da impressora; a nota embaixo do pedido acompanha até o CUPS responder. Pede confirmação |
 | **Imprimir de novo** / **Tentar de novo** | põe um pedido `impresso` (ou recusado) na fila outra vez |
 | **Marcar impresso** | confirma o Pix **sem** passar pela fila (imprimiu por fora, pelo PDF) |
@@ -798,9 +778,8 @@ combinar continua valendo pra sair um arquivo só, mas sem promessa de ganho.
 
 | Botão da barra | O que faz |
 |---|---|
-| **Montar PDF combinado** | monta a folha corrida e mostra o progresso ali mesmo. Depois de pronta, vira **Refazer PDF combinado** |
-| **Ver PDF** / **Ver PDF (rede local)** | abre a folha combinada pra conferir, igual ao PDF de um pedido só |
-| **Imprimir** | manda a folha pra fila e marca **todos** os pedidos dela como pagos. Pede confirmação |
+| **Combinar** | cria a combinação no banco e mostra a conta oficial e o mapa de quem cai em qual folha. O worker já começa a montar a folha, que se confere no painel dele |
+| **Imprimir** | põe a folha na fila e confirma o Pix de **todos** os pedidos dela. Pede confirmação |
 | **Limpar** | desmarca tudo |
 
 **Quem separa a pilha depois?** Uma folha combinada pode ter carta de dois
@@ -2629,7 +2608,7 @@ sai "enviado pra impressora" sem ter enviado. O pedido continua **pago**
 (clicar em Imprimir significa "conferi o Pix", e isso não deixa de ser verdade
 porque a impressora caiu) e o PDF continua pronto no disco do worker: resolva
 a impressora e clique em **Tentar de novo** (ou abra o link do e-mail de
-novo), ou imprima pelo celular usando o link "Ver PDF".
+novo), ou abra a folha no painel do worker e imprima de onde preferir.
 
 Pra diagnosticar:
 
@@ -2797,32 +2776,38 @@ baixam em paralelo (`DRIVE_WORKERS`, 4). Falha de rede é retentada com espera
 crescente (`DRIVE_RETRIES`/`DRIVE_BACKOFF`); id inexistente ou arquivo sem
 compartilhamento público falha na hora, sem insistir.
 
-### O link "Ver PDF" não espera a montagem
+### Conferir a folha: o painel do worker
 
-Pedido grande leva minutos pra montar, e o edge da Cloudflare corta a
-requisição em ~100s — era o `context canceled` no log do `cloudflared`. Então
-`GET /orders/{id}/pdf` **não** monta o PDF dentro da requisição: ele dispara a
-montagem numa thread e responde na hora com uma página que se atualiza sozinha
-a cada 5s, mostrando quantas imagens já baixaram. Quando o arquivo fica pronto,
-a mesma URL passa a servir o PDF.
+O site não monta nem guarda PDF. Quem monta é o worker da impressora, e a
+folha só existe no disco dele — então é ele quem a mostra, num painel na rede
+de casa: `http://IP-DO-HOMELAB:8001` (`WORKER_PAINEL_PORTA`; 0 desliga). O
+site nem sabe que esse painel existe, que é o que deixa os dois isolados.
 
-O refresh dessa página aponta pra URL **sem** o `fresh=1`, senão cada
-atualização pediria uma remontagem e o pedido nunca terminaria.
+A lista vem do site (`GET /worker/conferir`): os pedidos que avisaram que
+pagaram, os que estão na fila ou deram erro, os impressos nos últimos 3 dias,
+e as folhas combinadas recentes. Pra cada um o painel diz como está a folha
+no disco — pronta, com carta faltando, montando (`12 de 60 imagens`), ou
+ainda não montada — com **Ver PDF**, **Montar** e **Refazer** (o que se usa
+depois de arrumar uma arte no Drive). Enquanto alguma coisa monta, a página se
+atualiza sozinha.
 
-Na prática você quase nunca vê essa página de espera: a montagem já começou no
-`notify-payment`, enquanto o e-mail saía e você conferia o Pix no banco. É a
-mesma montagem — quando o link "Ver PDF" chega, ele acompanha a que está
-rodando ou serve o arquivo já pronto, sem baixar nada do Drive de novo.
+Quase sempre a folha já está pronta quando você abre: o worker **adianta** a
+de todo pedido que avisou que pagou e a de toda folha combinada recém-criada,
+enquanto você confere o Pix no banco.
 
-Duas requisições pro mesmo pedido **não** montam o PDF em paralelo: a segunda
-espera a primeira e reaproveita o arquivo dela. Sem isso, abrir o link duas
-vezes (ou o navegador tentando de novo porque demorou) dobrava as conexões com
-o Drive e ainda deixava dois `canvas.save()` escrevendo no mesmo arquivo.
+**Quem monta é sempre o laço do worker**, um trabalho de cada vez. O painel
+roda numa thread ao lado e só deixa o pedido numa fila (e acorda o laço pra
+ele não esperar a próxima volta). Duas montagens do mesmo arquivo ao mesmo
+tempo escreviam no mesmo PDF e o corrompiam.
 
-Imagem que não baixou vira uma carta "FALHA NO DOWNLOAD" bem visível no PDF.
-Pra tentar de novo, use o link **"montar de novo"** (`fresh=1`) do e-mail — a
-página de auto-refresh não pode remontar sozinha, senão entraria em loop num
-pedido que sempre falha.
+Imagem que não baixou vira uma carta "FALHA NO DOWNLOAD" bem visível no PDF, e
+o painel avisa quantas. **Refazer** tenta de novo (falha de taxa do Drive
+costuma ser temporária); na hora de imprimir, uma folha com falha é remontada
+de qualquer jeito antes de ir pro papel.
+
+A lista tem nome de cliente. Com `WORKER_PAINEL_SENHA` no `.env` do worker, o
+navegador pede usuário e senha (qualquer usuário, essa senha); sem ela, o
+painel fica aberto pra quem estiver na rede de casa.
 
 #### Quando der `Read timed out`
 
@@ -2868,9 +2853,10 @@ já tem 10,5 mm de margem lateral de propósito.
 
 ### Como o PDF volta pro navegador
 
-O arquivo é grande e sobe por um link doméstico, então a entrega importa tanto
-quanto a montagem. `GET /orders/{id}/pdf` faz três coisas que o `FileResponse`
-do Starlette 0.38 não faz sozinho:
+O arquivo é grande, então a entrega importa tanto quanto a montagem. O
+**Ver PDF** do painel do worker (`GET /pdf/{pedido|combo}/{id}`,
+`worker/entrega.py`) faz duas coisas que o `FileResponse` do Starlette 0.38
+não faz sozinho:
 
 **Range.** A resposta anuncia `Accept-Ranges: bytes` e atende pedido de faixa
 com `206`. Sem isso o visualizador não consegue ler o índice do fim do arquivo
@@ -2887,15 +2873,8 @@ sozinho, então não há como o navegador mostrar uma folha velha. O `If-Range`
 também é conferido — retomar um download pela metade só vale se for o mesmo
 arquivo, senão sairia um PDF emendado de duas montagens diferentes.
 
-**Link da rede local.** Com `LOCAL_BASE_URL` no `.env`, o e-mail de aviso e a
-tela do admin ganham um botão **"Ver PDF (rede local)"** ao lado do "Ver PDF"
-normal. É a mesma folha, com o mesmo token assinado, mas pelo IP do homelab: o
-link público manda o arquivo até a Cloudflare e traz de volta, ou seja, gasta a
-subida doméstica duas vezes pra chegar numa máquina que está do lado. Fora de
-casa esse botão não abre — o de fora continua sendo o "Ver PDF" normal.
-
 `tests/test_pdf_range.py` trava esse comportamento (faixas, 416, 304,
-`If-Range`, e a porta continuar exigindo token). Roda sem rede:
+`If-Range`), e também a senha do painel, a lista e o Montar. Roda sem rede:
 
 ```
 python tests/test_pdf_range.py
@@ -2903,14 +2882,14 @@ python tests/test_pdf_range.py
 
 ## Limpeza automática dos PDFs
 
-Os PDFs ficam em cache em `PDF_OUTPUT_DIR` (`/app/data`, o mesmo volume do
-banco) pra que "Ver PDF" e "Imprimir" usem exatamente o mesmo arquivo. Uma
-faxina roda no start e depois a cada `CLEANUP_INTERVAL_HOURS`, apagando todo
-PDF gerado há mais de `PDF_KEEP_DAYS` dias.
+Os PDFs ficam em cache no disco do worker (`PDF_OUTPUT_DIR`) pra que conferir
+no painel e imprimir usem exatamente o mesmo arquivo. O worker roda uma faxina
+a cada `CLEANUP_INTERVAL_HOURS`, apagando todo PDF gerado há mais de
+`PDF_KEEP_DAYS` dias.
 
 **Apagar é sempre reversível**: o XML do pedido continua guardado no banco
-pra sempre, então abrir o link "Ver PDF" ou "Imprimir" de um pedido antigo
-remonta a folha na hora — o único custo é baixar as imagens do Drive de novo.
+pra sempre, então montar ou imprimir de novo um pedido antigo remonta a
+folha na hora — o único custo é baixar as imagens do Drive de novo.
 Por isso a regra é por idade do arquivo, sem se importar com o status do
 pedido.
 
