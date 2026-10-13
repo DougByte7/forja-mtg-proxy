@@ -39,7 +39,7 @@ import time
 
 import requests
 
-from . import identidade as ident, log, ritmo
+from . import identidade as ident, log, plataforma, ritmo
 
 BASE = os.environ.get("SPELLBOOK_URL", "https://backend.commanderspellbook.com")
 SITE = os.environ.get("SPELLBOOK_SITE", "https://commanderspellbook.com")
@@ -53,7 +53,9 @@ DELAY_SEGUNDOS = float(os.environ.get("SPELLBOOK_DELAY_SEGUNDOS", "1"))
 # propósito: o Spellbook publica combos novos toda semana, e o custo de
 # perder o cache é UMA requisição.
 CACHE_TTL = float(os.environ.get("SPELLBOOK_CACHE_TTL", str(6 * 3600)))
-CACHE_DIR = os.environ.get("SPELLBOOK_CACHE_DIR", "/app/data/spellbook-cache")
+CACHE_DIR = os.environ.get(
+    "SPELLBOOK_CACHE_DIR",
+    plataforma.padrao("/app/data/spellbook-cache", "/tmp/forja-spellbook-cache"))
 LIGADO = os.environ.get("SPELLBOOK", "1") == "1"
 
 # Limites do serializer deles (`common/serializers.py`): 600 linhas no deck e

@@ -263,6 +263,14 @@ novo_commit v-sem-worker
 eq "sem o worker no compose, publica do mesmo jeito" "$(publicar)" "0"
 check "e sobe só o site" \
   "$(grep -qE 'up -d --build --no-deps forja-backend$' "$BANCADA/chamadas.txt"; echo $?)"
+
+# Site na Vercel: o homelab publica só o worker, e ele não entra duas vezes.
+printf 'forja-worker\n' > "$BANCADA/SERVICOS"
+: > "$BANCADA/chamadas.txt"
+novo_commit v-so-worker
+eq "só o worker, publica" "$(FORJA_SERVICE=forja-worker FORJA_HEALTH_URL= publicar)" "0"
+check "sobe o worker uma vez só" \
+  "$(grep -qE 'up -d --build --no-deps forja-worker$' "$BANCADA/chamadas.txt"; echo $?)"
 rm -f "$BANCADA/SERVICOS"
 
 echo

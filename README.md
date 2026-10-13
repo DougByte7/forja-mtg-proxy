@@ -2364,6 +2364,71 @@ O motivo de cada falha vai pro log com o nome da carta:
 grep "desisti\|nome-desconhecido\|layout-mudou\|repescando" /app/data/logs/forja.log
 ```
 
+## O site na Vercel
+
+O site roda na Vercel; o homelab fica só com o **worker da impressora**, que
+pergunta a fila pro site (ver *A fila de impressão e o worker*). O site não
+sabe que o homelab existe.
+
+O que vai pra lá é decidido por três arquivos:
+
+| Arquivo | O que faz |
+|---|---|
+| `pyproject.toml` | as dependências **do site** (sem `reportlab` nem `uvicorn`, que são do worker), o ponto de entrada `app.main:app` e `cdn = true`, que serve `app/static` pelo CDN |
+| `vercel.json` | a região das funções: `iad1`, ao lado dos bancos do Turso (`aws-us-east-1`). Cada consulta ao banco é uma ida e volta; com a função em São Paulo seriam ~280 ms cada |
+| `.vercelignore` | deixa de fora o worker, o deploy do homelab, os testes e o `requirements.txt` (que é do container) |
+
+**O site já se ajusta sozinho na Vercel.** Ela põe `VERCEL=1` no ambiente, e
+`app/plataforma.py` troca os padrões: sem migrar ao subir, sem thread de
+fundo, sem contar visita em memória (quem conta é o Vercel Analytics), IP de
+`x-real-ip`, país de `x-vercel-ip-country`, log só no stdout e os caches de
+EDHREC/MPC Fill/Spellbook em `/tmp`. Qualquer uma dessas variáveis posta à mão
+continua mandando.
+
+O que precisa ir nas variáveis de ambiente do projeto (Settings → Environment
+Variables):
+
+| Variável | |
+|---|---|
+| `DB_URL`, `DB_AUTH_TOKEN` | o banco dos pedidos no Turso |
+| `CARTAS_DB_URL`, `CARTAS_DB_AUTH_TOKEN` | a base de cartas no Turso |
+| `BLOB_READ_WRITE_TOKEN` | a Vercel põe sozinha ao ligar uma loja do Blob ao projeto (Storage → Blob) |
+| `ADMIN_TOKEN`, `WORKER_TOKEN`, `CADASTRO_TOKEN` | as chaves de sempre; o `WORKER_TOKEN` tem que ser o mesmo do worker |
+| `PUBLIC_BASE_URL` | o domínio do site, pro link Imprimir do e-mail |
+| `PIX_KEY`, `MERCHANT_NAME`, `MERCHANT_CITY` | a cobrança |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `NOTIFY_TO` | o e-mail de aviso |
+
+Não precisam ir: `DB_PATH`, `CARTAS_DB_PATH`, `LOG_DIR`, `PDF_*`, `CUPS_*`,
+`PRINTER_QUEUE`, `TINTA_*`, `DRIVE_*`, as guias de corte — são do homelab ou
+do worker.
+
+O **Vercel Analytics** precisa ser ligado no painel do projeto (Analytics →
+Enable); o script já está nas páginas.
+
+**Esquema mudou?** Rode o `migrar` (workflow *Tarefas* → `migrar`, ou
+`python -m app.tarefas migrar` com as URLs no ambiente) antes de o código novo
+atender requisição: na Vercel o site não migra sozinho.
+
+### O homelab depois da Vercel
+
+Só o `forja-worker`. No `.env` do homelab:
+
+```
+FORJA_API_URL=https://forja.seudominio.com   # o site na Vercel
+WORKER_TOKEN=a-mesma-do-site
+```
+
+e no `.env` do runner do GitHub Actions (ver *Publicação automática*):
+
+```
+FORJA_SERVICE=forja-worker
+FORJA_HEALTH_URL=
+```
+
+Assim o push na `main` reconstrói só o worker, sem tentar subir o site de
+novo. O túnel da Cloudflare e a porta 8000 podem ser fechados: o worker não
+recebe conexão nenhuma de fora (o painel, na 8001, é só pra rede de casa).
+
 ## Banco: arquivo ou Turso
 
 Os dois bancos — o dos pedidos (`orders.db`: pedidos, decks, contas, artes

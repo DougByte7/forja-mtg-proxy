@@ -38,7 +38,7 @@ import unicodedata
 
 import requests
 
-from . import identidade as ident, log, ritmo
+from . import identidade as ident, log, plataforma, ritmo
 from .cartas import face_da_frente
 from .poder import NOME_DO_BRACKET
 
@@ -54,7 +54,8 @@ DELAY_SEGUNDOS = float(os.environ.get("EDHREC_DELAY_SEGUNDOS", "1"))
 # Cache longo de propósito: os números do EDHREC são agregados de milhares de
 # decks e não mudam de hora em hora. Cada acerto aqui é um acesso a menos.
 CACHE_TTL = float(os.environ.get("EDHREC_CACHE_TTL", str(24 * 3600)))
-CACHE_DIR = os.environ.get("EDHREC_CACHE_DIR", "/app/data/edhrec-cache")
+CACHE_DIR = os.environ.get(
+    "EDHREC_CACHE_DIR", plataforma.padrao("/app/data/edhrec-cache", "/tmp/forja-edhrec-cache"))
 LIGADO = os.environ.get("EDHREC", "1") == "1"
 
 _freio = ritmo.Freio("edhrec", DELAY_SEGUNDOS)

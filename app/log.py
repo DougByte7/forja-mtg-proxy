@@ -26,7 +26,11 @@ import os
 import sys
 from logging.handlers import RotatingFileHandler
 
-DIR = os.environ.get("LOG_DIR", "/app/data/logs")
+from . import plataforma
+
+# Na Vercel, só stdout: o disco some com o processo, e quem guarda o log é
+# ela (ver `plataforma`).
+DIR = os.environ.get("LOG_DIR", plataforma.padrao("/app/data/logs", ""))
 NIVEL = os.environ.get("LOG_NIVEL", "INFO").upper()
 MAX_BYTES = int(float(os.environ.get("LOG_MAX_MB", "20")) * 1024 * 1024)
 BACKUPS = int(os.environ.get("LOG_BACKUPS", "5"))

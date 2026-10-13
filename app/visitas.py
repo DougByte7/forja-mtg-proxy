@@ -38,7 +38,7 @@ import re
 import threading
 import time
 
-from . import log
+from . import log, plataforma
 
 JANELA_MINUTOS = float(os.environ.get("VISITA_JANELA_MINUTOS", "30"))
 ANONIMIZAR_IP = os.environ.get("VISITA_ANONIMIZAR_IP", "0") == "1"
@@ -122,8 +122,10 @@ def classificar(user_agent: str, cabecalhos) -> tuple[str, str]:
 # túnel da Cloudflare (`cf-connecting-ip`); na Vercel é a própria Vercel
 # (`x-real-ip`). Cabeçalho de quem NÃO está na frente é forjável por qualquer
 # um — por isso é configuração, e não "o primeiro que aparecer".
-IP_CABECALHO = os.environ.get("IP_CABECALHO", "cf-connecting-ip").strip().lower()
-PAIS_CABECALHO = os.environ.get("PAIS_CABECALHO", "cf-ipcountry").strip().lower()
+IP_CABECALHO = os.environ.get(
+    "IP_CABECALHO", plataforma.padrao("cf-connecting-ip", "x-real-ip")).strip().lower()
+PAIS_CABECALHO = os.environ.get(
+    "PAIS_CABECALHO", plataforma.padrao("cf-ipcountry", "x-vercel-ip-country")).strip().lower()
 
 
 def ip_do_pedido(request) -> str:

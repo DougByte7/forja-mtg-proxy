@@ -15,8 +15,8 @@ from fastapi.staticfiles import StaticFiles
 
 from . import (artes, artes_enviadas, blob, calc, cambio, cartas, cleanup,
                cotacao_job, decks, detalhe_carta, edhrec, estoque, fulfillment, importar, log, manabase,
-               mpcfill, notify, pix, poder, spellbook, storage, tarefas,
-               usuarios, visitas)
+               mpcfill, notify, pix, plataforma, poder, spellbook, storage,
+               tarefas, usuarios, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -179,7 +179,8 @@ def _acao(metodo: str, caminho: str) -> str | None:
 # conta é o Vercel Analytics: cada requisição pode cair num processo novo, e
 # a "visita" em memória viraria uma por requisição. Lá isto fica em 0 — e o
 # que sobra aqui é só o log das ações e dos erros.
-REGISTRAR_VISITAS = os.environ.get("REGISTRAR_VISITAS", "1") == "1"
+REGISTRAR_VISITAS = os.environ.get(
+    "REGISTRAR_VISITAS", plataforma.padrao("1", "0")) == "1"
 
 
 @app.middleware("http")
@@ -252,8 +253,10 @@ async def registrar_visita(request: Request, call_next):
 # requisições: migrar em toda partida a frio são idas ao banco à toa, e thread
 # de fundo não termina. Lá as duas ficam em 0 e viram comando — ver
 # `app/tarefas.py`.
-MIGRAR_NO_STARTUP = os.environ.get("MIGRAR_NO_STARTUP", "1") == "1"
-TAREFAS_EM_SEGUNDO_PLANO = os.environ.get("TAREFAS_EM_SEGUNDO_PLANO", "1") == "1"
+MIGRAR_NO_STARTUP = os.environ.get(
+    "MIGRAR_NO_STARTUP", plataforma.padrao("1", "0")) == "1"
+TAREFAS_EM_SEGUNDO_PLANO = os.environ.get(
+    "TAREFAS_EM_SEGUNDO_PLANO", plataforma.padrao("1", "0")) == "1"
 
 
 @app.on_event("startup")

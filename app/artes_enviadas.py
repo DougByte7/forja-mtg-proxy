@@ -24,7 +24,7 @@ da arte é o mesmo nos dois casos, e `GET /artes/enviadas/{sha}` atende os
 dois (o do Blob redireciona).
 
 SÓ DUAS PROPORÇÕES ENTRAM: a da carta (63 x 88 mm) e a do gabarito da MPC,
-com sangria. São as duas que o `pdf_generator._crop_bleed` desenha no tamanho
+com sangria. São as duas que o `sangria.crop_bleed` desenha no tamanho
 certo; qualquer outra sairia esticada no papel, e é melhor recusar na subida
 do que descobrir na folha.
 """
@@ -160,9 +160,9 @@ def validar(dados: bytes) -> dict:
     bytes JPEG). Levanta `ValueError` com a razão em português, pra tela
     mostrar como veio.
     """
-    # Import local: o `pdf_generator` lê o disco por este módulo, e as medidas
-    # do gabarito e o recorte da sangria moram lá.
-    from . import pdf_generator as pg
+    # Import local: o `sangria` é leve, mas o import circular com o
+    # `pdf_generator` (que lê o disco por este módulo) fica mais simples assim.
+    from . import sangria as pg
 
     if not dados:
         raise ValueError("O arquivo veio vazio.")
@@ -192,7 +192,7 @@ def validar(dados: bytes) -> dict:
     # imagem inteira, e assim arquivo truncado não chega ao disco. Sem a
     # sangria, que é como a carta sai no papel.
     try:
-        mini = pg._crop_bleed(pg._sem_transparencia(img), "enviada")
+        mini = pg.crop_bleed(pg.sem_transparencia(img), "enviada")
         mini.thumbnail((LARGURA_MINIATURA, LARGURA_MINIATURA * 2), Image.LANCZOS)
         saida = io.BytesIO()
         mini.save(saida, format="JPEG", quality=85)

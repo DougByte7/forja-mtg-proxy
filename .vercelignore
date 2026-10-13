@@ -1,0 +1,24 @@
+# O que NÃO vai pra Vercel. Lá roda só o site (app/); o resto é do homelab
+# ou do desenvolvimento.
+
+# O worker da impressora e o deploy do homelab
+worker/
+deploy/
+Dockerfile
+docker-compose*.yml
+diag_rede.py
+
+# O requirements.txt é do container (tem reportlab e uvicorn, que o site não
+# usa). Fora daqui, a Vercel instala só o que o pyproject.toml lista.
+requirements.txt
+
+# Testes, documentação e o que é local
+tests/
+.github/
+*.md
+data/
+.env
+.env.*
+__pycache__/
+.pytest_cache/
+.venv/

@@ -42,7 +42,7 @@ import time
 
 import requests
 
-from . import calc, identidade as ident, log, ritmo
+from . import calc, identidade as ident, log, plataforma, ritmo
 
 BASE = os.environ.get("MPCFILL_URL", "https://mpcfill.com")
 USER_AGENT = os.environ.get(
@@ -56,7 +56,8 @@ DELAY_SEGUNDOS = float(os.environ.get("MPCFILL_DELAY_SEGUNDOS", "1"))
 # menos numa grade de centenas. Combo novo muda o que é verdade sobre o deck;
 # arte nova, não.
 CACHE_TTL = float(os.environ.get("MPCFILL_CACHE_TTL", str(7 * 24 * 3600)))
-CACHE_DIR = os.environ.get("MPCFILL_CACHE_DIR", "/app/data/mpcfill-cache")
+CACHE_DIR = os.environ.get(
+    "MPCFILL_CACHE_DIR", plataforma.padrao("/app/data/mpcfill-cache", "/tmp/forja-mpcfill-cache"))
 # Faz parte do nome de cada arquivo do cache. Subir o número descarta de uma
 # vez tudo o que foi guardado com uma leitura errada da API — sem isso, um
 # parse consertado continuaria servindo o resultado velho por uma semana, e o

@@ -1,0 +1,33 @@
+# O SITE, como a Vercel o vê. O container do homelab (o worker da impressora,
+# e o site quando roda lá) continua instalando pelo requirements.txt, que tem
+# também o que só o worker usa: reportlab (montar o PDF) e uvicorn.
+#
+# Sem [build-system] de propósito: o projeto não é um pacote a instalar, só a
+# lista do que o site precisa — o uv da Vercel trata assim e não tenta
+# empacotar app/, worker/ e tests/ juntos.
+
+[project]
+name = "forja-de-proxies"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.115.0",
+    "python-multipart==0.0.9",
+    "qrcode[pil]==7.4.2",
+    "Pillow==10.4.0",
+    "requests==2.32.3",
+    "libsql==0.1.11",
+]
+
+[tool.vercel]
+# O app mora num PACOTE (app/, com imports relativos): apontar o módulo
+# explicitamente garante que ele é importado como `app.main`.
+entrypoint = "app.main:app"
+
+[tool.vercel.fastapi.static]
+# O `app.mount("/", StaticFiles(...))` vai pro CDN no build. A Vercel deixaria
+# os arquivos dentro da função por causa do middleware de log (que roda em
+# volta de tudo), mas na Vercel ele não conta visita nenhuma — servir HTML,
+# CSS e JS pelo CDN sem passar por ele não perde nada. As rotas declaradas
+# antes do mount (/deckbuilder, /admin...) continuam indo pra função.
+cdn = true

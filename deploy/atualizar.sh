@@ -23,7 +23,8 @@
 #   FORJA_COMPOSE         arquivo compose (padrão: docker-compose.yml da pasta).
 #                         Aponte pro compose grande do servidor se a Forja for
 #                         um serviço dentro dele (veja docker-compose.snippet.yml)
-#   FORJA_SERVICE         nome do serviço no compose (padrão: forja-backend)
+#   FORJA_SERVICE         nome do serviço no compose (padrão: forja-backend).
+#                         Com o site na Vercel, é o worker: forja-worker
 #   FORJA_WORKER_SERVICE  nome do worker da impressora no compose (padrão:
 #                         forja-worker). Só é tocado se existir no compose —
 #                         compose sem ele publica só o site, como antes
@@ -124,7 +125,11 @@ fi
 # serviço, e pedir `up` de um serviço que não existe derrubaria o deploy
 # inteiro (e dispararia o desfazer) por causa de uma linha que falta.
 SERVICOS=("$FORJA_SERVICE")
-if [ -n "$FORJA_WORKER_SERVICE" ] && \
+#
+# Depois da ida do site pra Vercel, o homelab roda SÓ o worker: aí o próprio
+# FORJA_SERVICE é o worker (FORJA_SERVICE=forja-worker), e ele não entra duas
+# vezes na lista.
+if [ -n "$FORJA_WORKER_SERVICE" ] && [ "$FORJA_WORKER_SERVICE" != "$FORJA_SERVICE" ] && \
    "${COMPOSE[@]}" -f "$FORJA_COMPOSE" config --services 2>/dev/null \
      | grep -qx "$FORJA_WORKER_SERVICE"; then
   SERVICOS+=("$FORJA_WORKER_SERVICE")
