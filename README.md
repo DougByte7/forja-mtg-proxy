@@ -461,6 +461,9 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `tests/test_artes_enviadas.py` — a arte enviada e a da Scryfall: proporção,
   arquivo quebrado, cantos transparentes no PDF e as rotas de envio:
   `python tests/test_artes_enviadas.py`.
+- `tests/test_diagnostico.py` — o veredito do `GET /admin/fontes`: 404 é a
+  fonte respondendo, 403/429/503 e o desafio da Cloudflare são bloqueio:
+  `python tests/test_diagnostico.py`.
 - `tests/test_blob.py` — a arte enviada pelo Vercel Blob: o formato e as
   amarras do token, a porta contra endereço de fora, a mesma conferência do
   disco e o redirecionamento. Blob de mentira, sem rede:
@@ -596,6 +599,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
 | `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, como o worker viu na última batida — pra descobrir o `PRINTER_QUEUE` certo |
 | `POST /admin/cleanup` | você (`X-Admin-Token`) | roda a faxina dos PDFs antigos na hora |
+| `GET /admin/fontes` | você (`X-Admin-Token`) | as fontes de fora respondem a este servidor? Uma requisição a cada uma e o veredito: responde, bloqueado ou fora |
 | `GET /admin/visitas` | você (`X-Admin-Token`) | quem está no sistema agora, separado em pessoas / bots / suspeitos |
 | `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
 | `GET /cotacao/{job_id}` | front | andamento ou resultado da cotação |
@@ -2404,6 +2408,14 @@ do worker.
 
 O **Vercel Analytics** precisa ser ligado no painel do projeto (Analytics →
 Enable); o script já está nas páginas.
+
+**Logo depois do primeiro deploy**, abra `GET /admin/fontes` (com o
+`X-Admin-Token`). Na Vercel o site sai por IP de datacenter, e site atrás da
+Cloudflare (LigaMagic, Moxfield) pode desconfiar disso. A rota faz uma
+requisição a cada fonte, com o mesmo User-Agent do módulo dela, e diz qual
+`responde`, qual está `bloqueado` (403/429/503 ou o desafio da Cloudflare) e
+qual está `fora`. Fonte bloqueada é recurso que para de funcionar calado:
+cotação, importação, sugestões.
 
 **Esquema mudou?** Rode o `migrar` (workflow *Tarefas* → `migrar`, ou
 `python -m app.tarefas migrar` com as URLs no ambiente) antes de o código novo

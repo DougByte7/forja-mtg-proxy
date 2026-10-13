@@ -14,9 +14,10 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
 from fastapi.staticfiles import StaticFiles
 
 from . import (artes, artes_enviadas, blob, calc, cambio, cartas, cleanup,
-               cotacao_job, decks, detalhe_carta, edhrec, estoque, fulfillment, importar, log, manabase,
-               mpcfill, notify, pix, plataforma, poder, spellbook, storage,
-               tarefas, usuarios, visitas)
+               cotacao_job, decks, detalhe_carta, diagnostico, edhrec,
+               estoque, fulfillment, importar, log, manabase, mpcfill, notify,
+               pix, plataforma, poder, spellbook, storage, tarefas, usuarios,
+               visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -2185,6 +2186,17 @@ def admin_estoque_tinta(corpo: dict = Body(default={}),
     except ValueError as e:
         raise HTTPException(400, str(e))
     return estoque.resumo()
+
+
+@app.get("/admin/fontes")
+def admin_fontes(x_admin_token: str | None = Header(default=None),
+                 quem: dict | None = Depends(quem_e)):
+    """As fontes de fora respondem a este servidor? Uma requisição a cada uma
+    (LigaMagic, Scryfall, EDHREC, Spellbook, MPC Fill, Archidekt, Moxfield e
+    o câmbio) e um veredito: responde, bloqueado ou fora. É o teste a fazer
+    logo depois de mudar de servidor — ver `diagnostico.py`."""
+    _check_admin(x_admin_token, quem)
+    return diagnostico.testar_fontes()
 
 
 @app.post("/admin/cleanup")
