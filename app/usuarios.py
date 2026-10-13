@@ -52,7 +52,7 @@ import threading
 import time
 import uuid
 
-from . import log
+from . import db, log
 
 DB_PATH = os.environ.get("DB_PATH", "/app/data/orders.db")
 
@@ -99,12 +99,7 @@ class CadastroFechado(PermissionError):
 
 
 def _conn():
-    pasta = os.path.dirname(DB_PATH)
-    if pasta:
-        os.makedirs(pasta, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return db.pedidos(DB_PATH, linhas=True)
 
 
 def init_db():

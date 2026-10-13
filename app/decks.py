@@ -54,7 +54,7 @@ import sqlite3
 import time
 import uuid
 
-from . import cartas as base_cartas
+from . import cartas as base_cartas, db
 from . import log
 
 DB_PATH = os.environ.get("DB_PATH", "/app/data/orders.db")
@@ -81,12 +81,7 @@ CATEGORIAS_FORA_DA_CONTA = {CATEGORIA_SIDEBOARD}
 
 
 def _conn():
-    pasta = os.path.dirname(DB_PATH)
-    if pasta:
-        os.makedirs(pasta, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return db.pedidos(DB_PATH, linhas=True)
 
 
 def init_db():

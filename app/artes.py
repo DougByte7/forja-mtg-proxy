@@ -40,7 +40,7 @@ import sqlite3
 import time
 import xml.etree.ElementTree as ET
 
-from . import arte_id as ids
+from . import arte_id as ids, db
 from . import calc
 from . import cartas as base_cartas
 from . import decks, log
@@ -77,12 +77,7 @@ _COLUNAS = ("deck_id, nome, face, copia, arte_id, arquivo, fonte, dpi, "
 
 
 def _conn():
-    pasta = os.path.dirname(DB_PATH)
-    if pasta:
-        os.makedirs(pasta, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return db.pedidos(DB_PATH, linhas=True)
 
 
 def init_db():

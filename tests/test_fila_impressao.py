@@ -21,7 +21,6 @@ Drive e o CUPS são dublês. Rode de dentro da raiz do projeto:
 Sai com código 1 se qualquer checagem falhar.
 """
 import os
-import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -137,8 +136,10 @@ def status_de(order_id):
 
 # --- 1. migração ------------------------------------------------------------
 velho = semear("Velho Antigo", "vv")
-with sqlite3.connect(os.environ["DB_PATH"]) as conn:
-    conn.execute("UPDATE orders SET status='paid' WHERE id=?", (velho,))
+conn = storage._conn()
+conn.execute("UPDATE orders SET status='paid' WHERE id=?", (velho,))
+conn.commit()
+conn.close()
 storage.init_db()
 check("pedido 'paid' de antes da fila vira 'impresso'", status_de(velho) == "impresso")
 

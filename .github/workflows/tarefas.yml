@@ -1,0 +1,78 @@
+name: Tarefas
+
+# O que o site fazia em thread de fundo, agora num runner do GitHub — NÃO no
+# homelab: estas tarefas falam só com o banco (Turso) e com a Scryfall, e é
+# assim que elas continuam rodando quando o site sair de casa. Ver
+# `app/tarefas.py`.
+#
+# Sem gatilho de pull_request, pelo mesmo motivo do publicar.yml: o
+# repositório é público e este job tem as chaves do banco.
+on:
+  schedule:
+    - cron: "17 6 * * *"       # todo dia, 03:17 em Brasília
+  workflow_dispatch:
+    inputs:
+      comando:
+        description: "O que rodar"
+        type: choice
+        default: diario
+        options:
+          - diario             # cartas (se estiverem velhas) + faxina
+          - cartas-forcar      # remonta a base de cartas agora
+          - migrar             # cria tabelas e colunas novas
+
+concurrency:
+  group: tarefas
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tarefas:
+    if: github.repository == 'DougByte7/forja-mtg-proxy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DB_URL: ${{ secrets.DB_URL }}
+      DB_AUTH_TOKEN: ${{ secrets.DB_AUTH_TOKEN }}
+      CARTAS_DB_URL: ${{ secrets.CARTAS_DB_URL }}
+      CARTAS_DB_AUTH_TOKEN: ${{ secrets.CARTAS_DB_AUTH_TOKEN }}
+      # Vai no User-Agent da Scryfall como contato (ver app/identidade.py).
+      NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+      ADMIN_LOGIN: ${{ secrets.ADMIN_LOGIN }}
+      ADMIN_SENHA: ${{ secrets.ADMIN_SENHA }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      # Sem as URLs do banco, os comandos criariam um SQLite descartável no
+      # runner e diriam "ok" — um verde que não fez nada. Melhor parar.
+      - name: Conferir os segredos
+        run: |
+          for v in DB_URL CARTAS_DB_URL; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Falta o segredo $v (Settings → Secrets and variables → Actions)."
+              exit 1
+            fi
+          done
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Rodar
+        env:
+          COMANDO: ${{ inputs.comando || 'diario' }}
+          LOG_DIR: ${{ runner.temp }}/logs
+        run: |
+          set -euo pipefail
+          case "$COMANDO" in
+            diario)        python -m app.tarefas cartas
+                           python -m app.tarefas faxina ;;
+            cartas-forcar) python -m app.tarefas cartas --forcar ;;
+            migrar)        python -m app.tarefas migrar ;;
+          esac

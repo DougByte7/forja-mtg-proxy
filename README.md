@@ -384,6 +384,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 
 ## Estrutura
 
+- `app/db.py` — a conexão com o banco: arquivo SQLite ou Turso, com a mesma
+  cara. Ver *Banco: arquivo ou Turso*.
+- `app/tarefas.py` — migração, sincronização de cartas e faxina como
+  comando avulso, pro cron. Ver *Migração e tarefas diárias fora do
+  processo*.
 - `worker/main.py` — o worker da impressora: pergunta a fila pro site, monta
   o PDF, manda pro CUPS e conta o resultado. Roda do lado da impressora, com
   `python -m worker`. Ver *A fila de impressão e o worker*.
@@ -556,6 +561,12 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
   todos os pedidos de uma vez. Roda sem rede (o Drive é trocado por imagens de
   mentira): `python tests/test_combos.py`.
+- `tests/test_fila_impressao.py` — a fila de impressão com o worker rodando
+  de verdade contra o app: reserva atômica, recusa do CUPS, relato que se
+  perde na rede e volta sem reimprimir, folha combinada e a porta do worker.
+  Sem rede nem impressora: `python tests/test_fila_impressao.py`.
+- `tests/test_tarefas.py` — os comandos avulsos (`migrar`, `cartas`,
+  `faxina`) e o site sem thread de fundo: `python tests/test_tarefas.py`.
 
 ### Rotas
 
@@ -2335,6 +2346,69 @@ O motivo de cada falha vai pro log com o nome da carta:
 ```sh
 grep "desisti\|nome-desconhecido\|layout-mudou\|repescando" /app/data/logs/forja.log
 ```
+
+## Banco: arquivo ou Turso
+
+Os dois bancos — o dos pedidos (`orders.db`: pedidos, decks, contas, artes
+escolhidas, estoque) e a base de cartas (`cartas.db`) — podem morar num
+arquivo ao lado do processo, como sempre, ou no **Turso** (libSQL, que é
+SQLite pela rede). Quem decide é o `.env`:
+
+```
+DB_URL=libsql://forja-pedidos-SUAORG.turso.io
+DB_AUTH_TOKEN=...
+CARTAS_DB_URL=libsql://forja-cartas-SUAORG.turso.io
+CARTAS_DB_AUTH_TOKEN=...
+```
+
+Sem URL, vale o `DB_PATH`/`CARTAS_DB_PATH` de antes. O SQL é o mesmo nos dois
+casos; o `app/db.py` embrulha a conexão do libSQL pra ela se comportar como a
+do `sqlite3` (cursor iterável, linha por nome, `IntegrityError`, uso em
+qualquer thread), e é o único lugar do código que sabe a diferença. A única
+coisa que não existe no remoto é `PRAGMA journal_mode`, que a base de cartas
+pula quando está no Turso.
+
+A suíte de testes passa nos dois modos. Pra rodar contra um libSQL de
+verdade, suba um servidor local (o `sqld` vem junto do CLI do Turso) e aponte
+as URLs pra ele — cada teste espera um banco vazio, então um servidor novo
+por teste:
+
+```
+~/.turso/sqld -d /tmp/p --http-listen-addr 127.0.0.1:8100 &
+~/.turso/sqld -d /tmp/c --http-listen-addr 127.0.0.1:8101 &
+DB_URL=http://127.0.0.1:8100 CARTAS_DB_URL=http://127.0.0.1:8101 python tests/test_decks.py
+```
+
+### Migração e tarefas diárias fora do processo
+
+No homelab o processo vive dias: cria as tabelas ao subir e mantém duas
+threads acordando de tempos em tempos (sincronizar cartas, podar sessões e
+PDFs). Num servidor que nasce e morre a cada punhado de requisições (Vercel),
+nenhuma das duas coisas funciona, então elas viram comando
+(`app/tarefas.py`):
+
+```
+python -m app.tarefas migrar               # tabelas, colunas novas, admin inicial
+python -m app.tarefas cartas [--forcar]    # base de cartas, se estiver velha
+python -m app.tarefas faxina               # sessões vencidas
+```
+
+e duas chaves desligam o jeito antigo: `MIGRAR_NO_STARTUP=0` e
+`TAREFAS_EM_SEGUNDO_PLANO=0` (as duas ficam em 1 no homelab). Sem thread, o
+botão de sincronizar cartas do admin responde 409 e manda pro cron.
+
+O cron é o workflow **Tarefas** (`.github/workflows/tarefas.yml`), num runner
+do GitHub — não no homelab, porque essas tarefas falam só com o Turso e com a
+Scryfall. Roda todo dia às 03:17 (cartas, se estiverem velhas, e faxina), e à
+mão pela aba Actions com três opções: `diario`, `cartas-forcar` e `migrar`.
+Precisa dos segredos `DB_URL`, `DB_AUTH_TOKEN`, `CARTAS_DB_URL` e
+`CARTAS_DB_AUTH_TOKEN` (e, opcionais, `NOTIFY_TO` pro contato no User-Agent
+da Scryfall e `ADMIN_LOGIN`/`ADMIN_SENHA` pro admin inicial do `migrar`); sem
+as URLs, ele para com erro em vez de rodar contra um banco descartável.
+
+**Mudou o esquema** (coluna nova, tabela nova)? Rode o `migrar` — pelo
+workflow, ou na mão com as URLs no ambiente — antes de o código novo
+atender requisição.
 
 ## Publicação automática (push na main → homelab)
 

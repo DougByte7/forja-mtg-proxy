@@ -33,7 +33,7 @@ import os
 import sqlite3
 import time
 
-from . import calc
+from . import calc, db
 
 DB_PATH = os.environ.get("DB_PATH", "/app/data/orders.db")
 
@@ -94,10 +94,7 @@ _CHAVES = {
 
 
 def _conn():
-    pasta = os.path.dirname(DB_PATH)
-    if pasta:
-        os.makedirs(pasta, exist_ok=True)
-    return sqlite3.connect(DB_PATH, timeout=30)
+    return db.pedidos(DB_PATH)
 
 
 def criar_tabelas(conn) -> None:

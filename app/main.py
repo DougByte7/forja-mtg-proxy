@@ -15,8 +15,8 @@ from fastapi.staticfiles import StaticFiles
 
 from . import (artes, artes_enviadas, calc, cambio, cartas, cleanup,
                cotacao_job, decks, detalhe_carta, edhrec, estoque, fulfillment, importar, log, manabase,
-               mpcfill, notify, pix, poder, spellbook, storage, usuarios,
-               visitas)
+               mpcfill, notify, pix, poder, spellbook, storage, tarefas,
+               usuarios, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -235,20 +235,25 @@ async def registrar_visita(request: Request, call_next):
     return resposta
 
 
+# As duas coisas que só fazem sentido num processo que vive dias (o
+# container do homelab). Na Vercel cada processo nasce e morre com poucas
+# requisições: migrar em toda partida a frio são idas ao banco à toa, e thread
+# de fundo não termina. Lá as duas ficam em 0 e viram comando — ver
+# `app/tarefas.py`.
+MIGRAR_NO_STARTUP = os.environ.get("MIGRAR_NO_STARTUP", "1") == "1"
+TAREFAS_EM_SEGUNDO_PLANO = os.environ.get("TAREFAS_EM_SEGUNDO_PLANO", "1") == "1"
+
+
 @app.on_event("startup")
 def startup():
-    storage.init_db()
-    decks.init_db()
-    cartas.init_db()
-    usuarios.init_db()
-    artes.init_db()
-    # Só faz alguma coisa se não existir conta nenhuma — ver `semear_admin`.
-    usuarios.semear_admin()
-    cleanup.start_background()
-    # Monta a base de cartas se ela estiver vazia ou velha, em segundo plano.
-    # Sem isto o deckbuilder nasce sem carta nenhuma e dependeria de alguém
-    # lembrar de rodar o sync na mão depois de cada container novo.
-    cartas.start_background()
+    if MIGRAR_NO_STARTUP:
+        tarefas.migrar()
+    if TAREFAS_EM_SEGUNDO_PLANO:
+        cleanup.start_background()
+        # Monta a base de cartas se ela estiver vazia ou velha, em segundo
+        # plano. Sem isto o deckbuilder nasce sem carta nenhuma e dependeria de
+        # alguém lembrar de rodar o sync na mão depois de cada container novo.
+        cartas.start_background()
     log.evento("app", "subiu", log_dir=log.DIR, nivel=log.NIVEL,
                fontes=", ".join(f["id"] for f in cotacao_job.fontes_ativas())
                       or "nenhuma",
@@ -1198,6 +1203,13 @@ def cartas_sync(x_admin_token: str | None = Header(default=None),
     que a tela do admin pode acompanhar por `GET /cartas/estado`.
     """
     _check_admin(x_admin_token, quem)
+    if not TAREFAS_EM_SEGUNDO_PLANO:
+        # Sem thread de fundo (Vercel) a carga morreria junto com o processo
+        # no meio do caminho. Quem remonta a base aí é o cron.
+        raise HTTPException(409, "Aqui a base de cartas é atualizada pelo "
+                                 "cron diário (GitHub Actions, workflow "
+                                 "\"Tarefas\"). Pra remontar agora, rode ele "
+                                 "à mão com a opção forçar.")
     if cartas.andamento()["rodando"]:
         return {"ok": True, "ja_rodando": True, **cartas.estado()}
     threading.Thread(target=cartas.sincronizar, daemon=True).start()

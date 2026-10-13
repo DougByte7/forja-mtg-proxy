@@ -51,7 +51,7 @@ import sqlite3  # noqa: E402
 
 from PIL import Image  # noqa: E402
 
-from app import arte_id, artes, artes_enviadas, cartas, decks, mpcfill  # noqa: E402
+from app import arte_id, artes, artes_enviadas, cartas, db, decks, mpcfill  # noqa: E402
 
 falhas = []
 
@@ -455,6 +455,9 @@ try:
     conn.commit()
     conn.close()
     atual, artes.DB_PATH = artes.DB_PATH, antigo
+    # O banco antigo é um ARQUIVO: com o Turso ligado (DB_URL), o DB_PATH
+    # nem seria lido. Desliga só durante este bloco.
+    url_atual, db.PEDIDOS_URL = db.PEDIDOS_URL, ""
     try:
         artes.init_db()
         artes.init_db()   # a subida seguinte encontra a tabela já nova
@@ -467,6 +470,7 @@ try:
            len(artes.do_deck("d1")["sol ring"]["copias"]), 1)
     finally:
         artes.DB_PATH = atual
+        db.PEDIDOS_URL = url_atual
 
     print("\n--- a arte padrão nas que faltam ---")
 

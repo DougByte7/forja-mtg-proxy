@@ -5,3 +5,4 @@ qrcode[pil]==7.4.2
 Pillow==10.4.0
 reportlab==4.2.2
 requests==2.32.3
+libsql==0.1.11

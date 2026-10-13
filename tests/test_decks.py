@@ -46,7 +46,7 @@ os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
 os.environ["SENHA_ITERACOES"] = "1000"
 os.environ["SESSAO_SEGURA"] = "0"
 
-from app import cartas, cotacao, decks  # noqa: E402
+from app import cartas, cotacao, db, decks  # noqa: E402
 
 falhas = []
 
@@ -565,6 +565,9 @@ try:
     conn.close()
     caminho_de_verdade = decks.DB_PATH
     decks.DB_PATH = antigo
+    # O banco antigo é um ARQUIVO: com o Turso ligado (DB_URL), o DB_PATH
+    # nem seria lido. Desliga só durante este bloco.
+    url_de_verdade, db.PEDIDOS_URL = db.PEDIDOS_URL, ""
     try:
         eq("banco antigo: deck lido antes da migração é WIP",
            decks.obter("velho0000001")["versao"], None)
@@ -575,6 +578,7 @@ try:
            decks.resumo(["velho0000001"])[0]["versao"], None)
     finally:
         decks.DB_PATH = caminho_de_verdade
+        db.PEDIDOS_URL = url_de_verdade
 
     def cem(**trocas):
         """Atraxa + 99 cartas legais: 99 Forest, menos o que `trocas` põe."""
@@ -668,7 +672,7 @@ try:
     eq("e sem histórico", decks.historico(copia)["versoes"], [])
 
     decks.apagar(vd["id"])
-    conn = sqlite3.connect(decks.DB_PATH)
+    conn = decks._conn()
     eq("apagar o deck leva as versões junto",
        conn.execute("SELECT COUNT(*) FROM deck_versoes WHERE deck_id=?",
                     (vd["id"],)).fetchone()[0], 0)

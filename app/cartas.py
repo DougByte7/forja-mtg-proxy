@@ -39,7 +39,7 @@ import zlib
 
 import requests
 
-from . import identidade as ident, log
+from . import db, identidade as ident, log
 
 DB_PATH = os.environ.get("CARTAS_DB_PATH", "/app/data/cartas.db")
 BASE = "https://api.scryfall.com"
@@ -182,22 +182,21 @@ _COLUNAS_TOKENS = ("id, nome, tipo, texto, poder, resistencia, cores, "
 _INTERROGACOES_TOKENS = ",".join("?" * len(_COLUNAS_TOKENS.split(",")))
 
 
-def _conn() -> sqlite3.Connection:
+def _conn():
     """Conexão nova a cada chamada — objeto de sqlite3 não atravessa thread,
-    e aqui tem thread de sync rodando ao lado das buscas da tela."""
-    pasta = os.path.dirname(DB_PATH)
-    if pasta:
-        os.makedirs(pasta, exist_ok=True)
+    e aqui tem thread de sync rodando ao lado das buscas da tela. Arquivo
+    local ou Turso, conforme o `CARTAS_DB_URL` (ver `db.py`)."""
     # `isolation_level=None` desliga a transação implícita do módulo sqlite3.
     # No modo legado (o padrão) ele abre uma transação sozinho antes do
     # primeiro INSERT e só fecha no `commit()` — e aí o nosso `BEGIN
     # IMMEDIATE` da troca esbarra num "cannot start a transaction within a
     # transaction". Sem ele, transação só existe onde a gente escreveu BEGIN.
-    conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level=None)
-    conn.row_factory = sqlite3.Row
+    conn = db.cartas(DB_PATH, linhas=True, isolation_level=None)
     # WAL pra leitura não travar durante a carga: a sincronização escreve
     # dezenas de milhares de linhas e a tela continua buscando enquanto isso.
-    conn.execute("PRAGMA journal_mode=WAL")
+    # No Turso quem decide isso é o servidor, e o PRAGMA nem é aceito.
+    if not db.remoto("cartas"):
+        conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 

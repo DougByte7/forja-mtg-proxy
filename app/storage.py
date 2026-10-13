@@ -36,7 +36,7 @@ import sqlite3
 import time
 import uuid
 
-from . import estoque
+from . import db, estoque
 
 DB_PATH = os.environ.get("DB_PATH", "/app/data/orders.db")
 
@@ -54,8 +54,7 @@ _COLUNAS_COMBOS = (
 
 
 def _conn():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    return sqlite3.connect(DB_PATH)
+    return db.pedidos(DB_PATH)
 
 
 def init_db():
