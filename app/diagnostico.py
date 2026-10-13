@@ -76,15 +76,24 @@ def _testar(fonte: dict) -> dict:
     inicio = time.monotonic()
     cabecalhos = {"User-Agent": fonte["ua"]} if fonte["ua"] else {}
     cabecalhos.update(fonte.get("extra") or {})
+    resposta = None
     try:
         r = requests.get(fonte["url"], headers=cabecalhos, timeout=TIMEOUT,
                          allow_redirects=True)
         situacao, detalhe = _veredito(r)
+        # O porquê de uma recusa costuma vir no corpo (a Scryfall manda um
+        # JSON com `details`). Sem ele, "HTTP 400" não diz o que mudar.
+        if situacao != "responde":
+            resposta = r.text[:400]
     except requests.RequestException as e:
         situacao, detalhe = "fora", f"{type(e).__name__}: {e}"[:200]
-    return {"fonte": fonte["id"], "uso": fonte["uso"], "situacao": situacao,
-            "detalhe": detalhe, "ms": int((time.monotonic() - inicio) * 1000),
-            "url": fonte["url"]}
+    saida = {"fonte": fonte["id"], "uso": fonte["uso"], "situacao": situacao,
+             "detalhe": detalhe, "ms": int((time.monotonic() - inicio) * 1000),
+             "url": fonte["url"]}
+    if resposta is not None:
+        saida["resposta"] = resposta
+        saida["cabecalhos_enviados"] = cabecalhos
+    return saida
 
 
 def testar_fontes() -> dict:

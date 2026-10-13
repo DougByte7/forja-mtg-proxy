@@ -76,6 +76,11 @@ check("uma linha por fonte", set(por) == {"ligamagic", "scryfall", "edhrec",
 check("o bloqueio aparece na fonte certa", por["moxfield"] == "bloqueado", por)
 check("sem resposta é fora", por["cambio"] == "fora", por)
 check("e o resumo diz que nem todas respondem", r["todas_respondem"] is False)
+mox = next(f for f in r["fontes"] if f["fonte"] == "moxfield")
+check("a recusa traz o corpo da resposta e o que foi mandado",
+      "resposta" in mox and "User-Agent" in mox["cabecalhos_enviados"], mox)
+liga = next(f for f in r["fontes"] if f["fonte"] == "ligamagic")
+check("quem responde não carrega corpo nenhum", "resposta" not in liga)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
