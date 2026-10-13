@@ -151,8 +151,8 @@ check("pedido novo não baixa nada", saldo() == (500, 100), saldo())
 storage.mark_notified(duas)
 check("avisou que pagou: 2 folhas de um lado levam 1 plástico",
       saldo() == (498, 99), saldo())
-storage.mark_paid(duas)
-check("pago depois do aviso não baixa de novo", saldo() == (498, 99), saldo())
+storage.pedir_impressao(duas)
+check("na fila depois do aviso não baixa de novo", saldo() == (498, 99), saldo())
 status(duas, "pending")
 check("voltou pra pendente: o material volta", saldo() == (500, 100), saldo())
 
@@ -163,7 +163,7 @@ status(tres, "cancelado")
 check("cancelado devolve", saldo() == (500, 100), saldo())
 
 dupla = semear("Bruno Lima", 3, laminacao="double")   # 1 folha, dois lados
-status(dupla, "paid")
+status(dupla, "impresso")
 check("dois lados: 1 plástico por folha", saldo() == (499, 99), saldo())
 status(dupla, "cancelado")
 check("e cancelado devolve", saldo() == (500, 100), saldo())
@@ -176,7 +176,7 @@ def saldo_foil():
 cliente.post("/admin/estoque/papel_foil/entrada", headers=AUTH,
              json={"quantidade": 50})
 foil = semear("Lia Castro", 18, laminacao="foil")   # 2 folhas, foil
-status(foil, "paid")
+status(foil, "impresso")
 check("foil tira do papel foil, não do fotográfico",
       saldo_foil() == 48 and saldo() == (500, 98), (saldo_foil(), saldo()))
 status(foil, "cancelado")
@@ -189,7 +189,7 @@ cliente.delete(f"/admin/pedidos/{avisado}", headers=AUTH)
 check("apagado sem imprimir devolve", saldo() == (500, 100), saldo())
 
 impresso = semear("Davi Nunes", 9)
-storage.mark_paid(impresso)
+status(impresso, "impresso")
 cliente.delete(f"/admin/pedidos/{impresso}", headers=AUTH)
 check("apagado depois de impresso não devolve", saldo() == (499, 99), saldo())
 

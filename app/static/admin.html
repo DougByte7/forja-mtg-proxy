@@ -194,6 +194,7 @@
   }
   /* O que espera decisão fica marcado: é a fila de trabalho do dia. */
   .pedido.notified{border-color:var(--gold);background:rgba(201,162,39,.05);}
+  .pedido.erro_impressao{border-color:var(--red);background:rgba(217,99,74,.06);}
   .pedido.cancelado{opacity:.6;}
   .p-topo{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
   .p-nome{font-size:15px;font-weight:600;flex:1;min-width:0;
@@ -206,13 +207,17 @@
   }
   .pill.pending{color:var(--text-muted);}
   .pill.notified{color:var(--gold-light);border-color:var(--gold);}
-  .pill.paid{color:var(--green);border-color:rgba(76,154,107,.45);}
+  .pill.a_imprimir,.pill.imprimindo{color:var(--gold-light);border-color:var(--gold);}
+  .pill.impresso{color:var(--green);border-color:rgba(76,154,107,.45);}
+  .pill.erro_impressao{color:#F2AFA1;border-color:rgba(217,99,74,.5);}
   .pill.cancelado{color:#F2AFA1;border-color:rgba(217,99,74,.5);}
   .p-meta{
     font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);
     margin-top:7px;line-height:1.7;
   }
   .p-meta b{color:var(--text);font-weight:600;}
+  .p-resposta{margin-top:4px;white-space:pre-wrap;word-break:break-word;}
+  .pedido.erro_impressao .p-resposta{color:#F2AFA1;}
   .p-meta .sep{opacity:.4;margin:0 6px;}
   .p-acoes{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;}
   .p-acoes .btn-sec{padding:7px 11px;font-size:11px;}
@@ -357,7 +362,7 @@
   <div id="lista"></div>
 
   <p class="rodape" id="rodapePedidos">
-    <b>Imprimir</b> marca como pago e manda pra fila — é a única ação que gasta papel.<br>
+    <b>Imprimir</b> confirma o Pix e põe o pedido na fila da impressora — é a única ação que gasta papel.<br>
     Marque dois ou mais pedidos pra juntá-los numa folha só e aproveitar o papel.<br>
     Conferir o Pix no app do banco continua sendo com você.
   </p>
@@ -417,11 +422,16 @@ const $ = (id) => document.getElementById(id);
 const gate = $("gate"), painel = $("painel");
 
 const ESTADOS = {
-  pending:   {nome: "Aguardando pagamento"},
-  notified:  {nome: "Avisou que pagou"},
-  paid:      {nome: "Pago e impresso"},
-  cancelado: {nome: "Cancelado"},
+  pending:        {nome: "Aguardando pagamento"},
+  notified:       {nome: "Avisou que pagou"},
+  a_imprimir:     {nome: "Na fila da impressora"},
+  imprimindo:     {nome: "Imprimindo"},
+  impresso:       {nome: "Impresso"},
+  erro_impressao: {nome: "Erro na impressão"},
+  cancelado:      {nome: "Cancelado"},
 };
+// Enquanto está nestes, quem decide o próximo passo é o worker.
+const NA_FILA = new Set(["a_imprimir", "imprimindo"]);
 const LAMINACAO = {single: "Um lado", double: "Dois lados", foil: "Foil"};
 
 let aba = "pedidos";       // "pedidos" | "decks" | "estoque" — o que a lista mostra
@@ -500,12 +510,8 @@ async function entrar() {
   // Sem fila de impressão configurada o botão Imprimir confirma o pagamento
   // mas não imprime nada. Melhor dizer isso ANTES de alguém clicar esperando
   // ouvir a impressora.
-  if (!sessao.impressora) {
-    $("avisoTopo").hidden = false;
-    $("avisoTopo").textContent =
-      "PRINTER_QUEUE não está configurada: o botão Imprimir vai confirmar o " +
-      "pagamento e deixar o PDF pronto, mas não manda nada pra impressora.";
-  }
+  workerSessao = sessao.worker || null;
+  avisarWorker(sessao.impressora);
   // Só pela marca de estoque baixo na aba; falhar aqui não impede a lista.
   api("/admin/estoque").then((d) => { estoque = d; marcarAbaEstoque(); })
     .catch(() => {});
@@ -531,6 +537,28 @@ $("btnSair").addEventListener("click", () => {
   esquecerToken();
   mostrarGate("");
 });
+
+/* A impressora mora no homelab e quem imprime é o worker, que pergunta a
+   fila de tempos em tempos. Se ele sumiu, o Imprimir continua enfileirando,
+   mas nada sai — e isso precisa estar escrito ANTES de alguém clicar. */
+let workerSessao = null;   // {visto_em, offline_segundos} de /admin/sessao
+
+function avisarWorker(impressora) {
+  const avisos = [];
+  const visto = workerSessao && workerSessao.visto_em;
+  if (!visto) {
+    avisos.push("A impressora nunca deu sinal: o worker não está rodando. " +
+                "O botão Imprimir põe o pedido na fila, mas nada sai até ele subir.");
+  } else if (Date.now() / 1000 - visto > workerSessao.offline_segundos) {
+    avisos.push(`A impressora não dá sinal desde ${quando(visto)}. ` +
+                "Os pedidos ficam na fila até o worker voltar.");
+  } else if (!impressora) {
+    avisos.push("O worker está no ar, mas sem PRINTER_QUEUE: o botão Imprimir " +
+                "confirma o pagamento e monta o PDF, mas não manda nada pra impressora.");
+  }
+  $("avisoTopo").hidden = !avisos.length;
+  $("avisoTopo").textContent = avisos.join(" ");
+}
 
 /* ----------------------------------------------------------------- lista */
 
@@ -937,7 +965,9 @@ function desenharFiltros(contagem) {
     ["", "Todos", contagem.total],
     ["notified", "Avisou que pagou", contagem.notified],
     ["pending", "Aguardando", contagem.pending],
-    ["paid", "Pagos", contagem.paid],
+    ["fila", "Na fila", (contagem.a_imprimir || 0) + (contagem.imprimindo || 0)],
+    ["erro_impressao", "Erro na impressão", contagem.erro_impressao],
+    ["impresso", "Impressos", contagem.impresso],
     ["cancelado", "Cancelados", contagem.cancelado],
   ];
   const div = $("filtros");
@@ -1033,7 +1063,18 @@ function desenharPedido(p) {
     `<span class="sep">|</span>${Number(p.pages)} pág.` +
     `<span class="sep">|</span>${escapar(LAMINACAO[p.lamination] || p.lamination)}<br>` +
     `criado ${quando(p.created_at)}` +
-    (p.notified_at ? `<span class="sep">|</span>avisou ${quando(p.notified_at)}` : "");
+    (p.notified_at ? `<span class="sep">|</span>avisou ${quando(p.notified_at)}` : "") +
+    (p.impresso_em ? `<span class="sep">|</span>impresso ${quando(p.impresso_em)}` : "") +
+    (p.status === "imprimindo" && p.impressao_em
+      ? `<span class="sep">|</span>pego pela impressora ${quando(p.impressao_em)}` : "");
+  // O que a impressora respondeu. No erro é o motivo; no impresso, a
+  // resposta do CUPS. Texto que veio de fora: entra como texto.
+  if (p.impressao_msg && (p.status === "erro_impressao" || p.status === "impresso")) {
+    const r = document.createElement("div");
+    r.className = "p-resposta";
+    r.textContent = (p.status === "erro_impressao" ? "Recusado: " : "") + p.impressao_msg;
+    meta.appendChild(r);
+  }
   el.appendChild(meta);
 
   el.appendChild(acoesDoPedido(p));
@@ -1078,17 +1119,30 @@ function acoesDoPedido(p) {
   div.appendChild(botao("Montar PDF", (b) => montarPdf(p, b)));
   div.appendChild(botao("Refazer PDF", (b) => montarPdf(p, b, true)));
 
-  if (aberto || p.status === "paid") {
-    div.appendChild(botao(p.status === "paid" ? "Imprimir de novo" : "Imprimir",
-                          () => confirmarImpressao(p)));
+  const rotuloImprimir = {impresso: "Imprimir de novo",
+                         erro_impressao: "Tentar de novo"}[p.status];
+  if (aberto || rotuloImprimir) {
+    div.appendChild(botao(rotuloImprimir || "Imprimir", () => confirmarImpressao(p)));
   }
   if (aberto) {
-    div.appendChild(botao("Marcar pago", () => mudarStatus(p, "paid",
-      "Marcado como pago sem imprimir.")));
+    div.appendChild(botao("Marcar impresso", () => mudarStatus(p, "impresso",
+      "Marcado como impresso, sem passar pela fila.")));
     div.appendChild(botao("Cancelar", () => mudarStatus(p, "cancelado",
       "Pedido cancelado."), "perigo"));
   }
-  if (p.status === "paid" || p.status === "cancelado") {
+  // Na fila, o pedido é do worker. Tirar de lá é voltar pra "avisou que
+  // pagou"; e um `imprimindo` que não sai do lugar (o worker caiu no meio)
+  // nunca volta pra fila sozinho, porque o CUPS pode já ter aceitado — quem
+  // sabe se saiu no papel é quem está do lado da impressora.
+  if (NA_FILA.has(p.status)) {
+    div.appendChild(botao("Tirar da fila", () => mudarStatus(p, "notified",
+      "Saiu da fila de impressão.")));
+  }
+  if (p.status === "imprimindo" || p.status === "erro_impressao") {
+    div.appendChild(botao("Saiu no papel", () => mudarStatus(p, "impresso",
+      "Marcado como impresso.")));
+  }
+  if (p.status === "impresso" || p.status === "erro_impressao" || p.status === "cancelado") {
     div.appendChild(botao(p.status === "cancelado" ? "Reabrir" : "Voltar pra pendente",
       () => mudarStatus(p, "pending", "Voltou pra aguardando pagamento.")));
   }
@@ -1156,20 +1210,60 @@ async function montarPdf(p, botaoEl, fresh) {
   }
 }
 
+/* Espera o worker terminar o que está na fila, chamando `ler()` até o estado
+   sair de a_imprimir/imprimindo. Desiste depois de `tetoMin` minutos — o
+   pedido continua na fila, e a lista mostra quando ele sair. */
+async function acompanharFila(ler, aoAndar, tetoMin = 15) {
+  const fim = Date.now() + tetoMin * 60000;
+  let atual = await ler();
+  while (NA_FILA.has(atual.status) && Date.now() < fim) {
+    aoAndar(atual);
+    await new Promise((r) => setTimeout(r, 4000));
+    atual = await ler();
+  }
+  return atual;
+}
+
+function resultadoDaFila(atual) {
+  if (atual.status === "impresso") {
+    let texto = atual.impressao_msg || "Enviado pra impressora.";
+    if (atual.impressao_falhas) {
+      texto += ` ATENÇÃO: ${atual.impressao_falhas} carta(s) não baixaram e ` +
+               `saíram como quadro de falha no papel.`;
+    }
+    return {tipo: atual.impressao_falhas ? "erro" : "ok", texto};
+  }
+  if (atual.status === "erro_impressao") {
+    return {tipo: "erro", texto: "A impressora recusou: " +
+            (atual.impressao_msg || "sem detalhe.")};
+  }
+  if (NA_FILA.has(atual.status)) {
+    return {tipo: "andando", texto: "Continua na fila — a lista mostra quando sair."};
+  }
+  return {tipo: "erro", texto: `Saiu da fila sem imprimir (${ESTADOS[atual.status]?.nome || atual.status}).`};
+}
+
 function confirmarImpressao(p) {
   abrirModal({
     titulo: "Imprimir agora?",
-    texto: `Isso marca o pedido <b>#${escapar(p.id)}</b> (${escapar(p.customer_name)}, ` +
-           `${p.pages} página(s)) como <b>pago</b> e manda a folha pra fila da ` +
-           `impressora. Confira o Pix no app do banco antes.`,
+    texto: `Isso confirma o Pix do pedido <b>#${escapar(p.id)}</b> ` +
+           `(${escapar(p.customer_name)}, ${p.pages} página(s)) e põe a folha ` +
+           `na fila da impressora. Confira o Pix no app do banco antes.`,
     ok: "Imprimir",
     perigo: false,
     aoConfirmar: async () => {
-      anotar(p.id, "andando", "Mandando pra impressora…");
+      anotar(p.id, "andando", "Pondo na fila…");
       ocupado++;
       try {
         const r = await api(`/admin/pedidos/${p.id}/imprimir`, {method: "POST"});
-        anotar(p.id, r.falhas ? "erro" : "ok", r.mensagem);
+        anotar(p.id, "andando", r.mensagem);
+        const atual = await acompanharFila(
+          () => api(`/admin/pedidos/${p.id}`),
+          (a) => anotar(p.id, "andando", a.status === "imprimindo"
+            ? "A impressora pegou o pedido — montando a folha e mandando pro CUPS…"
+            : r.mensagem));
+        const fim = resultadoDaFila(atual);
+        anotar(p.id, fim.tipo, fim.texto);
         await carregar();
       } catch (e) {
         if (e.message !== "401") anotar(p.id, "erro", e.message);
@@ -1420,19 +1514,26 @@ function confirmarImpressaoCombinada() {
                      .join(", ");
   abrirModal({
     titulo: "Imprimir a folha combinada?",
-    texto: `Isso marca <b>todos</b> estes pedidos como pagos e manda ` +
-           `${resumo.combinadas} folha(s) pra fila: ${nomes}. ` +
+    texto: `Isso confirma o Pix de <b>todos</b> estes pedidos e põe ` +
+           `${resumo.combinadas} folha(s) na fila da impressora: ${nomes}. ` +
            `As cartas saem misturadas no mesmo papel, então não dá pra ` +
            `imprimir só uma parte — confira o Pix de cada um antes.`,
     ok: "Imprimir tudo",
     perigo: false,
     aoConfirmar: async () => {
-      anotarCombo("andando", "Mandando pra impressora…");
+      anotarCombo("andando", "Pondo na fila…");
       ocupado++;
       try {
-        const r = await api(`/admin/combos/${comboAtual.id}/imprimir`,
-                            {method: "POST"});
-        anotarCombo(r.falhas ? "erro" : "ok", r.mensagem);
+        const id = comboAtual.id;
+        const r = await api(`/admin/combos/${id}/imprimir`, {method: "POST"});
+        anotarCombo("andando", r.mensagem);
+        const atual = await acompanharFila(
+          () => api(`/admin/combos/${id}`),
+          (a) => anotarCombo("andando", a.status === "imprimindo"
+            ? "A impressora pegou a folha — montando e mandando pro CUPS…"
+            : r.mensagem));
+        const fim = resultadoDaFila(atual);
+        anotarCombo(fim.tipo, fim.texto);
         await carregar();
       } catch (e) {
         if (e.message !== "401") anotarCombo("erro", e.message);
@@ -1616,6 +1717,9 @@ $("buscaInput").addEventListener("input", (ev) => {
 setInterval(() => {
   if (document.hidden || !token || painel.hidden || carregando || ocupado) return;
   if ($("modal").classList.contains("show")) return;
+  api("/admin/sessao").then((s) => { workerSessao = s.worker || null;
+                                     avisarWorker(s.impressora); })
+    .catch(() => {});
   carregar();
 }, 30000);
 

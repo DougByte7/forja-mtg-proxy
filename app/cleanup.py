@@ -53,9 +53,13 @@ def _podar_sessoes() -> int:
         return 0
 
 
-def run_once() -> dict:
-    """Apaga os PDFs mais velhos que PDF_KEEP_DAYS. Devolve um resuminho."""
-    sessoes = _podar_sessoes()
+def run_once(podar_sessoes: bool = True) -> dict:
+    """Apaga os PDFs mais velhos que PDF_KEEP_DAYS. Devolve um resuminho.
+
+    `podar_sessoes=False` é o worker da impressora: ele tem PDFs mas não tem
+    banco, e podar sessões lá criaria um `orders.db` vazio do nada.
+    """
+    sessoes = _podar_sessoes() if podar_sessoes else 0
     if PDF_KEEP_DAYS <= 0:
         return {"desligado": True, "removidos": 0, "liberado_mb": 0.0,
                 "sessoes_podadas": sessoes}

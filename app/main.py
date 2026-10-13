@@ -10,13 +10,13 @@ from fastapi import (Body, Cookie, Depends, FastAPI, Form, Header,
                      HTTPException, Request, Response, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
-                               Response, StreamingResponse)
+                               RedirectResponse, Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
 from . import (artes, artes_enviadas, calc, cambio, cartas, cleanup,
                cotacao_job, decks, detalhe_carta, edhrec, estoque, fulfillment, importar, log, manabase,
-               mpcfill, notify, pix, poder, printer, spellbook, storage, tinta,
-               usuarios, visitas)
+               mpcfill, notify, pix, poder, spellbook, storage, usuarios,
+               visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -48,6 +48,15 @@ PIX_KEY = os.environ.get("PIX_KEY", "")
 MERCHANT_NAME = os.environ.get("MERCHANT_NAME", "FORJA DE PROXIES")
 MERCHANT_CITY = os.environ.get("MERCHANT_CITY", "ITAIOPOLIS")
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+# A chave do worker da impressora (ver `worker/`). É outra chave de propósito:
+# ela abre só as rotas `/worker/*`, e vazar a do worker não dá acesso ao
+# painel — nem vazar a do painel dá pra se passar pela impressora. Vazia
+# desliga as rotas do worker.
+WORKER_TOKEN = os.environ.get("WORKER_TOKEN", "")
+# Sem notícia do worker há mais que isto, a tela diz que a impressora está
+# fora do ar. Ele pergunta pela fila a cada ~30s, então alguns minutos de
+# silêncio já não são acaso.
+WORKER_OFFLINE_SEGUNDOS = int(os.environ.get("WORKER_OFFLINE_SEGUNDOS", "180"))
 
 # Janela pra não mandar 10 e-mails se o cliente ficar clicando no botão.
 NOTIFY_COOLDOWN_SECONDS = 120
@@ -279,10 +288,17 @@ async def create_order(xml_file: UploadFile, lamination: str = Form(...),
     }
 
 
+def _publico(pedido: dict) -> dict:
+    """O pedido como o cliente pode ver: sem a resposta crua do CUPS, que
+    pode trazer endereço e nome de fila, e sem o id interno do combo."""
+    return {k: v for k, v in pedido.items()
+            if k not in ("impressao_msg", "impressao_combo")}
+
+
 @app.get("/pedidos/meus")
 def meus_pedidos(quem: dict = Depends(exige_login)):
     """Os pedidos desta conta, de qualquer aparelho."""
-    return {"pedidos": storage.list_by_dono(quem["id"])}
+    return {"pedidos": [_publico(p) for p in storage.list_by_dono(quem["id"])]}
 
 
 @app.post("/pedidos/reclamar")
@@ -317,7 +333,7 @@ def order_status(order_id: str):
     order = storage.get_order(order_id)
     if not order:
         raise HTTPException(404, "Pedido não encontrado.")
-    return order
+    return _publico(order)
 
 
 @app.post("/orders/{order_id}/notify-payment")
@@ -335,7 +351,7 @@ def notify_payment(order_id: str):
     order = storage.get_order(order_id)
     if not order:
         raise HTTPException(404, "Pedido não encontrado.")
-    if order["status"] == "paid":
+    if order["status"] in storage.STATUS_PAGOS:
         return {"status": "already_printed",
                 "message": "Esse pedido já foi confirmado e enviado pra impressão."}
 
@@ -665,51 +681,89 @@ def print_order(order_id: str, token: str | None = None,
                 x_admin_token: str | None = Header(default=None),
                 quem: dict | None = Depends(quem_e)):
     """
-    Link "Imprimir" do e-mail. Reaproveita o PDF já conferido, marca o
-    pedido como pago e manda pra fila da impressora. Aceita o token assinado
-    da querystring (o do e-mail) ou o header X-Admin-Token, pra disparar na
-    mão quando precisar.
-    """
-    order = _authorize("print", order_id, token, x_admin_token, quem)
-    was_paid = order["status"] == "paid"
+    Link "Imprimir" do e-mail. Confirma o Pix e põe o pedido na fila da
+    impressora (`a_imprimir`) — quem imprime é o worker, que pega a fila na
+    próxima passada. Aceita o token assinado da querystring (o do e-mail) ou
+    o header X-Admin-Token, pra disparar na mão quando precisar.
 
+    Responde com um redirecionamento pra página que acompanha a fila, e não
+    com ela direto: aquela página se atualiza sozinha, e se fosse ESTA URL se
+    atualizando, cada recarga poria o pedido na fila de novo — uma cópia
+    impressa a cada 5 segundos. Abrir o link do e-mail de novo, de propósito,
+    continua sendo "imprimir de novo".
+    """
+    _authorize("print", order_id, token, x_admin_token, quem)
     try:
-        pdf_path, failures, print_status = fulfillment.run_print_job(order_id)
-    except printer.PrintError as e:
+        storage.pedir_impressao(order_id)
+    except storage.FilaError as e:
+        return HTMLResponse(_status_page("Não foi pra fila", str(e), ok=False),
+                            status_code=409)
+    log.evento("pedido", "na-fila", pedido=order_id, por="link")
+    destino = f"/orders/{order_id}/impressao" + (f"?token={token}" if token else "")
+    return RedirectResponse(destino, status_code=303)
+
+
+def _worker_visto() -> float | None:
+    """Quando o worker deu sinal pela última vez (epoch), ou None."""
+    visto = storage.ler_worker("visto")
+    return visto["em"] if visto else None
+
+
+def _aviso_worker() -> str:
+    """Uma frase pra quando o worker sumiu, ou vazio se ele está por aí."""
+    visto = _worker_visto()
+    if visto is None:
+        return (" ATENÇÃO: a impressora nunca deu sinal de vida — o worker "
+                "não está rodando, e o pedido fica na fila até ele voltar.")
+    parado = time.time() - visto
+    if parado > WORKER_OFFLINE_SEGUNDOS:
+        return (f" ATENÇÃO: a impressora não dá sinal há {int(parado // 60)} "
+                f"min. O pedido fica na fila até ela voltar.")
+    return ""
+
+
+@app.get("/orders/{order_id}/impressao", response_class=HTMLResponse)
+def print_progress(order_id: str, token: str | None = None,
+                   x_admin_token: str | None = Header(default=None),
+                   quem: dict | None = Depends(quem_e)):
+    """Onde o pedido está na fila da impressora. Só lê — se atualiza sozinha
+    enquanto o worker não termina, e pode ser recarregada à vontade.
+
+    Usa o mesmo token do link "Imprimir": é a continuação dele."""
+    order = _authorize("print", order_id, token, x_admin_token, quem)
+    status = order["status"]
+    aqui = f"/orders/{order_id}/impressao" + (f"?token={token}" if token else "")
+    resumo = (f"Pedido {order_id} de {order['customer_name']} — "
+              f"{order['pages']} página(s), R$ {order['amount']:.2f}.")
+    msg = order.get("impressao_msg") or ""
+
+    if status == "a_imprimir":
+        return HTMLResponse(_status_page(
+            "Na fila da impressora",
+            f"{resumo} Pagamento confirmado. A impressora pega o pedido em "
+            f"instantes — esta página se atualiza sozinha.{_aviso_worker()}",
+            refresh=aqui))
+    if status == "imprimindo":
+        return HTMLResponse(_status_page(
+            "Imprimindo",
+            f"{resumo} A folha está sendo montada e enviada pro CUPS. Pedido "
+            f"grande leva alguns minutos baixando as artes.", refresh=aqui))
+    if status == "impresso":
+        detalhe = f"{resumo} {msg}".strip()
+        if order.get("impressao_falhas"):
+            detalhe += (f" ATENÇÃO: {order['impressao_falhas']} carta(s) não "
+                        f"baixaram e saíram como quadro de falha no papel.")
+        return HTMLResponse(_status_page("Enviado pra impressora", detalhe))
+    if status == "erro_impressao":
         return HTMLResponse(_status_page(
             "A impressora recusou o trabalho",
-            f"O pedido {order_id} está marcado como pago e o PDF está pronto, "
-            f"mas o CUPS não aceitou: {e} "
-            f"Depois de resolver, abra este mesmo link de novo — ou use o link "
-            f"\"Ver PDF\" do e-mail e imprima pelo celular.", ok=False
-        ), status_code=502)
-    except Exception as e:
-        return HTMLResponse(_status_page(
-            "Falhou", f"Não consegui imprimir o pedido {order_id}: {e}", ok=False
-        ), status_code=500)
-
-    resumo = (f"Pedido {order_id} de {order['customer_name']} — "
-              f"{order['pages']} página(s), R$ {order['amount']:.2f}. "
-              f"PDF: {os.path.basename(pdf_path)}.")
-
-    if not printer.PRINTER_QUEUE:
-        # Modo sem impressora no servidor: o clique confirma o pagamento e
-        # deixa o PDF pronto, mas a impressão em si fica manual, pelo link
-        # "Ver PDF".
-        titulo = "Pagamento confirmado"
-        detalhe = (f"{resumo} A impressão automática está desligada "
-                   f"(PRINTER_QUEUE vazia), então nada foi pra fila nenhuma — "
-                   f"abra o link \"Ver PDF\" do e-mail e imprima de onde preferir.")
-    else:
-        titulo = "Enviado pra impressora"
-        detalhe = f"{resumo} {print_status}."
-
-    if was_paid:
-        detalhe += " Esse pedido já tinha sido confirmado antes."
-    if failures:
-        detalhe += (f" ATENÇÃO: {failures} carta(s) não baixaram do Drive e saíram "
-                    f"como quadro de falha no papel.")
-    return HTMLResponse(_status_page(titulo, detalhe))
+            f"{resumo} O pedido está pago, mas não foi impresso: {msg} "
+            f"Depois de resolver, abra o link \"Imprimir\" do e-mail de novo.",
+            ok=False), status_code=502)
+    return HTMLResponse(_status_page(
+        "Fora da fila",
+        f"{resumo} Esse pedido não está na fila de impressão (estado: "
+        f"{status}).", ok=False))
 
 
 def _montando_page(order_id: str, estado: dict, token: str | None,
@@ -753,11 +807,17 @@ def _montando_page(order_id: str, estado: dict, token: str | None,
 </body></html>"""
 
 
-def _status_page(title: str, message: str, ok: bool = True) -> str:
+def _status_page(title: str, message: str, ok: bool = True,
+                 refresh: str | None = None) -> str:
+    """Página de recado. `refresh` é a URL pra onde ela se recarrega a cada
+    5s — só pra URL que apenas LÊ, nunca pra uma que faz alguma coisa."""
     color = "#C9A227" if ok else "#D9634A"
+    recarga = (f'<meta http-equiv="refresh" content="5;url={refresh}">'
+               if refresh else "")
     return f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+{recarga}
 <title>{title} — Forja de Proxies</title></head>
 <body style="margin:0;min-height:100vh;display:flex;align-items:center;
              justify-content:center;background:#0F0D17;color:#EDE6D6;
@@ -1779,17 +1839,27 @@ def precos():
     return estoque.precos_por_pagina()
 
 
+# A tinta que o worker contou vale por este tempo. Passou disso, a impressora
+# está fora do ar há um bom tempo e o número velho não diz mais nada.
+TINTA_VALIDADE_SEGUNDOS = int(os.environ.get("TINTA_VALIDADE_SEGUNDOS",
+                                             str(2 * 86400)))
+
+
 @app.get("/impressora/tinta")
 def ink_level():
     """Nível de tinta da impressora, pra tela avisar quando vai demorar.
 
     Público de propósito — é a mesma informação que o aviso na página já dá,
-    e ela precisa carregar antes de qualquer pedido. Por isso a resposta não
-    leva endereço de CUPS nem nome de fila (ver `tinta.estado`), e a consulta
-    de verdade fica em cache: quem abre a página não vira uma pergunta nova
-    pra impressora.
+    e ela precisa carregar antes de qualquer pedido. Quem pergunta pra
+    impressora é o worker (ver `tinta.estado`, que já tira endereço e nome de
+    fila); aqui só se devolve o que ele contou na última batida.
     """
-    return tinta.estado()
+    batida = storage.ler_worker("tinta")
+    if (not batida or not isinstance(batida["valor"], dict)
+            or time.time() - batida["em"] > TINTA_VALIDADE_SEGUNDOS):
+        return {"estado": "desconhecido", "nivel": None, "marcadores": [],
+                "fonte": "sem-worker"}
+    return batida["valor"]
 
 
 @app.get("/admin/orders")
@@ -1804,10 +1874,13 @@ def list_open_orders(x_admin_token: str | None = Header(default=None),
 @app.get("/admin/printers")
 def list_printers(x_admin_token: str | None = Header(default=None),
                   quem: dict | None = Depends(quem_e)):
-    """Lista as filas que o CUPS conhece, vistas de dentro do container —
-    é assim que se descobre o nome certo pra PRINTER_QUEUE."""
+    """Lista as filas que o CUPS conhece, como o worker viu na última batida —
+    é assim que se descobre o nome certo pra PRINTER_QUEUE do worker."""
     _check_admin(x_admin_token, quem)
-    return printer.list_queues()
+    batida = storage.ler_worker("filas")
+    if not batida:
+        return {"erro": "o worker da impressora nunca deu sinal."}
+    return {**(batida["valor"] or {}), "visto_em": batida["em"]}
 
 
 @app.get("/admin/tinta")
@@ -1817,10 +1890,13 @@ def ink_diagnostics(x_admin_token: str | None = Header(default=None),
 
     Serve pra responder "esse modelo informa o nível?" sem abrir terminal:
     se não vier nenhum `marker-*`, ele não informa, e o aviso da página passa
-    a depender do `TINTA_ESTADO` no .env.
+    a depender do `TINTA_ESTADO` no .env do worker.
     """
     _check_admin(x_admin_token, quem)
-    return tinta.diagnostico()
+    batida = storage.ler_worker("tinta_diagnostico")
+    if not batida:
+        return {"erro": "o worker da impressora nunca deu sinal."}
+    return {**(batida["valor"] or {}), "visto_em": batida["em"]}
 
 
 @app.get("/admin/visitas")
@@ -1866,7 +1942,12 @@ def admin_session(x_admin_token: str | None = Header(default=None),
     token novo) pra saber se mostra a lista ou o formulário de entrada, sem
     ter que pedir a lista inteira só pra descobrir isso."""
     _check_admin(x_admin_token, quem)
-    return {"ok": True, "impressora": printer.PRINTER_QUEUE or None,
+    filas = storage.ler_worker("filas")
+    return {"ok": True,
+            "impressora": ((filas or {}).get("valor") or {}).get(
+                "printer_queue_configurada"),
+            "worker": {"visto_em": _worker_visto(),
+                       "offline_segundos": WORKER_OFFLINE_SEGUNDOS},
             "email_configurado": notify.is_configured()}
 
 
@@ -2007,12 +2088,13 @@ def admin_set_status(order_id: str, status: str = Form(...),
                      quem: dict | None = Depends(quem_e)):
     """Muda o estado de um pedido na mão.
 
-    Serve pros casos que o fluxo normal não cobre: marcar como pago um Pix
-    que caiu sem o cliente avisar, cancelar um pedido abandonado, ou desfazer
+    Serve pros casos que o fluxo normal não cobre: marcar como impresso um
+    pedido que saiu por fora da fila, cancelar um pedido abandonado, ou desfazer
     um clique errado voltando pra 'pending'.
 
-    Marcar como 'paid' por aqui NÃO imprime nada — quem imprime é o botão de
-    imprimir, que é uma ação separada de propósito (papel e tinta não voltam).
+    Marcar como 'impresso' por aqui NÃO imprime nada — é o "imprimi por
+    fora". Quem manda pra impressora é o botão de imprimir, que é uma ação
+    separada de propósito (papel e tinta não voltam).
     """
     _check_admin(x_admin_token, quem)
     try:
@@ -2048,36 +2130,23 @@ def admin_build_pdf(order_id: str, fresh: bool = False,
 def admin_print(order_id: str,
                 x_admin_token: str | None = Header(default=None),
                 quem: dict | None = Depends(quem_e)):
-    """Mesmo efeito do link "Imprimir" do e-mail: marca pago e manda pra fila.
+    """Mesmo efeito do link "Imprimir" do e-mail: confirma o Pix e põe o
+    pedido na fila (`a_imprimir`). Também é o "imprimir de novo".
 
-    É a única ação da tela que gasta papel, então o botão pede confirmação do
-    outro lado. Aqui roda síncrono igual ao link, pra resposta já dizer se o
-    CUPS aceitou.
+    Não espera a impressora: o worker pega na próxima passada, e a tela
+    acompanha pelo `GET /admin/pedidos/{id}` até sair de `a_imprimir` /
+    `imprimindo`.
     """
     _check_admin(x_admin_token, quem)
-    order = storage.get_order(order_id)
-    if not order:
-        raise HTTPException(404, "Pedido não encontrado.")
-    ja_pago = order["status"] == "paid"
     try:
-        pdf_path, falhas, print_status = fulfillment.run_print_job(order_id)
-    except printer.PrintError as e:
-        raise HTTPException(502, f"O pedido foi marcado como pago e o PDF "
-                                 f"está pronto, mas o CUPS recusou: {e}")
-    if not printer.PRINTER_QUEUE:
-        mensagem = ("Pagamento confirmado e PDF pronto. A impressão automática "
-                    "está desligada (PRINTER_QUEUE vazia), então nada foi pra "
-                    "fila — use o botão Ver PDF e imprima de onde preferir.")
-    else:
-        mensagem = f"{print_status}."
-    if ja_pago:
-        mensagem += " Esse pedido já tinha sido confirmado antes."
-    if falhas:
-        mensagem += (f" ATENÇÃO: {falhas} carta(s) não baixaram do Drive e "
-                     f"saíram como quadro de falha no papel.")
-    log.evento("admin", "imprimiu", pedido=order_id, falhas=falhas,
-               arquivo=os.path.basename(pdf_path))
-    return {"ok": True, "mensagem": mensagem, "falhas": falhas,
+        if not storage.pedir_impressao(order_id):
+            raise HTTPException(404, "Pedido não encontrado.")
+    except storage.FilaError as e:
+        raise HTTPException(409, str(e))
+    log.evento("admin", "pediu-impressao", pedido=order_id)
+    return {"ok": True,
+            "mensagem": "Pagamento confirmado — o pedido está na fila da "
+                        "impressora." + _aviso_worker(),
             "pedido": storage.get_order(order_id)}
 
 
@@ -2087,9 +2156,9 @@ def admin_print(order_id: str,
 # 5 slots em branco. Marcando vários na tela, as filas de impressão deles
 # viram uma fila corrida e só a última folha do conjunto sai incompleta.
 #
-# O que NÃO muda: o valor de cada pedido (foi o combinado com o cliente) e o
-# estado de cada um (o combo não tem estado próprio — quem fica 'paid' são os
-# pedidos, todos de uma vez, quando a folha vai pra impressora).
+# O que NÃO muda: o valor de cada pedido (foi o combinado com o cliente). O
+# estado anda junto: quando a folha vai pra fila, todos os pedidos dela vão
+# junto, e saem dela juntos (ver `storage.pedir_impressao_combo`).
 
 
 def _pedidos_do_combo(order_ids: list[str]) -> list[dict]:
@@ -2182,6 +2251,8 @@ def admin_get_combo(combo_id: str,
         raise HTTPException(404, "Combinação não encontrada.")
     pedidos = [p for p in (storage.get_order(i) for i in combo["order_ids"]) if p]
     resposta = _resposta_combo(combo_id, pedidos)
+    for campo in ("status", "impressao_msg", "impressao_falhas", "impresso_em"):
+        resposta[campo] = combo.get(campo)
     # Pedido apagado depois de a folha ter sido combinada: a montagem vai
     # recusar, e é melhor a tela saber disso antes de gastar minutos baixando.
     resposta["faltando"] = [i for i in combo["order_ids"]
@@ -2214,37 +2285,29 @@ def admin_build_combo_pdf(combo_id: str, fresh: bool = False,
 def admin_print_combo(combo_id: str,
                       x_admin_token: str | None = Header(default=None),
                       quem: dict | None = Depends(quem_e)):
-    """Manda a folha combinada pra fila e marca TODOS os pedidos dela como pagos.
+    """Põe a folha combinada na fila e confirma o Pix de TODOS os pedidos dela.
 
     É um papel só com as cartas de várias pessoas, então não existe imprimir
     metade: ou o conjunto inteiro é confirmado, ou nenhum. Confira os Pix de
-    todos antes — a tela pede confirmação do outro lado.
+    todos antes — a tela pede confirmação do outro lado. A tela acompanha pelo
+    `GET /admin/combos/{id}` até a folha sair da fila.
     """
     _check_admin(x_admin_token, quem)
-    combo = storage.get_combo(combo_id)
-    if not combo:
-        raise HTTPException(404, "Combinação não encontrada.")
     try:
-        pdf_path, falhas, print_status, ids = fulfillment.run_combo_print_job(combo_id)
-    except printer.PrintError as e:
-        raise HTTPException(502, f"Os pedidos foram marcados como pagos e a "
-                                 f"folha está pronta, mas o CUPS recusou: {e}")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-    if not printer.PRINTER_QUEUE:
-        mensagem = (f"{len(ids)} pedido(s) confirmados e folha combinada pronta. "
-                    f"A impressão automática está desligada (PRINTER_QUEUE "
-                    f"vazia), então nada foi pra fila — use Ver PDF combinado e "
-                    f"imprima de onde preferir.")
-    else:
-        mensagem = f"{print_status}. {len(ids)} pedido(s) marcados como pagos."
-    if falhas:
-        mensagem += (f" ATENÇÃO: {falhas} carta(s) não baixaram do Drive e "
-                     f"saíram como quadro de falha no papel.")
-    log.evento("admin", "imprimiu-combinado", combo=combo_id, falhas=falhas,
-               pedidos=len(ids), arquivo=os.path.basename(pdf_path))
-    return {"ok": True, "mensagem": mensagem, "falhas": falhas, "pedidos": ids}
+        ids = storage.pedir_impressao_combo(combo_id)
+    except storage.FilaError as e:
+        raise HTTPException(409, str(e))
+    # O material que a fila corrida deixa de gastar volta já aqui, no mesmo
+    # clique que confirmou: é uma vez por combinação, e imprimir a mesma
+    # folha de novo não devolve outra vez.
+    pedidos = [p for p in (storage.get_order(i) for i in ids) if p]
+    estoque.devolver_combinacao(combo_id, pedidos)
+    log.evento("admin", "pediu-impressao-combinada", combo=combo_id,
+               pedidos=len(ids))
+    return {"ok": True,
+            "mensagem": f"{len(ids)} pedido(s) confirmados — a folha combinada "
+                        f"está na fila da impressora." + _aviso_worker(),
+            "pedidos": ids}
 
 
 @app.delete("/admin/combos/{combo_id}")
@@ -2393,4 +2456,118 @@ def run_cleanup(x_admin_token: str | None = Header(default=None),
 # Serve o front-end (app/static/index.html) na raiz. Fica depois das rotas
 # da API de propósito — assim /orders, /admin/... continuam resolvendo
 # certo, e qualquer outro caminho cai no arquivo estático.
+# --- Worker da impressora (`worker/`, roda no homelab) ----------------------
+#
+# A conversa é sempre de lá pra cá: o worker pergunta a fila, reserva o que
+# vai imprimir e conta o resultado. Este lado não sabe onde o worker mora nem
+# se ele existe — só que alguém com o WORKER_TOKEN passou por aqui (`visto`).
+#
+# Cada troca de estado é condicionada (ver `storage.reservar`): se a linha não
+# estava onde o worker achava, a resposta é 409 e ele segue pra próxima. Isso
+# é o que deixa duas rodadas do worker lerem a mesma fila sem imprimir nada em
+# dobro.
+
+
+def _check_worker(authorization: str | None = Header(default=None)) -> None:
+    if not WORKER_TOKEN:
+        raise HTTPException(503, "Worker desligado (WORKER_TOKEN vazia).")
+    if not authorization or not hmac.compare_digest(
+            str(authorization), f"Bearer {WORKER_TOKEN}"):
+        raise HTTPException(401, "Token do worker inválido ou ausente.")
+
+
+@app.get("/worker/fila", dependencies=[Depends(_check_worker)])
+def worker_fila():
+    """O que imprimir e o que adiantar. Cada pergunta conta como sinal de
+    vida — é ela que o admin usa pra dizer se a impressora está no ar."""
+    storage.salvar_worker("visto", True)
+    return storage.fila_do_worker()
+
+
+@app.get("/worker/pedidos/{order_id}", dependencies=[Depends(_check_worker)])
+def worker_pedido(order_id: str):
+    """O pedido com o XML — o que o worker precisa pra montar a folha."""
+    pedido = storage.get_order_with_xml(order_id)
+    if not pedido:
+        raise HTTPException(404, "Pedido não encontrado.")
+    return pedido
+
+
+@app.get("/worker/combos/{combo_id}", dependencies=[Depends(_check_worker)])
+def worker_combo(combo_id: str):
+    """A folha combinada com os pedidos dela, com XML, NA ORDEM DE IMPRESSÃO."""
+    combo = storage.get_combo(combo_id)
+    if not combo:
+        raise HTTPException(404, "Combinação não encontrada.")
+    pedidos = storage.get_orders_with_xml(combo["order_ids"])
+    if len(pedidos) < len(combo["order_ids"]):
+        faltando = set(combo["order_ids"]) - {p["id"] for p in pedidos}
+        raise HTTPException(409, "Pedido apagado depois que a combinação foi "
+                                 f"montada: {', '.join(sorted(faltando))}.")
+    return {**combo, "pedidos": pedidos}
+
+
+_RESERVAR = {"pedidos": storage.reservar, "combos": storage.reservar_combo}
+_CONCLUIR = {"pedidos": storage.concluir, "combos": storage.concluir_combo}
+_FALHAR = {"pedidos": storage.falhar, "combos": storage.falhar_combo}
+
+
+def _tipo_do_worker(tipo: str) -> str:
+    if tipo not in _RESERVAR:
+        raise HTTPException(404, "Tipo desconhecido.")
+    return tipo
+
+
+@app.post("/worker/{tipo}/{item_id}/reservar",
+          dependencies=[Depends(_check_worker)])
+def worker_reservar(tipo: str, item_id: str):
+    """`a_imprimir -> imprimindo`. 409 = não está mais na fila (outro pegou,
+    ou o operador mudou de ideia) — o worker NÃO imprime."""
+    if not _RESERVAR[_tipo_do_worker(tipo)](item_id):
+        raise HTTPException(409, "Não está na fila de impressão.")
+    log.evento("worker", "reservou", tipo=tipo, id=item_id)
+    return {"ok": True}
+
+
+@app.post("/worker/{tipo}/{item_id}/concluir",
+          dependencies=[Depends(_check_worker)])
+def worker_concluir(tipo: str, item_id: str, corpo: dict = Body(default={})):
+    """O CUPS aceitou. `corpo`: `{"mensagem": str, "falhas": int}`."""
+    mensagem = str(corpo.get("mensagem") or "")[:2000]
+    try:
+        falhas = max(0, int(corpo.get("falhas") or 0))
+    except (TypeError, ValueError):
+        falhas = 0
+    if not _CONCLUIR[_tipo_do_worker(tipo)](item_id, mensagem, falhas):
+        raise HTTPException(409, "Não estava imprimindo.")
+    log.evento("worker", "imprimiu", tipo=tipo, id=item_id, falhas=falhas)
+    return {"ok": True}
+
+
+@app.post("/worker/{tipo}/{item_id}/falhar",
+          dependencies=[Depends(_check_worker)])
+def worker_falhar(tipo: str, item_id: str, corpo: dict = Body(default={})):
+    """O CUPS (ou a montagem) recusou. `corpo`: `{"mensagem": str}`."""
+    mensagem = str(corpo.get("mensagem") or "erro sem detalhe")[:2000]
+    if not _FALHAR[_tipo_do_worker(tipo)](item_id, mensagem):
+        raise HTTPException(409, "Não estava imprimindo.")
+    log.aviso("worker", "falhou", tipo=tipo, id=item_id, motivo=mensagem[:200])
+    return {"ok": True}
+
+
+# O que a batida pode trazer, e com que nome fica guardado.
+_BATIDA = ("tinta", "tinta_diagnostico", "filas")
+
+
+@app.post("/worker/batida", dependencies=[Depends(_check_worker)])
+def worker_batida(corpo: dict = Body(default={})):
+    """O estado da impressora, de tempos em tempos: `tinta` (o que a página
+    pública mostra), `tinta_diagnostico` e `filas` (só o admin vê)."""
+    for chave in _BATIDA:
+        if isinstance(corpo.get(chave), dict):
+            storage.salvar_worker(chave, corpo[chave])
+    storage.salvar_worker("visto", True)
+    return {"ok": True}
+
+
 app.mount("/", StaticFiles(directory="app/static", html=True), name="static")

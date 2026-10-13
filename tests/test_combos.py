@@ -14,7 +14,7 @@ O que se está travando aqui é o que dói se quebrar em silêncio:
 3. **A folha que sai.** As cartas de todos os pedidos, na ordem, sem página
    nova entre um e outro — e com a legenda dizendo de quem é cada posição.
 4. **Imprimir confirma TODOS.** É um papel só com carta de várias pessoas:
-   ou o conjunto inteiro vira 'paid', ou nenhum.
+   ou o conjunto inteiro entra na fila de impressão, ou nenhum.
 5. **A porta.** Toda rota nova de /admin exige o token, e o link assinado de
    um pedido não abre a folha combinada.
 
@@ -273,10 +273,15 @@ check("antes de imprimir, ninguém está pago",
       [storage.get_order(i)["status"] for i in (ana, bruno, carla)]
       == ["pending"] * 3)
 r = cliente.post(f"/admin/combos/{combo['id']}/imprimir", headers=AUTH)
-check("imprime a folha combinada", r.status_code == 200, r.text[:90])
-check("e marca os três pedidos como pagos",
+check("põe a folha combinada na fila", r.status_code == 200, r.text[:90])
+check("e os três pedidos entram na fila junto",
       [storage.get_order(i)["status"] for i in (ana, bruno, carla)]
-      == ["paid"] * 3)
+      == ["a_imprimir"] * 3)
+check("presos ao combo, pra o worker não imprimir cada um sozinho",
+      all(storage.get_order(i)["impressao_combo"] == combo["id"]
+          for i in (ana, bruno, carla)))
+check("e o combo também está na fila",
+      storage.get_combo(combo["id"])["status"] == "a_imprimir")
 check("a resposta diz quais pedidos foram confirmados",
       sorted(r.json()["pedidos"]) == sorted([ana, bruno, carla]), r.json())
 
@@ -286,7 +291,7 @@ check("desfaz a combinação", r.status_code == 200 and r.json()["pdf_apagado"],
       r.text[:90])
 check("a folha some do disco", not os.path.exists(caminho))
 check("mas os pedidos continuam lá, pagos",
-      all(storage.get_order(i) and storage.get_order(i)["status"] == "paid"
+      all(storage.get_order(i) and storage.get_order(i)["status"] == "a_imprimir"
           for i in (ana, bruno, carla)))
 check("desfazer de novo = 404",
       cliente.delete(f"/admin/combos/{combo['id']}", headers=AUTH).status_code == 404)

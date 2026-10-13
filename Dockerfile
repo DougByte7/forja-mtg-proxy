@@ -15,6 +15,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+# O worker da impressora sai desta mesma imagem, com outro comando (ver o
+# docker-compose.yml). Ele usa o `cups-client` lá de cima; o site não usa mais.
+COPY worker ./worker
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000

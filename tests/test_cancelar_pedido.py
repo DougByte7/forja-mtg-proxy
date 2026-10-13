@@ -89,10 +89,10 @@ check("e o status dele não muda",
       storage.get_order(bruno)["status"] == "notified")
 
 carla = semear("Carla Reis", "ghi789")
-storage.mark_paid(carla)
+storage.set_status(carla, "impresso")
 r = cliente.post(f"/orders/{carla}/cancel")
-check("pedido pago não cancela por aqui", r.status_code == 409, r.text[:120])
-check("e o status dele não muda", storage.get_order(carla)["status"] == "paid")
+check("pedido impresso não cancela por aqui", r.status_code == 409, r.text[:120])
+check("e o status dele não muda", storage.get_order(carla)["status"] == "impresso")
 
 # --- 3. id que não existe ------------------------------------------------
 r = cliente.post("/orders/nao-existe/cancel")

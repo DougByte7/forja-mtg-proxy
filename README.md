@@ -174,8 +174,10 @@ existe uma API que confirme "foi pago" — e o banco não notifica nada. Então
    do celular) pra você conferir antes de gastar papel. Só olhar não marca
    nada como pago nem imprime.
 5. Você confere no app do banco se o Pix caiu mesmo e **só então** clica em
-   **Imprimir**. Esse clique marca o pedido como pago e manda pra fila da
-   impressora — reaproveitando exatamente o PDF que você acabou de olhar.
+   **Imprimir**. Esse clique confirma o pagamento e põe o pedido na **fila
+   de impressão** (`a_imprimir`). Quem imprime é o worker da impressora, que
+   pega a fila em até ~30 s — ver *A fila de impressão e o worker*. A página
+   que abre acompanha a fila sozinha até dizer se o CUPS aceitou.
 
 O PDF vai como **link, não como anexo**: um pedido grande passaria fácil do
 limite de 25 MB do Gmail. Como o arquivo abre no celular, dá pra imprimir
@@ -202,8 +204,9 @@ curl -H "X-Admin-Token: SEU_TOKEN" https://SEU-BACKEND/orders/ID/print
 ```
 
 E `GET /admin/orders` (mesmo header) lista os pedidos ainda não impressos,
-com `status` `pending` (ninguém avisou nada) ou `notified` (o cliente disse
-que pagou).
+com `status` `pending` (ninguém avisou nada), `notified` (o cliente disse
+que pagou) ou um dos estados da fila (`a_imprimir`, `imprimindo`,
+`erro_impressao`).
 
 Pra não depender do e-mail nem do curl, tem a tela **[Pedidos](#tela-de-pedidos-admin)**
 em `/admin`, com a mesma coisa em botão.
@@ -212,6 +215,80 @@ Se um dia quiser confirmação automática de verdade, migrar pra um provedor
 como o Asaas (cadastro simples de pessoa física, tem webhook) resolve esse
 ponto sem mexer no resto — o `pix.py` viraria uma chamada de API em vez de
 gerar o BR Code na mão.
+
+## A fila de impressão e o worker
+
+O site **não fala com a impressora**. Clicar em Imprimir só grava o status
+`a_imprimir`, e quem imprime é um processo à parte, o **worker**
+(`worker/main.py`), que roda do lado do CUPS e pergunta a fila pro site a cada
+`WORKER_INTERVALO_SEGUNDOS` (30). A conversa é sempre do worker pro site,
+nunca o contrário: o site não sabe onde o worker mora, e é isso que deixa o
+site rodar longe do homelab (a migração pra Vercel parte daqui).
+
+```
+pending → notified → a_imprimir → imprimindo → impresso
+                         ↑              ↓
+                         └──── erro_impressao
+impresso ── "Imprimir de novo" ──► a_imprimir
+```
+
+- **`a_imprimir`** — o Pix foi conferido (o clique em Imprimir), e o pedido
+  espera o worker. Daqui em diante tudo conta como pago.
+- **`imprimindo`** — o worker reservou o pedido. A reserva é atômica do lado
+  do site (`UPDATE … WHERE status='a_imprimir'`): duas rodadas do worker
+  lendo a mesma fila não imprimem o mesmo pedido duas vezes, porque só uma
+  consegue mudar a linha.
+- **`impresso`** — o CUPS aceitou. A resposta dele fica em `impressao_msg`.
+- **`erro_impressao`** — o CUPS (ou a montagem do PDF) recusou, com o motivo
+  em `impressao_msg`. **Tentar de novo** põe na fila outra vez.
+
+Pedido parado em `imprimindo` (o worker caiu no meio) **não volta pra fila
+sozinho**: o CUPS pode já ter aceitado, e papel não volta. Na tela, **Saiu no
+papel** ou **Tirar da fila** resolvem — quem decide é quem está do lado da
+impressora. Se a rede cair depois de o CUPS aceitar, o worker guarda o
+resultado e reenvia na volta seguinte, sem imprimir de novo.
+
+Além de imprimir, o worker **adianta** o PDF de quem está em `notified` (um
+por volta, pra um pedido grande montando não segurar uma impressão), manda a
+**tinta** e as **filas do CUPS** pro site de 5 em 5 min
+(`WORKER_BATIDA_SEGUNDOS`) e faz a faxina dos PDFs dele. O admin diz
+"a impressora não dá sinal" quando o worker some por mais de
+`WORKER_OFFLINE_SEGUNDOS` (180).
+
+**Folha combinada** entra na fila como uma coisa só: o combo e todos os
+pedidos dele vão pra `a_imprimir` juntos, e os pedidos ficam presos ao combo
+(`impressao_combo`) pra o worker não imprimir cada um sozinho.
+
+**A porta do worker** é `WORKER_TOKEN`, outra chave que não a `ADMIN_TOKEN`:
+ela abre só as rotas `/worker/*`, mandada como `Authorization: Bearer …`.
+Vazia, as rotas respondem 503. O worker precisa de duas variáveis:
+
+```
+FORJA_API_URL=https://forja.seudominio.com   # onde está o site
+WORKER_TOKEN=a-mesma-do-site
+```
+
+e lê a configuração da impressora de sempre (`PRINTER_QUEUE`, `CUPS_HOST`,
+`LP_OPTIONS`, `TINTA_*`, `DRIVE_*`, as guias de corte). A arte que o cliente
+**enviou** mora no site: o worker baixa pela rota pública
+`/artes/enviadas/{sha}` (`ARTES_ENVIADAS_URL`, que por padrão é o
+`FORJA_API_URL`).
+
+No `docker-compose.yml` ele é o serviço `forja-worker`: mesma imagem, outro
+comando (`python -m worker`), **sem porta nenhuma**, com volume próprio e o
+`/run/cups` montado. Enquanto o site mora na mesma máquina, ele fala com o
+site pela rede interna do compose (`http://forja-backend:8000`). O
+`deploy/atualizar.sh` reconstrói o worker junto com o site quando o serviço
+existe no compose; compose sem ele publica só o site, como antes.
+
+| Rota do worker | O que faz |
+|---|---|
+| `GET /worker/fila` | o que imprimir (`a_imprimir`, pedidos soltos e combos) e o que adiantar (`notified`). Conta como sinal de vida |
+| `GET /worker/pedidos/{id}` / `GET /worker/combos/{id}` | o pedido com o XML / a folha combinada com os pedidos, na ordem de impressão |
+| `POST /worker/{pedidos\|combos}/{id}/reservar` | `a_imprimir → imprimindo`. 409 = não está mais na fila: não imprime |
+| `POST /worker/{pedidos\|combos}/{id}/concluir` | `imprimindo → impresso`, com `mensagem` e `falhas` |
+| `POST /worker/{pedidos\|combos}/{id}/falhar` | `imprimindo → erro_impressao`, com `mensagem` |
+| `POST /worker/batida` | `tinta`, `tinta_diagnostico` e `filas`, pro aviso público e pro admin |
 
 ## Revisar o pedido antes de pagar
 
@@ -285,7 +362,9 @@ O que dá pra fazer:
   é redesenhado, sem pedir nada ao servidor (que nem devolve XML).
 - **Ver o andamento**: a tela consulta `GET /orders/{id}` de cada pedido ao
   abrir. *Aguardando pagamento* (`pending`), *Aviso enviado* (`notified`),
-  *Confirmado* (`paid`) ou *Cancelado*. Pedido que o servidor não conhece mais
+  *Na fila de impressão* (`a_imprimir`, e também `erro_impressao` — o erro
+  da impressora é problema do operador, não do cliente), *Imprimindo*,
+  *Impresso* ou *Cancelado*. Pedido que o servidor não conhece mais
   (a faxina apagou) aparece como *Não encontrado*, e o ✕ tira ele da lista.
 - **Enquanto ninguém foi avisado** (`pending`), e só nesse estado, o rodapé
   mostra o QR de novo e as duas ações: **enviar a notificação de pagamento**
@@ -305,6 +384,9 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 
 ## Estrutura
 
+- `worker/main.py` — o worker da impressora: pergunta a fila pro site, monta
+  o PDF, manda pro CUPS e conta o resultado. Roda do lado da impressora, com
+  `python -m worker`. Ver *A fila de impressão e o worker*.
 - `app/static/index.html` — o front-end (a Forja de Proxies), servido pelo
   próprio FastAPI.
 - `app/static/admin.html` — a tela de pedidos do operador, em `/admin`. Ver
@@ -345,7 +427,8 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `app/pix.py` — monta o BR Code (QR Pix) na mão, sem provedor.
 - `app/calc.py` — mesma lógica de páginas/custo do artifact, em Python.
 - `app/storage.py` — pedidos em SQLite, com nome de quem pediu e hash do deck
-  (`status`: `pending` → `notified` → `paid`, mais `cancelado` pro que o
+  (`status`: `pending` → `notified` → `a_imprimir` → `imprimindo` →
+  `impresso`, mais `erro_impressao` e `cancelado` pro que o
   operador desistiu na tela de pedidos — ou o próprio cliente, pela tela
   *Meus Pedidos*, enquanto ninguém foi avisado). Guarda também as **combinações** de
   pedidos que dividem uma folha — ver *Combinar pedidos numa folha só*.
@@ -483,19 +566,20 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /orders/{id}/notify-payment` | botão do cliente | manda o e-mail de aviso e já começa a montar o PDF (não imprime) |
 | `POST /orders/{id}/cancel` | tela **Meus Pedidos** | o cliente desiste. Só vale em `pending`; depois do aviso volta 409. Não apaga: vira `cancelado` no histórico |
 | `GET /orders/{id}/pdf?token=…` | botão **Ver PDF** | monta e devolve a folha inline pra conferir (`&fresh=1` regera) |
-| `GET /orders/{id}/print?token=…` | botão **Imprimir** | marca pago e manda pra fila da impressora |
+| `GET /orders/{id}/print?token=…` | botão **Imprimir** | confirma o Pix, põe na fila da impressora e redireciona pra página abaixo |
+| `GET /orders/{id}/impressao?token=…` | depois do **Imprimir** | onde o pedido está na fila. Só lê, e se atualiza sozinha até sair |
 | `GET /admin` | você, no navegador | a tela de pedidos (é só HTML: os dados vêm das rotas abaixo, todas com token) |
 | `GET /admin/sessao` | tela de pedidos | diz se o token vale, pra tela saber se mostra a lista ou o formulário de entrada |
 | `GET /admin/pedidos` | tela de pedidos | todos os pedidos, do mais novo pro mais antigo, com contagem por estado. Aceita `status=` e `busca=` |
 | `GET /admin/pedidos/{id}` | tela de pedidos | um pedido só |
-| `POST /admin/pedidos/{id}/status` | tela de pedidos | muda o estado na mão (`pending`, `notified`, `paid`, `cancelado`) |
+| `POST /admin/pedidos/{id}/status` | tela de pedidos | muda o estado na mão (`pending`, `notified`, `impresso`, `cancelado`). Os estados da fila não se escrevem por aqui |
 | `POST /admin/pedidos/{id}/pdf` | tela de pedidos | manda montar a folha (ou diz como vai a montagem). `?fresh=true` remonta do zero |
-| `POST /admin/pedidos/{id}/imprimir` | tela de pedidos | mesmo efeito do link **Imprimir** do e-mail: marca pago e manda pra fila |
+| `POST /admin/pedidos/{id}/imprimir` | tela de pedidos | mesmo efeito do link **Imprimir** do e-mail: confirma o Pix e põe na fila. Também é o "imprimir de novo" |
 | `DELETE /admin/pedidos/{id}` | tela de pedidos | apaga o pedido e o PDF de vez |
 | `POST /admin/combos` | tela de pedidos | junta os pedidos de `ids` (separados por vírgula) numa folha só e devolve quanto papel isso economiza. Não monta PDF nenhum |
 | `GET /admin/combos/{id}` | tela de pedidos | uma combinação já criada, com os pedidos dela no estado de agora |
 | `POST /admin/combos/{id}/pdf` | tela de pedidos | manda montar a folha combinada (ou diz como vai a montagem). `?fresh=true` remonta |
-| `POST /admin/combos/{id}/imprimir` | tela de pedidos | manda a folha pra fila e marca **todos** os pedidos dela como pagos |
+| `POST /admin/combos/{id}/imprimir` | tela de pedidos | põe a folha na fila e confirma o Pix de **todos** os pedidos dela |
 | `DELETE /admin/combos/{id}` | tela de pedidos | desfaz a combinação e apaga a folha. Os pedidos não são tocados |
 | `GET /admin/estoque` | aba **Estoque** | saldo de papel e plástico, tintas, custo de uma folha e os últimos movimentos |
 | `POST /admin/estoque/{item}/entrada` | aba **Estoque** | soma uma compra (`quantidade`, `valor_pago` opcional) |
@@ -506,7 +590,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `GET /precos` | tela do cliente | reais por página em cada acabamento (público) |
 | `GET /combos/{id}/pdf?token=…` | botão **Ver PDF** da barra | a folha combinada, pra conferir antes de imprimir |
 | `GET /admin/orders` | você (`X-Admin-Token`) | pedidos ainda não impressos |
-| `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, pra descobrir o `PRINTER_QUEUE` certo |
+| `GET /admin/printers` | você (`X-Admin-Token`) | filas que o CUPS conhece, como o worker viu na última batida — pra descobrir o `PRINTER_QUEUE` certo |
 | `POST /admin/cleanup` | você (`X-Admin-Token`) | roda a faxina dos PDFs antigos na hora |
 | `GET /admin/visitas` | você (`X-Admin-Token`) | quem está no sistema agora, separado em pessoas / bots / suspeitos |
 | `POST /cotacao` | botão **Cotar preços das cartas** | começa a cotar o XML e devolve o `job_id` (não cria pedido nem cobra nada). Campo opcional `commander` tira essa carta da conta |
@@ -589,8 +673,11 @@ estado e uma busca que casa com nome, id do pedido ou código do deck.
 | **Ver PDF (rede local)** | a mesma folha pelo IP do homelab, sem passar pelo túnel. Só aparece com `LOCAL_BASE_URL` no `.env` — ver *Como o PDF volta pro navegador* |
 | **Montar PDF** | manda montar antes da hora e mostra o progresso ali mesmo (`12 de 60 imagens baixadas`) |
 | **Refazer PDF** | remonta do zero — é o que se usa depois de arrumar uma arte no Drive |
-| **Imprimir** | marca como pago e manda pra fila do CUPS. Pede confirmação |
-| **Marcar pago** | confirma o Pix **sem** imprimir (pro Pix que caiu sem o cliente avisar) |
+| **Imprimir** | confirma o Pix e põe na fila da impressora; a nota embaixo do pedido acompanha até o CUPS responder. Pede confirmação |
+| **Imprimir de novo** / **Tentar de novo** | põe um pedido `impresso` (ou recusado) na fila outra vez |
+| **Marcar impresso** | confirma o Pix **sem** passar pela fila (imprimiu por fora, pelo PDF) |
+| **Tirar da fila** | devolve um pedido da fila pra *Avisou que pagou* |
+| **Saiu no papel** | pra um `imprimindo` que travou (ou um recusado) que você sabe que saiu |
 | **Cancelar** | tira da fila sem apagar nada; continua no histórico |
 | **Reabrir** / **Voltar pra pendente** | desfaz um clique errado. Voltar pra pendente limpa o aviso do cliente, então ele consegue avisar de novo |
 | **Apagar** | apaga o pedido, o XML do deck e o PDF. Não tem volta, e por isso pede o id digitado |
@@ -604,9 +691,11 @@ A lista se atualiza sozinha a cada 30 s, mas só com a aba à vista e nenhuma
 confirmação aberta: redesenhar a lista embaixo de um clique é a melhor forma
 de imprimir o pedido errado.
 
-Sem `PRINTER_QUEUE` configurada, aparece um aviso no topo — ali o botão
-**Imprimir** confirma o pagamento e deixa o PDF pronto, mas não manda nada
-pra impressora nenhuma.
+O aviso no topo diz quando o worker da impressora sumiu (nunca deu sinal, ou
+não dá há mais de `WORKER_OFFLINE_SEGUNDOS`) — o Imprimir continua pondo na
+fila, mas nada sai até ele voltar. Também avisa quando o worker está no ar sem
+`PRINTER_QUEUE`: aí o pedido sai da fila como `impresso` com o PDF pronto, mas
+nada foi pra impressora nenhuma.
 
 ### Estoque de material
 
@@ -618,12 +707,12 @@ muda o preço cobrado por página.
 
 | O pedido... | Papel | Plástico |
 |---|---|---|
-| vira `notified` (avisou que pagou) ou `paid` | sai 1 por página | um lado: 1 a cada 2 páginas, arredondando pra cima; dois lados: 1 por página |
+| vira `notified` (avisou que pagou) ou entra na fila de impressão | sai 1 por página | um lado: 1 a cada 2 páginas, arredondando pra cima; dois lados: 1 por página |
 | volta pra `pending` ou vira `cancelado` | volta o que saiu | volta o que saiu |
 | é apagado sem ter sido impresso | volta | volta |
-| é apagado depois de `paid` | fica baixado | fica baixado |
+| é apagado em `imprimindo` ou `impresso` | fica baixado | fica baixado |
 
-Cada pedido baixa uma vez só: passar por `notified` e depois por `paid` não
+Cada pedido baixa uma vez só: passar por `notified` e depois pela fila não
 desconta de novo, e o estorno devolve exatamente o que foi descontado. A
 ligação mora em `estoque_baixas`, e a baixa roda na mesma transação que muda
 o status (`storage`), então qualquer caminho — e-mail, tela ou combinação —
@@ -726,10 +815,10 @@ tela, embaixo da barra, com as páginas de cada pedido. `COMBO_LABEL=0` no
   entregaria acabamento errado pra metade da gente, e não tem desfazer depois
   de plastificado — a tela avisa e o backend recusa.
 - **Não entra pedido cancelado.** A caixinha nem aparece neles.
-- **Não tem estado próprio.** Um combo é só um arranjo de papel. Quem fica
-  `paid` são os pedidos, todos de uma vez, quando a folha vai pra impressora —
-  é um papel só com carta de várias pessoas, então não existe imprimir metade.
-  Desfazer a combinação joga fora o arranjo e não toca em pedido nenhum.
+- **Entra na fila inteiro.** Imprimir a folha põe o combo e todos os pedidos
+  dele em `a_imprimir` de uma vez, e eles saem da fila juntos — é um papel só
+  com carta de várias pessoas, então não existe imprimir metade. Desfazer a
+  combinação joga fora o arranjo e não toca em pedido nenhum.
 
 **Escolher os mesmos pedidos de novo cai na mesma folha.** O id da combinação
 sai do conjunto de pedidos, não do clique, então marcar A e depois B dá o mesmo
@@ -2459,22 +2548,24 @@ curl -H "X-Admin-Token: SEU_TOKEN" http://localhost:8000/admin/visitas
 
 ## Quando a impressão falha
 
-Se o `lp` recusar o trabalho, o link Imprimir devolve **502** com o erro do
-CUPS na tela e uma dica do que fazer — ele nunca diz "enviado pra impressora"
-sem ter enviado. O pedido continua marcado como **pago** (clicar em Imprimir
-significa "conferi o Pix", e isso não deixa de ser verdade porque a
-impressora caiu) e o PDF continua pronto no disco: resolva a impressora e
-abra o mesmo link de novo, ou imprima pelo celular usando o link "Ver PDF".
+Se o `lp` recusar o trabalho, o worker devolve o pedido como
+**`erro_impressao`**, com o erro do CUPS e uma dica do que fazer — a página do
+link Imprimir mostra isso com **502**, e a tela do admin em vermelho. Nunca
+sai "enviado pra impressora" sem ter enviado. O pedido continua **pago**
+(clicar em Imprimir significa "conferi o Pix", e isso não deixa de ser verdade
+porque a impressora caiu) e o PDF continua pronto no disco do worker: resolva
+a impressora e clique em **Tentar de novo** (ou abra o link do e-mail de
+novo), ou imprima pelo celular usando o link "Ver PDF".
 
-Pra diagnosticar, de dentro do container:
+Pra diagnosticar:
 
 ```
 curl -H "X-Admin-Token: SEU_TOKEN" https://SEU-BACKEND/admin/printers
 ```
 
-Ele devolve `filas` (os nomes que o CUPS conhece), `configurada_existe`
-(se o `PRINTER_QUEUE` do `.env` bate com algum) e uma `dica` quando o
-lpstat reclama.
+Ele devolve o que o worker viu na última batida (`visto_em`): `filas` (os
+nomes que o CUPS conhece), `configurada_existe` (se o `PRINTER_QUEUE` do
+worker bate com algum) e uma `dica` quando o lpstat reclama.
 
 **`Scheduler is not running`** não é problema de nome de fila — é o CUPS não
 atendendo no endereço configurado. No servidor do CUPS:
@@ -2487,7 +2578,7 @@ ss -lntp | grep 631          # em que endereço ele escuta?
 Se aparecer só `127.0.0.1:631`, o cupsd está no padrão: **só aceita conexão
 local**. Dois caminhos:
 
-1. **O forja-backend roda na mesma máquina do CUPS** (mais simples, e não
+1. **O forja-worker roda na mesma máquina do CUPS** (mais simples, e não
    expõe o cupsd na rede): monte o socket no container e deixe `CUPS_HOST`
    **vazio** no `.env`. Tem a linha pronta, comentada, no
    `docker-compose.snippet.yml`:
@@ -2517,11 +2608,13 @@ a 2 semanas** — antes do orçamento, pra quem vai pagar ler antes de pagar.
 Quem sabe o nível é o CUPS, nos atributos `marker-*` da fila (são eles que
 desenham a barrinha de tinta na interface web dele). O `lpstat` não mostra
 isso: a pergunta é IPP, e o `app/tinta.py` monta esse pedido na mão pra não
-precisar do `ipptool`, que não vem no `cups-client`. A resposta fica em cache
-(`TINTA_CACHE_SEGUNDOS`, 24 h) porque a rota é pública — cada visita não
-pode virar uma pergunta nova pra impressora, e nível de tinta não muda de
-hora em hora. O cache mora na memória: reiniciar o container zera na hora,
-que é o que se faz depois de reabastecer de qualquer jeito.
+precisar do `ipptool`, que não vem no `cups-client`. Quem pergunta é o
+**worker**, e ele manda a resposta pro site na batida de 5 em 5 min — a rota
+pública só devolve o que ele contou. Contado há mais de
+`TINTA_VALIDADE_SEGUNDOS` (2 dias), vale "desconhecido". Do lado do worker a
+leitura fica em cache (`TINTA_CACHE_SEGUNDOS`, 24 h), porque nível de tinta
+não muda de hora em hora; reiniciar o worker zera, que é o que se faz depois
+de reabastecer de qualquer jeito.
 
 **Nem toda impressora responde**, e a L4260 é justamente do tipo que
 costuma não responder: impressora de tanque não tem chip no tanque pra medir
@@ -2537,7 +2630,7 @@ curl -H "X-Admin-Token: SEU_TOKEN" https://SEU-BACKEND/admin/tinta
 
 `informa_nivel: true` e a página se vira sozinha. Se vier `false` (ou
 `atributos` sem nenhum `marker-*`), o caminho é a mão — quem enche o tanque
-olha e escreve no `.env`:
+olha e escreve no `.env` do worker:
 
 ```
 TINTA_ESTADO=baixo     # liga o aviso; "ok" cala; vazio = automático

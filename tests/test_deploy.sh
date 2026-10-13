@@ -51,6 +51,8 @@ for arg in "$@"; do
     exit 0
   fi
   [ "$arg" = "logs" ] && exit 0
+  # `config --services`: os serviços que o compose conhece, do roteiro.
+  [ "$arg" = "config" ] && { cat "$BANCADA/SERVICOS" 2>/dev/null; exit 0; }
 done
 exit 0
 FAKE
@@ -241,6 +243,27 @@ codigo=$(FORJA_COMPOSE="$BANCADA/nao-existe.yml" "$SERVIDOR/deploy/atualizar.sh"
          > "$BANCADA/saida.txt" 2>&1; echo $?)
 eq "compose inexistente para na hora" "$codigo" "1"
 check "e diz onde procurou" "$(grep -q 'não achei o compose' "$BANCADA/saida.txt"; echo $?)"
+
+# --------------------------------------------------------------------------
+# 7. O worker da impressora anda junto — mas só se existir no compose
+# --------------------------------------------------------------------------
+touch "$BANCADA/SAUDE_OK"
+printf 'forja-backend\nforja-worker\n' > "$BANCADA/SERVICOS"
+: > "$BANCADA/chamadas.txt"
+novo_commit v-com-worker
+eq "com o worker no compose, publica" "$(publicar)" "0"
+check "sobe o site e o worker juntos" \
+  "$(grep -q 'up -d --build --no-deps forja-backend forja-worker' "$BANCADA/chamadas.txt"; echo $?)"
+
+# O compose grande do servidor ainda sem o serviço: pedir `up` de um serviço
+# que não existe derrubaria a publicação inteira.
+printf 'forja-backend\noutro-servico\n' > "$BANCADA/SERVICOS"
+: > "$BANCADA/chamadas.txt"
+novo_commit v-sem-worker
+eq "sem o worker no compose, publica do mesmo jeito" "$(publicar)" "0"
+check "e sobe só o site" \
+  "$(grep -qE 'up -d --build --no-deps forja-backend$' "$BANCADA/chamadas.txt"; echo $?)"
+rm -f "$BANCADA/SERVICOS"
 
 echo
 if [ "$falhas" -gt 0 ]; then echo "$falhas checagem(ns) falharam"; exit 1; fi

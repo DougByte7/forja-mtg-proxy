@@ -14,5 +14,35 @@ services:
     ports:
       - "8000:8000"
 
+  # O worker da impressora (worker/main.py). Pergunta a fila pro site e
+  # imprime; o site nunca fala com ele. Por isso não tem porta nenhuma.
+  #
+  # Volume PRÓPRIO de propósito: o worker não lê o banco do site (só a API), e
+  # os PDFs dele não podem dividir pasta com os que o site ainda monta pro
+  # "Ver PDF" — dois processos escrevendo o mesmo arquivo corrompem a folha.
+  forja-worker:
+    build: .
+    container_name: forja-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Enquanto o site mora na mesma máquina, a conversa é pela rede interna
+      # do compose. Quando o site for pra fora, é aqui que entra o endereço
+      # público dele.
+      FORJA_API_URL: ${FORJA_API_URL:-http://forja-backend:8000}
+      PDF_OUTPUT_DIR: /app/data/pdfs
+      LOG_DIR: /app/data/logs
+    command: ["python", "-m", "worker"]
+    mem_limit: ${FORJA_MEM_LIMIT:-3g}
+    memswap_limit: ${FORJA_MEM_LIMIT:-3g}
+    volumes:
+      - forja-worker-data:/app/data
+      # CUPS na mesma máquina: o lp fala pelo socket local. Monta a PASTA, não
+      # o arquivo — o socket é recriado a cada restart do cupsd.
+      - /run/cups:/run/cups
+    depends_on:
+      - forja-backend
+
 volumes:
   forja-data:
+  forja-worker-data:

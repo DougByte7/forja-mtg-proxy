@@ -74,7 +74,7 @@ ana = semear("Ana Prado", "abc123", 9, 1)
 bruno = semear("Bruno Lima", "def456", 18, 2)
 carla = semear("Carla Reis", "ghi789", 4, 1)
 storage.mark_notified(bruno)
-storage.mark_paid(carla)
+storage.set_status(carla, "impresso")
 
 # --- 1. a porta ----------------------------------------------------------
 # Cada rota nova tem que barrar duas coisas: quem não manda token nenhum e
@@ -114,7 +114,7 @@ check("lista todos os pedidos", sorted(ids) == sorted([ana, bruno, carla]), ids)
 check("do mais novo pro mais antigo", ids[0] == carla, ids)
 check("contagem por status",
       (dados["contagem"]["pending"], dados["contagem"]["notified"],
-       dados["contagem"]["paid"], dados["contagem"]["total"]) == (1, 1, 1, 3),
+       dados["contagem"]["impresso"], dados["contagem"]["total"]) == (1, 1, 1, 3),
       dados["contagem"])
 primeiro = dados["pedidos"][0]
 check("o XML do deck não vai junto", "xml_text" not in primeiro, list(primeiro))
@@ -156,7 +156,7 @@ check("voltar pra pendente limpa o aviso do cliente",
 r = cliente.post(f"/admin/pedidos/{ana}/status", data={"status": "impresso?"},
                  headers=AUTH)
 check("status inventado = 400", r.status_code == 400, r.status_code)
-r = cliente.post("/admin/pedidos/naoexiste/status", data={"status": "paid"},
+r = cliente.post("/admin/pedidos/naoexiste/status", data={"status": "impresso"},
                  headers=AUTH)
 check("pedido inexistente = 404", r.status_code == 404, r.status_code)
 

@@ -18,10 +18,10 @@ Três coisas moram aqui:
    cobrar pedido novo. Pedido que já existe guarda o valor com que foi criado.
 
 A baixa é automática e segue o status do pedido: entrou em `notified` ou
-`paid`, o material da folha sai do estoque; voltou pra `pending` ou foi
+na fila de impressão, o material da folha sai do estoque; voltou pra `pending` ou foi
 cancelado, volta. `estoque_baixas` guarda quanto cada pedido levou, e é ela
 que torna isso idempotente — o mesmo pedido passando por `notified` e depois
-por `paid` não baixa duas vezes, e o estorno devolve exatamente o que saiu,
+por `impresso` não baixa duas vezes, e o estorno devolve exatamente o que saiu,
 mesmo que o consumo por folha tenha mudado no meio.
 
 Quem chama `sincronizar` é o `storage`, com a própria conexão, dentro da
@@ -59,8 +59,15 @@ TINTAS = {
     "ciano": {"nome": "Ciano", "ml_garrafa": 70.0, "ml_por_folha": 0.32},
 }
 
-# Status em que o pedido já conta como material gasto.
-STATUS_COM_BAIXA = ("notified", "paid")
+# Status em que o pedido já conta como material gasto: do aviso de pagamento
+# em diante, a fila de impressão inteira (ver o topo do `storage`). O
+# `erro_impressao` segura a baixa: o pedido está pago e vai ser impresso de
+# novo — estornar e baixar outra vez a cada tentativa só sujaria o histórico.
+STATUS_COM_BAIXA = ("notified", "a_imprimir", "imprimindo", "impresso",
+                    "erro_impressao")
+# Os que podem já ter ido pro papel. `imprimindo` entra porque o CUPS pode ter
+# aceitado antes de o worker conseguir contar.
+STATUS_NO_PAPEL = ("imprimindo", "impresso")
 
 # Motivos de movimento. `combinado` é o material que a impressão combinada
 # deixou de gastar: cada pedido baixa o dele, e a fila corrida usa menos que
@@ -239,12 +246,12 @@ def sincronizar(conn, order_ids: list[str]) -> None:
 def ao_apagar(conn, order_id: str) -> None:
     """Pedido apagado: se ele não chegou a ser impresso, o material volta.
 
-    Pedido `paid` foi pro papel, então a baixa fica — o material foi gasto
-    mesmo que o registro do pedido suma.
+    Pedido que foi pro papel (`STATUS_NO_PAPEL`) mantém a baixa — o material
+    foi gasto mesmo que o registro do pedido suma.
     """
     pedido = conn.execute("SELECT status FROM orders WHERE id = ?",
                           (order_id,)).fetchone()
-    if pedido and pedido[0] != "paid":
+    if pedido and pedido[0] not in STATUS_NO_PAPEL:
         conn.execute("UPDATE orders SET status = 'cancelado' WHERE id = ?",
                      (order_id,))
         sincronizar(conn, [order_id])

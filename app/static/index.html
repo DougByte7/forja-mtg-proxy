@@ -2423,8 +2423,20 @@
                 recado: 'Pague o Pix e clique em "Pagamento realizado" — é esse clique que me avisa.'},
     notified:  {rotulo: 'Aviso enviado', classe: 'avisado',
                 recado: 'Já fui avisado. Assim que eu conferir o Pix no banco, o pedido vai pra impressão.'},
-    paid:      {rotulo: 'Confirmado', classe: 'pago',
-                recado: 'Pagamento conferido: esse pedido já foi pra impressão.'},
+    // Da fila em diante o Pix está conferido. O erro da impressora é
+    // problema meu, não do cliente: pra ele o pedido continua na fila.
+    a_imprimir:     {rotulo: 'Na fila de impressão', classe: 'pago',
+                     recado: 'Pagamento conferido: o pedido está na fila da impressora.'},
+    imprimindo:     {rotulo: 'Imprimindo', classe: 'pago',
+                     recado: 'Pagamento conferido: o pedido está sendo impresso agora.'},
+    erro_impressao: {rotulo: 'Na fila de impressão', classe: 'pago',
+                     recado: 'Pagamento conferido: o pedido está na fila da impressora.'},
+    impresso:       {rotulo: 'Impresso', classe: 'pago',
+                     recado: 'Pagamento conferido e pedido impresso.'},
+    // O nome antigo de "impresso": pode estar guardado no navegador de quem
+    // pediu antes da fila existir, até o servidor responder.
+    paid:           {rotulo: 'Confirmado', classe: 'pago',
+                     recado: 'Pagamento conferido: esse pedido já foi pra impressão.'},
     cancelado: {rotulo: 'Cancelado', classe: 'morto',
                 recado: 'Esse pedido foi cancelado. Nada foi impresso e nada mais vai acontecer com ele.'},
     sumiu:     {rotulo: 'Não encontrado', classe: 'morto',
@@ -2631,7 +2643,7 @@
 
     const recado = document.createElement('p');
     recado.className = 'od-recado'
-      + (reg.status === 'paid' ? ' bom' : '')
+      + (estadoInfo(reg.status).classe === 'pago' ? ' bom' : '')
       + (reg.status === 'cancelado' || reg.status === 'sumiu' ? ' ruim' : '');
     recado.textContent = info.recado;
     host.appendChild(recado);

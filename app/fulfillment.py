@@ -10,7 +10,8 @@ frágil demais, então quem avisa é o próprio cliente:
    o operador for conferir.
 2. O operador recebe um e-mail com o resumo do pedido e dois botões:
    **Ver PDF** (`GET /orders/{id}/pdf`) pra conferir a folha antes de gastar
-   papel, e **Imprimir** (`GET /orders/{id}/print`) pra mandar pra fila.
+   papel, e **Imprimir** (`GET /orders/{id}/print`) pra pôr o pedido na fila
+   da impressora — quem imprime é o worker (`worker/`), não este processo.
 3. O operador confere o Pix no app do banco, abre o PDF, e só então imprime.
 
 O PDF não vai anexo no e-mail de propósito: pedido grande passa fácil do
@@ -32,7 +33,7 @@ import os
 import threading
 import time
 
-from . import estoque, pdf_generator, printer, storage
+from . import pdf_generator, storage
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 # URL pública do backend, usada pra montar os links do e-mail.
@@ -403,42 +404,3 @@ def descartar_combo_pdf(combo_id: str) -> bool:
     """Apaga a folha combinada montada. Os pedidos dela não são tocados."""
     _mapas_combo.pop(combo_id, None)
     return _descartar(_combo_subject(combo_id), combo_pdf_path(combo_id))
-
-
-def run_print_job(order_id: str) -> tuple[str, int, str]:
-    """
-    Garante o PDF, marca o pedido como pago e manda pra fila CUPS. Roda de
-    forma síncrona de propósito: assim quem clicou no link vê na tela se deu
-    certo ou não.
-
-    Marca como pago ANTES de imprimir, e de propósito: clicar em Imprimir
-    quer dizer "conferi o Pix no banco", o que é verdade mesmo que a
-    impressora esteja fora do ar. Se o `lp` falhar, a PrintError sobe e a
-    tela avisa — é só resolver a impressora e abrir o mesmo link de novo.
-    """
-    path, failures = ensure_pdf(order_id)
-    storage.mark_paid(order_id)
-    status = printer.print_pdf(path)
-    return path, failures, status
-
-
-def run_combo_print_job(combo_id: str) -> tuple[str, int, str, list[str]]:
-    """O mesmo, pra folha combinada: um arquivo, VÁRIOS pedidos pagos.
-
-    Todos os pedidos daquele papel viram 'paid' de uma vez — as cartas deles
-    saem misturadas na mesma folha, então não existe imprimir só metade. Como
-    no pedido só, marcar vem ANTES de mandar pro CUPS: clicar em imprimir quer
-    dizer "conferi os Pix", e isso continua verdade se a impressora estiver
-    fora do ar.
-
-    Devolve `(caminho, falhas, status_da_fila, ids_marcados)`.
-    """
-    combo = storage.get_combo(combo_id)
-    if not combo:
-        raise ValueError("Combinação não encontrada.")
-    path, failures = ensure_combo_pdf(combo_id)
-    storage.mark_paid_many(combo["order_ids"])
-    pedidos = [p for p in (storage.get_order(i) for i in combo["order_ids"]) if p]
-    estoque.devolver_combinacao(combo_id, pedidos)
-    status = printer.print_pdf(path)
-    return path, failures, status, combo["order_ids"]

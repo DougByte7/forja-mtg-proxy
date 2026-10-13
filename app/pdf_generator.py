@@ -52,6 +52,11 @@ CARD_H = 88 * mm
 COLS, ROWS = 3, 3
 PAGE_W, PAGE_H = A4
 OUTPUT_DIR = os.environ.get("PDF_OUTPUT_DIR", "/tmp")
+# De onde vem a arte que o cliente ENVIOU. Vazio = do disco deste processo
+# (`artes_enviadas.caminho`), que é o caso do site. O worker da impressora não
+# tem esses arquivos: ele aponta isto pro endereço do site e baixa pela mesma
+# rota pública que a tela usa (`GET /artes/enviadas/{sha}`).
+ARTES_ENVIADAS_URL = os.environ.get("ARTES_ENVIADAS_URL", "").rstrip("/")
 
 # --- Sangria (bleed) do MPC Fill ---
 # A arte que o MPC Fill guarda no Drive está no gabarito de IMPRESSÃO da
@@ -363,8 +368,12 @@ def _bytes_da_arte(session: requests.Session, arte_id: str) -> bytes:
     if origem == ids.SCRYFALL:
         return _baixar(session, ids.url_da_scryfall(arte_id, "png"), arte_id)
     if origem == ids.ENVIADA:
+        sha = ids.sha_da_enviada(arte_id)
+        if ARTES_ENVIADAS_URL:
+            return _baixar(session, f"{ARTES_ENVIADAS_URL}/artes/enviadas/{sha}",
+                           arte_id, "a arte enviada não veio do site")
         try:
-            with open(artes_enviadas.caminho(ids.sha_da_enviada(arte_id)), "rb") as f:
+            with open(artes_enviadas.caminho(sha), "rb") as f:
                 return f.read()
         except OSError:
             raise RuntimeError("o arquivo enviado não está mais no servidor")

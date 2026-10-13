@@ -24,6 +24,9 @@
 #                         Aponte pro compose grande do servidor se a Forja for
 #                         um serviço dentro dele (veja docker-compose.snippet.yml)
 #   FORJA_SERVICE         nome do serviço no compose (padrão: forja-backend)
+#   FORJA_WORKER_SERVICE  nome do worker da impressora no compose (padrão:
+#                         forja-worker). Só é tocado se existir no compose —
+#                         compose sem ele publica só o site, como antes
 #   FORJA_HEALTH_URL      o que chamar pra saber se subiu (padrão:
 #                         http://localhost:8000/). Vazio pula a conferência
 #   FORJA_HEALTH_TIMEOUT  segundos de paciência esperando subir (padrão: 90)
@@ -35,6 +38,7 @@ set -euo pipefail
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FORJA_DIR="${FORJA_DIR:-$AQUI}"
 FORJA_SERVICE="${FORJA_SERVICE:-forja-backend}"
+FORJA_WORKER_SERVICE="${FORJA_WORKER_SERVICE-forja-worker}"
 FORJA_COMPOSE="${FORJA_COMPOSE:-$FORJA_DIR/docker-compose.yml}"
 FORJA_HEALTH_URL="${FORJA_HEALTH_URL-http://localhost:8000/}"
 FORJA_HEALTH_TIMEOUT="${FORJA_HEALTH_TIMEOUT:-90}"
@@ -114,11 +118,23 @@ fi
 # --------------------------------------------------------------------------
 # Container
 # --------------------------------------------------------------------------
+# O worker da impressora (`worker/`) sai da mesma imagem e anda junto com o
+# site: um commit que muda a fila muda os dois lados. Mas só se ele existir
+# no compose — o compose grande do servidor pode ainda não ter ganhado o
+# serviço, e pedir `up` de um serviço que não existe derrubaria o deploy
+# inteiro (e dispararia o desfazer) por causa de uma linha que falta.
+SERVICOS=("$FORJA_SERVICE")
+if [ -n "$FORJA_WORKER_SERVICE" ] && \
+   "${COMPOSE[@]}" -f "$FORJA_COMPOSE" config --services 2>/dev/null \
+     | grep -qx "$FORJA_WORKER_SERVICE"; then
+  SERVICOS+=("$FORJA_WORKER_SERVICE")
+fi
+
 subir(){
   # `--no-deps` porque o compose costuma ser o GRANDE do servidor, com os
   # outros serviços do homelab dentro. Publicar a Forja não pode reiniciar o
-  # vizinho de baixo — só o serviço nomeado aqui é tocado.
-  "${COMPOSE[@]}" -f "$FORJA_COMPOSE" up -d --build --no-deps "$FORJA_SERVICE"
+  # vizinho de baixo — só os serviços nomeados aqui são tocados.
+  "${COMPOSE[@]}" -f "$FORJA_COMPOSE" up -d --build --no-deps "${SERVICOS[@]}"
 }
 
 # Espera a página responder de verdade. Sem isto, "deploy ok" significa só
@@ -145,7 +161,7 @@ esta_no_ar(){
 # Dentro do `if` de propósito: comando que falha aí não dispara o `set -e`.
 # Solto, um `up` que desse errado abortaria o script na hora — sem log, sem
 # desfazer, sem dica. Era o que acontecia.
-diz "reconstruindo e subindo o serviço $FORJA_SERVICE…"
+diz "reconstruindo e subindo: ${SERVICOS[*]}…"
 if subir && esta_no_ar; then
   if [ "$FORJA_PRUNE" != "0" ]; then
     # Cada rebuild deixa a imagem anterior pra trás, sem tag. Num servidor de
