@@ -46,6 +46,13 @@ services:
       # CUPS na mesma máquina: o lp fala pelo socket local. Monta a PASTA, não
       # o arquivo — o socket é recriado a cada restart do cupsd.
       - /run/cups:/run/cups
+    # SELinux (Fedora, Bazzite...): sem isto o container leva "Permission
+    # denied" ao abrir o socket do CUPS, e o worker não imprime nem lê a
+    # tinta. `label=disable` tira a separação do SELinux SÓ deste container.
+    # NÃO use `:z` no volume no lugar disto: ele reetiquetaria o /run/cups do
+    # sistema. Em máquina sem SELinux a opção não faz nada.
+    security_opt:
+      - label=disable
     depends_on:
       - forja-backend
 
