@@ -72,7 +72,8 @@ r = diagnostico.testar_fontes()
 por = {f["fonte"]: f["situacao"] for f in r["fontes"]}
 check("uma linha por fonte", set(por) == {"ligamagic", "scryfall", "edhrec",
                                           "spellbook", "mpcfill", "archidekt",
-                                          "moxfield", "cambio"}, por)
+                                          "moxfield", "cambio",
+                                          "cambio-reserva"}, por)
 check("o bloqueio aparece na fonte certa", por["moxfield"] == "bloqueado", por)
 check("sem resposta é fora", por["cambio"] == "fora", por)
 check("e o resumo diz que nem todas respondem", r["todas_respondem"] is False)

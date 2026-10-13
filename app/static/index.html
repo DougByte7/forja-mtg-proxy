@@ -1311,7 +1311,7 @@
           <div class="v">${moeda(totalTeorico, 'BRL')}</div>
           <div class="obs">o menor preço de cada carta entre as fontes, o de
             fora convertido a ${moeda(taxa, 'BRL')} por dólar${
-              cambio.fonte === 'awesomeapi' ? '' : ' (valor fixo, sem consultar câmbio)'
+              cambio.fonte !== 'fixa' ? '' : ' (valor fixo, sem consultar câmbio)'
             } · nenhuma loja vende tudo por esse total${
               semPreco ? ` · ${semPreco} carta(s) sem preço` : ''}</div>
           <button class="cot-copiar" data-lista="${indice}">Copiar lista</button>
@@ -1430,7 +1430,7 @@
         ${Math.round(COT_DISCREPANCIA * 100)}% acima do preço da
         ${esc(fonteRef.rotulo)}${fonteRef.moeda === 'BRL' ? '' :
           `, convertido a ${moeda(taxa, 'BRL')} por dólar (${
-            cambio.fonte === 'awesomeapi'
+            cambio.fonte !== 'fixa'
               ? 'câmbio de hoje' : 'valor fixo, sem consultar câmbio'})`}.
         Serve pra comparar ordem de grandeza: o preço de fora não inclui
         frete, imposto nem IOF.

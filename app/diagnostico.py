@@ -55,7 +55,10 @@ def _fontes() -> list[dict]:
         {"id": "moxfield", "uso": "importar deck",
          "url": f"{importar.MOXFIELD_API}/decks/all/forja-diagnostico",
          "ua": importar.MOXFIELD_USER_AGENT or importacao_ua},
-        {"id": "cambio", "uso": "dólar do dia na cotação", "url": cambio.URL, "ua": ""},
+        {"id": "cambio", "uso": "dólar do dia na cotação", "url": cambio.URL,
+         "ua": identidade.user_agent("câmbio")},
+        {"id": "cambio-reserva", "uso": "dólar do dia, se a AwesomeAPI falhar",
+         "url": cambio.URL_RESERVA, "ua": identidade.user_agent("câmbio")},
     ]
 
 

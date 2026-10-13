@@ -3,9 +3,10 @@ Confere o câmbio: o indicador de "carta cara aqui" e a régua que faz o
 deckbuilder escrever em real um preço que a base guarda em dólar.
 
 Motivo de existir: os dois usos são de apresentação, então a regra é NUNCA
-atrapalhar. Se a API cair, mudar de formato ou devolver bobagem, a cotação
-inteira tem que seguir com a taxa fixa — e o cache tem que segurar a
-requisição, pra uma cotação de 75 cartas não virar 75 consultas de câmbio.
+atrapalhar. Se a API cair, mudar de formato ou devolver bobagem, vale a
+reserva, depois o último valor de verdade, e por fim a taxa fixa — e o
+cache (memória e banco) tem que segurar a requisição, pra uma cotação de 75
+cartas, ou cem processos da Vercel, não virarem cem consultas de câmbio.
 
 Desde que o deckbuilder passou a converter preço, uma coisa a mais precisa
 valer: `GET /cambio` tem que responder SEMPRE, inclusive sem rede. A tela
@@ -64,15 +65,34 @@ class Resposta:
 chamadas = []
 
 
-def responder(corpo=None, erro=None):
-    """Troca a rede por uma resposta fixa e zera o cache do módulo."""
+def zerar_banco():
+    conn = cambio._conn()
+    conn.execute("CREATE TABLE IF NOT EXISTS cambio_guardado "
+                 "(id INTEGER PRIMARY KEY, valor TEXT)")
+    conn.execute("DELETE FROM cambio_guardado")
+    conn.commit()
+    conn.close()
+
+
+def responder(corpo=None, erro=None, reserva=None, erro_reserva=None,
+              novo_processo=True, banco_limpo=True):
+    """Troca a rede por respostas fixas: `corpo`/`erro` pra AwesomeAPI,
+    `reserva`/`erro_reserva` pra Frankfurter. Por padrão começa do zero —
+    sem memória (processo novo) e sem nada guardado no banco."""
     def falso(url, **kwargs):
         chamadas.append(url)
+        if url == cambio.URL_RESERVA:
+            if erro_reserva or reserva is None:
+                raise erro_reserva or RuntimeError("reserva fora")
+            return Resposta(reserva)
         if erro:
             raise erro
         return Resposta(corpo)
     cambio.requests.get = falso
-    cambio._cache = None
+    if novo_processo:
+        cambio._cache = None
+    if banco_limpo:
+        zerar_banco()
     chamadas.clear()
 
 
@@ -83,25 +103,49 @@ try:
     eq("e a tela sabe de onde veio", cambio.taxa()["fonte"], "awesomeapi")
     eq("segunda chamada sai do cache, sem bater na rede", len(chamadas), 1)
 
+    # Na Vercel cada processo nasce sem memória: o valor tem que vir do
+    # banco, senão cada processo novo pergunta de novo e estoura a cota.
+    responder({"USDBRL": {"bid": "9.99"}}, banco_limpo=False)
+    eq("processo novo lê o valor do banco", cambio.taxa()["valor"], 5.4321)
+    eq("sem tocar na rede", len(chamadas), 0)
+
     # A chave do par não é fixa no código: quem apontar a CAMBIO_URL pra
     # outro endpoint do mesmo formato continua funcionando.
     responder({"USDBRLT": {"bid": "5.10"}})
     eq("não depende do nome da chave", cambio.taxa()["valor"], 5.10)
 
-    # Daqui pra baixo é o que interessa: toda falha cai na taxa fixa.
+    # A AwesomeAPI fora (é o 429 da Vercel): vale a reserva.
+    responder(erro=RuntimeError("429 QuotaExceeded"),
+              reserva={"amount": 1.0, "base": "USD", "rates": {"BRL": 5.37}})
+    atual = cambio.taxa()
+    eq("AwesomeAPI fora: a reserva responde", atual["valor"], 5.37)
+    eq("e a tela sabe que foi ela", atual["fonte"], "frankfurter")
+
+    # Toda falha, das duas, cai na taxa fixa quando não há nada guardado.
     responder(erro=RuntimeError("sem rede"))
     eq("rede caída não levanta, cai na fixa", cambio.taxa()["valor"], cambio.FIXA)
     eq("e diz que é fixa", cambio.taxa()["fonte"], "fixa")
+    eq("e não insiste a cada pedido", len(chamadas), 2)
 
-    responder({"USDBRL": {"bid": "0.0001"}})
+    responder({"USDBRL": {"bid": "0.0001"}}, reserva={"rates": {"BRL": 0.0001}})
     eq("valor fora da faixa é ignorado", cambio.taxa()["valor"], cambio.FIXA)
     responder({"USDBRL": {"bid": "1200"}})
     eq("valor absurdo também", cambio.taxa()["valor"], cambio.FIXA)
-    responder({"USDBRL": {"bid": None}})
+    responder({"USDBRL": {"bid": None}}, reserva={"rates": {}})
     eq("campo vazio também", cambio.taxa()["valor"], cambio.FIXA)
-    responder("<html>manutenção</html>")
+    responder("<html>manutenção</html>", reserva="<html>idem</html>")
     eq("resposta que não é JSON de câmbio também", cambio.taxa()["valor"],
        cambio.FIXA)
+
+    # Falhou tudo mas já houve um valor de verdade: ele vale mais que a fixa.
+    responder({"USDBRL": {"bid": "5.60"}})
+    cambio.taxa()
+    responder(erro=RuntimeError("sem rede"), banco_limpo=False)
+    cambio._gravar_banco({**cambio._ler_banco(),
+                          "atual": {**cambio._ler_banco()["atual"], "vale_ate": 0}})
+    atual = cambio.taxa()
+    eq("as duas fora: vale o último valor de verdade", atual["valor"], 5.60)
+    eq("dizendo de onde ele veio", atual["fonte"], "awesomeapi")
 
     # Quem desligar a busca no .env não pode ver requisição nenhuma saindo.
     salvo_buscar = cambio.BUSCAR
@@ -117,7 +161,9 @@ try:
     # taxa do dia em que subiu.
     responder({"USDBRL": {"bid": "5.55"}})
     cambio.taxa()
-    cambio._cache["quando"] -= cambio.TTL + 1
+    cambio._cache["vale_ate"] = 0
+    cambio._gravar_banco({**cambio._ler_banco(),
+                          "atual": {**cambio._ler_banco()["atual"], "vale_ate": 0}})
     cambio.taxa()
     eq("cache vencido busca de novo", len(chamadas), 2)
 finally:
