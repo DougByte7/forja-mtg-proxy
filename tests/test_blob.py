@@ -207,7 +207,36 @@ check("a miniatura também", r.status_code == 307
 check("sha que não existe = 404",
       ana.get("/artes/enviadas/" + "0" * 64, follow_redirects=False).status_code == 404)
 
-# --- 5. sem Blob, tudo como antes -------------------------------------------------
+# --- 5. a virada: as artes do disco vão pro Blob ----------------------------------
+from app import tarefas  # noqa: E402
+
+velha_pasta = os.path.join(TMP, "do-homelab")
+os.makedirs(velha_pasta)
+velhas = [imagem(745, 1040, cor=(200, 10, 10)), imagem(745, 1040, "JPEG", cor=(10, 200, 10))]
+shas = []
+for dados in velhas:
+    s_ = hashlib.sha256(dados).hexdigest()
+    shas.append(s_)
+    Path(velha_pasta, s_).write_bytes(dados)
+Path(velha_pasta, shas[0] + ".miniatura.jpg").write_bytes(imagem(100, 140, "JPEG"))
+Path(velha_pasta, "f" * 64).write_bytes(b"truncado")      # nome que não bate
+Path(velha_pasta, "qualquer.txt").write_bytes(b"lixo")      # nem é arte
+
+contagem = tarefas.artes_pro_blob(velha_pasta)
+check("leva as artes do disco pro Blob", contagem["levadas"] == 2, contagem)
+check("recusa a que não confere com o nome", contagem["recusadas"] == ["f" * 64])
+check("e anota cada uma", all(artes_enviadas.url(s_) for s_ in shas))
+check("com a miniatura que já existia, ou gerada",
+      all(artes_enviadas.url_miniatura(s_) for s_ in shas))
+check("o tipo certo do JPEG",
+      artes_enviadas._registro(shas[1])["tipo"] == "image/jpeg")
+check("rodar de novo não leva nada outra vez",
+      tarefas.artes_pro_blob(velha_pasta)["ja_estavam"] == 2)
+check("pelo comando também", tarefas.main(["artes-pro-blob", velha_pasta]) == 0)
+check("sem pasta, o comando diz o que falta",
+      tarefas.main(["artes-pro-blob"]) == 2)
+
+# --- 6. sem Blob, tudo como antes -------------------------------------------------
 os.environ["BLOB_READ_WRITE_TOKEN"] = ""
 check("sem o token de escrita, o modo é o direto",
       ana.post(f"{base}/artes/enviar/inicio").json() == {"modo": "direto"})

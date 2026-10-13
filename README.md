@@ -466,7 +466,7 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   `python tests/test_diagnostico.py`.
 - `tests/test_blob.py` — a arte enviada pelo Vercel Blob: o formato e as
   amarras do token, a porta contra endereço de fora, a mesma conferência do
-  disco e o redirecionamento. Blob de mentira, sem rede:
+  disco, o redirecionamento e o `artes-pro-blob` da virada. Blob de mentira, sem rede:
   `python tests/test_blob.py`.
 - `tests/test_cotacao.py` — leitura da decklist do XML e a matemática da
   cotação: `python tests/test_cotacao.py`.
@@ -2420,6 +2420,23 @@ cotação, importação, sugestões.
 **Esquema mudou?** Rode o `migrar` (workflow *Tarefas* → `migrar`, ou
 `python -m app.tarefas migrar` com as URLs no ambiente) antes de o código novo
 atender requisição: na Vercel o site não migra sozinho.
+
+### A virada: as artes enviadas
+
+As artes que as pessoas subiram enquanto o site morava no homelab estão no
+disco dele (`/app/data/artes-enviadas`, no volume `forja-data`), e os pedidos
+e decks apontam pra elas pelo sha. Elas vão pro Blob com:
+
+```
+docker cp forja-backend:/app/data/artes-enviadas ./artes-enviadas   # ou do volume
+DB_URL=... DB_AUTH_TOKEN=... BLOB_READ_WRITE_TOKEN=... \
+  python -m app.tarefas artes-pro-blob ./artes-enviadas
+```
+
+O comando confere o sha de cada arquivo contra o conteúdo, sobe o original e
+a miniatura e anota na tabela `artes_enviadas`. Pode rodar de novo: o que já
+foi é pulado. Depois disso, `GET /artes/enviadas/{sha}` no site redireciona
+pro Blob, e o worker acha as artes por lá.
 
 ### O homelab depois da Vercel
 

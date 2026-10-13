@@ -246,6 +246,64 @@ def iniciar_envio() -> dict:
             "maximo_bytes": TAMANHO_MAXIMO}
 
 
+def _anotar(sha: str, url_original: str, url_mini: str | None, tipo_: str,
+            tamanho: int) -> None:
+    conn = _conn()
+    try:
+        def gravar(c):
+            c.execute("INSERT INTO artes_enviadas (sha, url, miniatura_url, "
+                      "tipo, tamanho, em) VALUES (?,?,?,?,?,?) "
+                      "ON CONFLICT(sha) DO NOTHING",
+                      (sha, url_original, url_mini, tipo_, tamanho, time.time()))
+            c.commit()
+        try:
+            gravar(conn)
+        except sqlite3.OperationalError as e:
+            if "no such table" not in str(e):
+                raise
+            criar_tabela(conn)
+            gravar(conn)
+    finally:
+        conn.close()
+
+
+def mudar_pro_blob(pasta: str) -> dict:
+    """Leva as artes de uma pasta do disco (o `ARTES_ENVIADAS_DIR` do homelab)
+    pro Blob e anota cada uma na tabela. Pode rodar de novo: o que já está
+    anotado é pulado. Devolve a contagem.
+
+    O sha do nome é conferido contra o conteúdo — arquivo que não bate (cópia
+    truncada, por exemplo) fica de fora e entra em `recusadas`.
+    """
+    contagem = {"levadas": 0, "ja_estavam": 0, "recusadas": []}
+    for nome in sorted(os.listdir(pasta)):
+        if not _SHA.match(nome):
+            continue
+        if _registro(nome):
+            contagem["ja_estavam"] += 1
+            continue
+        with open(os.path.join(pasta, nome), "rb") as f:
+            dados = f.read()
+        if hashlib.sha256(dados).hexdigest() != nome:
+            contagem["recusadas"].append(nome)
+            continue
+        caminho_mini = os.path.join(pasta, nome + ".miniatura.jpg")
+        if os.path.isfile(caminho_mini):
+            with open(caminho_mini, "rb") as f:
+                miniatura = f.read()
+            tipo_ = TIPOS.get(Image.open(io.BytesIO(dados)).format, "image/jpeg")
+        else:
+            conferida = validar(dados)
+            miniatura, tipo_ = conferida["miniatura"], conferida["tipo"]
+        original = blob.enviar(f"{PREFIXO_BLOB}{nome}", dados, tipo_,
+                               sobrescrever=True)
+        mini = blob.enviar(f"{PREFIXO_BLOB}{nome}.miniatura.jpg", miniatura,
+                           "image/jpeg", sobrescrever=True)
+        _anotar(nome, original["url"], mini.get("url"), tipo_, len(dados))
+        contagem["levadas"] += 1
+    return contagem
+
+
 def registrar_do_blob(endereco: str) -> dict:
     """O navegador terminou de subir: confere o arquivo e anota o endereço.
 
@@ -271,22 +329,5 @@ def registrar_do_blob(endereco: str) -> dict:
         return _resposta(conferida)
     mini = blob.enviar(f"{PREFIXO_BLOB}{sha}.miniatura.jpg",
                        conferida["miniatura"], "image/jpeg", sobrescrever=True)
-    conn = _conn()
-    try:
-        def gravar(c):
-            c.execute("INSERT INTO artes_enviadas (sha, url, miniatura_url, "
-                      "tipo, tamanho, em) VALUES (?,?,?,?,?,?) "
-                      "ON CONFLICT(sha) DO NOTHING",
-                      (sha, endereco, mini.get("url"), conferida["tipo"],
-                       len(dados), time.time()))
-            c.commit()
-        try:
-            gravar(conn)
-        except sqlite3.OperationalError as e:
-            if "no such table" not in str(e):
-                raise
-            criar_tabela(conn)
-            gravar(conn)
-    finally:
-        conn.close()
+    _anotar(sha, endereco, mini.get("url"), conferida["tipo"], len(dados))
     return _resposta(conferida)

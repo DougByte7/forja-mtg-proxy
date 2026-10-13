@@ -11,6 +11,7 @@ termina. Então as duas coisas viram comando:
     python -m app.tarefas migrar               # tabelas, colunas novas, admin inicial
     python -m app.tarefas cartas [--forcar]    # base de cartas, se estiver velha
     python -m app.tarefas faxina               # sessões, preços e cotações vencidos
+    python -m app.tarefas artes-pro-blob PASTA # artes do disco -> Vercel Blob
 
 Quem roda `cartas` e `faxina` todo dia é o GitHub Actions
 (`.github/workflows/tarefas.yml`); `migrar` roda a cada deploy que muda o
@@ -22,8 +23,8 @@ No homelab nada disto é obrigatório: `MIGRAR_NO_STARTUP` e
 """
 import sys
 
-from . import (artes, artes_enviadas, cache_precos, cartas, cotacao_job,
-               decks, log, storage, usuarios)
+from . import (artes, artes_enviadas, blob, cache_precos, cartas,
+               cotacao_job, decks, log, storage, usuarios)
 
 
 def migrar() -> None:
@@ -66,8 +67,25 @@ def faxina() -> int:
     return sessoes
 
 
+def artes_pro_blob(pasta: str) -> dict:
+    """A virada pra Vercel: as artes enviadas que moravam no disco do homelab
+    vão pro Blob. Precisa do `BLOB_READ_WRITE_TOKEN` e do `DB_URL` no
+    ambiente. Pode rodar de novo; o que já foi é pulado."""
+    if not blob.ligado():
+        raise RuntimeError("Falta o BLOB_READ_WRITE_TOKEN no ambiente.")
+    contagem = artes_enviadas.mudar_pro_blob(pasta)
+    log.evento("tarefas", "artes-pro-blob", levadas=contagem["levadas"],
+               ja_estavam=contagem["ja_estavam"],
+               recusadas=len(contagem["recusadas"]) or None)
+    for nome in contagem["recusadas"]:
+        log.aviso("tarefas", "arte-nao-confere", arquivo=nome,
+                  nota="o conteúdo não bate com o sha do nome")
+    return contagem
+
+
 def main(argv: list[str]) -> int:
-    if not argv or argv[0] not in ("migrar", "cartas", "faxina"):
+    if not argv or argv[0] not in ("migrar", "cartas", "faxina",
+                                   "artes-pro-blob"):
         print(__doc__.strip().split("\n\n")[2], file=sys.stderr)
         return 2
     comando = argv[0]
@@ -76,6 +94,12 @@ def main(argv: list[str]) -> int:
             migrar()
         elif comando == "cartas":
             sincronizar_cartas(forcar="--forcar" in argv[1:])
+        elif comando == "artes-pro-blob":
+            if len(argv) < 2:
+                print("Diga a pasta: python -m app.tarefas artes-pro-blob PASTA",
+                      file=sys.stderr)
+                return 2
+            artes_pro_blob(argv[1])
         else:
             faxina()
     except Exception as e:
