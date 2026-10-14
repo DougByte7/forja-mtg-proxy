@@ -9,7 +9,7 @@
    mesa, pergunta — perder duas horas de montagem por um clique errado num
    botão de importar seria o pior estrago que esta tela sabe fazer. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {buscar} from "./busca.js";
 import {desenharTudo} from "./desenho.js";
 import {guardarDesfazer} from "./edicao.js";

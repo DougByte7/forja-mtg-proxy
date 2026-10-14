@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------- desenhar */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {botaoDeArte} from "./artes.js";
 import {atualizarCategoriasDoDestino} from "./busca.js";
 import {ganchosDaPrevia} from "./carta.js";

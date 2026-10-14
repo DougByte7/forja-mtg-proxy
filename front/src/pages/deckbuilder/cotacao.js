@@ -1,6 +1,6 @@
 /* --------------------------------------------------------------- orçamento */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {desenharDeck} from "./desenho.js";
 import {estado} from "./estado.js";
 import {agendarCotacao, assinaturaDeCotacao,

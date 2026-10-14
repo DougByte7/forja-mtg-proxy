@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------ eventos */
 
-import {$} from "../comum/dom.js";
+import {$} from "../../shared/dom.js";
 import {ligarArrastar} from "./arrastar.js";
 import {abrirEscolhaDeArte, fecharArte} from "./artes.js";
 import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,

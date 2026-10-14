@@ -19,7 +19,7 @@
    As fichas entram no fim, uma de cada (ver `fichasDoDeck`): vão pro papel
    junto com o deck, e são a parte que se esquece de escolher. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {arteEscolhida, imagemDaFace, ladoPronto, nomeDaArte, quadroHTML,
         temArtePorCopia, temVerso} from "./artes.js";
 import {estado} from "./estado.js";

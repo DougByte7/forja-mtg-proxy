@@ -2,8 +2,8 @@
 O JavaScript do deckbuilder, lido do jeito que o navegador o carrega.
 
 A página carrega um módulo só — a entrada, na tag `<script type="module">` —
-e dali o navegador segue os `import` por `app/static/deckbuilder/` e
-`app/static/comum/`. Os testes que rodam esse JS no Duktape
+e dali o navegador (pelo build do Vite) segue os `import` por
+`front/src/pages/deckbuilder/` e `front/src/shared/`. Os testes que rodam esse JS no Duktape
 (`test_deckbuilder`, `test_goldfish`, `test_precos_brl`) partem da mesma
 entrada e seguem o mesmo grafo, e assim ele existe num lugar só: nos próprios
 `import`.
@@ -22,8 +22,10 @@ estreita, que o `test_modulos.py` confere:
 import re
 from pathlib import Path
 
-ESTATICO = Path(__file__).resolve().parents[1] / "app" / "static"
-PAGINA = ESTATICO / "deckbuilder.html"
+# A raiz do projeto do front: os `src` da página são caminhos a partir dela.
+ESTATICO = Path(__file__).resolve().parents[1] / "front"
+PAGINA = ESTATICO / "pages" / "deckbuilder.html"
+PASTA = ESTATICO / "src" / "pages" / "deckbuilder"
 
 IMPORT = re.compile(r'^import\s*\{[^}]*\}\s*from\s*"([^"]+)";[ \t]*\n', re.M)
 EXPORT = re.compile(r"^export (?=(?:async )?function |const |let |class )",

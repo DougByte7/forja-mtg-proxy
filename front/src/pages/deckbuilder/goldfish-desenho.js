@@ -17,7 +17,7 @@
    nenhum por perto. O painel da carta mora aqui pelo mesmo motivo: ele lê a
    carta, e é repintado junto com a mesa. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {imagemDaFace} from "./artes.js";
 import {detalheDaCarta} from "./carta.js";
 import {assinaturaDoDeck} from "./combos.js";

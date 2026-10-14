@@ -13,7 +13,7 @@
    nenhuma carta listada denuncia de qual das duas veio — por isso a resposta
    traz `alvo` e o cabeçalho o diz por extenso. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {estado} from "./estado.js";
 import {aplicarImportado,

@@ -1,6 +1,6 @@
 /* ---------------------------------------------------------------- abertura */
 
-import {$} from "../comum/dom.js";
+import {$} from "../../shared/dom.js";
 import {carregarArtes, ligarArte} from "./artes.js";
 import {buscar, buscarComandante, escolherDestino} from "./busca.js";
 import {lerConta, ligarConvite, ligarOrfao, receberConta} from "./conta.js";

@@ -5,7 +5,7 @@
    existe porque esperar a rede pra dizer "essa carta é de outra cor" tornaria
    a tela lenta justamente no momento em que a informação importa. */
 
-import {$} from "../comum/dom.js";
+import {$} from "../../shared/dom.js";
 import {desenharAnalise, desenharContador} from "./desenho.js";
 import {estado} from "./estado.js";
 import {atualizarBotaoPedido} from "./galeria.js";

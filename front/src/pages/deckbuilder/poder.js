@@ -1,6 +1,6 @@
 /* --------------------------------------------------------- nível de poder */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {assinaturaDoDeck} from "./combos.js";
 import {estado} from "./estado.js";
 import {api, salvarAgora} from "./salvar.js";

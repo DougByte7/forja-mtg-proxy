@@ -9,7 +9,7 @@
    turno 1: é o caso pior, e é sobre o caso pior que se decide quantos terrenos
    o deck leva. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {estado} from "./estado.js";
 import {cartasContadas, categoriaAutomatica, categoriaDe,
         ehPropria} from "./utilidades.js";

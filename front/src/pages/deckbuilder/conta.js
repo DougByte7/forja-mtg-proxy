@@ -7,7 +7,7 @@
 
    `estado.usuario` é null pra anônimo. Não é erro: é quem está só olhando. */
 
-import {$} from "../comum/dom.js";
+import {$} from "../../shared/dom.js";
 import {estado} from "./estado.js";
 import {api} from "./salvar.js";
 import {toast} from "./utilidades.js";

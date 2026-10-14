@@ -12,7 +12,7 @@
    por duas cartas continua sendo duas linhas da conta, porque tirar uma das
    duas do deck não tira a ficha da caixa. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {assinaturaDoDeck} from "./combos.js";
 import {estado} from "./estado.js";

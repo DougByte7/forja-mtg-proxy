@@ -1,6 +1,6 @@
 /* --------------------------------------------------------------- mexer no deck */
 
-import {$} from "../comum/dom.js";
+import {$} from "../../shared/dom.js";
 import {buscar} from "./busca.js";
 import {desenharTudo} from "./desenho.js";
 import {CATEGORIAS_FORA_DA_CONTA, estado} from "./estado.js";

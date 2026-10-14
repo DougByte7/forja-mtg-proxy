@@ -8,7 +8,7 @@
    O menu da carta oferece TUDO de qualquer zona, de propósito, inclusive o
    que numa partida de verdade seria absurdo: aqui não tem juiz. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {temVerso} from "./artes.js";
 import {abrirCarta} from "./carta.js";
 import {estado} from "./estado.js";

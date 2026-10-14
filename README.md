@@ -116,8 +116,9 @@ front basta recarregar o navegador.
 O front está migrando, uma tela por vez, de HTML com JavaScript solto em
 `app/static/` pra Preact + TypeScript em `front/`, com build no Vite. Até agora
 migraram a página inicial (`/`), o login (`/entrar`), o cadastro
-(`/cadastro`), a lista de decks (`/meus-decks`) e o admin (`/admin`); falta
-o deckbuilder. Essas telas saem do build, em `app/static/dist/`
+(`/cadastro`), a lista de decks (`/meus-decks`) e o admin (`/admin`). O
+deckbuilder já sai do mesmo build, mas ainda com os módulos JS de antes, em
+conversão. Essas telas saem do build, em `app/static/dist/`
 (fora do git), e sem ele a rota responde 503 dizendo o comando que falta.
 Precisa de Node 22 ou mais novo e do pnpm (a versão está no `packageManager`
 do `front/package.json`):
@@ -435,21 +436,17 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   "Meus Pedidos") mora em módulos `.ts` com testes ao lado.
 - `front/src/pages/admin/` — a tela de pedidos do operador, em `/admin`. Ver
   *Tela de pedidos (admin)*.
-- `app/static/deckbuilder.html` — a tela de montar deck de Commander, em
-  `/deckbuilder`. Três colunas (maybeboard, deck, busca), categorias próprias
-  e as análises embaixo do deck. Ver *Deckbuilder de Commander*. A página
-  guarda só a marcação; o CSS e o JavaScript moram em
-  `app/static/deckbuilder/`, um módulo ES por assunto (`estado.js`,
-  `busca.js`, `goldfish.js`, `combos.js`…), sem build. A página carrega só a
-  entrada (`abertura.js`), e cada módulo importa o que usa e exporta só o que
-  outro módulo importa — o resto é privado dele. O que é igual em todas as
-  páginas mora em `app/static/comum/` (hoje, `$` e `escapar`). A rota
-  `/deckbuilder` serve a página com `no-cache` e com a versão de cada
-  arquivo: direto no `src`/`href`, e num importmap pros `import` de dentro
-  dos módulos, pra que um deploy nunca misture HTML novo com JS velho.
-  Módulo novo só precisa ser importado por alguém; os testes seguem o mesmo
-  grafo a partir da entrada, e acusam arquivo na pasta que nenhum `import`
-  alcança.
+- `front/pages/deckbuilder.html` + `front/src/pages/deckbuilder/` — a tela
+  de montar deck de Commander, em `/deckbuilder`. Três colunas (maybeboard,
+  deck, busca), categorias próprias e as análises embaixo do deck. Ver
+  *Deckbuilder de Commander*. A página guarda só a marcação; o CSS e o
+  JavaScript são um módulo ES por assunto (`estado.js`, `busca.js`,
+  `goldfish.js`, `combos.js`…), que o Vite empacota a partir da entrada
+  (`abertura.js`). Cada módulo importa o que usa e exporta só o que outro
+  módulo importa — o resto é privado dele. Está sendo convertido pra Preact;
+  até lá, `$` e `escapar` moram em `front/src/shared/dom.js`. Módulo novo só
+  precisa ser importado por alguém; os testes seguem o mesmo grafo a partir
+  da entrada, e acusam arquivo na pasta que nenhum `import` alcança.
 - `app/cartas.py` — a cópia local do bulk data da Scryfall (busca instantânea
   sem tocar na API deles) e a sincronização diária que a mantém.
 - `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
@@ -564,8 +561,8 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   nenhuma carta pode ficar invisível na lista por causa de uma categoria que
   não foi desenhada. Também avalia os módulos um de cada vez, como o
   navegador, pra pegar módulo que na carga usa um nome de outro que ainda não
-  foi avaliado; e, com o `fastapi` instalado, confere que a rota serve cada
-  arquivo com a versão, no `src`/`href` e no importmap. Precisa do `dukpy`
+  foi avaliado; e, com o `fastapi` instalado, confere que a rota existe.
+  Precisa do `dukpy`
   (`pip install dukpy`; ele não está no `requirements.txt` porque não é
   dependência do serviço): `python tests/test_deckbuilder.py`.
 - `tests/test_modulos.py` — o que o navegador só confere no clique: que cada

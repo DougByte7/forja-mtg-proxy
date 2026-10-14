@@ -4,7 +4,7 @@
    por clique no fundo existe porque uma gaveta modal que só fecha no ✕ é uma
    armadilha em tela de toque, onde o ✕ fica longe do polegar. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {agendarBusca, buscarComandante, buscarDoComeco} from "./busca.js";
 import {estado, FILTROS_VAZIOS, NOME_DO_TIPO, TIPOS} from "./estado.js";
 import {simboloDaTela} from "./preco.js";

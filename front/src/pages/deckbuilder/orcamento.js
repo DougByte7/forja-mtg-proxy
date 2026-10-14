@@ -17,7 +17,7 @@
    Por isso cada linha diz, no tracejado e no title, qual das duas está
    mostrando — um número que esconde de onde veio é pior que número nenhum. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {cotar} from "./cotacao.js";
 import {estado} from "./estado.js";
 import {CARO_BRL, CARO_USD, moeda, notaDoCambio, reais,

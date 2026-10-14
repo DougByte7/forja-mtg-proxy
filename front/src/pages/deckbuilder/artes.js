@@ -37,7 +37,7 @@
    da ficha, não pelo nome (`nomeDaArte`).
    ========================================================================= */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {desenharDeck, desenharMaybe} from "./desenho.js";
 import {estado} from "./estado.js";
 import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";

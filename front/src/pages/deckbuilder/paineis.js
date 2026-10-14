@@ -6,7 +6,7 @@
    vista ou não, senão abrir "Análise" mostraria o deck de dois minutos atrás
    por um quadro. */
 
-import {$} from "../comum/dom.js";
+import {$} from "../../shared/dom.js";
 import {assinaturaDoDeck, procurarCombos} from "./combos.js";
 import {estado} from "./estado.js";
 import {desenharMesa} from "./goldfish-desenho.js";

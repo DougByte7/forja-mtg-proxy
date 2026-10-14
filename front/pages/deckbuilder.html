@@ -6,12 +6,12 @@
 <title>Deckbuilder — Forja de Proxies</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/deckbuilder/estilo.css">
+<link rel="stylesheet" href="/src/pages/deckbuilder/estilo.css">
 <!-- Vercel Analytics: é ele que conta as visitas quando o site roda na
      Vercel (lá o REGISTRAR_VISITAS fica em 0). Fora dela o script não existe
      e o navegador só registra um 404, sem efeito na página. -->
 <script>window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };</script>
-<script defer src="/_vercel/insights/script.js"></script>
+<script defer vite-ignore src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 
@@ -767,7 +767,6 @@
      cada arquivo importa o que usa. O importmap vazio é onde a rota
      /deckbuilder põe a versão de cada arquivo (ver `main.py`); servida como
      arquivo estático, a página funciona igual, só que sem as versões. -->
-<script type="importmap">{"imports": {}}</script>
-<script type="module" src="/deckbuilder/abertura.js"></script>
+<script type="module" src="/src/pages/deckbuilder/abertura.js"></script>
 </body>
 </html>

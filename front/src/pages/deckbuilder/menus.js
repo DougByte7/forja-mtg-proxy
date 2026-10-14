@@ -9,7 +9,7 @@
    de categorias muda a cada carta, e um menu guardado teria que ser
    sincronizado — que é o mesmo trabalho, feito duas vezes. */
 
-import {escapar} from "../comum/dom.js";
+import {escapar} from "../../shared/dom.js";
 import {abrirEscolhaDeArte} from "./artes.js";
 import {abrirCarta} from "./carta.js";
 import {acharEntrada, apagarCategoria, criarCategoria, definirCategoria, mover,

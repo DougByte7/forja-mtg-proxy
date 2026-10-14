@@ -1,6 +1,6 @@
 /* ---------------------------------------------------------------- utilidades */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {CATEGORIA_SIDEBOARD, CATEGORIAS, CATEGORIAS_FORA_DA_CONTA, CORES,
         estado, NOME_COR} from "./estado.js";
 import {moeda} from "./preco.js";

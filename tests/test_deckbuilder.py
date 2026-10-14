@@ -22,7 +22,7 @@ Três divergências custam caro, e são as três que este teste persegue:
    paga. É o pior estrago possível aqui, e o mais silencioso.
 
 COMO ELE RODA. O JavaScript da página — os módulos de
-`app/static/deckbuilder/` e `app/static/comum/`, achatados na ordem em que o
+`front/src/pages/deckbuilder/` e `front/src/shared/`, achatados na ordem em que o
 navegador os avalia (ver `js_do_deckbuilder.py`) — é executado num
 interpretador (Duktape, via `dukpy`) sobre um DOM de mentira: as funções de
 desenho e de estado não tocam em nada além do que este arquivo lhes dá. Não
@@ -43,7 +43,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from js_do_deckbuilder import (ESTATICO, PAGINA, arquivos, js_da_pagina,
+from js_do_deckbuilder import (PAGINA, PASTA, arquivos, js_da_pagina,
                                sem_abrir, sem_modulo)
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -261,12 +261,12 @@ try:
     eq("a página carrega o JS só pela entrada, como módulo",
        re.findall(r'<script type="([^"]+)"',
                   PAGINA.read_text(encoding="utf-8")),
-       ["importmap", "module"])
+       ["module"])
     lista = arquivos()
     check("a entrada leva ao grafo inteiro", len(lista) > 1, len(lista))
     # Um arquivo na pasta que nenhum `import` alcança é código que não roda —
     # e que nenhum teste roda, porque a lista dos testes sai do grafo.
-    fora = sorted(p.name for p in (ESTATICO / "deckbuilder").glob("*.js")
+    fora = sorted(p.name for p in PASTA.glob("*.js")
                   if p.resolve() not in lista)
     eq("todo módulo da pasta é alcançado pela entrada", fora, [])
     eq("avaliados um de cada vez, na ordem do navegador, nenhum quebra",
@@ -842,33 +842,12 @@ try:
         os.chdir(RAIZ)
         from app.main import app  # noqa: E402
 
+        # A página sai do build do front (`app/frontend.py`); quem confere o
+        # HTML do build e o no-cache é o `test_frontend.py`. Aqui basta a rota
+        # existir: 503 é ela respondendo sem o build.
         cliente = TestClient(app)
         r = cliente.get("/deckbuilder")
-        eq("a página responde", r.status_code, 200)
-        # Sem isto o navegador pode servir a página do cache dele, e ela
-        # apontaria pros arquivos de outro deploy.
-        check("a página sai com no-cache",
-              "no-cache" in r.headers.get("cache-control", ""),
-              r.headers.get("cache-control"))
-        urls = re.findall(r'(?:src|href)="(/(?:deckbuilder|comum)/[^"]+)"',
-                          r.text)
-        eq("cada arquivo que a página pede sai com a versão na URL",
-           [u for u in urls if not re.search(r"\?v=[0-9a-f]{12}$", u)], [])
-        # Os `import` de dentro dos módulos não passam pela página: quem os
-        # versiona é o importmap. Módulo fora dele é pedido sem versão, e o
-        # navegador pode responder com um velho do cache.
-        mapa = json.loads(re.search(r'<script type="importmap">(.*?)</script>',
-                                    r.text, re.S)[1])["imports"]
-        modulos = ["/" + p.relative_to(ESTATICO).as_posix() for p in lista]
-        eq("todo módulo do grafo está no importmap, com a versão",
-           [m for m in modulos if not re.fullmatch(
-               re.escape(m) + r"\?v=[0-9a-f]{12}", mapa.get(m, ""))], [])
-        eq("e cada um é pré-carregado, pra não descobrir o grafo aos poucos",
-           sorted(re.findall(r'<link rel="modulepreload" href="([^"]+)">',
-                             r.text)), sorted(mapa.values()))
-        eq("e cada URL versionada responde",
-           sorted(u for u in set(urls) | set(mapa.values())
-                  if cliente.get(u).status_code != 200), [])
+        check("a página tem rota", r.status_code in (200, 503), r.status_code)
 
 except Exception as e:      # noqa: BLE001 — o erro é o resultado do teste
     import traceback

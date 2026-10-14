@@ -9,7 +9,7 @@
    sabe. Esperar a rede pra mostrar uma carta que já está na tela seria fazer
    o clique parecer travado por causa da metade menos urgente da informação. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {imagemDaFace} from "./artes.js";
 import {api} from "./salvar.js";
 import {ico, manaEmTexto, manaHTML} from "./utilidades.js";

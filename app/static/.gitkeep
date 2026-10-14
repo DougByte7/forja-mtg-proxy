@@ -1,0 +1,3 @@
+# A pasta existe no git só por causa do `StaticFiles(directory="app/static")`
+# do main.py, que se recusa a subir sem ela. O conteúdo é o build do front
+# (`app/static/dist/`, gerado por `pnpm build` em front/, fora do git).

@@ -10,7 +10,7 @@
    motivo. A tela só deixa de oferecer o clique que ele recusaria, usando a
    mesma validação instantânea do contador. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {estado} from "./estado.js";
 import {abrirMenu} from "./menus.js";

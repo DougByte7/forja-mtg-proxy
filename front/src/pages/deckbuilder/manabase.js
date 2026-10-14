@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------- mana base */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {desenharTudo} from "./desenho.js";
 import {acharEntrada, guardarDesfazer} from "./edicao.js";

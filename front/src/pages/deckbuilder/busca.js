@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------- buscar */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {adicionar, escolherComandante, ondeEsta} from "./edicao.js";
 import {algumFiltro, CATEGORIA_SIDEBOARD, estado} from "./estado.js";

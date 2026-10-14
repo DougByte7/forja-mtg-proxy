@@ -5,7 +5,7 @@
    serviço gratuito. Por isso a tela guarda a assinatura do deck de quando a
    busca rodou e, quando ela deixa de bater, avisa em vez de rebuscar. */
 
-import {$, escapar} from "../comum/dom.js";
+import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {adicionar} from "./edicao.js";
 import {estado} from "./estado.js";
