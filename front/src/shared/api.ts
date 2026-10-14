@@ -19,16 +19,21 @@ export type ApiOptions = {
   noStore?: boolean;
   /** Erro sem `detail` mostra o corpo em texto em vez de "Erro <status>". */
   errorText?: boolean;
+  headers?: Record<string, string>;
 };
 
 async function request(url: string, opts: ApiOptions): Promise<Response> {
   const init: RequestInit = {
     method: opts.method ?? (opts.body === undefined ? "GET" : "POST"),
   };
-  if (opts.body !== undefined) {
-    init.headers = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = { ...opts.headers };
+  if (opts.body instanceof FormData) {
+    init.body = opts.body;   // o navegador põe o Content-Type com o boundary
+  } else if (opts.body !== undefined) {
+    headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(opts.body);
   }
+  init.headers = headers;
   if (opts.noStore) init.cache = "no-store";
 
   const r = await fetch(url, init);

@@ -43,7 +43,7 @@ except ImportError:
     print("PULADO: fastapi não está instalado (pip install -r requirements.txt)")
     sys.exit(0)
 
-os.chdir(RAIZ)  # a rota /admin serve app/static/admin.html por caminho relativo
+os.chdir(RAIZ)
 
 from app import storage  # noqa: E402
 from app.main import app  # noqa: E402
@@ -102,7 +102,8 @@ check("sessão com o token certo abre",
 
 # A página em si é pública (é só HTML), mas não pode trazer dado dentro.
 pagina = cliente.get("/admin")
-check("a página /admin abre", pagina.status_code == 200, pagina.status_code)
+# 503 é a rota certa sem o build do front (ver `test_frontend.py`).
+check("a página /admin tem rota", pagina.status_code in (200, 503), pagina.status_code)
 check("a página não carrega pedido nenhum embutido",
       "Bruno Lima" not in pagina.text and "def456" not in pagina.text)
 

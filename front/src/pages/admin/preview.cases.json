@@ -1,0 +1,146 @@
+[
+  {
+    "caso": "o caso da tela: economiza 1",
+    "pedidos": [
+      {
+        "pages": 1,
+        "blanks": 5
+      },
+      {
+        "pages": 2,
+        "blanks": 0
+      },
+      {
+        "pages": 1,
+        "blanks": 7
+      }
+    ],
+    "esperado": {
+      "cartas": 24,
+      "paginas_separadas": 4,
+      "paginas_combinadas": 3,
+      "folhas_economizadas": 1,
+      "brancos_separados": 12,
+      "brancos": 3,
+      "brancos_evitados": 9
+    }
+  },
+  {
+    "caso": "redondos: não economiza",
+    "pedidos": [
+      {
+        "pages": 2,
+        "blanks": 0
+      },
+      {
+        "pages": 1,
+        "blanks": 0
+      }
+    ],
+    "esperado": {
+      "cartas": 27,
+      "paginas_separadas": 3,
+      "paginas_combinadas": 3,
+      "folhas_economizadas": 0,
+      "brancos_separados": 0,
+      "brancos": 0,
+      "brancos_evitados": 0
+    }
+  },
+  {
+    "caso": "muito branco, folha nenhuma",
+    "pedidos": [
+      {
+        "pages": 1,
+        "blanks": 5
+      },
+      {
+        "pages": 1,
+        "blanks": 3
+      }
+    ],
+    "esperado": {
+      "cartas": 10,
+      "paginas_separadas": 2,
+      "paginas_combinadas": 2,
+      "folhas_economizadas": 0,
+      "brancos_separados": 8,
+      "brancos": 8,
+      "brancos_evitados": 0
+    }
+  },
+  {
+    "caso": "três migalhas viram uma folha",
+    "pedidos": [
+      {
+        "pages": 1,
+        "blanks": 8
+      },
+      {
+        "pages": 1,
+        "blanks": 8
+      },
+      {
+        "pages": 1,
+        "blanks": 8
+      }
+    ],
+    "esperado": {
+      "cartas": 3,
+      "paginas_separadas": 3,
+      "paginas_combinadas": 1,
+      "folhas_economizadas": 2,
+      "brancos_separados": 24,
+      "brancos": 6,
+      "brancos_evitados": 18
+    }
+  },
+  {
+    "caso": "um só",
+    "pedidos": [
+      {
+        "pages": 1,
+        "blanks": 0
+      }
+    ],
+    "esperado": {
+      "cartas": 9,
+      "paginas_separadas": 1,
+      "paginas_combinadas": 1,
+      "folhas_economizadas": 0,
+      "brancos_separados": 0,
+      "brancos": 0,
+      "brancos_evitados": 0
+    }
+  },
+  {
+    "caso": "um punhado qualquer",
+    "pedidos": [
+      {
+        "pages": 4,
+        "blanks": 3
+      },
+      {
+        "pages": 2,
+        "blanks": 6
+      },
+      {
+        "pages": 3,
+        "blanks": 1
+      },
+      {
+        "pages": 1,
+        "blanks": 8
+      }
+    ],
+    "esperado": {
+      "cartas": 72,
+      "paginas_separadas": 10,
+      "paginas_combinadas": 8,
+      "folhas_economizadas": 2,
+      "brancos_separados": 18,
+      "brancos": 0,
+      "brancos_evitados": 18
+    }
+  }
+]

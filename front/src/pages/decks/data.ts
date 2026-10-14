@@ -21,6 +21,7 @@
 import { queryOptions } from "@tanstack/preact-query";
 import type { User } from "../../shared/account";
 import { api } from "../../shared/api";
+import { daysAgo } from "../../shared/format";
 import { readLocalDecks } from "../../shared/localDecks";
 
 export type DeckSummary = {
@@ -84,13 +85,7 @@ export const deckListQuery = (user: User | null) => queryOptions({
 });
 
 export function relativeTime(ts: number, now = Date.now()) {
-  if (!ts) return "";
-  const days = Math.floor((now / 1000 - ts) / 86400);
-  if (days <= 0) return "mexido hoje";
-  if (days === 1) return "mexido ontem";
-  if (days < 30) return `mexido há ${days} dias`;
-  const months = Math.round(days / 30);
-  return months === 1 ? "mexido há um mês" : `mexido há ${months} meses`;
+  return ts ? "mexido " + daysAgo(ts, now) : "";
 }
 
 /* Aceita o link inteiro ou só o id: quem compartilha manda a URL, e exigir

@@ -115,8 +115,8 @@ front basta recarregar o navegador.
 
 O front está migrando, uma tela por vez, de HTML com JavaScript solto em
 `app/static/` pra Preact + TypeScript em `front/`, com build no Vite. Até agora
-migraram o login (`/entrar`), o cadastro (`/cadastro`) e a lista de
-decks (`/meus-decks`). Essas telas saem do build, em `app/static/dist/`
+migraram o login (`/entrar`), o cadastro (`/cadastro`), a lista de
+decks (`/meus-decks`) e o admin (`/admin`). Essas telas saem do build, em `app/static/dist/`
 (fora do git), e sem ele a rota responde 503 dizendo o comando que falta.
 Precisa de Node 22 ou mais novo e do pnpm (a versão está no `packageManager`
 do `front/package.json`):
@@ -140,7 +140,10 @@ comentários, em português. Dado que vem do servidor (conta, decks, pedidos)
 passa pelo TanStack Query (`@tanstack/preact-query`): leitura com `useQuery`,
 escrita com `useMutation`, que invalida a lista depois. Cada tela monta com
 `mount()` de `front/src/shared/query.tsx`, que já põe o cliente em volta.
-Estado só da tela (campo digitado, botão armado) fica no componente. A Vercel roda o build sozinha (`buildCommand` no
+Estado só da tela (campo digitado, botão armado) fica no componente; quando
+ele é grande e compartilhado entre partes da tela (o admin: token, aba,
+notas, seleção pra combinar, confirmação aberta), vai pra uma store de
+`@preact/signals`, como `front/src/pages/admin/store.ts`. A Vercel roda o build sozinha (`buildCommand` no
 `vercel.json`). O container não roda, porque o site não mora mais no homelab.
 
 ### 4. Abra a tela
@@ -423,11 +426,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   é comum em `front/src/shared/`). O build vai pra `app/static/dist/`, e
   `app/frontend.py` serve o HTML de cada tela com `no-cache`; os assets têm
   hash no nome e vão pelo mount estático. Hoje: login (`/entrar`), cadastro
-  (`/cadastro`) e a lista de decks (`/meus-decks`). Ver
+  (`/cadastro`), a lista de decks (`/meus-decks`) e o admin (`/admin`). Ver
   *As telas em Preact*.
 - `app/static/index.html` — o front-end (a Forja de Proxies), servido pelo
   próprio FastAPI.
-- `app/static/admin.html` — a tela de pedidos do operador, em `/admin`. Ver
+- `front/src/pages/admin/` — a tela de pedidos do operador, em `/admin`. Ver
   *Tela de pedidos (admin)*.
 - `app/static/deckbuilder.html` — a tela de montar deck de Commander, em
   `/deckbuilder`. Três colunas (maybeboard, deck, busca), categorias próprias
@@ -599,8 +602,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `tests/test_combos.py` — combinar pedidos numa folha só: a conta de folhas
   economizadas, as regras de quem pode entrar no mesmo papel (laminação,
   cancelado), a folha que sai com as cartas emendadas e imprimir confirmando
-  todos os pedidos de uma vez. Roda sem rede (o Drive é trocado por imagens de
-  mentira): `python tests/test_combos.py`.
+  todos os pedidos de uma vez. A prévia que a barra do admin calcula no clique
+  e a conta do backend leem os mesmos casos de
+  `front/src/pages/admin/preview.cases.json` (este teste e o
+  `preview.test.ts`), e nenhuma das duas pode mudar sozinha. Roda sem rede (o
+  Drive é trocado por imagens de mentira): `python tests/test_combos.py`.
 - `tests/test_fila_impressao.py` — a fila de impressão com o worker rodando
   de verdade contra o app: reserva atômica, recusa do CUPS, relato que se
   perde na rede e volta sem reimprimir, folha combinada e a porta do worker.
@@ -703,7 +709,7 @@ Ela pede o `ADMIN_TOKEN` do `.env` na primeira vez e guarda no navegador
 (no `sessionStorage`, que some quando a aba fecha; marcando *"Lembrar neste
 navegador"*, no `localStorage`, que fica). O botão **Sair** apaga os dois.
 
-**Onde mora a proteção:** o arquivo `admin.html` é servido como qualquer
+**Onde mora a proteção:** a página do admin é servida como qualquer
 outro estático — quem digitar o endereço vê a tela. O que ele **não** vê é
 pedido nenhum: a página nasce vazia e todo dado vem das rotas `/admin/...`,
 que exigem o header `X-Admin-Token`. Sem o token, a tela é uma caixa de texto

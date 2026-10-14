@@ -17,7 +17,7 @@ type Reply = [number, unknown] | [number, unknown, "text"];
 export function mockFetch(handler: (method: string, url: string, body: any) => Reply) {
   const fn = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    const body = init?.body ? JSON.parse(init.body as string) : undefined;
+    const body = parseBody(init?.body);
     const [status, data, kind] = handler(method, url, body);
     const text = kind === "text" ? String(data) : JSON.stringify(data);
     return new Response(status === 204 ? null : text, { status });
@@ -26,9 +26,22 @@ export function mockFetch(handler: (method: string, url: string, body: any) => R
   return fn;
 }
 
-/** O corpo JSON da primeira chamada a `method url`. */
+/* JSON vira objeto; formulário vira objeto também, campo a campo. */
+function parseBody(body: BodyInit | null | undefined) {
+  if (!body) return undefined;
+  if (body instanceof FormData) return Object.fromEntries(body as unknown as Iterable<[string, string]>);
+  return JSON.parse(body as string);
+}
+
+/** O corpo da primeira chamada a `method url`. */
 export function sentBody(fetch: ReturnType<typeof mockFetch>, method: string, url: string) {
   const call = fetch.mock.calls.find(
     ([u, init]) => u === url && (init?.method ?? "GET") === method);
-  return call?.[1]?.body ? JSON.parse(call[1].body as string) : undefined;
+  return parseBody(call?.[1]?.body);
+}
+
+/** Os cabeçalhos da primeira chamada a `url`. */
+export function sentHeaders(fetch: ReturnType<typeof mockFetch>, url: string) {
+  const call = fetch.mock.calls.find(([u]) => u === url);
+  return (call?.[1]?.headers ?? {}) as Record<string, string>;
 }

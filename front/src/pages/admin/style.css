@@ -1,0 +1,306 @@
+/* Mesma paleta da tela do cliente (index.html), de propósito: é o mesmo
+   sistema, só que do lado de dentro. O que muda é a largura — aqui a tela
+   é uma lista, não um formulário. */
+:root{
+  --bg:#0F0D17;
+  --surface:#1B1730;
+  --surface-2:#241F3D;
+  --border:#382F5C;
+  --text:#EDE6D6;
+  --text-muted:#A79BC7;
+  --gold:#C9A227;
+  --gold-light:#E4C767;
+  --purple:#8B6BFF;
+  --green:#4C9A6B;
+  --red:#D9634A;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(circle at 15% 0%, rgba(139,107,255,0.12), transparent 45%),
+    radial-gradient(circle at 85% 100%, rgba(201,162,39,0.10), transparent 45%),
+    var(--bg);
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+  min-height:100vh;
+  padding:28px 16px 72px;
+}
+.wrap{max-width:840px;margin:0 auto;}
+[hidden]{display:none !important;}
+
+header{display:flex;align-items:center;gap:12px;margin-bottom:22px;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0;}
+.brand .rune{
+  width:38px;height:38px;border:1.5px solid var(--gold);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Cinzel',serif;color:var(--gold-light);font-size:18px;
+  transform:rotate(45deg);flex-shrink:0;
+}
+.brand .rune span{transform:rotate(-45deg);}
+.brand h1{font-family:'Cinzel',serif;font-weight:700;font-size:20px;letter-spacing:.03em;margin:0;}
+.brand p{margin:2px 0 0;font-size:12px;color:var(--text-muted);}
+
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:22px;box-shadow:0 20px 40px -20px rgba(0,0,0,.6);
+}
+.mono{font-family:'IBM Plex Mono',monospace;}
+.rotulo{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;
+  color:var(--gold-light);text-transform:uppercase;margin-bottom:8px;display:block;
+}
+
+/* --- Entrada ---------------------------------------------------------- */
+#gate{max-width:420px;margin:8vh auto 0;}
+#gate h2{font-family:'Cinzel',serif;font-size:17px;margin:0 0 8px;}
+#gate p{font-size:13px;line-height:1.6;color:var(--text-muted);margin:0 0 16px;}
+input[type=password],input[type=text],input[type=search]{
+  width:100%;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);padding:11px 12px;font-size:14px;
+  font-family:'Inter',sans-serif;
+}
+input:focus-visible,button:focus-visible,select:focus-visible{
+  outline:2px solid var(--gold);outline-offset:1px;
+}
+.lembrar{
+  display:flex;align-items:center;gap:8px;margin-top:12px;
+  font-size:12px;color:var(--text-muted);cursor:pointer;
+}
+.lembrar input{width:15px;height:15px;accent-color:var(--gold);cursor:pointer;}
+
+.btn-ouro{
+  background:var(--gold);color:#1A1408;border:none;border-radius:9px;padding:12px;
+  font-weight:700;font-size:14px;cursor:pointer;width:100%;margin-top:14px;
+}
+.btn-ouro:hover:not(:disabled){filter:brightness(1.08);}
+.btn-ouro:disabled{opacity:.4;cursor:not-allowed;}
+
+/* --- Barra de filtros -------------------------------------------------- */
+.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.chip{
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);
+  border-radius:999px;padding:7px 13px;font-size:12px;cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;white-space:nowrap;
+}
+.chip:hover{border-color:var(--gold);color:var(--gold-light);}
+.chip.ativo{border-color:var(--gold);background:rgba(201,162,39,.10);color:var(--gold-light);}
+.chip .n{font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.75;margin-left:5px;}
+.busca-linha{display:flex;gap:8px;margin-bottom:16px;}
+.busca-linha input{flex:1;}
+.btn-sec{
+  background:transparent;border:1px solid var(--border);color:var(--text-muted);
+  border-radius:9px;padding:9px 14px;font-size:12px;cursor:pointer;white-space:nowrap;
+  transition:border-color .15s,color .15s;
+}
+.btn-sec:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
+.btn-sec:disabled{opacity:.35;cursor:not-allowed;}
+.btn-sec.perigo:hover:not(:disabled){border-color:var(--red);color:#F2AFA1;}
+
+/* --- Lista de pedidos -------------------------------------------------- */
+/* Troca de assunto do painel: pedidos, decks ou estoque. Fica acima dos
+   filtros porque muda O QUE se lista, não como. */
+.abas{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);}
+.aba{background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--text-muted);font-size:13px;padding:8px 12px;cursor:pointer;
+  font-family:inherit;}
+.aba:hover{color:var(--gold-light);}
+.aba.ativo{color:var(--gold-light);border-bottom-color:var(--gold);}
+.aba .n{font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.75;
+  margin-left:5px;}
+.aba .n.alerta{color:#F2AFA1;opacity:1;}
+
+/* --- Estoque ------------------------------------------------------ */
+.estoque-itens{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  gap:10px;margin-bottom:10px;}
+.item-estoque{background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:14px 16px;}
+.item-estoque.baixo{border-color:var(--red);background:rgba(217,99,74,.07);}
+.item-estoque .nome{font-size:13px;color:var(--text-muted);}
+.item-estoque .saldo{font-family:'IBM Plex Mono',monospace;font-size:28px;
+  color:var(--gold-light);margin:4px 0 2px;}
+.item-estoque.baixo .saldo{color:#F2AFA1;}
+.item-estoque .saldo small{font-size:12px;color:var(--text-muted);margin-left:6px;}
+.item-estoque .detalhe{font-family:'IBM Plex Mono',monospace;font-size:11px;
+  color:var(--text-muted);line-height:1.7;}
+.item-estoque .p-acoes .btn-sec{padding:7px 11px;font-size:11px;}
+.bloco-estoque{background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+.bloco-estoque .topo{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.bloco-estoque .topo .rotulo{flex:1;margin:0;}
+.bloco-estoque .topo .btn-sec{padding:6px 11px;font-size:11px;}
+.rolagem{overflow-x:auto;}
+.custo-folha{width:100%;border-collapse:collapse;font-size:12.5px;}
+.custo-folha th,.custo-folha td{padding:6px 8px;text-align:right;
+  border-bottom:1px solid var(--border);white-space:nowrap;}
+.custo-folha th:first-child,.custo-folha td:first-child{text-align:left;
+  color:var(--text-muted);}
+.custo-folha th{font-weight:500;color:var(--text-muted);font-size:11px;}
+.custo-folha td{font-family:'IBM Plex Mono',monospace;}
+.custo-folha tr.total td{color:var(--gold-light);font-weight:600;}
+.custo-folha tr:last-child td{border-bottom:none;}
+.custo-folha .negativo{color:#F2AFA1;}
+.movimento{display:flex;gap:10px;font-family:'IBM Plex Mono',monospace;
+  font-size:11.5px;line-height:1.5;padding:5px 0;border-bottom:1px solid var(--border);
+  color:var(--text-muted);flex-wrap:wrap;}
+.movimento:last-child{border-bottom:none;}
+.movimento .delta{min-width:52px;text-align:right;color:var(--text);}
+.movimento .delta.sai{color:#F2AFA1;}
+.movimento .delta.entra{color:var(--green);}
+.movimento .oque{flex:1;min-width:160px;}
+.modal-campo{display:block;margin-bottom:12px;}
+.modal-campo .rotulo{margin-bottom:6px;}
+#modalCampos.grade{display:grid;grid-template-columns:1fr 1fr;column-gap:10px;}
+.bloco-estoque .nota-bloco{font-family:'IBM Plex Mono',monospace;font-size:11px;
+  color:var(--text-muted);margin-top:8px;line-height:1.6;}
+
+/* --- Decks -------------------------------------------------------- */
+.deck{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;margin-bottom:9px;display:flex;gap:12px;align-items:center;
+}
+/* Deck sem dono não é erro — hoje é o estado de todos eles. A marca é
+   informativa, não alarme: fica no texto, sem cor de aviso. */
+.deck .arte{width:44px;height:44px;border-radius:8px;flex:none;
+  background:var(--surface-2);object-fit:cover;object-position:50% 20%;}
+.deck .miolo{flex:1;min-width:0;}
+.deck .nome{font-size:14.5px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;}
+.deck .meta{font-size:11.5px;color:var(--text-muted);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.deck .dono{font-size:12px;text-align:right;flex:none;}
+.deck .dono .sem{color:var(--text-muted);font-style:italic;}
+.deck .conta{font-family:'IBM Plex Mono',monospace;font-size:12px;flex:none;}
+.deck .acoes{display:flex;gap:6px;flex:none;}
+@media (max-width:640px){
+  .deck{flex-wrap:wrap;}
+  .deck .dono,.deck .acoes{text-align:left;}
+}
+
+.pedido{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:14px 16px;margin-bottom:10px;
+}
+/* O que espera decisão fica marcado: é a fila de trabalho do dia. */
+.pedido.notified{border-color:var(--gold);background:rgba(201,162,39,.05);}
+.pedido.erro_impressao{border-color:var(--red);background:rgba(217,99,74,.06);}
+.pedido.cancelado{opacity:.6;}
+.p-topo{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.p-nome{font-size:15px;font-weight:600;flex:1;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.p-valor{font-family:'IBM Plex Mono',monospace;font-size:17px;color:var(--gold-light);}
+.pill{
+  font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;border:1px solid var(--border);border-radius:999px;
+  padding:3px 9px;color:var(--text-muted);white-space:nowrap;
+}
+.pill.pending{color:var(--text-muted);}
+.pill.notified{color:var(--gold-light);border-color:var(--gold);}
+.pill.a_imprimir,.pill.imprimindo{color:var(--gold-light);border-color:var(--gold);}
+.pill.impresso{color:var(--green);border-color:rgba(76,154,107,.45);}
+.pill.erro_impressao{color:#F2AFA1;border-color:rgba(217,99,74,.5);}
+.pill.cancelado{color:#F2AFA1;border-color:rgba(217,99,74,.5);}
+.p-meta{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);
+  margin-top:7px;line-height:1.7;
+}
+.p-meta b{color:var(--text);font-weight:600;}
+.p-resposta{margin-top:4px;white-space:pre-wrap;word-break:break-word;}
+.pedido.erro_impressao .p-resposta{color:#F2AFA1;}
+.p-meta .sep{opacity:.4;margin:0 6px;}
+.p-acoes{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;}
+.p-acoes .btn-sec{padding:7px 11px;font-size:11px;}
+.p-nota{
+  font-size:11px;line-height:1.55;margin-top:10px;border-radius:8px;
+  padding:8px 10px;border:1px dashed var(--border);color:var(--text-muted);
+}
+.p-nota.ok{color:var(--green);border-color:rgba(76,154,107,.45);}
+.p-nota.erro{color:#F2AFA1;border-color:var(--red);background:rgba(217,99,74,.10);}
+.p-nota.andando{color:var(--gold-light);border-color:var(--gold);}
+
+/* --- Combinar pedidos -------------------------------------------------- */
+/* A caixinha fica na frente do cartão, alinhada com o nome. Só aparece em
+   pedido que pode entrar na folha — cancelado não gasta papel. */
+.p-topo .marcar{
+  width:17px;height:17px;accent-color:var(--gold);cursor:pointer;
+  flex-shrink:0;margin:0 2px 0 0;
+}
+.pedido.marcado{border-color:var(--purple);background:rgba(139,107,255,.07);}
+
+/* Barra que nasce no rodapé quando há pedido marcado. Fixa de propósito:
+   a lista é longa e a decisão de combinar se toma olhando os pedidos. */
+.combo-barra{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  background:var(--surface-2);border-top:1px solid var(--purple);
+  box-shadow:0 -14px 30px -18px rgba(0,0,0,.9);
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+}
+.combo-dentro{max-width:840px;margin:0 auto;display:flex;gap:10px;
+  align-items:center;flex-wrap:wrap;}
+.combo-conta{flex:1;min-width:220px;font-size:12px;line-height:1.6;
+  color:var(--text-muted);font-family:'IBM Plex Mono',monospace;}
+.combo-conta b{color:var(--text);}
+.combo-conta .ganho{color:var(--gold-light);}
+.combo-conta .nada{color:var(--text-muted);}
+.combo-conta .erro{color:#F2AFA1;}
+.combo-acoes{display:flex;gap:7px;flex-wrap:wrap;}
+.combo-acoes .btn-sec{padding:8px 12px;font-size:12px;}
+.combo-acoes .btn-ouro{width:auto;margin:0;padding:8px 14px;font-size:12px;}
+.combo-mapa{
+  max-width:840px;margin:8px auto 0;font-family:'IBM Plex Mono',monospace;
+  font-size:11px;line-height:1.7;color:var(--text-muted);
+}
+.combo-mapa b{color:var(--text);}
+/* O rodapé fixo cobriria o fim da lista; o corpo ganha folga quando ela
+   está no ar. */
+body.com-combo{padding-bottom:200px;}
+@media (max-width:560px){
+  .combo-acoes{width:100%;}
+  .combo-acoes button{flex:1;min-width:calc(50% - 4px);}
+}
+
+.vazio{
+  text-align:center;color:var(--text-muted);font-size:13px;line-height:1.6;
+  border:1px dashed var(--border);border-radius:12px;padding:28px 18px;
+}
+.aviso{
+  background:rgba(217,99,74,.12);border:1px solid var(--red);color:#F2AFA1;
+  border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:14px;
+}
+.rodape{
+  margin-top:22px;font-size:11px;line-height:1.6;color:var(--text-muted);
+  text-align:center;
+}
+.rodape b{color:var(--text);}
+
+/* --- Confirmação ------------------------------------------------------- */
+.modal{
+  position:fixed;inset:0;z-index:50;background:rgba(8,6,16,.84);
+  display:none;align-items:center;justify-content:center;padding:16px;
+}
+.modal.show{display:flex;}
+.modal-box{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  width:min(430px,100%);padding:22px;
+}
+.modal-box h3{font-family:'Cinzel',serif;font-size:16px;margin:0 0 10px;letter-spacing:.03em;}
+.modal-box p{font-size:13px;line-height:1.6;color:var(--text-muted);margin:0 0 14px;}
+.modal-box p b{color:var(--text);}
+.modal-acoes{display:flex;gap:9px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap;}
+.btn-confirma{
+  background:var(--gold);color:#1A1408;border:none;border-radius:9px;
+  padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;
+}
+.btn-confirma.perigo{background:var(--red);color:#2A0F09;}
+.btn-confirma:hover:not(:disabled){filter:brightness(1.08);}
+.btn-confirma:disabled{opacity:.4;cursor:not-allowed;}
+
+@media (prefers-reduced-motion: reduce){*{transition:none !important;}}
+@media (max-width:560px){
+  .p-valor{font-size:15px;}
+  .p-acoes .btn-sec{flex:1;min-width:calc(50% - 4px);}
+}
+
+/* O Preact monta dentro de #app; sem caixa própria, o layout continua
+   sendo o de antes. */
+#app{display:contents;}

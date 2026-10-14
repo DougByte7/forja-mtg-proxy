@@ -71,7 +71,8 @@ check("com no-cache", r.headers.get("cache-control") == "no-cache",
 
 # Cada rota aponta pra tela certa do build: trocar o nome de um entry no
 # vite.config.ts sem trocar aqui é tela em branco (503) só naquela rota.
-TELAS = {"/entrar": "login", "/cadastro": "signup", "/meus-decks": "decks"}
+TELAS = {"/entrar": "login", "/cadastro": "signup", "/meus-decks": "decks",
+         "/admin": "admin"}
 for nome in TELAS.values():
     (frontend.DIST / "pages" / f"{nome}.html").write_text(
         f"<!DOCTYPE html><title>{nome}</title>", encoding="utf-8")
@@ -80,7 +81,7 @@ for rota, nome in TELAS.items():
     check(f"{rota} serve a tela {nome}", r.status_code == 200
           and f"<title>{nome}</title>" in r.text, r.status_code)
 
-for antigo in ("entrar.html", "cadastro.html", "decks.html"):
+for antigo in ("entrar.html", "cadastro.html", "decks.html", "admin.html"):
     check(f"/{antigo} antigo não existe mais",
           c.get(f"/{antigo}").status_code == 404)
 

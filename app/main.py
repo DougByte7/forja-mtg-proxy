@@ -1731,7 +1731,7 @@ def list_visitas(x_admin_token: str | None = Header(default=None),
     }
 
 
-# --- Tela de pedidos (app/static/admin.html) -------------------------------
+# --- Tela de pedidos (front/src/pages/admin) -------------------------------
 #
 # A página em si é só a casca: HTML, CSS e JS, sem nenhum dado de pedido
 # dentro. TUDO que ela mostra vem das rotas abaixo, e todas passam pelo
@@ -1742,9 +1742,9 @@ def list_visitas(x_admin_token: str | None = Header(default=None),
 
 @app.get("/admin", response_class=HTMLResponse)
 def admin_page():
-    """Serve a tela de pedidos. Fica antes do mount estático pra a URL ser
-    /admin, sem o .html."""
-    return FileResponse("app/static/admin.html", media_type="text/html")
+    """Serve a tela de pedidos (`front/src/pages/admin`). Fica antes do mount
+    estático pra a URL ser /admin, sem o .html."""
+    return frontend.page("admin")
 
 
 @app.get("/admin/sessao")

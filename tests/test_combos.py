@@ -289,47 +289,23 @@ check("desfazer de novo = 404",
       cliente.delete(f"/admin/combos/{combo['id']}", headers=AUTH).status_code == 404)
 
 # --- 9. a prévia da tela contra a conta do backend -----------------------
-# A barra do admin refaz a conta de folhas em JavaScript pra responder no
+# A barra do admin refaz a conta de folhas no navegador pra responder no
 # clique, sem ida ao servidor. Duas implementações da mesma regra é
 # exatamente onde a divergência se esconde: a tela promete uma economia, o
-# papel entrega outra. Aqui as duas contas rodam sobre os mesmos números.
-try:
-    import quickjs
-except ImportError:
-    print("pulado: quickjs não instalado (pip install quickjs) — a prévia do "
-          "admin não foi conferida contra o backend")
-else:
-    fonte = (RAIZ / "app/static/admin.html").read_text(encoding="utf-8")
-    # Do começo do bloco até o fim de `resumoLocal`, que é a conta em si.
-    trecho = re.search(r"const CARTAS_POR_FOLHA.*?^function resumoLocal.*?^}",
-                       fonte, re.S | re.M).group(0)
-    ctx = quickjs.Context()
-    ctx.eval(trecho + """
-    function previa(lista) {
-      const r = resumoLocal(lista);
-      return JSON.stringify([r.cartas, r.separadas, r.combinadas, r.economia,
-                             r.brancosSeparados, r.brancos, r.brancosEvitados]);
-    }""")
-    import json
-    casos = [
-        [(1, 5), (2, 0), (1, 7)],          # o caso da tela: economiza 1
-        [(2, 0), (1, 0)],                  # redondos: não economiza
-        [(1, 5), (1, 3)],                  # muito branco, folha nenhuma
-        [(1, 8), (1, 8), (1, 8)],          # três migalhas viram uma folha
-        [(1, 0)],                          # um só
-        [(4, 3), (2, 6), (3, 1), (1, 8)],  # um punhado qualquer
-    ]
-    for caso in casos:
-        lista = [{"id": f"p{i}", "pages": pg, "blanks": bl, "created_at": i}
-                 for i, (pg, bl) in enumerate(caso)]
-        py = calc.resumo_combinado(lista)
-        esperado = [py["cartas"], py["paginas_separadas"],
-                    py["paginas_combinadas"], py["folhas_economizadas"],
-                    py["brancos_separados"], py["brancos"],
-                    py["brancos_evitados"]]
-        obtido = json.loads(ctx.eval(f"previa({json.dumps(lista)})"))
-        check(f"prévia da tela bate com o backend em {caso}",
-              obtido == esperado, f"js={obtido} py={esperado}")
+# papel entrega outra. Os casos moram num JSON só, que as duas pontas leem:
+# aqui o backend tem de dar o `esperado` de cada caso, e o
+# `front/src/pages/admin/preview.test.ts` cobra o mesmo da conta da tela.
+# Mudou a regra? Mude as duas contas e o JSON juntos.
+import json
+CASOS = json.loads((RAIZ / "front/src/pages/admin/preview.cases.json")
+                   .read_text(encoding="utf-8"))
+for caso in CASOS:
+    lista = [{"id": f"p{i}", "created_at": i, **p}
+             for i, p in enumerate(caso["pedidos"])]
+    py = calc.resumo_combinado(lista)
+    obtido = {k: py[k] for k in caso["esperado"]}
+    check(f"backend dá o esperado em '{caso['caso']}' (a tela confere o mesmo)",
+          obtido == caso["esperado"], f"py={obtido} json={caso['esperado']}")
 
 
 # --- 10. a faxina conhece a folha combinada ------------------------------

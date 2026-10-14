@@ -63,7 +63,7 @@ TAMANHO_MINIMO_SENHA = int(os.environ.get("SENHA_MINIMA", "8"))
 # Quanto tempo uma sessão vale. Duas durações: a normal, pra quem entra num
 # computador emprestado, e a de quem marcou "lembrar de mim" — o celular do
 # operador, onde digitar senha toda vez é o que faria a tela deixar de ser
-# usada. É a mesma escolha que o `admin.html` já fazia com o token.
+# usada. É a mesma escolha que a tela do admin já fazia com o token.
 SESSAO_HORAS = float(os.environ.get("SESSAO_HORAS", "12"))
 SESSAO_DIAS_LEMBRAR = float(os.environ.get("SESSAO_DIAS", "60"))
 
