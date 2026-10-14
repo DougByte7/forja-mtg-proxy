@@ -4,7 +4,6 @@ import {$, escapar} from "../../shared/dom.js";
 import {botaoDeArte} from "./artes.js";
 import {atualizarCategoriasDoDestino} from "./busca.js";
 import {ganchosDaPrevia} from "./carta.js";
-import {desenharCombos} from "./combos.js";
 import {categoryOf, categoryOrder, deckIdentity, isCustomCategory, totalCards} from "./deck";
 import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
 import {agendarCotacao, desenharPreviaOrcamento, subtotalDoGrupo,
@@ -26,9 +25,6 @@ export function desenharTudo(){
   desenharPreviaOrcamento();
   $("rot-preco-moeda").textContent = screenCurrency();
   atualizarCategoriasDoDestino();
-  // Redesenha os combos pra o aviso de "o deck mudou desde esta busca"
-  // aparecer no mesmo instante em que ele passa a ser verdade.
-  if (state.combos) desenharCombos();
   // A cotação persegue o deck: cada mudança marca uma nova, que só sai depois
   // de o deck ficar quieto.
   agendarCotacao();

@@ -3,7 +3,7 @@
    A estimativa de bracket vem do Commander Spellbook, pelo servidor (ver
    `app/poder.py`). Aqui fica a busca e o estado dela; o desenho é
    `ui/Power.tsx`. */
-import { assinaturaDoDeck } from "./combos.js";
+import { deckSignature } from "./combos";
 import { api, salvarAgora } from "./salvar.js";
 import { state, touch } from "./state";
 import { toast } from "./ui/toast";
@@ -35,7 +35,7 @@ export async function estimatePower() {
   touch();
   try {
     state.poder = await api(`/decks/${state.id}/poder`, { method: "POST" });
-    state.poderAssinatura = assinaturaDoDeck();
+    state.poderAssinatura = deckSignature();
   } catch (e) {
     state.poderErro = (e as Error).message;
   } finally {

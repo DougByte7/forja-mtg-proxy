@@ -20,7 +20,7 @@
 import {$, escapar} from "../../shared/dom.js";
 import {imagemDaFace} from "./artes.js";
 import {detalheDaCarta} from "./carta.js";
-import {assinaturaDoDeck} from "./combos.js";
+import {deckSignature} from "./combos";
 import {attackers, bottomCountOnKeep, cardByUid, cardName, comboCount,
         combosOf, fieldRow, handSummary, isLand, playerArts, ZONE_NAMES} from "./goldfish";
 import {COLOR_NAMES, COLORS, state} from "./state";
@@ -200,7 +200,7 @@ function combosDaCartaHTML(c){
   // A lista fecha com o deck de quando a busca rodou, não com o de agora —
   // mesma ressalva que a aba de combos faz, e pelo mesmo motivo: a mesa foi
   // embaralhada de um deck que pode ter mudado desde então.
-  const velho = state.combosAssinatura !== assinaturaDoDeck()
+  const velho = state.combosAssinatura !== deckSignature()
     ? `<div class="gf-combo-velho">O deck mudou desde a busca de combos.</div>` : "";
   return `<div class="gf-combos">
     <div class="gf-combos-titulo">Combos <b>${achados.length}</b></div>
@@ -650,7 +650,7 @@ function notaDeCombosHTML(m){
   // dá pra deduzir olhando a mesa: um deck editado depois da busca e o
   // segundo deck, que entrou pelo id e nunca foi perguntado.
   const ressalvas = [];
-  if (state.combosAssinatura !== assinaturaDoDeck()){
+  if (state.combosAssinatura !== deckSignature()){
     ressalvas.push("o deck mudou desde a busca");
   }
   if (m.jogadores.length > 1) ressalvas.push("o segundo deck não foi perguntado");

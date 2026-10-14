@@ -7,7 +7,6 @@ import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,
         atualizarCategoriasDoDestino, buscarComandante, escolherDestino,
         escolherPorPagina, ligarTecladoDaBusca, ultimosResultados, virarPagina} from "./busca.js";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
-import {adicionarPeca} from "./combos.js";
 import {linkDeConta} from "./conta.js";
 import {fecharCotacao} from "./cotacao.js";
 import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
@@ -298,8 +297,6 @@ export function ligarEventos(){
     if (verCmd) return abrirCarta(state.comandantes[Number(verCmd.dataset.verCmd)]);
     const saiCmd = e.target.closest("[data-tirar-cmd]");
     if (saiCmd) return removeCommander(Number(saiCmd.dataset.tirarCmd));
-    const peca = e.target.closest("[data-add-peca]");
-    if (peca) return adicionarPeca(peca.dataset.addPeca, peca);
     if (e.target.closest("#btn-parceiro")){
       commanderPick.partner = true;
       $("heroi").hidden = false;

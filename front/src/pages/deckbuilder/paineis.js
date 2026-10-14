@@ -7,7 +7,7 @@
    por um quadro. */
 
 import {$} from "../../shared/dom.js";
-import {assinaturaDoDeck, procurarCombos} from "./combos.js";
+import {deckSignature, searchCombos} from "./combos";
 import {desenharMesa} from "./goldfish-desenho.js";
 import {analisarManabase} from "./manabase.js";
 import {estimatePower} from "./power";
@@ -32,12 +32,12 @@ function rodarAoAbrir(nome){
   if (nome === "sugestoes" && !state.sugestoes && !state.sugestoesRodando){
     return buscarSugestoes({tema: state.sugestoesTema});
   }
-  const assinatura = assinaturaDoDeck();
+  const assinatura = deckSignature();
   if (nome === "analise" && state.poderAssinatura !== assinatura){
     return estimatePower();
   }
   if (nome === "combos" && state.combosAssinatura !== assinatura){
-    return procurarCombos();
+    return searchCombos();
   }
   if (nome === "tokens" && state.tokensAssinatura !== assinatura){
     return loadTokens();

@@ -7,6 +7,7 @@ import { $ } from "../../shared/dom.js";
 import {
   ColorDistribution, Curve, DeckAlerts, IdentityNote, Issues, Odds, Power, TypeDistribution,
 } from "./ui/Analysis";
+import { CombosTabCount, DeckCombos, NearCombos } from "./ui/Combos";
 import { Meters } from "./ui/Meters";
 import { TokensPanel, TokensTabCount } from "./ui/Tokens";
 import { History, VersionPill } from "./ui/Versions";
@@ -27,4 +28,8 @@ export function mountIslands() {
   render(<History />, $("historico-resultado")!);
   render(<TokensPanel />, $("ilha-tokens")!);
   render(<TokensTabCount />, $("aba-tokens-n")!);
+  render(<DeckCombos />, $("combos-resultado")!);
+  render(<NearCombos />, $("combos-rail-resultado")!);
+  render(<CombosTabCount list="no_deck" />, $("aba-combos-n")!);
+  render(<CombosTabCount list="faltando_uma" />, $("rail-combos-n")!);
 }

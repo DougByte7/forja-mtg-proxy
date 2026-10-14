@@ -95,7 +95,7 @@ describe("componentes", () => {
       p.state.poderRodando = false;
       p.state.poder = { bracket: 3, nome: "Turbinado", explicacao: "Até três game changers.",
                         motivos: [{ titulo: "Game changers", detalhe: "2 no deck", cartas: ["Rhystic Study"] }] };
-      p.state.poderAssinatura = p.assinaturaDoDeck();
+      p.state.poderAssinatura = p.deckSignature();
       p.touch();
     });
     expect(host.querySelector(".degrau.aqui .n")!.textContent).toBe("3");

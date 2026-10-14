@@ -1,7 +1,7 @@
 /* A aba de análise e os avisos que ela empresta pra lista e pra lateral.
    As contas moram em `analysis.ts`, `odds.ts` e `power.ts`. */
 import { colorDemand, groupIssues, isCountIssue, manaCurve, typeCounts, type Issue } from "../analysis";
-import { assinaturaDoDeck } from "../combos.js";
+import { deckSignature } from "../combos";
 import { deckIdentity, totalCards } from "../deck";
 import { oddsView, percent, SEEN_BY_T4 } from "../odds";
 import { BRACKETS, estimatePower, type PowerResult } from "../power";
@@ -197,7 +197,7 @@ export function Power() {
   const total = totalCards();
   return (
     <>
-      {state.poderAssinatura !== assinaturaDoDeck() && (
+      {state.poderAssinatura !== deckSignature() && (
         <div class="combo-desatualizado">O deck mudou desde esta estimativa.
           <button class="refazer" onClick={() => estimatePower()}>Atualizar</button></div>
       )}

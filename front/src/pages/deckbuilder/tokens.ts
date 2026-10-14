@@ -7,7 +7,7 @@
    Sem botão de buscar, ao contrário dos combos: a base local já guarda, carta
    por carta, quais fichas ela cria, então a resposta não custa rede e pode
    acompanhar o deck como a mana base acompanha. O desenho é `ui/Tokens.tsx`. */
-import { assinaturaDoDeck } from "./combos.js";
+import { deckSignature } from "./combos";
 import { api, salvarAgora } from "./salvar.js";
 import { state, touch } from "./state";
 import type { Card } from "./types";
@@ -33,7 +33,7 @@ export async function loadTokens() {
   if (!state.tokens) { state.tokensRodando = true; touch(); }
   try {
     state.tokens = await api(`/decks/${state.id}/tokens`);
-    state.tokensAssinatura = assinaturaDoDeck();
+    state.tokensAssinatura = deckSignature();
     state.tokensErro = null;
   } catch (e) {
     state.tokensErro = (e as Error).message;
