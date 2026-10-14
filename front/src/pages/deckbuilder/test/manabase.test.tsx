@@ -43,7 +43,7 @@ it("básicos um a um ou todos, e o terreno de fixar com um clique", async () => 
   const p = await page({ deck: [], maybe: [] });
   p.state.manabase = RESPONSE();
   const host = mount(p);
-  const count = (nome: string) => p.state.cartas.find((e: any) => e.carta.nome === nome)?.quantidade ?? 0;
+  const count = (nome: string) => p.state.cards.find((e: any) => e.carta.nome === nome)?.quantidade ?? 0;
 
   act(() => (host.querySelector(".mb-basico") as HTMLButtonElement).click());
   expect(count("Plains")).toBe(4);
@@ -65,7 +65,7 @@ it("o teto de preço pede de novo ao servidor, em dólar", async () => {
   vi.stubGlobal("fetch", fetch);
   const host = mount(p);
   act(() => ([...host.querySelectorAll(".mb-teto .chip")].at(-1) as HTMLButtonElement).click());
-  expect(p.state.manabaseTeto).toBe(999);
+  expect(p.state.manabaseCap).toBe(999);
   expect(fetch.mock.calls[0][0]).toBe("/decks/abc/manabase?teto=999");
 });
 
@@ -74,7 +74,7 @@ it("abrir um ciclo mostra só ele, com a volta pra visão geral", async () => {
   p.state.manabase = RESPONSE();
   const host = mount(p);
   act(() => (host.querySelector(".mb-base-grupo") as HTMLButtonElement).click());
-  expect(p.state.mbCategoria).toBe("shocks");
+  expect(p.state.manabaseCycle).toBe("shocks");
   expect(host.querySelector(".mb-ciclo.aberto h3")!.textContent).toBe("Shocks");
   expect(host.querySelector(".mb-chegando")).not.toBeNull();   // 2 de 4 na tela
   act(() => (host.querySelector(".mb-ciclo.aberto .mb-ver") as HTMLButtonElement).click());

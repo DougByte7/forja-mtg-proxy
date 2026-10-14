@@ -27,7 +27,7 @@ function mount(Component: any) {
 it("as duas listas, com o preço que cada uma pergunta", async () => {
   const p = await page();
   p.state.combos = RESPONSE();
-  p.state.combosAssinatura = p.deckSignature();
+  p.state.combosSignature = p.deckSignature();
   const deck = mount(p.DeckCombos);
   const near = mount(p.NearCombos);
   expect(deck.querySelector(".produz")!.textContent).toBe("Resulta em: Mana infinita");
@@ -42,7 +42,7 @@ it("as duas listas, com o preço que cada uma pergunta", async () => {
 it("adicionar a peça que falta fecha o combo aqui mesmo", async () => {
   const p = await page();
   p.state.combos = RESPONSE();
-  p.state.combosAssinatura = p.deckSignature();
+  p.state.combosSignature = p.deckSignature();
   vi.stubGlobal("fetch", vi.fn(async (url: string) =>
     url.startsWith("/cartas/busca") ? new Response(JSON.stringify({ cartas: [FINKS] }))
       : new Promise(() => {})));
@@ -52,7 +52,7 @@ it("adicionar a peça que falta fecha o combo aqui mesmo", async () => {
   await act(async () => { (near.querySelector(".add-peca") as HTMLButtonElement).click(); });
   await act(async () => { await vi.waitFor(() => expect(p.state.combos.faltando_uma).toHaveLength(0)); });
 
-  expect(p.state.cartas.map((e: any) => e.carta.nome)).toContain("Kitchen Finks");
+  expect(p.state.cards.map((e: any) => e.carta.nome)).toContain("Kitchen Finks");
   expect(p.state.combos.no_deck.map((c: any) => c.produz[0])).toEqual(["Vida infinita", "Mana infinita"]);
   expect(near.textContent).toContain("Nenhum combo a uma carta de fechar");
   // A lista está em dia com o deck: no lugar do "procure de novo", o recado.
@@ -63,12 +63,12 @@ it("adicionar a peça que falta fecha o combo aqui mesmo", async () => {
 it("o deck que muda depois da busca ganha o aviso, e esperando/erro valem pras duas", async () => {
   const p = await page();
   p.state.combos = RESPONSE();
-  p.state.combosAssinatura = "outro deck";
+  p.state.combosSignature = "outro deck";
   const deck = mount(p.DeckCombos);
   const near = mount(p.NearCombos);
   expect(deck.textContent).toContain("O deck mudou desde esta busca");
-  act(() => { p.state.combosRodando = true; p.touch(); });
+  act(() => { p.state.combosLoading = true; p.touch(); });
   expect([deck.textContent, near.textContent]).toEqual(["Perguntando ao Spellbook…", "Perguntando ao Spellbook…"]);
-  act(() => { p.state.combosRodando = false; p.state.combosErro = "Spellbook fora do ar."; p.touch(); });
+  act(() => { p.state.combosLoading = false; p.state.combosError = "Spellbook fora do ar."; p.touch(); });
   expect(near.querySelector(".aponta.erro")!.textContent).toBe("Spellbook fora do ar.");
 });

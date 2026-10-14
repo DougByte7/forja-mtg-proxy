@@ -31,16 +31,16 @@ function Synergy({ item, fromCard, target }: { item: Suggestion; fromCard: boole
 
 export function SuggestionsPanel() {
   const state = useDeck();
-  if (state.sugestoesRodando) return <div class="nota">Perguntando ao EDHREC sobre {state.sugestoesAlvo}…</div>;
-  if (state.sugestoesErro) return <div class="aponta erro"><span>{state.sugestoesErro}</span></div>;
-  const s: SuggestionsResponse | null = state.sugestoes;
+  if (state.suggestionsLoading) return <div class="nota">Perguntando ao EDHREC sobre {state.suggestionsTarget}…</div>;
+  if (state.suggestionsError) return <div class="aponta erro"><span>{state.suggestionsError}</span></div>;
+  const s: SuggestionsResponse | null = state.suggestions;
   if (!s) return null;
 
   const fromCard = s.alvo?.tipo === "carta";
   // O nome do comandante sai do estado, e não do `alvo` que veio junto: com
   // uma dupla de parceiros o servidor manda os dois separados por vírgula, e
   // "Muldrotha, the Gravetide" já tem vírgula dentro. A tela junta com "e".
-  const target = fromCard ? (s.alvo!.nome || "") : state.comandantes.map((c) => c.nome).join(" e ");
+  const target = fromCard ? (s.alvo!.nome || "") : state.commanders.map((c) => c.nome).join(" e ");
   return (
     <>
       <div class="sug-alvo">
@@ -55,9 +55,9 @@ export function SuggestionsPanel() {
       </div>
       {!!s.temas?.length && (
         <div class="temas">
-          <button class={"chip" + (!state.sugestoesTema ? " ativo" : "")} onClick={() => loadSuggestions({ theme: "" })}>Tudo</button>
+          <button class={"chip" + (!state.suggestionsTheme ? " ativo" : "")} onClick={() => loadSuggestions({ theme: "" })}>Tudo</button>
           {s.temas.slice(0, 14).map((t) => (
-            <button class={"chip" + (state.sugestoesTema === t.slug ? " ativo" : "")}
+            <button class={"chip" + (state.suggestionsTheme === t.slug ? " ativo" : "")}
                     title={t.decks ? `${t.decks} decks` : ""} onClick={() => loadSuggestions({ theme: t.slug })}>{t.nome}</button>
           ))}
         </div>

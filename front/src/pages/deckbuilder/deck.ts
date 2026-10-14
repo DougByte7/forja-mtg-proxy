@@ -5,7 +5,7 @@ import type { Board, Card, Entry } from "./types";
 
 export function deckIdentity() {
   const colors = new Set<string>();
-  state.comandantes.forEach((c) => (c.identidade || "").split("").forEach((x) => colors.add(x)));
+  state.commanders.forEach((c) => (c.identidade || "").split("").forEach((x) => colors.add(x)));
   return COLORS.filter((c) => colors.has(c)).join("");
 }
 
@@ -15,11 +15,11 @@ const outOfCount = (entry: Entry) => OUT_OF_COUNT.has(entry.categoria || "");
    contador, curva, distribuição, assinatura pros combos. O sideboard fica de
    fora, e o maybeboard nem está nesta lista. */
 export function countedCards() {
-  return state.cartas.filter((e) => !outOfCount(e));
+  return state.cards.filter((e) => !outOfCount(e));
 }
 
 export function totalCards() {
-  return state.comandantes.length + countedCards().reduce((n, e) => n + e.quantidade, 0);
+  return state.commanders.length + countedCards().reduce((n, e) => n + e.quantidade, 0);
 }
 
 /* A categoria automática, a que sai do tipo da carta. */
@@ -44,7 +44,7 @@ export function categoryOf(entry: Entry | null | undefined) {
 export function categoryOrder(entries: Entry[]) {
   const used = new Set(entries.map(categoryOf));
   const automatic = AUTO_CATEGORIES.map((c) => c[0]).concat(["Outros"]);
-  const custom = state.categorias.filter((c) => !automatic.includes(c));
+  const custom = state.categories.filter((c) => !automatic.includes(c));
   const order = [
     ...custom,
     ...automatic.filter((c) => used.has(c)),
@@ -62,14 +62,14 @@ export function categoryOrder(entries: Entry[]) {
 
 /* Toda categoria que a tela sabe oferecer no menu, própria ou não. */
 export function allCategories() {
-  return [...state.categorias, ...AUTO_CATEGORIES.map((c) => c[0]), "Outros", SIDEBOARD];
+  return [...state.categories, ...AUTO_CATEGORIES.map((c) => c[0]), "Outros", SIDEBOARD];
 }
 
 export function isCustomCategory(cat: string) {
-  return state.categorias.includes(cat);
+  return state.categories.includes(cat);
 }
 
 /* As duas listas pelo nome que o resto do código usa pra falar delas. */
 export function boardList(board: Board | string) {
-  return board === "talvez" ? state.maybe : state.cartas;
+  return board === "talvez" ? state.maybe : state.cards;
 }

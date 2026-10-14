@@ -74,45 +74,45 @@ export type ScryfallOption = {
 };
 
 export const artState = {
-  carta: null as Card | null,   // a carta aberta agora; null = modal fechada
+  card: null as Card | null,   // a carta aberta agora; null = modal fechada
   face: "frente" as Face,       // o lado que a grade está escolhendo
   // O segmento aberto. Fica de uma carta pra outra: quem escolhe pela
   // Scryfall costuma seguir nela.
-  origem: "mpcfill" as Origin,
-  copia: 0,                     // 0 = todas as cópias; n = a n-ésima (ver `artes.py`)
-  porCopia: false,              // o "Uma arte por cópia" desta carta
-  busca: "",                    // o nome que se pergunta ao MPC Fill por esse lado
+  origin: "mpcfill" as Origin,
+  copy: 0,                     // 0 = todas as cópias; n = a n-ésima (ver `artes.py`)
+  perCopy: false,              // o "Uma arte por cópia" desta carta
+  query: "",                    // o nome que se pergunta ao MPC Fill por esse lado
   ids: [] as string[],          // todos os ids de arte dele, na ordem das fontes
-  carregandoIds: false,
-  erroIds: "",
+  loadingIds: false,
+  idsError: "",
   meta: {} as Record<string, ArtMeta>,   // id -> metadados, preenchido por carta aberta
-  semDetalhes: false,           // os metadados não vieram: a grade fica sem nome e DPI
-  pagina: 0,
+  noDetails: false,           // os metadados não vieram: a grade fica sem nome e DPI
+  page: 0,
   // `impressao` = {k, sigla, artista} da impressão clicada na vitrine, ou
   // null. `k` é a posição dela na tira, pra a tira saber qual acender.
-  filtro: { texto: "", fonte: "", dpi: 0, impressao: null as { k: number; sigla: string; artista: string } | null },
-  impressoes: null as Printing[] | null | false,   // null = buscando, false = não deu, array = ok
-  escolhas: {} as Record<string, CardChoices>,      // nome achatado -> escolhas
-  fontes: [] as { nome: string }[],
+  filter: { text: "", source: "", dpi: 0, printing: null as { k: number; sigla: string; artista: string } | null },
+  printings: null as Printing[] | null | false,   // null = buscando, false = não deu, array = ok
+  choices: {} as Record<string, CardChoices>,      // nome achatado -> escolhas
+  sources: [] as { nome: string }[],
   // Os ids de arte já buscados, pelo nome que foi perguntado. `null` = ainda
   // não busquei nada; `buscandoDeck` segura a busca do deck inteiro em voo,
   // pra duas cartas abertas em seguida não pedirem o deck duas vezes.
-  porNome: null as Record<string, string[]> | null,
-  buscandoDeck: null as Promise<void> | null,
-  enviando: false,
-  aplicandoPadrao: false,       // o "Usar a arte padrão nas que faltam" em voo
+  byName: null as Record<string, string[]> | null,
+  deckSearch: null as Promise<void> | null,
+  uploading: false,
+  applyingDefaults: false,       // o "Usar a arte padrão nas que faltam" em voo
   // Sobe a cada abertura: a modal se remonta, e os filtros digitados na carta
   // anterior não ficam nos campos.
-  aberturas: 0,
-  envioEstado: "",              // o que o envio de arquivo está fazendo, ou o erro dele
-  fechaAoEscolher: false,
+  opens: 0,
+  uploadStatus: "",              // o que o envio de arquivo está fazendo, ou o erro dele
+  closeOnPick: false,
 };
 
-try { artState.fechaAoEscolher = localStorage.getItem(CLOSE_ON_PICK_KEY) === "1"; }
+try { artState.closeOnPick = localStorage.getItem(CLOSE_ON_PICK_KEY) === "1"; }
 catch { /* navegador privado: a modal fica aberta, que é o padrão */ }
 
 export function setCloseOnPick(on: boolean) {
-  artState.fechaAoEscolher = on;
+  artState.closeOnPick = on;
   try { localStorage.setItem(CLOSE_ON_PICK_KEY, on ? "1" : "0"); }
   catch { /* vale só pra esta visita */ }
   touch();
@@ -145,7 +145,7 @@ export function artName(card: Card) {
 /* `choices` é o mapa de outro deck — o segundo deck do goldfish, que tem as
    artes dele. Sem ele, valem as do deck aberto. */
 function cardChoices(card: Card, choices?: Record<string, CardChoices> | null): CardChoices {
-  return (choices || artState.escolhas)[artKey(artName(card))] || {};
+  return (choices || artState.choices)[artKey(artName(card))] || {};
 }
 
 /* Com `copy`, a arte daquela cópia: a dela, ou a de todas. Sem `copy`, a de
@@ -180,7 +180,7 @@ export function sideReady(card: Card, face: Face, quantity: number) {
 /* Quantas cópias da carta vão pro papel. Comandante e ficha são uma. */
 export function paperQuantity(card: Card | null) {
   if (!card || card.ficha) return 1;
-  const entry = state.cartas.find((e) => e.carta && e.carta.nome === card.nome);
+  const entry = state.cards.find((e) => e.carta && e.carta.nome === card.nome);
   return entry ? entry.quantidade : 1;
 }
 
@@ -271,7 +271,7 @@ export async function loadArts() {
   if (!state.id) return;
   try {
     const r = await api(`/decks/${state.id}/artes`);
-    artState.escolhas = r.escolhas || {};
+    artState.choices = r.escolhas || {};
   } catch {
     return;   // sem isto a lista mostra todos no padrão, que é o que eles são
   }
@@ -281,9 +281,9 @@ export async function loadArts() {
 /* `name` é o que o quadro carrega em `data-arte-carta`: o nome da carta, ou a
    chave da ficha (ver `artName`). */
 export function findArtCard(name: string): Card | null {
-  const inDeck = state.cartas.find((e) => e.carta && e.carta.nome === name);
+  const inDeck = state.cards.find((e) => e.carta && e.carta.nome === name);
   if (inDeck) return inDeck.carta;
-  return state.comandantes.find((c) => c.nome === name) || deckTokens().find((f) => f.chaveArte === name) || null;
+  return state.commanders.find((c) => c.nome === name) || deckTokens().find((f) => f.chaveArte === name) || null;
 }
 
 /* A página atrás não rola com a modal aberta: a roda do mouse que passa do
@@ -303,20 +303,20 @@ export async function openArtPicker(name: string, face?: string, copy?: string |
   if (!card) return;
   if (!state.id) return toast("Salve o deck antes de escolher artes.");
 
-  artState.carta = card;
-  artState.aberturas++;
+  artState.card = card;
+  artState.opens++;
   artState.meta = {};
-  artState.semDetalhes = false;
-  artState.envioEstado = "";
-  artState.filtro = { texto: "", fonte: "", dpi: 0, impressao: null };
+  artState.noDetails = false;
+  artState.uploadStatus = "";
+  artState.filter = { text: "", source: "", dpi: 0, printing: null };
   // Ficha não tem impressões: a Scryfall responde pelo nome, e "Soldier"
   // seria a tira de todos os Soldier já impressos. O que ajuda é ver a ficha
   // que o deck cria, e é ela que o segmento Scryfall oferece.
-  artState.impressoes = card.ficha ? [] : null;
+  artState.printings = card.ficha ? [] : null;
   const quantity = paperQuantity(card);
-  artState.copia = Math.min(Number(copy) || 0, quantity);
-  artState.porCopia = quantity > 1 && (artState.copia > 0 || hasPerCopyArt(card));
-  artState.copia = artState.porCopia ? artState.copia || 1 : 0;
+  artState.copy = Math.min(Number(copy) || 0, quantity);
+  artState.perCopy = quantity > 1 && (artState.copy > 0 || hasPerCopyArt(card));
+  artState.copy = artState.perCopy ? artState.copy || 1 : 0;
   // A prévia do hover fica presa embaixo da modal se não for dispensada: o
   // clique não move o mouse, e é movimento que a apaga.
   document.getElementById("previa")?.classList.remove("mostra");
@@ -332,36 +332,36 @@ export async function openArtPicker(name: string, face?: string, copy?: string |
    frente "de Kaladesh" quer o verso da mesma impressão. */
 export function showFace(face: Face) {
   artState.face = face;
-  artState.busca = searchNameFor(artState.carta!, face);
+  artState.query = searchNameFor(artState.card!, face);
   artState.ids = [];
-  artState.carregandoIds = true;
-  artState.erroIds = "";
-  artState.pagina = 0;
+  artState.loadingIds = true;
+  artState.idsError = "";
+  artState.page = 0;
   touch();
-  loadCardArts(artState.busca);
+  loadCardArts(artState.query);
 }
 
 export function setOrigin(origin: Origin) {
-  if (!artState.carta || origin === artState.origem) return;
-  artState.origem = origin;
-  artState.pagina = 0;
+  if (!artState.card || origin === artState.origin) return;
+  artState.origin = origin;
+  artState.page = 0;
   touch();
 }
 
 export function setCopy(copy: number) {
-  artState.copia = copy || 1;
+  artState.copy = copy || 1;
   touch();
 }
 
 async function loadPrintings(name: string) {
   try {
     const r = await api(`/cartas/impressoes?nome=${encodeURIComponent(name)}`);
-    if (!artState.carta || artState.carta.ficha || artState.carta.nome !== name) return;   // trocou de carta
-    artState.impressoes = r.impressoes || [];
+    if (!artState.card || artState.card.ficha || artState.card.nome !== name) return;   // trocou de carta
+    artState.printings = r.impressoes || [];
   } catch {
     // `false` e não `[]`: "não consegui perguntar" e "essa carta só saiu uma
     // vez" são coisas diferentes, e a tela diz as duas de formas diferentes.
-    artState.impressoes = false;
+    artState.printings = false;
   }
   touch();
 }
@@ -379,30 +379,30 @@ async function loadPrintings(name: string) {
    primeira que se abre: quem abre uma costuma abrir as outras em seguida. */
 async function loadCardArts(search: string) {
   try {
-    if (!artState.porNome) {
-      artState.buscandoDeck = artState.buscandoDeck || requestArts(null);
-      try { await artState.buscandoDeck; } finally { artState.buscandoDeck = null; }
+    if (!artState.byName) {
+      artState.deckSearch = artState.deckSearch || requestArts(null);
+      try { await artState.deckSearch; } finally { artState.deckSearch = null; }
     }
-    if (!(search in artState.porNome!)) {
+    if (!(search in artState.byName!)) {
       const ask = [search];
       // Duas fichas de mesmo nome (as Wurm do Wurmcoil) são a mesma busca.
-      for (const f of artState.carta?.ficha ? deckTokens() : []) {
+      for (const f of artState.card?.ficha ? deckTokens() : []) {
         const s = searchNameFor(f, "frente");
-        if (!(s in artState.porNome!) && !ask.includes(s)) ask.push(s);
+        if (!(s in artState.byName!) && !ask.includes(s)) ask.push(s);
       }
       await requestArts(ask);
     }
   } catch (e) {
-    if (artState.busca !== search) return;
-    artState.carregandoIds = false;
-    artState.erroIds = (e as Error).message;
+    if (artState.query !== search) return;
+    artState.loadingIds = false;
+    artState.idsError = (e as Error).message;
     touch();
     return;
   }
-  if (artState.busca !== search) return;   // trocou de carta ou de lado
-  const ids = artState.porNome![search] || [];
+  if (artState.query !== search) return;   // trocou de carta ou de lado
+  const ids = artState.byName![search] || [];
   artState.ids = ids;
-  artState.carregandoIds = false;
+  artState.loadingIds = false;
   touch();
   loadMetadata(search, ids);
 }
@@ -414,8 +414,8 @@ async function requestArts(names: string[] | null) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(names ? { nomes: names } : {}),
   });
-  artState.porNome = Object.assign(artState.porNome || {}, r.por_nome || {});
-  artState.fontes = r.fontes || artState.fontes;
+  artState.byName = Object.assign(artState.byName || {}, r.por_nome || {});
+  artState.sources = r.fontes || artState.sources;
 }
 
 /* Os metadados de TODAS as artes deste lado da carta, numa requisição só.
@@ -432,13 +432,13 @@ async function loadMetadata(search: string, ids: string[]) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids: missing }),
     });
-    if (artState.busca !== search) return;   // trocou de carta ou de lado
+    if (artState.query !== search) return;   // trocou de carta ou de lado
     Object.assign(artState.meta, r.artes || {});
   } catch {
     // A grade já está desenhada com as miniaturas: sem metadados ela perde o
     // nome do arquivo e o DPI, e continua servindo pra escolher pela ARTE,
     // que é o que a pessoa veio fazer. O filtro é que fica sem serventia.
-    artState.semDetalhes = true;
+    artState.noDetails = true;
   }
   touch();
 }
@@ -447,18 +447,18 @@ async function loadMetadata(search: string, ids: string[]) {
    `loadMetadata` traz de todas as artes do lado aberto de uma vez — então o
    filtro vê o conjunto inteiro, não só a página à vista. */
 export function filteredIds() {
-  const f = artState.filtro;
-  if (!f.texto && !f.fonte && !f.dpi && !f.impressao) return artState.ids;
+  const f = artState.filter;
+  if (!f.text && !f.source && !f.dpi && !f.printing) return artState.ids;
   return artState.ids.filter((id) => {
     const m = artState.meta[id];
     // Sem metadado ainda (a requisição está em voo): não esconde o que não
     // conhece — a alternativa seria a grade encolher e voltar a crescer
     // sozinha enquanto a pessoa olha.
     if (!m) return true;
-    if (f.fonte && m.fonte !== f.fonte) return false;
+    if (f.source && m.fonte !== f.source) return false;
     if (f.dpi && (m.dpi || 0) < f.dpi) return false;
-    if (f.texto && !(m.arquivo || "").toLowerCase().includes(f.texto)) return false;
-    if (f.impressao && !matchesPrinting(m.arquivo, f.impressao)) return false;
+    if (f.text && !(m.arquivo || "").toLowerCase().includes(f.text)) return false;
+    if (f.printing && !matchesPrinting(m.arquivo, f.printing)) return false;
     return true;
   });
 }
@@ -487,17 +487,17 @@ export function matchesPrinting(file: string | undefined, printing: { sigla: str
    arquivos daquela impressão — é assim que se acha "a de Kaladesh" entre
    setecentas. Clicar de novo na mesma tira o filtro. */
 export function togglePrintingFilter(k: number) {
-  const printing = Array.isArray(artState.impressoes) ? artState.impressoes[k] : null;
+  const printing = Array.isArray(artState.printings) ? artState.printings[k] : null;
   if (!printing) return;
-  const on = artState.filtro.impressao?.k !== k;
-  artState.filtro.impressao = on ? { k, sigla: printing.sigla || "", artista: printing.artista || "" } : null;
-  artState.pagina = 0;
+  const on = artState.filter.printing?.k !== k;
+  artState.filter.printing = on ? { k, sigla: printing.sigla || "", artista: printing.artista || "" } : null;
+  artState.page = 0;
   touch();
 }
 
 export function setArtFilter(change: Partial<{ texto: string; fonte: string; dpi: number }>) {
-  Object.assign(artState.filtro, change);
-  artState.pagina = 0;
+  Object.assign(artState.filter, change);
+  artState.page = 0;
   touch();
 }
 
@@ -521,13 +521,13 @@ export function visiblePages(current: number, total: number): (number | "…")[]
 /* A página à vista de uma lista. */
 export function pageOf<T>(list: T[]) {
   const pages = Math.ceil(list.length / ARTS_PER_PAGE);
-  const page = artState.pagina < pages ? artState.pagina : 0;
+  const page = artState.page < pages ? artState.page : 0;
   const start = page * ARTS_PER_PAGE;
   return { pages, page, start, items: list.slice(start, start + ARTS_PER_PAGE) };
 }
 
 export function goToPage(page: number) {
-  artState.pagina = page;
+  artState.page = page;
   touch();
 }
 
@@ -535,13 +535,13 @@ export function goToPage(page: number) {
    com imagem desse lado. A ficha oferece a imagem dela mesma, a que o deck
    cria. */
 export function scryfallOptions(): ScryfallOption[] {
-  const card = artState.carta!, back = artState.face === "verso";
+  const card = artState.card!, back = artState.face === "verso";
   if (card.ficha) {
     const image = (back ? card.imagem_verso : card.imagem) || "";
     const id = scryfallIdFromImage(image);
     return id ? [{ id, imagem: image, status: "", legenda: "A ficha que o deck cria", arquivo: tokenLabel(card) }] : [];
   }
-  return (Array.isArray(artState.impressoes) ? artState.impressoes : []).map((i) => {
+  return (Array.isArray(artState.printings) ? artState.printings : []).map((i) => {
     const image = back ? i.imagem_verso : i.imagem;
     if (!i.id || !image) return null;
     return {
@@ -558,7 +558,7 @@ export function scryfallOptions(): ScryfallOption[] {
 /* A escolha na memória da tela, do jeito que o `artes.do_deck` a devolveria. */
 function saveLocal(card: Card, face: Face, copy: number, choice: Choice) {
   const key = artKey(artName(card));
-  const own: CardChoices = { ...artState.escolhas[key] };
+  const own: CardChoices = { ...artState.choices[key] };
   if (copy) {
     const copies = { ...own.copias };
     copies[copy] = { ...copies[copy], [face]: choice };
@@ -566,13 +566,13 @@ function saveLocal(card: Card, face: Face, copy: number, choice: Choice) {
   } else {
     own[face] = choice;
   }
-  artState.escolhas[key] = own;
+  artState.choices[key] = own;
 }
 
 /* `face` null tira todas as escolhas por cópia da carta, dos dois lados. */
 function removeLocal(card: Card, face: Face | null, copy: number) {
   const key = artKey(artName(card));
-  const own: CardChoices = { ...artState.escolhas[key] };
+  const own: CardChoices = { ...artState.choices[key] };
   if (face === null) {
     delete own.copias;
   } else if (copy) {
@@ -586,15 +586,15 @@ function removeLocal(card: Card, face: Face | null, copy: number) {
   } else {
     delete own[face];
   }
-  if (Object.keys(own).length) artState.escolhas[key] = own;
-  else delete artState.escolhas[key];
+  if (Object.keys(own).length) artState.choices[key] = own;
+  else delete artState.choices[key];
 }
 
 /* Grava no servidor o que um clique na grade escolheu. */
 async function storeChoice(choice: Choice) {
   // Guardados antes da rede: a modal pode fechar ou trocar de lado enquanto
   // o servidor responde, e a escolha é da carta e do lado que foram clicados.
-  const card = artState.carta!, face = artState.face, copy = artState.copia;
+  const card = artState.card!, face = artState.face, copy = artState.copy;
   let r;
   try {
     r = await api(`/decks/${state.id}/artes`, {
@@ -612,7 +612,7 @@ function finishChoice(card: Card, face: Face, copy: number, choice: Choice, verb
   saveLocal(card, face, copy, choice);
   const which = copy ? `da cópia ${copy}` : face === "verso" ? "do verso" : "";
   toast(["Arte", which, verb].filter(Boolean).join(" ") + (choice.baixa_resolucao ? `, ${LOW_RES_WARNING}.` : "."));
-  if (artState.fechaAoEscolher) return closeArtPicker();
+  if (artState.closeOnPick) return closeArtPicker();
   touch();
 }
 
@@ -656,14 +656,14 @@ async function uploadToBlob(file: File, upload: any) {
 }
 
 function setUploadStatus(text: string) {
-  artState.envioEstado = text;
+  artState.uploadStatus = text;
   touch();
 }
 
 export async function uploadArtFile(file: File | null | undefined) {
-  if (!file || !artState.carta || artState.enviando) return;
-  const card = artState.carta, face = artState.face, copy = artState.copia;
-  artState.enviando = true;
+  if (!file || !artState.card || artState.uploading) return;
+  const card = artState.card, face = artState.face, copy = artState.copy;
+  artState.uploading = true;
   setUploadStatus("Enviando…");
   let r;
   try {
@@ -689,18 +689,18 @@ export async function uploadArtFile(file: File | null | undefined) {
       r = await api(`/decks/${state.id}/artes/enviar`, { method: "POST", body });
     }
   } catch (e) {
-    if (artState.carta === card) setUploadStatus((e as Error).message);
+    if (artState.card === card) setUploadStatus((e as Error).message);
     return;
   } finally {
-    artState.enviando = false;
+    artState.uploading = false;
   }
-  artState.envioEstado = "";
+  artState.uploadStatus = "";
   finishChoice(card, face, copy, r.escolha, "enviada");
 }
 
 export async function revertToDefault() {
-  if (!artState.carta) return;
-  const card = artState.carta, face = artState.face, copy = artState.copia;
+  if (!artState.card) return;
+  const card = artState.card, face = artState.face, copy = artState.copy;
   try {
     await api(`/decks/${state.id}/artes?nome=${encodeURIComponent(artName(card))}&face=${face}&copia=${copy}`,
               { method: "DELETE" });
@@ -717,11 +717,11 @@ export async function revertToDefault() {
    porque é trabalho que não volta. Devolve se o interruptor ficou como a
    pessoa pediu. */
 export async function setPerCopy(on: boolean) {
-  const card = artState.carta;
+  const card = artState.card;
   if (!card) return;
   if (on) {
-    artState.porCopia = true;
-    artState.copia = 1;
+    artState.perCopy = true;
+    artState.copy = 1;
     return touch();
   }
   if (hasPerCopyArt(card)) {
@@ -734,10 +734,10 @@ export async function setPerCopy(on: boolean) {
       return touch();
     }
     removeLocal(card, null, 0);
-    if (artState.carta !== card) return touch();
+    if (artState.card !== card) return touch();
   }
-  artState.porCopia = false;
-  artState.copia = 0;
+  artState.perCopy = false;
+  artState.copy = 0;
   touch();
 }
 
@@ -745,7 +745,7 @@ export async function setPerCopy(on: boolean) {
    `artes.aplicar_padrao`). */
 export async function applyDefaultsToMissing() {
   if (!state.id) return;
-  artState.aplicandoPadrao = true;
+  artState.applyingDefaults = true;
   touch();
   let r;
   try {
@@ -753,10 +753,10 @@ export async function applyDefaultsToMissing() {
   } catch (e) {
     return toast("Não consegui: " + (e as Error).message);
   } finally {
-    artState.aplicandoPadrao = false;
+    artState.applyingDefaults = false;
     touch();
   }
-  artState.escolhas = r.escolhas || artState.escolhas;
+  artState.choices = r.escolhas || artState.choices;
   const parts = [r.aplicadas ? `${r.aplicadas} arte(s) padrão aplicada(s).` : "Nenhuma arte padrão aplicada."];
   if (r.baixa_resolucao.length) parts.push(`Em baixa resolução: ${r.baixa_resolucao.join(", ")}.`);
   if (r.sem_imagem.length) parts.push(`Sem imagem da Scryfall: ${r.sem_imagem.join(", ")}.`);
@@ -765,8 +765,8 @@ export async function applyDefaultsToMissing() {
 }
 
 export function closeArtPicker() {
-  artState.carta = null;
-  artState.busca = "";
+  artState.card = null;
+  artState.query = "";
   lockScroll(false);
   touch();
 }

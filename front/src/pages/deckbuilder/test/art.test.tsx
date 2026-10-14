@@ -59,8 +59,8 @@ describe("nomes e chaves", () => {
 
   it("a prévia do hover mostra o arquivo escolhido, cada face pela sua", async () => {
     const p = await page();
-    p.artState.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
-    p.artState.escolhas["delver of secrets insectile aberration"] = { verso: { arte_id: "id-inseto" } };
+    p.artState.choices["sol ring"] = { frente: { arte_id: "id-sol" } };
+    p.artState.choices["delver of secrets insectile aberration"] = { verso: { arte_id: "id-inseto" } };
     expect(p.previewProps(SOL_RING)["data-arte"]).toContain("thumbnail?id=id-sol");
     expect(p.previewProps(ELVES)["data-arte"]).toBe("http://arte/Llanowar Elves");
     const delver = p.previewProps(DELVER);
@@ -90,9 +90,9 @@ describe("nomes e chaves", () => {
 describe("a galeria", () => {
   it("um quadro por arte, só do que vai pro papel, comandante primeiro", async () => {
     const p = await page();
-    p.state.cartas.push({ carta: DELVER, quantidade: 1, categoria: "" },
+    p.state.cards.push({ carta: DELVER, quantidade: 1, categoria: "" },
                          { carta: ROOM, quantidade: 1, categoria: "" });
-    p.artState.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
+    p.artState.choices["sol ring"] = { frente: { arte_id: "id-sol" } };
     const html = galleryHtml(p);
     const q = frames(html);
     expect(q.filter(([n]) => n.startsWith("Delver")).map(([, f]) => f)).toEqual(["frente", "verso"]);
@@ -111,14 +111,14 @@ describe('o "Gerar pedido"', () => {
   it("só com todas as artes, verso incluído, e só com deck salvo", async () => {
     const p = await page();
     p.state.id = "abc123";
-    p.state.cartas = [{ carta: SOL_RING, quantidade: 4, categoria: "" },
+    p.state.cards = [{ carta: SOL_RING, quantidade: 4, categoria: "" },
                        { carta: DELVER, quantidade: 1, categoria: "" }];
     expect(orderLink(p)).toEqual([false, null, "Faltam 4 arte(s) — escolha na aba Artes"]);
-    p.artState.escolhas["atraxa"] = { frente: { arte_id: "a" } };
-    p.artState.escolhas["sol ring"] = { frente: { arte_id: "s" } };
-    p.artState.escolhas["delver of secrets insectile aberration"] = { frente: { arte_id: "d" } };
+    p.artState.choices["atraxa"] = { frente: { arte_id: "a" } };
+    p.artState.choices["sol ring"] = { frente: { arte_id: "s" } };
+    p.artState.choices["delver of secrets insectile aberration"] = { frente: { arte_id: "d" } };
     expect(orderLink(p).slice(1)).toEqual([null, "Faltam 1 arte(s) — escolha na aba Artes"]);
-    p.artState.escolhas["delver of secrets insectile aberration"].verso = { arte_id: "i" };
+    p.artState.choices["delver of secrets insectile aberration"].verso = { arte_id: "i" };
     expect(orderLink(p).slice(0, 2)).toEqual([false, "/?deck=abc123"]);
     p.state.id = null;
     expect(orderLink(p).slice(0, 2)).toEqual([true, null]);
@@ -135,13 +135,13 @@ describe('o "Gerar pedido"', () => {
     p.state.tokens = { total: 3, grupos: [
       { carta: "Motor de Wurm", tokens: [wurm("Deathtouch", "t:Wurm aaaa1111"), wurm("Lifelink", "t:Wurm bbbb2222")] },
       { carta: "Sol Ring", tokens: [wurm("Deathtouch", "t:Wurm aaaa1111")] }] };
-    p.state.cartas = [{ carta: SOL_RING, quantidade: 1, categoria: "" }];
-    p.artState.escolhas["atraxa"] = { frente: { arte_id: "a" } };
-    p.artState.escolhas["sol ring"] = { frente: { arte_id: "s" } };
-    p.artState.escolhas["t wurm aaaa1111"] = { frente: { arte_id: "w" } };
+    p.state.cards = [{ carta: SOL_RING, quantidade: 1, categoria: "" }];
+    p.artState.choices["atraxa"] = { frente: { arte_id: "a" } };
+    p.artState.choices["sol ring"] = { frente: { arte_id: "s" } };
+    p.artState.choices["t wurm aaaa1111"] = { frente: { arte_id: "w" } };
     const f = p.deckTokens();
     const before = orderLink(p)[2];
-    p.artState.escolhas["t wurm bbbb2222"] = { frente: { arte_id: "v" } };
+    p.artState.choices["t wurm bbbb2222"] = { frente: { arte_id: "v" } };
     const after = orderLink(p)[1];
 
     expect(f).toHaveLength(2);
@@ -160,8 +160,8 @@ describe('o "Gerar pedido"', () => {
   it("arte por cópia: as dez Florestas, a 2 e a 4 numa arte e o resto na de todas", async () => {
     const p = await page();
     p.state.id = "abc123";
-    const forest = p.state.cartas[2].carta;
-    p.artState.escolhas = {
+    const forest = p.state.cards[2].carta;
+    p.artState.choices = {
       "atraxa": { frente: { arte_id: "a" } }, "sol ring": { frente: { arte_id: "s" } },
       "ashnods altar": { frente: { arte_id: "t" } }, "llanowar elves": { frente: { arte_id: "e" } },
       "swords to plowshares": { frente: { arte_id: "p" } },
@@ -181,7 +181,7 @@ describe('o "Gerar pedido"', () => {
             p.chosenArt(forest, "frente", null, 3).arte_id]).toEqual(["outra", "todas"]);
     expect([order, shortcut]).toEqual(["/?deck=abc123", true]);
 
-    delete p.artState.escolhas.forest.frente;
+    delete p.artState.choices.forest.frente;
     expect([orderLink(p)[2], shortcutHidden(p)])
       .toEqual(["Faltam 1 arte(s) — escolha na aba Artes", false]);
     // A linha do deck mostra a arte da primeira cópia que tem.
@@ -213,8 +213,8 @@ describe("a modal de escolher a arte", () => {
   it("carta de duas faces: o seletor de lado marca o que já tem arte", async () => {
     const p = await page();
     p.state.id = "abc123";
-    p.state.cartas.push({ carta: DELVER, quantidade: 1, categoria: "" });
-    p.artState.escolhas["delver of secrets insectile aberration"] = { verso: { arte_id: "i" } };
+    p.state.cards.push({ carta: DELVER, quantidade: 1, categoria: "" });
+    p.artState.choices["delver of secrets insectile aberration"] = { verso: { arte_id: "i" } };
     const host = drawn(p.ArtPicker);
     await act(() => p.openArtPicker(DELVER.nome, "verso"));
     const sides = [...host.querySelectorAll<HTMLElement>("#arte-faces [data-face]")]

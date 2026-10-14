@@ -108,17 +108,17 @@ const Stale = () => <div class="combo-desatualizado">O deck mudou desde esta bus
 /** Esperando, ou o erro: os dois lugares mostram o mesmo. */
 function Waiting() {
   const state = useDeck();
-  if (state.combosRodando) return <div class="nota">Perguntando ao Spellbook…</div>;
-  if (state.combosErro) return <div class="aponta erro"><span>{state.combosErro}</span></div>;
+  if (state.combosLoading) return <div class="nota">Perguntando ao Spellbook…</div>;
+  if (state.combosError) return <div class="aponta erro"><span>{state.combosError}</span></div>;
   return null;
 }
 
 export function DeckCombos() {
   const state = useDeck();
   const data: CombosResponse | null = state.combos as any;
-  if (state.combosRodando || state.combosErro) return <Waiting />;
+  if (state.combosLoading || state.combosError) return <Waiting />;
   if (!data) return null;
-  const stale = state.combosAssinatura !== deckSignature();
+  const stale = state.combosSignature !== deckSignature();
   const inDeck = data.no_deck || [];
   return (
     <>
@@ -127,8 +127,8 @@ export function DeckCombos() {
           que entrou pode ter deixado OUTROS combos a uma peça de fechar, e
           isso só o Spellbook responde. Com a resposta inteira já marcada
           como velha, seriam dois avisos sobre a mesma coisa. */}
-      {state.combosMexidos > 0 && !stale && (
-        <div class="combo-mexido"><SpriteIcon name="check" /> {state.combosMexidos} combo(s) fecharam aqui na
+      {state.combosAdded > 0 && !stale && (
+        <div class="combo-mexido"><SpriteIcon name="check" /> {state.combosAdded} combo(s) fecharam aqui na
           tela com as cartas que você adicionou. Procure de novo pra ver os combos <b>novos</b> que essas
           cartas abriram — essa parte só o Spellbook sabe.</div>
       )}
@@ -146,12 +146,12 @@ export const NEAR_COMBOS_SHOWN = 12;
 export function NearCombos() {
   const state = useDeck();
   const data: CombosResponse | null = state.combos as any;
-  if (state.combosRodando || state.combosErro) return <Waiting />;
+  if (state.combosLoading || state.combosError) return <Waiting />;
   if (!data) return null;
   const near = data.faltando_uma || [];
   return (
     <>
-      {state.combosAssinatura !== deckSignature() && <Stale />}
+      {state.combosSignature !== deckSignature() && <Stale />}
       {!near.length ? (
         <div class="nota">Nenhum combo a uma carta de fechar — pelo menos entre os que o Spellbook conhece.</div>
       ) : (

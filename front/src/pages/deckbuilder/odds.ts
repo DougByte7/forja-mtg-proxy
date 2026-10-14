@@ -100,7 +100,7 @@ export function oddsView() {
   // As próprias em cima e na ordem em que a pessoa as pôs, como na lista: é a
   // organização dela, e ela vem antes do que a carta é. Os tipos seguem
   // ordenados por tamanho, que é a ordem que ninguém escolheu.
-  const custom = state.categorias.filter((c) => byCustom.has(c)).map((c) => [c, byCustom.get(c)!, true] as const);
+  const custom = state.categories.filter((c) => byCustom.has(c)).map((c) => [c, byCustom.get(c)!, true] as const);
   const types = [...byType.entries()].sort((a, b) => b[1] - a[1]).map(([c, K]) => [c, K, false] as const);
   const rows = [...custom, ...types].map(([category, K, isCustom]) => ({
     category, K, isCustom,

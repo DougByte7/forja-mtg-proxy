@@ -19,7 +19,7 @@ it("a fita e a bolinha contam o que está ligado; o ✕ devolve ao neutro", asyn
   const tape = mount(<p.FilterTape />);
   expect((button.querySelector("#conta-filtros") as HTMLElement).hidden).toBe(true);
 
-  act(() => p.updateFilters({ tipo: "creature", cmcMin: "2", cmcMax: "4", ordem: "preco_desc" }));
+  act(() => p.updateFilters({ type: "creature", cmcMin: "2", cmcMax: "4", order: "preco_desc" }));
   expect([...tape.querySelectorAll(".ligado b")].map((b) => b.textContent)).toEqual(["Criatura", "custo 2–4", "preço"]);
   expect(button.querySelector("#conta-filtros")!.textContent).toBe("3");
   expect(button.querySelector("button")!.className).toContain("ouro");
@@ -27,7 +27,7 @@ it("a fita e a bolinha contam o que está ligado; o ✕ devolve ao neutro", asyn
   expect(tape.querySelector('svg[aria-label="maior primeiro"]')).not.toBeNull();
 
   act(() => (tape.querySelectorAll(".ligado button")[1] as HTMLButtonElement).click());
-  expect([p.state.filtros.cmcMin, p.state.filtros.cmcMax]).toEqual(["", ""]);
+  expect([p.state.filters.cmcMin, p.state.filters.cmcMax]).toEqual(["", ""]);
   act(() => p.clearFilters());
   expect(tape.innerHTML).toBe("");
 });
@@ -39,7 +39,7 @@ it("o campo de efeito guarda o texto aparado sem comer o espaço de quem digita"
   input.focus();
   input.value = "draw ";
   act(() => { input.dispatchEvent(new Event("input", { bubbles: true })); });
-  expect(p.state.filtros.texto).toBe("draw");
+  expect(p.state.filters.text).toBe("draw");
   expect(input.value).toBe("draw ");          // o espaço continua no campo
   input.blur();
   act(() => p.clearFilters());
@@ -52,8 +52,8 @@ it("os dois interruptores de inéditas mostram o mesmo filtro", async () => {
   const hero = mount(<p.HeroUnreleasedSwitch />);
   const drawerBox = () => (fields.querySelector("#f-ineditas") as HTMLInputElement).checked;
   act(() => (hero.querySelector("#cmd-ineditas") as HTMLInputElement).click());
-  expect([p.state.filtros.ineditas, drawerBox()]).toEqual([true, true]);
+  expect([p.state.filters.unreleased, drawerBox()]).toEqual([true, true]);
   act(() => (fields.querySelector('[data-cor="G"]') as HTMLButtonElement).click());
-  expect(p.state.filtros.cores).toBe("G");
+  expect(p.state.filters.colors).toBe("G");
   expect(fields.querySelector('[data-cor="G"]')!.getAttribute("aria-pressed")).toBe("true");
 });

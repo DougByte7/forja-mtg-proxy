@@ -43,7 +43,7 @@ export function DeckAlerts() {
 export function Issues() {
   const state = useDeck();
   const v = currentValidation();
-  if (!state.comandantes.length) return <Empty>Escolha o comandante pra análise começar.</Empty>;
+  if (!state.commanders.length) return <Empty>Escolha o comandante pra análise começar.</Empty>;
   if (v.ok) {
     return (
       <div class="aponta ok"><SpriteIcon name="check" /> Deck legal: 100 cartas, singleton respeitado e tudo
@@ -180,7 +180,7 @@ export function IdentityNote() {
   const state = useDeck();
   const identity = deckIdentity();
   return (
-    <div class="nota" id="nota-identidade" hidden={!state.comandantes.length}>
+    <div class="nota" id="nota-identidade" hidden={!state.commanders.length}>
       {identity
         ? <>Mostrando só o que cabe na identidade <ManaPips identity={identity} /> do comandante.</>
         : "Comandante incolor: só cartas sem cor aparecem na busca."}
@@ -190,14 +190,14 @@ export function IdentityNote() {
 
 export function Power() {
   const state = useDeck();
-  if (state.poderRodando) return <div class="nota">Classificando…</div>;
-  if (state.poderErro) return <div class="aponta erro"><span>{state.poderErro}</span></div>;
-  const p: PowerResult | null = state.poder;
+  if (state.powerLoading) return <div class="nota">Classificando…</div>;
+  if (state.powerError) return <div class="aponta erro"><span>{state.powerError}</span></div>;
+  const p: PowerResult | null = state.power;
   if (!p) return null;
   const total = totalCards();
   return (
     <>
-      {state.poderAssinatura !== deckSignature() && (
+      {state.powerSignature !== deckSignature() && (
         <div class="combo-desatualizado">O deck mudou desde esta estimativa.
           <button class="refazer" onClick={() => estimatePower()}>Atualizar</button></div>
       )}

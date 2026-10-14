@@ -44,7 +44,7 @@ describe("odds", () => {
 
   it("as categorias próprias vêm em cima, na ordem da pessoa", async () => {
     const p = await page();
-    p.state.cartas = clone([...Array(12)].map((_, i) => entrada(carta(`c${i}`, "Instant"), 1, i % 2 ? "Sac outlet" : "")));
+    p.state.cards = clone([...Array(12)].map((_, i) => entrada(carta(`c${i}`, "Instant"), 1, i % 2 ? "Sac outlet" : "")));
     expect(p.oddsView().rows.map((r: any) => [r.category, r.isCustom])).toEqual([
       ["Sac outlet", true], ["Instantâneos", false]]);
   });
@@ -75,7 +75,7 @@ describe("analysis", () => {
 describe("componentes", () => {
   it("a análise mostra a barra de montagem e os erros agrupados", async () => {
     const p = await page();
-    p.state.validacao = { ok: false, total: 40, apontamentos: [
+    p.state.validation = { ok: false, total: 40, apontamentos: [
       { tipo: "faltam", nivel: "aviso", mensagem: "Faltam 60" },
       { tipo: "banida", nivel: "erro", mensagem: "Black Lotus é banida.", carta: "Black Lotus" }] };
     const host = mount(p.Issues);
@@ -89,19 +89,19 @@ describe("componentes", () => {
     const p = await page();
     const host = mount(p.Power);
     expect(host.innerHTML).toBe("");
-    act(() => { p.state.poderRodando = true; p.touch(); });
+    act(() => { p.state.powerLoading = true; p.touch(); });
     expect(host.textContent).toBe("Classificando…");
     act(() => {
-      p.state.poderRodando = false;
-      p.state.poder = { bracket: 3, nome: "Turbinado", explicacao: "Até três game changers.",
+      p.state.powerLoading = false;
+      p.state.power = { bracket: 3, nome: "Turbinado", explicacao: "Até três game changers.",
                         motivos: [{ titulo: "Game changers", detalhe: "2 no deck", cartas: ["Rhystic Study"] }] };
-      p.state.poderAssinatura = p.deckSignature();
+      p.state.powerSignature = p.deckSignature();
       p.touch();
     });
     expect(host.querySelector(".degrau.aqui .n")!.textContent).toBe("3");
     expect(host.querySelector(".poder-nome")!.textContent).toBe("Bracket 3 — Turbinado");
     expect(host.textContent).not.toContain("O deck mudou");
-    act(() => { p.state.cartas.push(clone(entrada(ELVES))); p.touch(); });
+    act(() => { p.state.cards.push(clone(entrada(ELVES))); p.touch(); });
     expect(host.textContent).toContain("O deck mudou desde esta estimativa");
   });
 });

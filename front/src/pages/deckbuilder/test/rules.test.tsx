@@ -37,13 +37,13 @@ function seen(p: Page) {
   type Row = [string, number, string];
   const row = (x: any): Row => [x.carta.nome, x.quantidade, x.categoria || ""];
   return {
-    cartas: e.cartas.map(row) as Row[],
+    cartas: e.cards.map(row) as Row[],
     maybe: e.maybe.map(row) as Row[],
-    categorias: e.categorias,
+    categorias: e.categories,
     total: p.totalCards(),
     contadas: p.countedCards().map((x: any) => x.carta.nome),
     orcamento: p.localBudget(),
-    ordem: p.categoryOrder(e.cartas),
+    ordem: p.categoryOrder(e.cards),
     apontamentos: p.validateLocally().apontamentos.map((a: any) => a.tipo),
     corpo: p.deckBody(),
     htmlDeck: drawn(p, "deck"),

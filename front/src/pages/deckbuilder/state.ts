@@ -70,13 +70,13 @@ export const TYPE_LABELS: Record<string, string> = Object.fromEntries(TYPE_OPTIO
    `filtrosLigados` conta o que difere daqui, e é essa conta que vira o
    número na bolinha do botão. */
 export type Filters = {
-  tipo: string; texto: string; cores: string; cmcMin: string; cmcMax: string;
-  precoMax: string; ordem: string; ineditas: boolean;
+  type: string; text: string; colors: string; cmcMin: string; cmcMax: string;
+  maxPrice: string; order: string; unreleased: boolean;
 };
 
 export const EMPTY_FILTERS: Readonly<Filters> = {
-  tipo: "", texto: "", cores: "", cmcMin: "", cmcMax: "", precoMax: "",
-  ordem: "nome", ineditas: false,
+  type: "", text: "", colors: "", cmcMin: "", cmcMax: "", maxPrice: "",
+  order: "nome", unreleased: false,
 };
 
 /* Tem algum filtro ligado? É a mesma pergunta que a bolinha do botão
@@ -93,7 +93,7 @@ export const EMPTY_FILTERS: Readonly<Filters> = {
    ela aparece, porque lá a pergunta é outra: o que está ligado. */
 export function anyFilterOn() {
   return (Object.keys(EMPTY_FILTERS) as (keyof Filters)[])
-    .some((k) => k !== "ineditas" && state.filtros[k] !== EMPTY_FILTERS[k]);
+    .some((k) => k !== "unreleased" && state.filters[k] !== EMPTY_FILTERS[k]);
 }
 
 /** O estado da tela. Os campos que espelham a API ficam com o nome de lá
@@ -102,91 +102,137 @@ export function anyFilterOn() {
     componentes. */
 export interface DeckState {
   id: string | null;
-  nome: string;
-  comandantes: Card[];
-  cartas: Entry[];
+  name: string;
+  commanders: Card[];
+  cards: Entry[];
   maybe: Entry[];
-  categorias: string[];
-  validacao: any;
-  cambio: { valor: number; fonte?: string; quando?: number } | null;
-  usuario: any;
-  dono: string | null;
-  versao: any;
-  historico: any;
-  mesa: Table | null;
-  mesaDesfazer: string[];
-  filtros: Filters;
-  buscaPagina: number;
-  buscaPorPagina: number;
-  buscaTotal: number;
-  desfazer: string[];
-  combos: { no_deck?: Combo[]; [k: string]: unknown } | null;
-  [field: string]: any;
+  categories: string[];
+  validation: any;
+  rate: { valor: number; fonte?: string; quando?: number } | null;
+  user: any;
+  owner: string | null;
+  version: any;
+  history: any;
+  table: Table | null;
+  tableUndo: string[];
+  filters: Filters;
+  searchPage: number;
+  searchPageSize: number;
+  searchTotal: number;
+  undoStack: string[];
+  combos: { no_deck?: Combo[]; faltando_uma?: Combo[]; [k: string]: unknown } | null;
+  combosSignature: string | null;
+  combosLoading: boolean;
+  combosError: string | null;
+  combosAdded: number;
+  power: any;
+  powerSignature: string | null;
+  powerLoading: boolean;
+  powerError: string | null;
+  suggestions: any;
+  suggestionsTheme: string | null;
+  suggestionsLoading: boolean;
+  suggestionsTarget: string;
+  suggestionsError: string | null;
+  manabase: any;
+  manabaseCap: number | null;
+  manabaseLoading: boolean;
+  manabaseError: string | null;
+  manabaseCycle: string;
+  tokens: any;
+  tokensSignature: string | null;
+  tokensLoading: boolean;
+  tokensError: string | null;
+  historyError: string | null;
+  destination: string;
+  destinationCategory: string;
+  quote: any;
+  quotedSignature: string | null;
+  quoteLoading: boolean;
+  quoteError: string | null;
+  tab: string;
+  rail: string;
+  results: any;
+  listFilter: { deck: string; talvez: string };
+  listOrder: string;
+  collapsedGroups: Set<string>;
 }
 
 export const state: DeckState = {
   id: null,
-  nome: "Deck sem nome",
-  comandantes: [],   // cartas completas
-  cartas: [],        // [{quantidade, carta, categoria}]
+  name: "Deck sem nome",
+  commanders: [],   // cartas completas
+  cards: [],        // [{quantidade, carta, categoria}]
   maybe: [],         // o mesmo formato — o que ainda está em dúvida
-  categorias: [],    // os nomes criados à mão, na ordem escolhida
-  validacao: null,   // a do servidor, quando chega
+  categories: [],    // os nomes criados à mão, na ordem escolhida
+  validation: null,   // a do servidor, quando chega
   // A régua com que o preço em dólar da base é lido: {valor, fonte, quando}.
   // Null até `GET /cambio` responder, e null pra sempre se ela falhar — nesse
   // caso a tela mostra dólar, que é o número que ela tem de verdade.
-  cambio: null,
-  usuario: null,     // quem está logado, ou null pra anônimo (que não é erro)
-  dono: null,        // de quem é este deck, ou null pra órfão
+  rate: null,
+  user: null,     // quem está logado, ou null pra anônimo (que não é erro)
+  owner: null,        // de quem é este deck, ou null pra órfão
   // Onde o deck está no histórico, como a última resposta do servidor contou:
   // {atual, concluida_em, mudou, entraram, sairam}. `atual` nulo é WIP.
-  versao: null,
-  historico: null,   // a última resposta de `GET /decks/{id}/versoes`
+  version: null,
+  history: null,   // a última resposta de `GET /decks/{id}/versoes`
+  historyError: null,
   // A mesa do goldfish: uma lista de jogadores (um, ou dois com o segundo
   // deck), o turno e o log. `null` = nunca embaralhou nesta sessão. NÃO entra
   // no `deckBody`: mão de goldfish gravada no deck é mão que volta três
   // semanas depois, em outra máquina.
-  mesa: null,
-  mesaDesfazer: [],  // pilha de fotografias do JSON da mesa
-  filtros: {...EMPTY_FILTERS},
-  // A paginação da busca, que só existe com filtro ligado. `buscaTotal` é o
+  table: null,
+  tableUndo: [],  // pilha de fotografias do JSON da mesa
+  filters: {...EMPTY_FILTERS},
+  // A paginação da busca, que só existe com filtro ligado. `searchTotal` é o
   // que o servidor contou na última resposta paginada — sem ele o paginador
   // não saberia quantas páginas tem.
-  buscaPagina: 0,
-  buscaPorPagina: 5,
-  buscaTotal: 0,
-  desfazer: [],
+  searchPage: 0,
+  searchPageSize: 5,
+  searchTotal: 0,
+  undoStack: [],
   combos: null,             // a última resposta do Spellbook
-  combosAssinatura: null,   // como o deck estava quando ela foi buscada
-  poder: null,              // a última estimativa de bracket
-  poderAssinatura: null,
-  sugestoes: null,          // a última resposta do EDHREC
-  sugestoesTema: null,
+  combosSignature: null,   // como o deck estava quando ela foi buscada
+  combosLoading: false,
+  combosError: null,
+  power: null,              // a última estimativa de bracket
+  powerSignature: null,
+  powerLoading: false,
+  powerError: null,
+  suggestions: null,          // a última resposta do EDHREC
+  suggestionsTheme: null,
   // Um pedido de sugestão em voo. Existe porque a aba se abre sozinha de dois
   // lugares (o clique na aba e a estrela de uma carta) e sem isto os dois
   // caminhos juntos pediriam duas páginas ao EDHREC no mesmo gesto — a do
   // comandante, por reflexo, e a da carta, que é a que foi pedida.
-  sugestoesRodando: false,
+  suggestionsLoading: false,
+  suggestionsTarget: "",        // de quem é a lista pedida: o comandante ou uma carta
+  suggestionsError: null,
   manabase: null,           // a última análise de mana base
-  manabaseTeto: null,       // teto de preço escolhido (null = o padrão)
+  manabaseCap: null,       // teto de preço escolhido (null = o padrão)
+  manabaseLoading: false,
+  manabaseError: null,
   tokens: null,             // as fichas que o deck cria
-  tokensAssinatura: null,   // o deck de quando elas foram listadas
-  mbCategoria: "",          // ciclo de terreno aberto na mana base ("" = todos)
-  combosMexidos: 0,         // combos fechados aqui na tela desde a busca
+  tokensSignature: null,   // o deck de quando elas foram listadas
+  tokensLoading: false,
+  tokensError: null,
+  manabaseCycle: "",          // ciclo de terreno aberto na mana base ("" = todos)
+  combosAdded: 0,         // combos fechados aqui na tela desde a busca
 
   // Pra onde vai a próxima carta escolhida na busca. Fica no estado, e não
   // num parâmetro de cada clique, porque é uma decisão que vale pra várias
   // cartas seguidas: "agora estou montando o sideboard".
-  destino: "deck",          // "deck" | "side" | "talvez"
-  destinoCategoria: "",     // "" = pelo tipo da carta
+  destination: "deck",          // "deck" | "side" | "talvez"
+  destinationCategory: "",     // "" = pelo tipo da carta
 
-  cotacao: null,            // o último resultado do servidor
-  cotacaoAssinatura: null,  // o deck de quando ela foi pedida
-  cotacaoRodando: false,
-  cotacaoErro: null,
+  quote: null,            // o último resultado do servidor
+  quotedSignature: null,  // o deck de quando ela foi pedida
+  quoteLoading: false,
+  quoteError: null,
 
-  aba: "deck",              // aba do centro
+  tab: "deck",              // aba do centro
   rail: "buscar",           // aba do painel de adicionar
+  results: null,         // o que as duas buscas trouxeram (ver `search.ts`)
 
   // ------------------------------------------------- a lente das duas listas
   //
@@ -200,11 +246,11 @@ export const state: DeckState = {
   // Cada lista tem a SUA busca (procurar no deck não pode filtrar o
   // maybeboard junto), mas a ordem é uma só pras duas: são a mesma lista
   // lida em dois lugares, e ordená-las diferente seria ler duas listas.
-  listaBusca: {deck: "", talvez: ""},
-  listaOrdem: "cmc",        // ver `LIST_ORDERS` em lists.ts
+  listFilter: {deck: "", talvez: ""},
+  listOrder: "cmc",        // ver `LIST_ORDERS` em lists.ts
   // Chaves "<tabuleiro>:<categoria>" — o mesmo nome de categoria pode estar
   // aberto de um lado e recolhido do outro.
-  gruposFechados: new Set(),
+  collapsedGroups: new Set(),
 };
 
 /* ------------------------------------------------- a ponte com os componentes

@@ -12,14 +12,14 @@ describe("contador", () => {
     const p = await page({ deck: [entrada(SOL_RING)], maybe: [] });
     expect(p.counterView()).toMatchObject({ total: 2, status: "", title: "Faltam 98 carta(s) pras 100" });
 
-    p.state.cartas = clone([entrada(FOREST, 101)]);
+    p.state.cards = clone([entrada(FOREST, 101)]);
     expect(p.counterView()).toMatchObject({ total: 102, status: "passou" });
 
-    p.state.cartas = clone([entrada(FOREST, 99)]);
-    p.state.validacao = { ok: true, apontamentos: [] };
+    p.state.cards = clone([entrada(FOREST, 99)]);
+    p.state.validation = { ok: true, apontamentos: [] };
     expect(p.counterView().status).toBe("completo");
 
-    p.state.validacao = { ok: false, apontamentos: [{ nivel: "erro", tipo: "identidade" }] };
+    p.state.validation = { ok: false, apontamentos: [{ nivel: "erro", tipo: "identidade" }] };
     expect(p.counterView()).toMatchObject({ status: "erro", title: "1 problema(s) — veja a aba Análise" });
   });
 });
@@ -27,13 +27,13 @@ describe("contador", () => {
 describe("Meters", () => {
   it("redesenha quando a página redesenha", async () => {
     const p = await page({ deck: [], maybe: [] });
-    p.state.comandantes = [];
+    p.state.commanders = [];
     const host = document.createElement("div");
     act(() => render(<p.Meters />, host));
     expect(host.querySelector("#contador-n")!.textContent).toBe("0");
     expect((host.querySelector("#btn-total") as HTMLElement).hidden).toBe(true);
 
-    p.state.comandantes = clone([ATRAXA]);
+    p.state.commanders = clone([ATRAXA]);
     act(() => p.redrawAll());
     expect(host.querySelector("#contador-n")!.textContent).toBe("1");
     expect((host.querySelector("#btn-total") as HTMLElement).hidden).toBe(false);
@@ -68,7 +68,7 @@ describe("lista do deck", () => {
     expect(input.value).toBe("3");
 
     input.blur();
-    act(() => { p.state.cartas[0].quantidade = 2; p.touch(); });
+    act(() => { p.state.cards[0].quantidade = 2; p.touch(); });
     expect(input.value).toBe("2");
     host.remove();
   });

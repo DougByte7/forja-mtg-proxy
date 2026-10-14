@@ -21,14 +21,14 @@ describe("aba Tokens", () => {
     expect(panel.querySelector("#tokens-resultado")!.textContent).toBe("");
     expect(note()).toBe(false);
 
-    act(() => { p.state.tokensRodando = true; p.touch(); });
+    act(() => { p.state.tokensLoading = true; p.touch(); });
     expect(panel.textContent).toContain("Procurando…");
 
-    act(() => { p.state.tokensRodando = false; p.state.tokensErro = "Fora do ar."; p.touch(); });
+    act(() => { p.state.tokensLoading = false; p.state.tokensError = "Fora do ar."; p.touch(); });
     expect(panel.querySelector(".aponta.erro")!.textContent).toBe("Fora do ar.");
     expect(note()).toBe(false);
 
-    act(() => { p.state.tokensErro = null; p.state.tokens = { total: 0, grupos: [] }; p.touch(); });
+    act(() => { p.state.tokensError = null; p.state.tokens = { total: 0, grupos: [] }; p.touch(); });
     expect(panel.textContent).toContain("não há nada a levar");
     expect(count.textContent).toBe("");
 
@@ -52,7 +52,7 @@ describe("aba Histórico", () => {
     const p = await page();
     const host = mount(p.History);
     expect(host.textContent).toBe("Carregando…");
-    act(() => { p.state.historicoErro = "Deck não encontrado."; p.touch(); });
+    act(() => { p.state.historyError = "Deck não encontrado."; p.touch(); });
     expect(host.textContent).toBe("Não consegui abrir o histórico: Deck não encontrado.");
   });
 });

@@ -21,7 +21,7 @@ export function validateLocally() {
   const issues: Issue[] = [];
   const total = totalCards();
 
-  if (!state.comandantes.length) {
+  if (!state.commanders.length) {
     issues.push({ nivel: "erro", tipo: "sem-comandante", mensagem: "Todo deck de Commander começa por um comandante." });
   }
   if (total < 100) {
@@ -35,7 +35,7 @@ export function validateLocally() {
   // uma decisão que ela nem tomou. O sideboard passa — fora da CONTA não é
   // fora das REGRAS, e uma carta guardada pra trocar depois precisa caber no
   // deck em que vai entrar. Mesma divisão do `decks.validar`.
-  for (const { carta, quantidade } of state.cartas) {
+  for (const { carta, quantidade } of state.cards) {
     if (!carta) continue;
     if (quantidade > 1 && !carta.basico && !carta.ilimitada) {
       issues.push({ nivel: "erro", tipo: "singleton", carta: carta.nome,
@@ -62,7 +62,7 @@ export function validateLocally() {
 }
 
 export function currentValidation() {
-  return state.validacao || validateLocally();
+  return state.validation || validateLocally();
 }
 
 /* ------------------------------------------------------------------ servidor */
@@ -81,13 +81,13 @@ export function deckBody() {
   const line = (e: { carta: { nome: string }; quantidade: number; categoria?: string }) =>
     ({ nome: e.carta.nome, quantidade: e.quantidade, categoria: e.categoria || "" });
   return {
-    nome: state.nome,
-    comandantes: state.comandantes.map((c) => c.nome),
-    cartas: state.cartas.map(line),
+    nome: state.name,
+    comandantes: state.commanders.map((c) => c.nome),
+    cartas: state.cards.map(line),
     maybeboard: state.maybe.map(line),
     // Vão inteiras, inclusive as vazias: uma categoria recém-criada some
     // antes de receber a primeira carta se ela só existir nas entradas.
-    categorias: state.categorias,
+    categorias: state.categories,
   };
 }
 
@@ -124,8 +124,8 @@ export async function saveNow() {
   if (saving) { saveAgain = true; return; }
   // Deck sem comandante e sem carta não vira registro no servidor: senão cada
   // pessoa que só abriu a página deixaria um deck vazio pra trás.
-  if (!state.comandantes.length && !state.cartas.length) return;
-  if (!state.usuario) {
+  if (!state.commanders.length && !state.cards.length) return;
+  if (!state.user) {
     setSaveStatus("entre na sua conta pra salvar", "erro");
     return;
   }
@@ -137,10 +137,10 @@ export async function saveNow() {
     const response = await api(state.id ? `/decks/${state.id}` : "/decks", body);
     const isNew = !state.id;
     state.id = response.deck.id;
-    state.validacao = response.validacao;
-    state.versao = response.versao;
+    state.validation = response.validacao;
+    state.version = response.versao;
     if (isNew) {
-      state.dono = response.deck.dono || null;
+      state.owner = response.deck.dono || null;
       history.replaceState(null, "", `?deck=${state.id}`);
     }
     rememberDeck();
@@ -152,7 +152,7 @@ export async function saveNow() {
     // A pílula da versão ganha o ponto de "a lista mudou" quando o servidor
     // confirma a mudança, e o histórico aberto acompanha a lista gravada.
     syncVersion();
-    if (state.aba === "historico") loadHistory();
+    if (state.tab === "historico") loadHistory();
     // O primeiro salvamento é o instante em que o deck ganha id — e é só com
     // id que dá pra cotar. Sem esta chamada, um deck de uma carta só nunca
     // seria cotado: a cotação esperaria uma segunda mudança que não vem.
@@ -186,7 +186,7 @@ export async function flushSave() {
 
 /* O nome que se digitou no cabeçalho. Vazio volta ao nome de fábrica. */
 export function renameDeck(name: string) {
-  state.nome = name.trim() || "Deck sem nome";
+  state.name = name.trim() || "Deck sem nome";
   scheduleSave();
 }
 
@@ -195,5 +195,5 @@ export function renameDeck(name: string) {
    `/decks/meus`. A tela "Meus decks" junta as duas listas (ver
    `shared/localDecks.ts`). */
 export function rememberDeck() {
-  if (state.id) rememberLocalDeck(state.id, state.nome, state.comandantes[0]?.nome);
+  if (state.id) rememberLocalDeck(state.id, state.name, state.commanders[0]?.nome);
 }

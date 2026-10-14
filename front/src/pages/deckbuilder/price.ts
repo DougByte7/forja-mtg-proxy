@@ -35,7 +35,7 @@ export const PRICEY_USD = 20;
 export const PRICEY_BRL = 100;
 
 export function exchangeRate() {
-  return state.cambio && state.cambio.valor > 0 ? state.cambio.valor : 0;
+  return state.rate && state.rate.valor > 0 ? state.rate.valor : 0;
 }
 
 /* Um valor em dólar, escrito do jeito que a tela mostra.
@@ -66,7 +66,7 @@ export function formatBRL(n: number) {
 /* A nota que acompanha todo valor convertido, no title. É ela que faz a
    diferença entre aproximação honesta e número inventado. */
 export function exchangeNote() {
-  const c = state.cambio;
+  const c = state.rate;
   if (!c || !(c.valor > 0)) return "Preço em dólar: o câmbio ainda não chegou.";
   return `Convertido a R$ ${c.valor.toFixed(2).replace(".", ",")} por dólar (`
     + (c.fonte === "fixa" ? "taxa padrão do servidor" : "câmbio do dia") + ").";
@@ -98,7 +98,7 @@ export function maxPriceInUsd(typed: number | string) {
    dólar e nada mais muda. */
 export async function loadExchangeRate() {
   try {
-    state.cambio = await api("/cambio");
+    state.rate = await api("/cambio");
   } catch {
     return;   // silêncio de propósito: isto é a régua, não o serviço
   }

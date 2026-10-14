@@ -33,13 +33,13 @@ export const tableRevision = signal(0);
    que saiu do campo, mesa nova), ele fecha. */
 export function touchTable() {
   const uid = detail.value?.uid;
-  if (uid != null && (!state.mesa || !cardByUid(uid))) hideDetail();
+  if (uid != null && (!state.table || !cardByUid(uid))) hideDetail();
   tableRevision.value++;
 }
 
 /* Uma jogada: foto pro desfazer, a regra, o redesenho. */
 function play(rule: () => unknown, gesture?: string) {
-  if (!state.mesa) return;
+  if (!state.table) return;
   saveTableSnapshot(gesture);
   rule();
   touchTable();
@@ -55,20 +55,20 @@ export function undoTable() {
    chega ao botão que estiver com o foco — senão o turno passaria e o botão
    seria clicado junto. */
 export function tableShortcut(e: KeyboardEvent) {
-  if (!state.mesa || e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (!state.table || e.ctrlKey || e.metaKey || e.altKey) return false;
   const space = e.key === " ";
   if (!space && e.key.toLowerCase() !== "d") return false;
   e.preventDefault();
   if (e.repeat) return true;
   closeTableMenu();
-  play(() => space ? passTurn() : draw(state.mesa!.ativo, 1));
+  play(() => space ? passTurn() : draw(state.table!.active, 1));
   return true;
 }
 
 /* ------------------------------------------------------- os botões do topo */
 
 export function shuffleUp() {
-  if (!countedCards().length && !state.comandantes.length) return toast("Monte o deck primeiro.");
+  if (!countedCards().length && !state.commanders.length) return toast("Monte o deck primeiro.");
   hideDetail();   // os uids recomeçam do 1 na mesa nova
   setUpTable([screenDeck()]);
   touchTable();
@@ -79,14 +79,14 @@ export const endCombat = () => play(clearCombat);
 
 /* Abrir o log não é jogada: não passa pelo `saveTableSnapshot`. */
 export function toggleLog() {
-  if (!state.mesa) return;
-  state.mesa.logAberto = !state.mesa.logAberto;
+  if (!state.table) return;
+  state.table.logOpen = !state.table.logOpen;
   touchTable();
 }
 
 export function secondDeckButton() {
-  if (!state.mesa) return;
-  if (state.mesa.jogadores.length > 1) return play(removeSecondDeck);
+  if (!state.table) return;
+  if (state.table.players.length > 1) return play(removeSecondDeck);
   openTableModal({ kind: "second" });
 }
 
@@ -129,14 +129,14 @@ export function tapFromIcon(uid: number) {
 /* Na fase de mandar pro fundo, clicar na mão é ESCOLHER — não abrir menu. */
 export function clickCard(uid: number, anchor: Element) {
   const c = cardByUid(uid);
-  if (c && state.mesa!.jogadores[c.dono].fase === "fundo" && zoneOfHand(uid)) {
+  if (c && state.table!.players[c.owner].phase === "fundo" && zoneOfHand(uid)) {
     return play(() => putOnBottom(uid));
   }
   openTableMenu({ kind: "card", uid }, anchor);
 }
 
 function zoneOfHand(uid: number) {
-  return state.mesa!.jogadores.some((p) => p.mao.some((c) => c.uid === uid));
+  return state.table!.players.some((p) => p.mao.some((c) => c.uid === uid));
 }
 
 /* ------------------------------------------------------------------ menus */
@@ -240,7 +240,7 @@ export type DeckOption = { id: string; nome: string; de: string };
 export async function listDecks(): Promise<DeckOption[]> {
   const byId = new Map<string, DeckOption>();
   for (const d of readLocalDecks()) byId.set(d.id, { id: d.id, nome: d.nome, de: "neste navegador" });
-  if (state.usuario) {
+  if (state.user) {
     try {
       const r = await api("/decks/meus");
       for (const d of r.decks || []) byId.set(d.id, { id: d.id, nome: d.nome || "Deck sem nome", de: "da sua conta" });
@@ -307,7 +307,7 @@ export async function showDetail(uid: number) {
   detail.value = { uid, data: null, floats, left };
 
   // Ficha inventada na hora não existe na Scryfall.
-  const name = c.ficha ? "" : c.carta?.nome;
+  const name = c.token ? "" : c.card?.nome;
   if (!name) return;
   let data;
   try {
@@ -359,7 +359,7 @@ function dropArea(e: DragEvent) {
   const area = (e.target as Element).closest?.("[data-gf-solta]") as HTMLElement | null;
   if (!area) return null;
   const c = cardByUid(dragging);
-  if (!c || Number(area.dataset.gfJ) !== c.dono) return null;
+  if (!c || Number(area.dataset.gfJ) !== c.owner) return null;
   return area;
 }
 

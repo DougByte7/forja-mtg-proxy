@@ -17,28 +17,28 @@ const pill = (p: any) => {
 it("quem pode concluir, e o que a pílula e o histórico mostram", async () => {
   const p = await page();
   const e = p.state;
-  e.usuario = null;
+  e.user = null;
   expect(p.completionBlocker()).toContain("conta");
 
-  e.usuario = { id: "eu", perfil: "cliente" };
-  e.versao = null;
+  e.user = { id: "eu", perfil: "cliente" };
+  e.version = null;
   expect(p.completionBlocker()).toContain("Faltam");
   expect(pill(p)).toEqual(["WIP", "versao-pilula wip", true]);
 
-  e.versao = { atual: 0, concluida_em: 1, mudou: false, entraram: 0, sairam: 0 };
+  e.version = { atual: 0, concluida_em: 1, mudou: false, entraram: 0, sairam: 0 };
   expect(p.completionBlocker()).toContain("igual à v0");
   expect(pill(p)[2]).toBe(true);   // na v0 ainda não há aba de histórico
 
-  e.versao = { atual: 2, concluida_em: 1, mudou: true, entraram: 3, sairam: 1 };
+  e.version = { atual: 2, concluida_em: 1, mudou: true, entraram: 3, sairam: 1 };
   expect(p.completionBlocker()).toBe("");
   expect(pill(p)).toEqual(["v2", "versao-pilula mudou", false]);
 
-  e.dono = "outra-pessoa";
+  e.owner = "outra-pessoa";
   expect(p.completionBlocker()).toContain("dono");
-  e.usuario = { id: "outra-pessoa", perfil: "comum" };
+  e.user = { id: "outra-pessoa", perfil: "comum" };
   expect(p.completionBlocker()).toBe("");
 
-  e.historico = {
+  e.history = {
     atual: 2,
     pendente: { entraram: [{ nome: "Sol Ring", zona: "side", quantidade: 1, carta: SOL_RING }],
                 sairam: [], n_entraram: 1, n_sairam: 0 },

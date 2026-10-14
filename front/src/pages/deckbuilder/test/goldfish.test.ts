@@ -41,35 +41,35 @@ const DECK = [entrada(SOL_RING, 1), entrada(FOREST, 10), entrada(ELVES, 4),
 const MAYBE = [entrada(BOLT, 3)];
 const IN_LIBRARY = 15;
 // O segundo deck, montado à mão como `addSecondDeck` o recebe.
-const deck2 = () => clone({ nome: "Deck do outro", comandantes: [KRENKO],
-                            entradas: [{ carta: MOUNTAIN, quantidade: 6 }, { carta: BOLT, quantidade: 2 }] });
+const deck2 = () => clone({ name: "Deck do outro", commanders: [KRENKO],
+                            entries: [{ carta: MOUNTAIN, quantidade: 6 }, { carta: BOLT, quantidade: 2 }] });
 const IN_LIBRARY2 = 8;
 
-type Card = { uid: number; dono: number; carta: any; [k: string]: any };
+type Card = { uid: number; owner: number; card: any; [k: string]: any };
 const ZONES = ["baralho", "mao", "campo", "cemiterio", "exilio", "comando"];
 
 let p: Page;
-const j = (i = 0) => p.state.mesa.jogadores[i];
+const j = (i = 0) => p.state.table.players[i];
 const table = () => p.setUpTable([p.screenDeck()]);
 /** Todas as cartas de todas as zonas, pra comparar multiconjuntos. */
-const all = () => p.state.mesa.jogadores.flatMap((pl: any) =>
-  ZONES.flatMap((z) => pl[z].map((c: Card) => `${c.uid}:${c.carta.nome}`))).sort();
+const all = () => p.state.table.players.flatMap((pl: any) =>
+  ZONES.flatMap((z) => pl[z].map((c: Card) => `${c.uid}:${c.card.nome}`))).sort();
 /** A carta `nome` em qualquer zona — a mão de abertura já foi comprada, e
     procurar só no baralho acharia ou não conforme o embaralhamento. */
 const find = (nome: string, i = 0): Card[] =>
-  ZONES.flatMap((z) => j(i)[z].filter((c: Card) => c.carta?.nome === nome));
+  ZONES.flatMap((z) => j(i)[z].filter((c: Card) => c.card?.nome === nome));
 /** Florestas fora do campo. Da mão E do baralho: as dez estão sempre ali,
     seja qual for o embaralhamento (só do baralho, às vezes sobram três). */
 const forests = (n: number): Card[] =>
-  [...j().mao, ...j().baralho].filter((c: Card) => c.carta.nome === "Forest").slice(0, n);
+  [...j().mao, ...j().baralho].filter((c: Card) => c.card.nome === "Forest").slice(0, n);
 const fieldOrder = () => j().campo.map((c: Card) => c.uid).join(",");
 
 beforeEach(async () => {
   p = await freshPage();
-  p.state.comandantes = clone([ATRAXA]);
-  p.state.cartas = clone(DECK);
+  p.state.commanders = clone([ATRAXA]);
+  p.state.cards = clone(DECK);
   p.state.maybe = clone(MAYBE);
-  p.state.nome = "Meu deck";
+  p.state.name = "Meu deck";
 });
 afterEach(cleanup);
 
@@ -78,19 +78,19 @@ describe("o baralho é o deck certo", () => {
     table();
     expect(j().baralho.length + j().mao.length).toBe(IN_LIBRARY);
     for (const nome of ["Atraxa", "Swords to Plowshares", "Lightning Bolt"]) {
-      expect(j().baralho.filter((c: Card) => c.carta.nome === nome)).toHaveLength(0);
+      expect(j().baralho.filter((c: Card) => c.card.nome === nome)).toHaveLength(0);
     }
-    expect(j().comando.map((c: Card) => c.carta.nome)).toEqual(["Atraxa"]);
-    expect(j().comando[0].cmd).toBe(true);
+    expect(j().comando.map((c: Card) => c.card.nome)).toEqual(["Atraxa"]);
+    expect(j().comando[0].commander).toBe(true);
   });
 
   it("cada cópia tem identidade própria", () => {
     table();
     const cards = [...j().baralho, ...j().mao];
     expect(new Set(cards.map((c: Card) => c.uid)).size).toBe(IN_LIBRARY);
-    const fs = cards.filter((c: Card) => c.carta.nome === "Forest");
-    fs[0].deitada = true;
-    expect(fs.filter((c: Card) => c.deitada)).toHaveLength(1);
+    const fs = cards.filter((c: Card) => c.card.nome === "Forest");
+    fs[0].tapped = true;
+    expect(fs.filter((c: Card) => c.tapped)).toHaveLength(1);
   });
 
   it("embaralhar é permutação", () => {
@@ -105,22 +105,22 @@ describe("o baralho é o deck certo", () => {
 describe("mão de abertura e mulligan London (o primeiro é grátis)", () => {
   it("compra 7 e começa no mulligan, turno 1, primeiro jogador", () => {
     table();
-    expect([j().mao.length, j().baralho.length, j().fase]).toEqual([7, IN_LIBRARY - 7, "mulligan"]);
-    expect([p.state.mesa.turno, p.state.mesa.ativo]).toEqual([1, 0]);
+    expect([j().mao.length, j().baralho.length, j().phase]).toEqual([7, IN_LIBRARY - 7, "mulligan"]);
+    expect([p.state.table.turn, p.state.table.active]).toEqual([1, 0]);
   });
 
   it("manter sem mulligan: 8 na mão (a do turno 1), nada pro fundo, direto pro jogo", () => {
     table(); p.keepHand(0);
-    expect([j().mao.length, j().aFundo, j().fase]).toEqual([8, 0, "jogo"]);
+    expect([j().mao.length, j().toBottom, j().phase]).toEqual([8, 0, "jogo"]);
   });
 
   it("1 mulligan não custa; 2 devolvem 1; 3 devolvem 2", () => {
     table(); p.londonMulligan(0); p.keepHand(0);
-    expect([j().mao.length, j().aFundo]).toEqual([8, 0]);
+    expect([j().mao.length, j().toBottom]).toEqual([8, 0]);
     table(); p.londonMulligan(0); p.londonMulligan(0); p.keepHand(0);
-    expect([j().mao.length, j().aFundo, j().fase]).toEqual([7, 1, "fundo"]);
+    expect([j().mao.length, j().toBottom, j().phase]).toEqual([7, 1, "fundo"]);
     table(); p.londonMulligan(0); p.londonMulligan(0); p.londonMulligan(0); p.keepHand(0);
-    expect(j().aFundo).toBe(2);
+    expect(j().toBottom).toBe(2);
   });
 
   it("as escolhidas vão pro FUNDO, e a mão fica com 6 — 5 mais a do turno 1", () => {
@@ -128,7 +128,7 @@ describe("mão de abertura e mulligan London (o primeiro é grátis)", () => {
     p.putOnBottom(j().mao[0].uid);
     const chosen = j().mao[0].uid;
     p.putOnBottom(chosen);
-    expect([j().mao.length, j().fase]).toEqual([6, "jogo"]);
+    expect([j().mao.length, j().phase]).toEqual([6, "jogo"]);
     expect(j().baralho.at(-1).uid).toBe(chosen);
   });
 
@@ -139,7 +139,7 @@ describe("mão de abertura e mulligan London (o primeiro é grátis)", () => {
     for (let i = 0; i < 12; i++) p.londonMulligan(0);
     j().mao = j().mao.slice(0, 3);
     p.keepHand(0);
-    expect([j().aFundo, j().mao.length]).toEqual([3, 3]);
+    expect([j().toBottom, j().mao.length]).toEqual([3, 3]);
   });
 });
 
@@ -164,12 +164,12 @@ describe("turnos", () => {
     table(); p.keepHand(0);
     const before = j().mao.length;
     p.moveToZone(j().mao[0].uid, "campo");
-    j().campo[0].deitada = true;
-    j().terrenosBaixados = 3;
+    j().campo[0].tapped = true;
+    j().landsThisTurn = 3;
     p.passTurn();
-    expect([p.state.mesa.turno, j().mao.length - (before - 1)]).toEqual([2, 1]);
-    expect(j().campo[0].deitada).toBe(false);
-    expect(j().terrenosBaixados).toBe(0);
+    expect([p.state.table.turn, j().mao.length - (before - 1)]).toEqual([2, 1]);
+    expect(j().campo[0].tapped).toBe(false);
+    expect(j().landsThisTurn).toBe(0);
   });
 
   it("dois terrenos no mesmo turno: conta, não impede", () => {
@@ -177,7 +177,7 @@ describe("turnos", () => {
     const two = forests(2);
     two.forEach((c) => p.moveToZone(c.uid, "mao"));
     two.forEach((c) => p.moveToZone(c.uid, "campo"));
-    expect([j().terrenosBaixados, j().campo.length]).toEqual([2, 2]);
+    expect([j().landsThisTurn, j().campo.length]).toEqual([2, 2]);
   });
 });
 
@@ -186,14 +186,14 @@ describe("dois decks na mesa", () => {
     table(); p.keepHand(0);
     const before = j(0).mao.length;
     p.addSecondDeck(deck2());
-    expect([p.state.mesa.jogadores.length, j(1).mao.length, j(1).fase, j(0).mao.length === before])
+    expect([p.state.table.players.length, j(1).mao.length, j(1).phase, j(0).mao.length === before])
       .toEqual([2, 7, "mulligan", true]);
   });
 
   it("quem mantém fora da vez fica com 7 e compra quando a vez chega", () => {
     // Comprar fora da vez adiantaria a compra de um turno que não chegou.
     table(); p.keepHand(0); p.addSecondDeck(deck2()); p.keepHand(1);
-    expect([j(1).mao.length, j(1).baralho.length, j(1).fase]).toEqual([7, IN_LIBRARY2 - 7, "jogo"]);
+    expect([j(1).mao.length, j(1).baralho.length, j(1).phase]).toEqual([7, IN_LIBRARY2 - 7, "jogo"]);
     p.passTurn();
     expect(j(1).mao.length).toBe(8);
   });
@@ -212,12 +212,12 @@ describe("dois decks na mesa", () => {
 
   it("cada deck com as artes dele, e elas voltam com o desfazer, fora da foto", () => {
     table();
-    const d = { ...deck2(), id: "d2", escolhas: { krenko: { frente: { arte_id: "abc" } } } };
+    const d = { ...deck2(), id: "d2", choices: { krenko: { frente: { arte_id: "abc" } } } };
     p.addSecondDeck(d);
     expect([p.playerArts(0) === null, p.playerArts(1).krenko.frente.arte_id]).toEqual([true, "abc"]);
     p.saveTableSnapshot();
     p.removeSecondDeck();
-    const inPhoto = p.state.mesaDesfazer[0].indexOf("abc") >= 0;
+    const inPhoto = p.state.tableUndo[0].indexOf("abc") >= 0;
     p.undoTableStep();
     expect([inPhoto, p.playerArts(1).krenko.frente.arte_id]).toEqual([false, "abc"]);
   });
@@ -233,17 +233,17 @@ describe("dois decks na mesa", () => {
     const steps = [];
     for (let i = 0; i < 4; i++) {
       p.passTurn();
-      steps.push(`${p.state.mesa.turno}:${p.state.mesa.ativo}`);
+      steps.push(`${p.state.table.turn}:${p.state.table.active}`);
     }
     expect(steps.join(" ")).toBe("1:1 2:0 2:1 3:0");
   });
 
   it("passar turno endireita só quem está jogando", () => {
     table(); p.keepHand(0); p.addSecondDeck(deck2()); p.keepHand(1);
-    p.moveToZone(j(0).mao[0].uid, "campo"); j(0).campo[0].deitada = true;
-    p.moveToZone(j(1).mao[0].uid, "campo"); j(1).campo[0].deitada = true;
+    p.moveToZone(j(0).mao[0].uid, "campo"); j(0).campo[0].tapped = true;
+    p.moveToZone(j(1).mao[0].uid, "campo"); j(1).campo[0].tapped = true;
     p.passTurn();   // vez do segundo
-    expect([j(0).campo[0].deitada, j(1).campo[0].deitada]).toEqual([true, false]);
+    expect([j(0).campo[0].tapped, j(1).campo[0].tapped]).toEqual([true, false]);
   });
 
   it("a carta volta pra zona do dono, não de quem a moveu", () => {
@@ -257,7 +257,7 @@ describe("dois decks na mesa", () => {
   it("tirar o segundo deck devolve a mesa pra um jogador", () => {
     table(); p.addSecondDeck(deck2()); p.passTurn();
     p.removeSecondDeck();
-    expect([p.state.mesa.jogadores.length, p.state.mesa.ativo]).toEqual([1, 0]);
+    expect([p.state.table.players.length, p.state.table.active]).toEqual([1, 0]);
   });
 
   it("a resposta do servidor vira deck sem o sideboard", () => {
@@ -265,7 +265,7 @@ describe("dois decks na mesa", () => {
       cartas_completas: [{ carta: MOUNTAIN, quantidade: 3, categoria: "" },
                          { carta: BOLT, quantidade: 2, categoria: "Sideboard" },
                          { carta: null, quantidade: 9, categoria: "" }] } });
-    expect([d.nome, d.comandantes.length, d.entradas.length, d.entradas[0].quantidade])
+    expect([d.name, d.commanders.length, d.entries.length, d.entries[0].quantidade])
       .toEqual(["Do servidor", 1, 1, 3]);
   });
 });
@@ -273,21 +273,21 @@ describe("dois decks na mesa", () => {
 describe("resumo da mão", () => {
   it("terrenos, média do que não é terreno e as cores pedidas", () => {
     // Terreno fica fora da média: custa zero e puxaria o número pra baixo.
-    const r = p.handSummary([{ carta: FOREST }, { carta: FOREST }, { carta: SOL_RING }, { carta: ELVES }]);
-    expect([r.terrenos, r.feiticos, r.custoMedio, r.cores.G || 0, r.cores.W || 0]).toEqual([2, 2, 1, 1, 0]);
-    const lands = p.handSummary([{ carta: FOREST }]);
-    expect([lands.terrenos, lands.feiticos, lands.custoMedio]).toEqual([1, 0, 0]);
-    const hybrid = p.handSummary([{ carta: FINKS }]);
-    expect([hybrid.cores.G || 0, hybrid.cores.W || 0]).toEqual([1, 1]);
+    const r = p.handSummary([{ card: FOREST }, { card: FOREST }, { card: SOL_RING }, { card: ELVES }]);
+    expect([r.lands, r.spells, r.averageCost, r.colors.G || 0, r.colors.W || 0]).toEqual([2, 2, 1, 1, 0]);
+    const lands = p.handSummary([{ card: FOREST }]);
+    expect([lands.lands, lands.spells, lands.averageCost]).toEqual([1, 0, 0]);
+    const hybrid = p.handSummary([{ card: FINKS }]);
+    expect([hybrid.colors.G || 0, hybrid.colors.W || 0]).toEqual([1, 1]);
   });
 });
 
 describe("o campo em três filas", () => {
   it("terreno-criatura é terreno; o resto cai em Outros", () => {
-    expect(p.fieldRow({ carta: { tipo: "Land Creature — Dryad Arbor" } })).toBe("Terrenos");
-    expect(p.fieldRow({ carta: ELVES })).toBe("Criaturas");
-    expect(p.fieldRow({ carta: SOL_RING })).toBe("Outros");
-    expect(p.fieldRow({ carta: null })).toBe("Outros");
+    expect(p.fieldRow({ card: { tipo: "Land Creature — Dryad Arbor" } })).toBe("Terrenos");
+    expect(p.fieldRow({ card: ELVES })).toBe("Criaturas");
+    expect(p.fieldRow({ card: SOL_RING })).toBe("Outros");
+    expect(p.fieldRow({ card: null })).toBe("Outros");
   });
 });
 
@@ -355,19 +355,19 @@ describe("arrumar o campo", () => {
 describe("vida, marcadores e dano de comandante", () => {
   it("a vida começa em 40, e os botões somam e subtraem", () => {
     table();
-    expect(j().vida).toBe(40);
+    expect(j().life).toBe(40);
     p.adjustLife(0, -5); p.adjustLife(0, 1);
-    expect(j().vida).toBe(36);
+    expect(j().life).toBe(36);
   });
 
   it("marcador de jogador sobe, desce, some no zero e nunca fica negativo", () => {
     table();
     p.adjustPlayerCounter(0, "veneno", 3);
-    const three = j().marcas.veneno;
+    const three = j().counters.veneno;
     p.adjustPlayerCounter(0, "veneno", -3);
-    expect([three, Object.keys(j().marcas).length]).toEqual([3, 0]);
+    expect([three, Object.keys(j().counters).length]).toEqual([3, 0]);
     p.adjustPlayerCounter(0, "energia", 1); p.adjustPlayerCounter(0, "energia", -5);
-    expect(Object.keys(j().marcas)).toHaveLength(0);
+    expect(Object.keys(j().counters)).toHaveLength(0);
   });
 
   it("marcador de carta mora na carta e some quando ela sai do campo", () => {
@@ -375,15 +375,15 @@ describe("vida, marcadores e dano de comandante", () => {
     const uid = j().mao[0].uid;
     p.moveToZone(uid, "campo");
     p.adjustCardCounter(uid, "+1/+1", 2);
-    expect(p.cardByUid(uid).marcas["+1/+1"]).toBe(2);
+    expect(p.cardByUid(uid).counters["+1/+1"]).toBe(2);
     p.moveToZone(uid, "cemiterio");
-    expect(Object.keys(p.cardByUid(uid).marcas)).toHaveLength(0);
+    expect(Object.keys(p.cardByUid(uid).counters)).toHaveLength(0);
   });
 
   it("dano de comandante é contado por origem", () => {
     table(); p.addSecondDeck(deck2());
     p.adjustCommanderDamage(0, 1, 7); p.adjustCommanderDamage(0, 1, 7);
-    expect([j(0).danoCmd[1], j(0).danoCmd[0]]).toEqual([14, 0]);
+    expect([j(0).commanderDamage[1], j(0).commanderDamage[0]]).toEqual([14, 0]);
   });
 });
 
@@ -392,7 +392,7 @@ describe("fichas", () => {
     // Um cemitério com três Soldados mentiria sobre o que dá pra devolver.
     table(); p.keepHand(0);
     p.createToken(0, { nome: "Soldado", poder: "1", resistencia: "1", cores: ["W"] }, 3);
-    expect([j().campo.length, j().campo[0].carta.nome, j().campo[0].ficha]).toEqual([3, "Soldado", true]);
+    expect([j().campo.length, j().campo[0].card.nome, j().campo[0].token]).toEqual([3, "Soldado", true]);
     const before = all().length;
     p.moveToZone(j().campo[0].uid, "cemiterio");
     expect([before, all().length, j().cemiterio.length]).toEqual([IN_LIBRARY + 4, IN_LIBRARY + 3, 0]);
@@ -401,28 +401,28 @@ describe("fichas", () => {
   it("não entra na conta do resumo do fim", () => {
     table(); p.keepHand(0);
     p.createToken(0, { nome: "Soldado" }, 2);
-    expect(p.gameSummary()[0].feiticosNoDeck).toBe(IN_LIBRARY - 10);   // menos as florestas
+    expect(p.gameSummary()[0].spellsInDeck).toBe(IN_LIBRARY - 10);   // menos as florestas
   });
 });
 
 describe("carta de duas faces", () => {
   it("vira, desvira, e volta pra frente ao sair do campo", () => {
     table(); p.keepHand(0);
-    j().campo.push({ uid: 999, dono: 0, carta: clone(DFC), verso: false, marcas: {} });
+    j().campo.push({ uid: 999, owner: 0, card: clone(DFC), backUp: false, counters: {} });
     p.toggleFace(999);
-    const flipped = p.cardByUid(999).verso;
+    const flipped = p.cardByUid(999).backUp;
     p.toggleFace(999);
-    expect([flipped, p.cardByUid(999).verso]).toEqual([true, false]);
+    expect([flipped, p.cardByUid(999).backUp]).toEqual([true, false]);
     p.toggleFace(999);
     p.moveToZone(999, "mao");
-    expect(p.cardByUid(999).verso).toBe(false);
+    expect(p.cardByUid(999).backUp).toBe(false);
   });
 
   it("carta sem verso de papel não vira", () => {
     table(); p.keepHand(0);
     const uid = find("Forest")[0].uid;
     p.moveToZone(uid, "campo"); p.toggleFace(uid);
-    expect(p.cardByUid(uid).verso).toBe(false);
+    expect(p.cardByUid(uid).backUp).toBe(false);
   });
 });
 
@@ -433,12 +433,12 @@ describe("combate", () => {
     p.moveToZone(mine, "campo"); p.moveToZone(theirs, "campo");
     p.toggleAttack(mine);
     p.setBlock(theirs, mine);
-    expect([p.cardByUid(mine).atacando, p.cardByUid(theirs).bloqueando === mine, p.attackers().length])
+    expect([p.cardByUid(mine).attacking, p.cardByUid(theirs).blocking === mine, p.attackers().length])
       .toEqual([true, true, 1]);
     p.setBlock(theirs, mine);
-    expect(p.cardByUid(theirs).bloqueando).toBeNull();
+    expect(p.cardByUid(theirs).blocking).toBeNull();
     p.passTurn();
-    expect([p.cardByUid(mine).atacando, p.attackers().length]).toEqual([false, 0]);
+    expect([p.cardByUid(mine).attacking, p.attackers().length]).toEqual([false, 0]);
   });
 });
 
@@ -479,7 +479,7 @@ describe("conservação: nenhuma carta some nem duplica", () => {
     p.castCommander(j().comando[0].uid);
     p.moveToZone(j().campo[0].uid, "comando");
     p.castCommander(j().comando[0].uid);
-    expect([j().impostoPago, j().campo.length, j().turnoDoComandante]).toEqual([2, 1, 1]);
+    expect([j().taxPaid, j().campo.length, j().commanderTurn]).toEqual([2, 1, 1]);
   });
 });
 
@@ -494,60 +494,60 @@ describe("desfazer", () => {
     p.saveTableSnapshot();
     p.moveToZone(j().mao[0].uid, "exilio");
     p.undoTableStep();
-    expect(j().mao.filter((c: Card) => c.carta?.nome)).toHaveLength(8);
+    expect(j().mao.filter((c: Card) => c.card?.nome)).toHaveLength(8);
 
     table(); p.saveTableSnapshot();
-    expect(p.state.mesaDesfazer.at(-1).indexOf("Llanowar Elves")).toBe(-1);
+    expect(p.state.tableUndo.at(-1).indexOf("Llanowar Elves")).toBe(-1);
   });
 
   it("pilha vazia não quebra, e a pilha tem teto", () => {
-    table(); p.state.mesaDesfazer = []; p.undoTableStep();
-    expect(p.state.mesa).not.toBeNull();
+    table(); p.state.tableUndo = []; p.undoTableStep();
+    expect(p.state.table).not.toBeNull();
     for (let i = 0; i < 40; i++) p.saveTableSnapshot();
-    expect(p.state.mesaDesfazer).toHaveLength(20);
+    expect(p.state.tableUndo).toHaveLength(20);
   });
 
   it("cliques seguidos do mesmo gesto são UM passo de desfazer", () => {
     // Sete cliques pra ir de 40 a 33 não podem comer sete das vinte fotos.
     table(); p.keepHand(0);
-    p.state.mesaDesfazer = [];
+    p.state.tableUndo = [];
     for (let i = 0; i < 3; i++) { p.saveTableSnapshot("vida0"); p.adjustLife(0, -1); }
-    expect([p.state.mesaDesfazer.length, j().vida]).toEqual([1, 37]);
+    expect([p.state.tableUndo.length, j().life]).toEqual([1, 37]);
     p.undoTableStep();
-    expect(j().vida).toBe(40);
+    expect(j().life).toBe(40);
 
-    p.state.mesaDesfazer = [];
+    p.state.tableUndo = [];
     p.saveTableSnapshot("vida0"); p.adjustLife(0, -1);
     p.saveTableSnapshot(); p.draw(0, 1);
     p.saveTableSnapshot("vida0"); p.adjustLife(0, -1);
-    expect(p.state.mesaDesfazer).toHaveLength(3);
+    expect(p.state.tableUndo).toHaveLength(3);
   });
 });
 
 describe("log e resumo do fim", () => {
   it("o log anota as jogadas com o turno em que aconteceram", () => {
     table(); p.keepHand(0); p.passTurn();
-    expect([p.state.mesa.log.length > 2, p.state.mesa.log.at(-1).turno]).toEqual([true, 2]);
+    expect([p.state.table.log.length > 2, p.state.table.log.at(-1).turn]).toEqual([true, 2]);
   });
 
   it("em que turno o comandante desceu, ou 'nunca'", () => {
     table(); p.keepHand(0);
-    expect(p.gameSummary()[0].turnoDoComandante).toBeNull();
+    expect(p.gameSummary()[0].commanderTurn).toBeNull();
     p.passTurn(); p.passTurn();
     p.castCommander(j().comando[0].uid);
-    expect(p.gameSummary()[0].turnoDoComandante).toBe(3);
+    expect(p.gameSummary()[0].commanderTurn).toBe(3);
   });
 
   it("curva teórica, realizada e o que ficou no baralho", () => {
     table(); p.keepHand(0);
     const r0 = p.gameSummary()[0];
     // 1 Sol Ring + 4 Elves, todos de custo 1.
-    expect([r0.teorica[1], r0.feiticosNoDeck, r0.teorica[0]]).toEqual([5, 5, 0]);
-    expect([r0.naoPuxadas, r0.restante.length]).toEqual([IN_LIBRARY - 8, IN_LIBRARY - 8]);
+    expect([r0.deckCurve[1], r0.spellsInDeck, r0.deckCurve[0]]).toEqual([5, 5, 0]);
+    expect([r0.neverDrawn, r0.remaining.length]).toEqual([IN_LIBRARY - 8, IN_LIBRARY - 8]);
     p.moveToZone(find("Llanowar Elves")[0].uid, "campo");
     p.moveToZone(find("Forest")[0].uid, "campo");
     const r = p.gameSummary()[0];
-    expect([r.realizada[1], r.feiticosJogados, r.terrenosJogados]).toEqual([1, 1, 1]);
+    expect([r.playedCurve[1], r.spellsPlayed, r.landsPlayed]).toEqual([1, 1, 1]);
   });
 });
 
@@ -560,10 +560,10 @@ it("a mesa não vaza pro deck salvo", () => {
 
 describe("deck vazio não quebra", () => {
   it("sem cartas a mesa monta; entrada sem carta na base é ignorada", () => {
-    p.state.cartas = []; p.state.comandantes = [];
+    p.state.cards = []; p.state.commanders = [];
     table();
     expect([j().baralho.length, j().mao.length]).toEqual([0, 0]);
-    p.state.cartas = [{ carta: null, quantidade: 3, categoria: "" },
+    p.state.cards = [{ carta: null, quantidade: 3, categoria: "" },
                        { carta: clone(SOL_RING), quantidade: 2, categoria: "" }];
     table();
     expect(j().baralho.length + j().mao.length).toBe(2);
@@ -623,7 +623,7 @@ describe("os combos na mesa", () => {
   it("ficha não é peça, e o segundo deck nunca foi perguntado", () => {
     table(); p.state.combos = clone(COMBOS);
     p.createToken(0, { nome: "Sol Ring", tipo: "Token Artifact" }, 1);
-    expect(p.comboCount(j().campo.find((c: Card) => c.ficha))).toBe(0);
+    expect(p.comboCount(j().campo.find((c: Card) => c.token))).toBe(0);
     p.addSecondDeck(deck2());
     expect(sum(j(1).baralho.map(p.comboCount))).toBe(0);
   });

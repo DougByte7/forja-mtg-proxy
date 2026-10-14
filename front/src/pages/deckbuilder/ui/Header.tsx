@@ -29,7 +29,7 @@ export function Header() {
               colada nele. Ela é o estado e a porta: o clique abre o menu que
               conclui a próxima versão (ver `versions.ts`). */}
           <div class="titulo-linha">
-            <GuardedInput id="nome-deck" value={state.nome} maxlength={80} aria-label="Nome do deck" spellcheck={false}
+            <GuardedInput id="nome-deck" value={state.name} maxlength={80} aria-label="Nome do deck" spellcheck={false}
                           onInput={(e: Event) => renameDeck((e.currentTarget as HTMLInputElement).value)} />
             <VersionPill />
           </div>

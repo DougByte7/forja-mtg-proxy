@@ -58,7 +58,7 @@ function PastedLink({ source, onImport }: { source: string | null; onImport: () 
 
 export function SearchResults({ box, onImportLink }: { box: SearchBox; onImportLink?: () => void }) {
   const state = useDeck();
-  const r: SearchResult = state.resultados[box];
+  const r: SearchResult = state.results[box];
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -114,7 +114,7 @@ export function DestinationSegment() {
   return (
     <div class="segmento" id="seg-destino">
       {DESTINATIONS.map(([d, label]) => (
-        <button type="button" class={state.destino === d ? "ativa" : undefined} data-destino={d}
+        <button type="button" class={state.destination === d ? "ativa" : undefined} data-destino={d}
                 onClick={() => chooseDestination(d)}>{label}</button>
       ))}
     </div>
@@ -130,11 +130,11 @@ export function DestinationSegment() {
 export function DestinationCategory() {
   const state = useDeck();
   const options = allCategories().filter((c) => c !== SIDEBOARD);
-  const current = options.includes(state.destinoCategoria) ? state.destinoCategoria : "";
+  const current = options.includes(state.destinationCategory) ? state.destinationCategory : "";
   return (
     <select class="campo" id="sel-categoria" aria-label="Categoria da carta que entra"
-            disabled={state.destino === "side"} value={current}
-            onChange={(e) => { state.destinoCategoria = e.currentTarget.value; }}>
+            disabled={state.destination === "side"} value={current}
+            onChange={(e) => { state.destinationCategory = e.currentTarget.value; }}>
       <option value="">Pelo tipo da carta</option>
       {options.map((c) => <option value={c}>{c}</option>)}
     </select>

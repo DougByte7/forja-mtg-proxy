@@ -21,7 +21,7 @@ function closeTopmost(): boolean {
   if (isTableModalOpen()) { closeTableModal(); return true; }
   if (quoteBox.value) { closeQuote(); return true; }
   if (sheetOpen.value) { closeSheet(); return true; }
-  if (artState.carta) { closeArtPicker(); return true; }
+  if (artState.card) { closeArtPicker(); return true; }
   // Sair da tela cheia pelo Esc, que é onde a mão vai primeiro.
   if (fullscreen.value) { setFullscreen(false); return true; }
   return false;
@@ -35,10 +35,10 @@ export function onPageKey(e: KeyboardEvent) {
   }
   if (isDrawerOpen() || isCardOpen()) return;   // dentro da gaveta ou da modal, o teclado é dela
   // D e Espaço só valem com a mesa à vista e nada por cima dela.
-  if (state.aba === "goldfish" && !typing && !isTableModalOpen() && !artState.carta && tableShortcut(e)) return;
+  if (state.tab === "goldfish" && !typing && !isTableModalOpen() && !artState.card && tableShortcut(e)) return;
   if (e.key === "/" && !typing) {
     e.preventDefault();
-    if (state.comandantes.length) focusSearch();
+    if (state.commanders.length) focusSearch();
     else document.getElementById("busca-cmd")?.focus();
   }
   if ((e.ctrlKey || e.metaKey) && e.key === "z" && !typing) {
@@ -46,7 +46,7 @@ export function onPageKey(e: KeyboardEvent) {
     // Na aba do goldfish, Ctrl+Z desfaz a JOGADA, não a edição do deck. São
     // duas pilhas separadas de propósito: desfazer uma jogada não pode tirar
     // uma carta do deck, e vice-versa.
-    if (state.aba === "goldfish" && state.mesa) undoTable();
+    if (state.tab === "goldfish" && state.table) undoTable();
     else undo();
   }
 }

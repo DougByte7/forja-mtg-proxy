@@ -51,9 +51,9 @@ function DiffColumns({ diff: d }: { diff: Diff }) {
 
 export function History() {
   const state = useDeck();
-  const h = state.historico;
-  if (state.historicoErro) {
-    return <div class="vazio">Não consegui abrir o histórico: {state.historicoErro}</div>;
+  const h = state.history;
+  if (state.historyError) {
+    return <div class="vazio">Não consegui abrir o histórico: {state.historyError}</div>;
   }
   if (!h) return <div class="vazio">Carregando…</div>;
   return (

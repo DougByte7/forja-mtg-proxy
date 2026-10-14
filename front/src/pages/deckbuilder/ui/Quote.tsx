@@ -35,10 +35,10 @@ function SourceLine({ f }: { f: Source }) {
 
 export function QuoteDetail() {
   const state = useDeck();
-  if (state.cotacaoErro) {
-    return <div class="aponta erro" style={{ gridColumn: "1/-1" }}><span>{state.cotacaoErro}</span></div>;
+  if (state.quoteError) {
+    return <div class="aponta erro" style={{ gridColumn: "1/-1" }}><span>{state.quoteError}</span></div>;
   }
-  const result = state.cotacao;
+  const result = state.quote;
   if (!result) return null;
   const sources: Source[] = result.fontes || [];
   // As mais caras primeiro: é o que responde "onde está o dinheiro do deck",

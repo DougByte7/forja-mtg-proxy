@@ -15,15 +15,15 @@ import { api, currentValidation, flushSave, isSavePending } from "./save";
 import { state, touch } from "./state";
 import { toast } from "./ui/toast";
 
-export const isWip = () => state.versao?.atual == null;
+export const isWip = () => state.version?.atual == null;
 
 /* Concluir versão é alterar o deck, então vale a regra do autosave: pede
    conta, e deck com dono só o dono e o admin alteram. */
 export function canComplete() {
-  const u = state.usuario;
+  const u = state.user;
   if (!u) return false;
-  if (!state.dono) return true;
-  return u.id === state.dono || u.perfil === "admin";
+  if (!state.owner) return true;
+  return u.id === state.owner || u.perfil === "admin";
 }
 
 export function shortDate(ts: number | null | undefined) {
@@ -37,7 +37,7 @@ export function shortDate(ts: number | null | undefined) {
    servidor: o `mudou` que ele contou pode estar velho, então o clique fica
    liberado e quem responde é o servidor, depois de gravar. */
 export function completionBlocker() {
-  if (!state.usuario) return "Entre na sua conta pra concluir versões.";
+  if (!state.user) return "Entre na sua conta pra concluir versões.";
   if (!canComplete()) return "Só quem é dono do deck conclui versões.";
   if (isWip()) {
     const v = currentValidation();
@@ -47,13 +47,13 @@ export function completionBlocker() {
     if (serious.length) return `${serious.length} problema(s) na lista — veja a aba Análise.`;
     return size ? size.mensagem : "A lista ainda não é válida.";
   }
-  if (!state.versao.mudou && !isSavePending()) return `A lista está igual à v${state.versao.atual}.`;
+  if (!state.version.mudou && !isSavePending()) return `A lista está igual à v${state.version.atual}.`;
   return "";
 }
 
 /** O que a pílula ao lado do nome mostra. */
 export function versionPillView() {
-  const v = state.versao;
+  const v = state.version;
   const wip = isWip();
   const changed = !wip && v.mudou;
   return {
@@ -69,12 +69,12 @@ export function versionPillView() {
 /* A aba de histórico só existe com o que comparar: sem ela, quem estava
    nela volta pro deck. */
 export function syncVersion() {
-  if (!versionPillView().hasHistory && state.aba === "historico") switchTab("deck");
+  if (!versionPillView().hasHistory && state.tab === "historico") switchTab("deck");
   touch();
 }
 
 export function openVersionMenu(anchor: Element) {
-  const v = state.versao;
+  const v = state.version;
   const wip = isWip();
   const blocker = completionBlocker();
   const items: MenuItem[] = [];
@@ -107,9 +107,9 @@ export async function completeVersion() {
   if (!state.id) return;
   try {
     const r = await api(`/decks/${state.id}/versoes`, { method: "POST" });
-    state.versao = r.versao;
-    state.historico = r.historico;
-    state.historicoErro = null;
+    state.version = r.versao;
+    state.history = r.historico;
+    state.historyError = null;
     syncVersion();
     toast(`v${r.versao.atual} concluída.`);
   } catch (e) {
@@ -128,11 +128,11 @@ export async function loadHistory() {
   try {
     const r = await api(`/decks/${state.id}/versoes`);
     if (request !== historyRequest) return;
-    state.historico = r;
-    state.historicoErro = null;
+    state.history = r;
+    state.historyError = null;
   } catch (e) {
     if (request !== historyRequest) return;
-    state.historicoErro = (e as Error).message;
+    state.historyError = (e as Error).message;
   }
   touch();
 }

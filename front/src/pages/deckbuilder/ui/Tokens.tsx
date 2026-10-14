@@ -25,11 +25,11 @@ export function TokensPanel() {
     <>
       {/* A lista está na tela: a explicação do que a aba faz vira ruído
           acima dela. */}
-      <p class="nota" id="tokens-nota" hidden={groups.length > 0 && !state.tokensErro}>As fichas que as
+      <p class="nota" id="tokens-nota" hidden={groups.length > 0 && !state.tokensError}>As fichas que as
         cartas do deck criam, agrupadas por quem as cria.</p>
       <div id="tokens-resultado" style={{ marginTop: "12px" }}>
-      {state.tokensErro ? <div class="aponta erro"><span>{state.tokensErro}</span></div>
-        : state.tokensRodando ? <div class="nota">Procurando…</div>
+      {state.tokensError ? <div class="aponta erro"><span>{state.tokensError}</span></div>
+        : state.tokensLoading ? <div class="nota">Procurando…</div>
         : !data ? null
         : !groups.length ? <div class="nota">Nenhuma carta deste deck cria ficha — não há nada a levar além das cartas.</div>
         : groups.map((g) => (

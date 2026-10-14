@@ -32,13 +32,13 @@ export type CombosResponse = { no_deck: SpellbookCombo[]; faltando_uma: Spellboo
    mudou" por causa disso ensinaria a ignorar o aviso. */
 export function deckSignature() {
   return JSON.stringify([
-    state.comandantes.map((c) => c.nome).sort(),
+    state.commanders.map((c) => c.nome).sort(),
     countedCards().map((e) => [e.carta.nome, e.quantidade]).sort(),
   ]);
 }
 
 export async function searchCombos() {
-  if (!state.comandantes.length && !state.cartas.length) {
+  if (!state.commanders.length && !state.cards.length) {
     toast("Monte alguma coisa antes de procurar combos.");
     return;
   }
@@ -48,20 +48,20 @@ export async function searchCombos() {
   // As duas abas de combo podem pedir a mesma consulta quase junto (abrir uma
   // e a outra em seguida): a segunda desiste em vez de repetir a chamada. A
   // consulta é uma só e alimenta os dois lugares, que esperam juntos.
-  if (state.combosRodando) return;
-  state.combosRodando = true;
-  state.combosErro = null;
+  if (state.combosLoading) return;
+  state.combosLoading = true;
+  state.combosError = null;
   touch();
   try {
     state.combos = await api(`/decks/${state.id}/combos`, { method: "POST" });
-    state.combosAssinatura = deckSignature();
-    state.combosMexidos = 0;   // a resposta nova já sabe de tudo
+    state.combosSignature = deckSignature();
+    state.combosAdded = 0;   // a resposta nova já sabe de tudo
   } catch (e) {
     // "Não sei" nunca pode virar "não tem combo": são opostos que parecem
     // iguais numa lista vazia.
-    state.combosErro = (e as Error).message;
+    state.combosError = (e as Error).message;
   } finally {
-    state.combosRodando = false;
+    state.combosLoading = false;
     touch();
   }
 }
@@ -134,10 +134,10 @@ export function closeCombosWith(name: string) {
   data.no_deck = closed.concat(data.no_deck || []);
 
   if (closed.length) {
-    state.combosMexidos += closed.length;
+    state.combosAdded += closed.length;
     // A lista voltou a bater com o deck: o aviso de "procure de novo" seria
     // falso agora. O recado do `combosMexidos` toma o lugar dele.
-    state.combosAssinatura = deckSignature();
+    state.combosSignature = deckSignature();
   }
   return closed.length;
 }

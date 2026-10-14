@@ -28,7 +28,7 @@ const RAILS: [RailName, string, string][] = [
 function newDestinationCategory() {
   const name = askNewCategory();
   if (!name) return;
-  deckState.destinoCategoria = createCategory(name) || "";
+  deckState.destinationCategory = createCategory(name) || "";
   touch();
 }
 

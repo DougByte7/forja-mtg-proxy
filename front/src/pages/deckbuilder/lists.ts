@@ -70,9 +70,9 @@ export function boardView(entries: Entry[], board: Board) {
   // estados que escondem carta: os grupos recolhidos se abrem e as categorias
   // vazias somem. Nenhum dos dois é apagado — os recolhidos voltam a fechar
   // quando a busca sai do campo.
-  const searched = foldAccents(state.listaBusca[board] || "").trim();
+  const searched = foldAccents(state.listFilter[board] || "").trim();
   const matches = (e: Entry) => foldAccents(e.carta.nome).includes(searched);
-  const compare = LIST_ORDERS[state.listaOrdem] || LIST_ORDERS.cmc;
+  const compare = LIST_ORDERS[state.listOrder] || LIST_ORDERS.cmc;
 
   const groups: GroupView[] = [];
   for (const category of order) {
@@ -88,7 +88,7 @@ export function boardView(entries: Entry[], board: Board) {
     groups.push({
       category, items,
       countText: searched ? `${filtered} de ${n}` : String(n),
-      collapsed: !searched && state.gruposFechados.has(`${board}:${category}`),
+      collapsed: !searched && state.collapsedGroups.has(`${board}:${category}`),
       custom: isCustomCategory(category),
       outOfCount: OUT_OF_COUNT.has(category),
       // Sem subtotal no maybeboard: ele não entra na cotação, e um preço ao
@@ -102,7 +102,7 @@ export function boardView(entries: Entry[], board: Board) {
   // "este deck não tem carta nenhuma", e o susto é achar que o filtro apagou
   // o deck.
   const noMatch = searched && !groups.length
-    ? `Nenhuma carta com “${state.listaBusca[board].trim()}” ${board === "talvez" ? "no maybeboard" : "no deck"}.`
+    ? `Nenhuma carta com “${state.listFilter[board].trim()}” ${board === "talvez" ? "no maybeboard" : "no deck"}.`
     : "";
   return { groups, noMatch };
 }
@@ -130,8 +130,8 @@ export function rowProblem(entry: Entry, identity: string, board: Board) {
    devolve tudo aberto, de propósito. */
 export function toggleGroup(cat: string, board: Board) {
   const key = `${board}:${cat}`;
-  if (state.gruposFechados.has(key)) state.gruposFechados.delete(key);
-  else state.gruposFechados.add(key);
+  if (state.collapsedGroups.has(key)) state.collapsedGroups.delete(key);
+  else state.collapsedGroups.add(key);
   touch();
 }
 
@@ -140,11 +140,11 @@ export function toggleGroup(cat: string, board: Board) {
    lista de 100 que já está na memória. E a cotação, a curva e o resto não
    têm por que recalcular por causa de uma letra digitada: só redesenha. */
 export function filterList(board: Board, text: string) {
-  state.listaBusca[board] = text;
+  state.listFilter[board] = text;
   touch();
 }
 
 export function sortLists(order: string) {
-  state.listaOrdem = LIST_ORDERS[order as keyof typeof LIST_ORDERS] ? order : "cmc";
+  state.listOrder = LIST_ORDERS[order as keyof typeof LIST_ORDERS] ? order : "cmc";
   touch();
 }

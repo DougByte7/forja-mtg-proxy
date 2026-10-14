@@ -36,7 +36,7 @@ import { ManaCost, ManaText } from "./Mana";
 export function useTable() {
   void tableRevision.value;
   void deckRevision.value;
-  return state.mesa;
+  return state.table;
 }
 
 /* A arte de uma carta da mesa: a escolhida no deck DO DONO, e a padrão quando
@@ -44,18 +44,18 @@ export function useTable() {
    aparecer com a arte que o outro escolheu. A face é a que está pra cima
    (ver `toggleFace`). */
 function tableArt(c: TableCard) {
-  return faceImage(c.carta || { nome: "" }, c.verso ? "verso" : "frente", 0, playerArts(c.dono) as any);
+  return faceImage(c.card || { nome: "" }, c.backUp ? "verso" : "frente", 0, playerArts(c.owner) as any);
 }
 
 /* Cada selo diz a quantidade e o nome ("5: +1/+1"): marcador de Magic é
    lista aberta, e uma sigla de uma letra confunde "tempo" com "tesouro". */
 function CardCounters({ c }: { c: TableCard }) {
-  const names = Object.keys(c.marcas || {});
+  const names = Object.keys(c.counters || {});
   if (!names.length) return null;
   // Três cabem; a quarta viraria tarja sobre a arte. O `title` lista todas.
   return (
-    <span class="gf-marcas" title={names.map((n) => `${n}: ${c.marcas[n]}`).join(", ")}>
-      {names.slice(0, 3).map((n) => <span class="gf-marca-b">{`${c.marcas[n]}: ${n}`}</span>)}
+    <span class="gf-marcas" title={names.map((n) => `${n}: ${c.counters[n]}`).join(", ")}>
+      {names.slice(0, 3).map((n) => <span class="gf-marca-b">{`${c.counters[n]}: ${n}`}</span>)}
     </span>
   );
 }
@@ -64,40 +64,40 @@ function CardCounters({ c }: { c: TableCard }) {
    painel (ver `showDetail`), e as duas juntas mostrariam a mesma carta duas
    vezes. */
 function TableCardButton({ c, zone }: { c: TableCard; zone: Zone }) {
-  const card = c.carta || { nome: "" };
-  const art = c.virada ? "" : tableArt(c);
+  const card = c.card || { nome: "" };
+  const art = c.faceDown ? "" : tableArt(c);
   const cls = ["gf-carta"];
-  if (c.deitada) cls.push("deitada");
-  if (c.virada) cls.push("virada");
-  if (c.atacando) cls.push("atacando");
-  if (c.bloqueando) cls.push("bloqueando");
-  if (c.ficha) cls.push("ficha");
+  if (c.tapped) cls.push("deitada");
+  if (c.faceDown) cls.push("virada");
+  if (c.attacking) cls.push("atacando");
+  if (c.blocking) cls.push("bloqueando");
+  if (c.token) cls.push("ficha");
   // A carta que é peça de combo se anuncia SEM hover: o painel responde
   // "quais combos", mas ninguém passa o mouse numa carta que não deu sinal de
   // ter o que contar. Carta virada pra baixo não ganha selo — ela está
   // escondida, e o selo a entregaria.
-  const combos = c.virada ? 0 : comboCount(c);
+  const combos = c.faceDown ? 0 : comboCount(c);
   return (
     <button class={cls.join(" ")} data-gf-uid={c.uid} draggable title={card.nome || ""}
             style={art ? { backgroundImage: `url('${art}')` } : undefined}
             onClick={(e) => clickCard(c.uid, e.currentTarget)}>
       <CardCounters c={c} />
       {combos > 0 && <span class="gf-combo-selo" title={`Peça de ${combos} combo(s) do deck`}>{combos}</span>}
-      {c.atacando ? <span class="gf-combate" title="Atacando">⚔</span>
-        : c.bloqueando ? <span class="gf-combate" title={"Bloqueia " + cardName(cardByUid(c.bloqueando))}>🛡</span>
+      {c.attacking ? <span class="gf-combate" title="Atacando">⚔</span>
+        : c.blocking ? <span class="gf-combate" title={"Bloqueia " + cardName(cardByUid(c.blocking))}>🛡</span>
         : null}
       {/* Só a mão leva o nome: é onde a decisão acontece. Ficha inventada na
           hora não tem arte: o nome dentro do quadro é tudo o que ela tem. */}
-      {(zone === "mao" || (c.ficha && !art)) && (
-        <span class="gf-nome">{(card.nome || "") + (c.ficha && card.poder ? ` ${card.poder}/${card.resistencia}` : "")}</span>
+      {(zone === "mao" || (c.token && !art)) && (
+        <span class="gf-nome">{(card.nome || "") + (c.token && card.poder ? ` ${card.poder}/${card.resistencia}` : "")}</span>
       )}
       {/* Deitar e endireitar é o gesto que mais se repete na mesa, e o ícone
           faz no lugar, em um clique. É um `span` porque a carta já é o botão,
           e botão dentro de botão é HTML inválido: quem chega pelo teclado
           continua pelo menu, que é onde o item existe com nome. */}
       {zone === "campo" && (
-        <span class="gf-tap" data-gf-tap={c.uid} aria-hidden="true" title={c.deitada ? "Endireitar" : "Deitar"}
-              onClick={(e) => { e.stopPropagation(); tapFromIcon(c.uid); }}>{c.deitada ? "↺" : "↻"}</span>
+        <span class="gf-tap" data-gf-tap={c.uid} aria-hidden="true" title={c.tapped ? "Endireitar" : "Deitar"}
+              onClick={(e) => { e.stopPropagation(); tapFromIcon(c.uid); }}>{c.tapped ? "↺" : "↻"}</span>
       )}
     </button>
   );
@@ -153,8 +153,8 @@ function Battlefield({ p, ij }: { p: Player; ij: number }) {
 function Piles({ lands }: { lands: TableCard[] }) {
   const piles = new Map<string, TableCard[]>();
   for (const c of lands) {
-    const key = [cardName(c), c.deitada, c.virada, c.verso, c.ficha, c.atacando, c.bloqueando,
-                 JSON.stringify(c.marcas)].join("|");
+    const key = [cardName(c), c.tapped, c.faceDown, c.backUp, c.token, c.attacking, c.blocking,
+                 JSON.stringify(c.counters)].join("|");
     if (!piles.has(key)) piles.set(key, []);
     piles.get(key)!.push(c);
   }
@@ -189,7 +189,7 @@ function Command({ p, ij }: { p: Player; ij: number }) {
   const title = (
     <>
       <Count name="Comando" n={p.comando.length} />
-      {p.impostoPago > 0 && <> <span class="gf-imposto" title="Custo a mais na próxima vez">+{p.impostoPago * 2}</span></>}
+      {p.taxPaid > 0 && <> <span class="gf-imposto" title="Custo a mais na próxima vez">+{p.taxPaid * 2}</span></>}
     </>
   );
   return (
@@ -209,7 +209,7 @@ function Pile({ p, ij, zone, title, label, action, onOpen }: {
 }) {
   const list = p[zone];
   const top = zone === "baralho" ? null : list[0];
-  const art = top && !top.virada ? tableArt(top) : "";
+  const art = top && !top.faceDown ? tableArt(top) : "";
   const cls = ["gf-pilha"];
   if (!list.length) cls.push("vazia");
   else if (!art) cls.push("verso");
@@ -230,17 +230,17 @@ function HandSummary({ hand }: { hand: TableCard[] }) {
   const r = handSummary(hand);
   // `title` em cada cor porque bolinha colorida sozinha não é informação
   // acessível — a mesma regra dos pips do resto da página.
-  const pips = COLORS.filter((c) => r.cores[c]);
+  const pips = COLORS.filter((c) => r.colors[c]);
   return (
     <span class="gf-resumo">
-      <span><b>{r.terrenos}</b> terreno(s)</span>
-      {r.feiticos > 0 && (
+      <span><b>{r.lands}</b> terreno(s)</span>
+      {r.spells > 0 && (
         <span title="Média de custo do que não é terreno">
-          <b>{r.custoMedio.toFixed(1).replace(".", ",")}</b> de custo médio</span>
+          <b>{r.averageCost.toFixed(1).replace(".", ",")}</b> de custo médio</span>
       )}
       {pips.length > 0 && (
         <span class="gf-cores" title="Símbolos de cor que a mão pede">
-          {pips.map((c) => <span class="gf-cor" title={COLOR_NAMES[c]}><span class={"pip " + c} />{r.cores[c]}</span>)}
+          {pips.map((c) => <span class="gf-cor" title={COLOR_NAMES[c]}><span class={"pip " + c} />{r.colors[c]}</span>)}
         </span>
       )}
     </span>
@@ -250,11 +250,11 @@ function HandSummary({ hand }: { hand: TableCard[] }) {
 function MulliganNote({ p, ij }: { p: Player; ij: number }) {
   const bottom = bottomCountOnKeep(ij);
   // A compra do turno só vem pra quem está na vez (ver `keepHand`).
-  const onTurn = state.mesa!.ativo === ij;
+  const onTurn = state.table!.active === ij;
   const later = onTurn ? "" : " A compra do turno vem quando chegar a vez.";
-  if (p.fase === "fundo") {
+  if (p.phase === "fundo") {
     return (
-      <p class="nota">Escolha <b>{p.aFundo}</b> carta(s) pra mandar pro fundo do baralho — clique nelas, na
+      <p class="nota">Escolha <b>{p.toBottom}</b> carta(s) pra mandar pro fundo do baralho — clique nelas, na
         ordem que quiser.{onTurn ? " Depois delas vem a compra do turno." : later}</p>
     );
   }
@@ -274,10 +274,10 @@ function MulliganNote({ p, ij }: { p: Player; ij: number }) {
 function Hand({ p, ij }: { p: Player; ij: number }) {
   return (
     <Area title={<><Count name="Mão" n={p.mao.length} /><HandSummary hand={p.mao} /></>} zone="mao" player={ij} cls="gf-area-mao">
-      {p.fase !== "jogo" && (
+      {p.phase !== "jogo" && (
         <div class="gf-mulligan">
           <MulliganNote p={p} ij={ij} />
-          {p.fase !== "fundo" && (
+          {p.phase !== "fundo" && (
             <div class="gf-acoes">
               <button class="btn ouro" data-gf-acao={`manter:${ij}`} onClick={() => keep(ij)}>Manter esta mão</button>
               <button class="btn" data-gf-acao={`mulligan:${ij}`} onClick={() => mulligan(ij)}>Mulligan</button>
@@ -304,7 +304,7 @@ function Zones({ p, ij, m, mirrored }: { p: Player; ij: number; m: Table; mirror
   const hand = [
     // A tecla D compra pra quem está na vez: é nesse baralho que ela aparece.
     <Pile key="baralho" p={p} ij={ij} zone="baralho" label="Comprar ou buscar no deck" action={`deck:${ij}`}
-          title={<><Count name="Deck" n={p.baralho.length} />{m.ativo === ij && <> <kbd title="Comprar">D</kbd></>}</>}
+          title={<><Count name="Deck" n={p.baralho.length} />{m.active === ij && <> <kbd title="Comprar">D</kbd></>}</>}
           onOpen={(anchor) => openTableMenu({ kind: "deck", player: ij }, anchor)} />,
     <Hand key="mao" p={p} ij={ij} />,
     <Pile key="cemiterio" p={p} ij={ij} zone="cemiterio" title={<Count name="Cemitério" n={p.cemiterio.length} />}
@@ -324,14 +324,14 @@ function Step({ label, text, onStep }: { label: string; text: string; onStep: (t
 /* Dano de comandante: só existe com dois decks na mesa. Sozinho, ele seria uma
    linha pra anotar o dano do próprio comandante em si mesmo. */
 function CommanderDamage({ p, ij, m }: { p: Player; ij: number; m: Table }) {
-  if (m.jogadores.length < 2) return null;
+  if (m.players.length < 2) return null;
   return (
     <>
-      {m.jogadores.map((other, io) => {
+      {m.players.map((other, io) => {
         if (io === ij) return null;
-        const n = p.danoCmd[io] || 0;
+        const n = p.commanderDamage[io] || 0;
         return (
-          <span class={"gf-dano" + (n >= 21 ? " letal" : "")} title={`Dano do comandante de ${other.nome} — 21 mata`}>
+          <span class={"gf-dano" + (n >= 21 ? " letal" : "")} title={`Dano do comandante de ${other.name} — 21 mata`}>
             Cmd <Step label="Menos 1 de dano" text="−" onStep={(t) => changeCommanderDamage(ij, io, -t)} />
             <b>{n}</b>
             <Step label="Mais 1 de dano" text="+" onStep={(t) => changeCommanderDamage(ij, io, t)} />
@@ -346,12 +346,12 @@ function CommanderDamage({ p, ij, m }: { p: Player; ij: number; m: Table }) {
    quantos deitados. Ver o cabeçalho de `goldfish.ts`. Os três ficam sempre,
    mesmo em zero, pra barra não mudar de largura a cada terreno. */
 function BarLands({ p }: { p: Player }) {
-  const lands = p.campo.filter((c) => isLand(c.carta));
-  const up = lands.filter((c) => !c.deitada).length;
+  const lands = p.campo.filter((c) => isLand(c.card));
+  const up = lands.filter((c) => !c.tapped).length;
   const tapped = lands.length - up;
   return (
     <span class="gf-fatos-j">Terrenos <b>{up}</b> em pé · <b>{tapped}</b> {tapped === 1 ? "deitado" : "deitados"}{" "}
-      <span title="Terrenos baixados neste turno">· Baixados <b>{p.terrenosBaixados}</b></span></span>
+      <span title="Terrenos baixados neste turno">· Baixados <b>{p.landsThisTurn}</b></span></span>
   );
 }
 
@@ -361,19 +361,19 @@ function BarLands({ p }: { p: Player }) {
 function Bar({ p, ij, m }: { p: Player; ij: number; m: Table }) {
   return (
     <div class="gf-barra">
-      <b class="gf-nome-j" title={p.nome}>{p.nome}</b>
-      {m.jogadores.length > 1 && m.ativo === ij && <span class="gf-vez">sua vez</span>}
+      <b class="gf-nome-j" title={p.name}>{p.name}</b>
+      {m.players.length > 1 && m.active === ij && <span class="gf-vez">sua vez</span>}
       <span class="gf-vida">Vida{" "}
         <Step label="Menos 1 de vida" text="−" onStep={(t) => changeLife(ij, -t)} />
-        <b>{p.vida}</b>
+        <b>{p.life}</b>
         <Step label="Mais 1 de vida" text="+" onStep={(t) => changeLife(ij, t)} />
       </span>
       <CommanderDamage p={p} ij={ij} m={m} />
-      {Object.keys(p.marcas).map((name) => (
+      {Object.keys(p.counters).map((name) => (
         <span class="gf-marca">
           {name}
           <button class="gf-passo" aria-label={`Menos 1 de ${name}`} onClick={() => changePlayerCounter(ij, name, -1)}>−</button>
-          <b>{p.marcas[name]}</b>
+          <b>{p.counters[name]}</b>
           <button class="gf-passo" aria-label={`Mais 1 de ${name}`} onClick={() => changePlayerCounter(ij, name, 1)}>+</button>
         </span>
       ))}
@@ -391,14 +391,14 @@ function Bar({ p, ij, m }: { p: Player; ij: number; m: Table }) {
 /* De cima pra baixo, quem está embaixo: campo de batalha, as duas linhas de
    zonas e a barra. Quem está em cima tem a mesma ordem de baixo pra cima. */
 function PlayerSection({ ij, m, mirrored }: { ij: number; m: Table; mirrored: boolean }) {
-  const p = m.jogadores[ij];
+  const p = m.players[ij];
   const parts = [
     <Battlefield key="campo" p={p} ij={ij} />,
     <Zones key="zonas" p={p} ij={ij} m={m} mirrored={mirrored} />,
     <Bar key="barra" p={p} ij={ij} m={m} />,
   ];
   if (mirrored) parts.reverse();
-  const active = m.jogadores.length > 1 && m.ativo === ij;
+  const active = m.players.length > 1 && m.active === ij;
   return (
     <section class={"gf-jogador" + (active ? " ativo" : "") + (mirrored ? " espelhado" : "")} data-gf-j={ij}>
       {parts}
@@ -416,9 +416,9 @@ function TableView() {
           sideboard e o maybeboard ficam de fora, como em toda análise desta tela.</div>
       ) : (
         // O segundo jogador vem primeiro: ele é o lado de cima da mesa espelhada.
-        <div class={"gf-jogadores" + (m.jogadores.length > 1 ? " dois" : "")}>
-          {(m.jogadores.length > 1 ? [1, 0] : [0]).map((ij) => (
-            <PlayerSection key={ij} ij={ij} m={m} mirrored={m.jogadores.length > 1 && ij === 1} />
+        <div class={"gf-jogadores" + (m.players.length > 1 ? " dois" : "")}>
+          {(m.players.length > 1 ? [1, 0] : [0]).map((ij) => (
+            <PlayerSection key={ij} ij={ij} m={m} mirrored={m.players.length > 1 && ij === 1} />
           ))}
         </div>
       )}
@@ -455,14 +455,14 @@ function DetailFace({ f, withName }: { f: Face; withName: boolean }) {
    acontecendo — carta em pé e sem marcador não ganha linha nenhuma. */
 function CardStatus({ c }: { c: TableCard }) {
   const items: string[] = [];
-  if (c.cmd) items.push("Comandante");
-  if (c.ficha) items.push("Ficha");
-  if (c.virada) items.push("Virada pra baixo");
-  if (c.verso) items.push("Mostrando o verso");
-  if (c.deitada) items.push("Deitada");
-  if (c.atacando) items.push("Atacando");
-  if (c.bloqueando) items.push("Bloqueia " + cardName(cardByUid(c.bloqueando)));
-  for (const name of Object.keys(c.marcas || {})) items.push(`${name}: ${c.marcas[name]}`);
+  if (c.commander) items.push("Comandante");
+  if (c.token) items.push("Ficha");
+  if (c.faceDown) items.push("Virada pra baixo");
+  if (c.backUp) items.push("Mostrando o verso");
+  if (c.tapped) items.push("Deitada");
+  if (c.attacking) items.push("Atacando");
+  if (c.blocking) items.push("Bloqueia " + cardName(cardByUid(c.blocking)));
+  for (const name of Object.keys(c.counters || {})) items.push(`${name}: ${c.counters[name]}`);
   if (!items.length) return null;
   return <div class="gf-detalhe-estado">{items.map((t) => <span>{t}</span>)}</div>;
 }
@@ -485,7 +485,7 @@ function CardCombos({ c }: { c: TableCard }) {
     <div class="gf-combos">
       <div class="gf-combos-titulo">Combos <b>{found.length}</b></div>
       {/* A lista fecha com o deck de quando a busca rodou, não com o de agora. */}
-      {state.combosAssinatura !== deckSignature() && <div class="gf-combo-velho">O deck mudou desde a busca de combos.</div>}
+      {state.combosSignature !== deckSignature() && <div class="gf-combo-velho">O deck mudou desde a busca de combos.</div>}
       {found.map(({ combo, pecas }) => {
         const c2 = combo as any;
         const needs: ComponentChildren[] = [];
@@ -546,7 +546,7 @@ function CardDetail() {
   };
   useLayoutEffect(measure);
   const art = c ? tableArt(c) : "";
-  const card = c?.carta || { nome: "" };
+  const card = c?.card || { nome: "" };
   const faces: Face[] = d?.data?.faces?.length ? d.data.faces : [{
     nome: card.nome, mana_cost: card.mana_cost, tipo: card.tipo, texto: card.texto as string,
     poder: (card.poder as string) || null, resistencia: (card.resistencia as string) || null,
@@ -586,8 +586,8 @@ function CombosNote({ m }: { m: Table | null }) {
   // As duas ressalvas são sobre o que a marcação NÃO cobre, e nenhuma delas
   // dá pra deduzir olhando a mesa.
   const caveats: string[] = [];
-  if (state.combosAssinatura !== deckSignature()) caveats.push("o deck mudou desde a busca");
-  if (m.jogadores.length > 1) caveats.push("o segundo deck não foi perguntado");
+  if (state.combosSignature !== deckSignature()) caveats.push("o deck mudou desde a busca");
+  if (m.players.length > 1) caveats.push("o segundo deck não foi perguntado");
   return (
     <div class="gf-nota-combos" id="gf-nota-combos">
       {n ? <><b>{n}</b> combo(s) do deck — as peças estão marcadas nas cartas.</>
@@ -605,11 +605,11 @@ function Log({ m }: { m: Table | null }) {
     <div class="gf-log" id="gf-log">
       {m && m.log.length > 0 && (
         <>
-          <button class="gf-log-cabeca" aria-expanded={m.logAberto} onClick={toggleLog}>
-            {m.logAberto ? "▾" : "▸"} Log da partida <b>{m.log.length}</b></button>
-          {m.logAberto && (
+          <button class="gf-log-cabeca" aria-expanded={m.logOpen} onClick={toggleLog}>
+            {m.logOpen ? "▾" : "▸"} Log da partida <b>{m.log.length}</b></button>
+          {m.logOpen && (
             <ol class="gf-log-lista">
-              {m.log.slice().reverse().map((l) => <li><span class="gf-log-t">T{l.turno}</span> {l.texto}</li>)}
+              {m.log.slice().reverse().map((l) => <li><span class="gf-log-t">T{l.turn}</span> {l.text}</li>)}
             </ol>
           )}
         </>
@@ -619,10 +619,10 @@ function Log({ m }: { m: Table | null }) {
 }
 
 function turnTitle(m: Table) {
-  const p = m.jogadores[m.ativo];
-  const whose = m.jogadores.length > 1 ? ` · vez de ${p.nome}` : "";
-  if (p.fase !== "jogo" && m.turno === 1) return (p.mulligans ? `Mulligan ${p.mulligans}` : "Mão de abertura") + whose;
-  return `Turno ${m.turno}${whose}`;
+  const p = m.players[m.active];
+  const whose = m.players.length > 1 ? ` · vez de ${p.name}` : "";
+  if (p.phase !== "jogo" && m.turn === 1) return (p.mulligans ? `Mulligan ${p.mulligans}` : "Mão de abertura") + whose;
+  return `Turno ${m.turn}${whose}`;
 }
 
 /* ------------------------------------------------------------ o painel */
@@ -630,8 +630,8 @@ function turnTitle(m: Table) {
 export function GoldfishPanel() {
   const m = useTable();
   useEffect(bindTableDocument, []);
-  const two = !!m && m.jogadores.length > 1;
-  const inCombat = !!m && (attackers().length > 0 || m.jogadores.some((p) => p.campo.some((c) => c.bloqueando)));
+  const two = !!m && m.players.length > 1;
+  const inCombat = !!m && (attackers().length > 0 || m.players.some((p) => p.campo.some((c) => c.blocking)));
   return (
     <>
       <div class="gf-topo">
@@ -653,7 +653,7 @@ export function GoldfishPanel() {
         <button class="btn" id="gf-encerrar" disabled={!m} onClick={() => openTableModal({ kind: "summary" })}
                 title="Resumo da partida: comandante, curva realizada e o que não foi puxado">Como foi</button>
         <button class="btn" id="gf-desfazer" title="Desfaz a última jogada (Ctrl+Z)"
-                disabled={!state.mesaDesfazer.length} onClick={undoTable}>Desfazer</button>
+                disabled={!state.tableUndo.length} onClick={undoTable}>Desfazer</button>
         <button class="btn" id="gf-tela" onClick={() => setFullscreen(!fullscreen.value)}>
           {fullscreen.value ? "Sair da tela cheia" : "Tela cheia"}</button>
         <button class="btn ouro" id="gf-embaralhar" onClick={shuffleUp}>Embaralhar</button>

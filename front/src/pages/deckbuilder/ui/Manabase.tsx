@@ -225,7 +225,7 @@ function Fixing({ m }: { m: ManabaseResponse }) {
   const cycles = m.fixadores;
   // O ciclo aberto pode sumir da resposta — o comandante mudou e a
   // identidade com ele. Aí a tela volta pra visão geral.
-  const open = cycles.find((c) => c.id === state.mbCategoria);
+  const open = cycles.find((c) => c.id === state.manabaseCycle);
   const missing = new Set(m.cores.filter((c) => c.faltam > 0).map((c) => c.cor));
   return (
     <section class="mb-fixacao">
@@ -257,14 +257,14 @@ export function ManabasePanel() {
   const state = useDeck();
   const m: ManabaseResponse | null = state.manabase;
   // A conta está na tela: a explicação do que o painel faz vira ruído acima dela.
-  const showing = !!m && !state.manabaseErro && !state.manabaseRodando;
+  const showing = !!m && !state.manabaseError && !state.manabaseLoading;
   return (
     <>
       <p class="nota" id="mb-nota" hidden={showing}>Quantos terrenos a curva pede, quantas fontes de cada cor o
         deck tem e quantas precisaria.</p>
       <div id="mb-resultado" style={{ marginTop: "12px" }}>
-        {state.manabaseErro ? <div class="aponta erro"><span>{state.manabaseErro}</span></div>
-          : state.manabaseRodando ? <div class="nota">Calculando…</div>
+        {state.manabaseError ? <div class="aponta erro"><span>{state.manabaseError}</span></div>
+          : state.manabaseLoading ? <div class="nota">Calculando…</div>
           : m && (
             <>
               <Summary m={m} />

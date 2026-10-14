@@ -152,7 +152,7 @@ function CardGroup({ group: g, identity, board }: { group: GroupView; identity: 
 
 export function BoardList({ board }: { board: Board }) {
   const state = useDeck();
-  const entries = board === "talvez" ? state.maybe : state.cartas;
+  const entries = board === "talvez" ? state.maybe : state.cards;
   // O maybeboard vazio não desenha nada: o aviso de vazio mora fora da lista.
   if (board === "talvez" && !entries.length) return null;
   const identity = deckIdentity();
@@ -165,7 +165,7 @@ export function BoardList({ board }: { board: Board }) {
    comandante só faz sentido quando o primeiro tem parceria. */
 export function CommanderBox() {
   const state = useDeck();
-  const commanders = state.comandantes;
+  const commanders = state.commanders;
   return (
     <>
       {commanders.map((c, i) => (

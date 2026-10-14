@@ -30,7 +30,7 @@ export function entryPrice(entry: Entry) {
 
 let quoteIndex: Map<string, UnitPrice> | null = null;   // nome achatado -> preço da fonte principal
 /* Qual objeto de cotação gerou o índice acima. Começa numa sentinela, e não em
-   `null`, de propósito: `state.cotacao` TAMBÉM é null antes da primeira
+   `null`, de propósito: `state.quote` TAMBÉM é null antes da primeira
    cotação, e aí a comparação de memoização daria certo no primeiro uso e
    devolveria o índice ainda não construído. */
 const NO_QUOTE = {};
@@ -47,12 +47,12 @@ function nameKey(name: string | undefined) {
 /* Refeito só quando a cotação troca de objeto, e não a cada linha desenhada:
    a lista chama isto uma vez por carta, e um deck tem 100. */
 function indexOfQuote() {
-  if (quoteIndexOf === state.cotacao) return quoteIndex!;
-  quoteIndexOf = state.cotacao;
+  if (quoteIndexOf === state.quote) return quoteIndex!;
+  quoteIndexOf = state.quote;
   quoteIndex = new Map();
-  const source = (state.cotacao?.fontes || [])[0];
+  const source = (state.quote?.fontes || [])[0];
   if (source) {
-    for (const line of state.cotacao.linhas || []) {
+    for (const line of state.quote.linhas || []) {
       const p = (line.precos || {})[source.id];
       if (!p || p.erro || !p.preco_unitario) continue;
       quoteIndex.set(nameKey(line.nome), {
@@ -182,7 +182,7 @@ export function sortablePrice(entry: Entry) {
    cotação dão números diferentes pro mesmo deck. */
 export function localBudget() {
   let total = 0, semPreco = 0, fora = 0, cartas = 0;
-  for (const entry of state.cartas) {
+  for (const entry of state.cards) {
     const c = entry.carta;
     if (!c) continue;
     if (c.basico) { fora += entry.quantidade; continue; }
@@ -190,7 +190,7 @@ export function localBudget() {
     if (!c.preco_usd) { semPreco += entry.quantidade; continue; }
     total += entryPrice(entry);
   }
-  fora += state.comandantes.length;
+  fora += state.commanders.length;
   return { total, semPreco, fora, cartas };
 }
 
@@ -212,28 +212,28 @@ export function quoteSignature() {
   // O que a cotação cobre (`decks.para_cotacao`): as 99 e o sideboard, sem
   // comandante e sem básico. O maybeboard fica fora — é a razão de ele
   // existir.
-  return JSON.stringify(state.cartas
+  return JSON.stringify(state.cards
     .filter((e) => e.carta && !e.carta.basico)
     .map((e) => [e.carta.nome, e.quantidade]).sort());
 }
 
 export function scheduleQuote() {
   clearTimeout(scheduled);
-  if (!state.id || state.cotacaoRodando) return;
-  if (quoteSignature() === state.cotacaoAssinatura) return;
+  if (!state.id || state.quoteLoading) return;
+  if (quoteSignature() === state.quotedSignature) return;
   if (!localBudget().cartas) return;   // só básico e comandante: nada a cotar
   scheduled = setTimeout(runQuote, QUOTE_DELAY);
 }
 
 export async function runQuote() {
-  if (state.cotacaoRodando) return;
+  if (state.quoteLoading) return;
   if (!state.id) await saveNow();
   if (!state.id) return;
   // A assinatura é gravada ANTES da resposta: se o deck mudar durante a
   // cotação, `scheduleQuote` vê a diferença e marca outra pra depois desta.
-  state.cotacaoAssinatura = quoteSignature();
-  state.cotacaoRodando = true;
-  state.cotacaoErro = null;
+  state.quotedSignature = quoteSignature();
+  state.quoteLoading = true;
+  state.quoteError = null;
   touch();
   try {
     const start = await api(`/decks/${state.id}/cotacao`, { method: "POST" });
@@ -250,9 +250,9 @@ export async function runQuote() {
    base pelo medido. */
 function finishQuote(result: unknown, error: string | null) {
   clearTimeout(polling);
-  state.cotacaoRodando = false;
-  state.cotacaoErro = error || null;
-  if (result) state.cotacao = result;
+  state.quoteLoading = false;
+  state.quoteError = error || null;
+  if (result) state.quote = result;
   touch();
   // O deck pode ter mudado enquanto o servidor cotava: se mudou, esta
   // resposta já nasce velha e a próxima é marcada agora.

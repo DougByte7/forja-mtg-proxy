@@ -64,7 +64,7 @@ export function DefaultArtsButton() {
   useDeck();
   return (
     <button class="btn" id="btn-artes-padrao" type="button" hidden={defaultsShortcutHidden()}
-            disabled={artState.aplicandoPadrao} onClick={applyDefaultsToMissing}>
+            disabled={artState.applyingDefaults} onClick={applyDefaultsToMissing}>
       Usar a arte padrão nas que faltam
     </button>
   );

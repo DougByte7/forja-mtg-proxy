@@ -42,12 +42,13 @@
    ela pro cemitério DELE, que é o que acontece na mesa — e é o que faz a lista
    de zonas continuar fechando por jogador.
 
-   NADA DISSO É SALVO. `deckBody` não sabe que `state.mesa` existe: uma mão
+   NADA DISSO É SALVO. `deckBody` não sabe que `state.table` existe: uma mão
    de goldfish gravada no deck é uma mão que volta três semanas depois, em outra
    máquina, no meio de uma edição.
 
-   Os campos da mesa (`jogadores`, `baralho`, `mao`…) ainda têm os nomes que os
-   módulos de desenho da mesa leem; mudam junto com eles.
+   As zonas (`baralho`, `mao`, `campo`…) continuam com os nomes em português:
+   elas são também as classes do CSS (`gf-baralho`, `z-campo`) e os valores
+   de `data-gf-solta`, e o vocabulário da tela é um só.
    ========================================================================= */
 import { countedCards } from "./deck";
 import { COLORS, OUT_OF_COUNT, state } from "./state";
@@ -57,52 +58,52 @@ import type { Card, Entry } from "./types";
 
 export type Zone = "baralho" | "mao" | "campo" | "cemiterio" | "exilio" | "comando";
 
-/** Uma cópia na mesa. A carta em si (`carta`) volta do registro no desfazer. */
+/** Uma cópia na mesa. A carta em si (`card`) volta do registro no desfazer. */
 export interface TableCard {
   uid: number;
-  dono: number;
-  carta: Card | null;
-  virada: boolean;
-  deitada: boolean;
-  verso: boolean;
-  marcas: Record<string, number>;
-  atacando: boolean;
-  bloqueando: number | null;
-  ficha: boolean;
-  cmd: boolean;
+  owner: number;
+  card: Card | null;
+  faceDown: boolean;
+  tapped: boolean;
+  backUp: boolean;
+  counters: Record<string, number>;
+  attacking: boolean;
+  blocking: number | null;
+  token: boolean;
+  commander: boolean;
 }
 
 export interface Player extends Record<Zone, TableCard[]> {
-  nome: string;
-  indice: number;
+  name: string;
+  index: number;
   deck: string | null;
-  vida: number;
-  marcas: Record<string, number>;
-  danoCmd: number[];
+  life: number;
+  counters: Record<string, number>;
+  commanderDamage: number[];
   mulligans: number;
-  aFundo: number;
-  fase: "mulligan" | "fundo" | "jogo";
-  terrenosBaixados: number;
-  impostoPago: number;
-  turnoDoComandante: number | null;
-  jogadas: { nome: string; cmc: number; terreno: boolean; turno: number }[];
+  toBottom: number;
+  phase: "mulligan" | "fundo" | "jogo";
+  landsThisTurn: number;
+  taxPaid: number;
+  commanderTurn: number | null;
+  plays: { name: string; cmc: number; land: boolean; turn: number }[];
 }
 
 export interface Table {
-  jogadores: Player[];
-  ativo: number;
-  turno: number;
-  log: { turno: number; texto: string }[];
-  logAberto: boolean;
+  players: Player[];
+  active: number;
+  turn: number;
+  log: { turn: number; text: string }[];
+  logOpen: boolean;
 }
 
 /** Um deck pra mesa: o da tela, ou um que veio de `GET /decks/{id}`. */
 export interface TableDeck {
   id?: string | null;
-  escolhas?: Record<string, unknown>;
-  nome: string;
-  comandantes: Card[];
-  entradas: { carta: Card | null; quantidade: number; categoria?: string }[];
+  choices?: Record<string, unknown>;
+  name: string;
+  commanders: Card[];
+  entries: { carta: Card | null; quantidade: number; categoria?: string }[];
 }
 
 /** Um combo como o Commander Spellbook o devolve (ver `combos.js`). */
@@ -131,7 +132,7 @@ export const ZONE_NAMES: Record<Zone, string> = {
 export const CARD_COUNTERS = ["+1/+1", "-1/-1", "lealdade"];
 export const PLAYER_COUNTERS = ["veneno", "energia", "experiência"];
 
-const table = () => state.mesa!;
+const table = () => state.table!;
 
 /* Cada carta na mesa é uma CÓPIA com identidade própria (`uid`), e não a
    entrada do deck. Três Florestas são três objetos: uma pode estar deitada e as
@@ -149,8 +150,8 @@ const cardsByUid = new Map<number, Card>();
 
 function makeCopy(card: Card, owner: number, extra?: Partial<TableCard>): TableCard {
   const c: TableCard = {
-    uid: nextUid++, dono: owner, carta: card, virada: false, deitada: false, verso: false,
-    marcas: {}, atacando: false, bloqueando: null, ficha: false, cmd: false,
+    uid: nextUid++, owner: owner, card: card, faceDown: false, tapped: false, backUp: false,
+    counters: {}, attacking: false, blocking: null, token: false, commander: false,
     ...extra,
   };
   cardsByUid.set(c.uid, card);
@@ -169,12 +170,12 @@ const artsByDeck = new Map<string, Record<string, unknown>>();
 
 /** `null` é "use as do deck da tela" (ver `faceImage`). */
 export function playerArts(playerIndex: number) {
-  const player = state.mesa?.jogadores[playerIndex];
+  const player = state.table?.players[playerIndex];
   return player && player.deck ? (artsByDeck.get(player.deck) || {}) : null;
 }
 
 export function cardName(c: TableCard | null | undefined) {
-  return c?.carta?.nome || "carta";
+  return c?.card?.nome || "carta";
 }
 
 /* ------------------------------------------------------------- o baralho */
@@ -186,9 +187,9 @@ export function cardName(c: TableCard | null | undefined) {
    tela sobre o que é o deck. */
 export function screenDeck(): TableDeck {
   return {
-    nome: state.nome || "Este deck",
-    comandantes: state.comandantes.filter(Boolean),
-    entradas: countedCards(),
+    name: state.name || "Este deck",
+    commanders: state.commanders.filter(Boolean),
+    entries: countedCards(),
   };
 }
 
@@ -202,18 +203,18 @@ export function deckFromResponse(response: { deck?: any }, id?: string, choices?
   const deck = response.deck || {};
   return {
     id: id || null,
-    escolhas: choices || {},
-    nome: deck.nome || "Segundo deck",
-    comandantes: (deck.comandantes_completos || []).filter(Boolean),
-    entradas: ((deck.cartas_completas || []) as Entry[]).filter(
+    choices: choices || {},
+    name: deck.nome || "Segundo deck",
+    commanders: (deck.comandantes_completos || []).filter(Boolean),
+    entries: ((deck.cartas_completas || []) as Entry[]).filter(
       (e) => e.carta && !OUT_OF_COUNT.has(e.categoria || "")),
   };
 }
 
 function libraryOf(deck: TableDeck, owner: number) {
-  const commanders = new Set(deck.comandantes.map((c) => (c.nome || "").toLowerCase()));
+  const commanders = new Set(deck.commanders.map((c) => (c.nome || "").toLowerCase()));
   const out: TableCard[] = [];
-  for (const entry of deck.entradas) {
+  for (const entry of deck.entries) {
     const card = entry.carta;
     if (!card) continue;                       // carta que a base não conhece
     if (commanders.has((card.nome || "").toLowerCase())) continue;
@@ -235,28 +236,28 @@ function shuffle<T>(items: T[]) {
 }
 
 export function shuffleLibrary(playerIndex: number) {
-  const player = table().jogadores[playerIndex];
+  const player = table().players[playerIndex];
   shuffle(player.baralho);
-  log(`${player.nome}: baralho reembaralhado`);
+  log(`${player.name}: baralho reembaralhado`);
 }
 
 /* --------------------------------------------------------------- a mesa */
 
 function newPlayer(deck: TableDeck, index: number): Player {
-  if (deck.id) artsByDeck.set(deck.id, deck.escolhas || {});
+  if (deck.id) artsByDeck.set(deck.id, deck.choices || {});
   return {
-    nome: deck.nome, indice: index,
+    name: deck.name, index: index,
     deck: deck.id || null,     // de onde vêm as artes (ver `playerArts`)
     baralho: shuffle(libraryOf(deck, index)),
     mao: [], campo: [], cemiterio: [], exilio: [],
-    comando: deck.comandantes.map((c) => makeCopy(c, index, { cmd: true })),
-    vida: STARTING_LIFE,
-    marcas: {},        // veneno, energia, experiência e o que mais for criado
-    danoCmd: [0, 0],   // dano de comandante recebido, por jogador de origem
-    mulligans: 0, aFundo: 0, fase: "mulligan",
-    terrenosBaixados: 0, impostoPago: 0,
-    turnoDoComandante: null,   // pro resumo do fim
-    jogadas: [],               // o que desceu pro campo, pra curva realizada
+    comando: deck.commanders.map((c) => makeCopy(c, index, { commander: true })),
+    life: STARTING_LIFE,
+    counters: {},        // veneno, energia, experiência e o que mais for criado
+    commanderDamage: [0, 0],   // dano de comandante recebido, por jogador de origem
+    mulligans: 0, toBottom: 0, phase: "mulligan",
+    landsThisTurn: 0, taxPaid: 0,
+    commanderTurn: null,   // pro resumo do fim
+    plays: [],               // o que desceu pro campo, pra curva realizada
   };
 }
 
@@ -264,15 +265,15 @@ export function setUpTable(decks: TableDeck[]) {
   nextUid = 1;
   cardsByUid.clear();
   artsByDeck.clear();
-  state.mesa = {
-    jogadores: decks.map((d, i) => newPlayer(d, i)),
-    ativo: 0, turno: 1, log: [], logAberto: false,
+  state.table = {
+    players: decks.map((d, i) => newPlayer(d, i)),
+    active: 0, turn: 1, log: [], logOpen: false,
   };
-  state.mesaDesfazer = [];
+  state.tableUndo = [];
   lastGesture = null;
-  for (const player of table().jogadores) drawFor(player, OPENING_HAND);
+  for (const player of table().players) drawFor(player, OPENING_HAND);
   log(decks.length > 1
-    ? `Mesa embaralhada: ${decks.map((d) => d.nome).join(" × ")}`
+    ? `Mesa embaralhada: ${decks.map((d) => d.name).join(" × ")}`
     : "Deck embaralhado");
 }
 
@@ -280,24 +281,24 @@ export function setUpTable(decks: TableDeck[]) {
    quem pede um oponente no meio de um goldfish quer ver a mão que está na tela
    contra alguma coisa, não jogar a mão fora. */
 export function addSecondDeck(deck: TableDeck) {
-  const t = state.mesa;
-  if (!t || t.jogadores.length > 1) return;
-  const player = newPlayer(deck, t.jogadores.length);
-  t.jogadores.push(player);
+  const t = state.table;
+  if (!t || t.players.length > 1) return;
+  const player = newPlayer(deck, t.players.length);
+  t.players.push(player);
   drawFor(player, OPENING_HAND);
-  log(`${player.nome} entrou na mesa`);
+  log(`${player.name} entrou na mesa`);
 }
 
 export function removeSecondDeck() {
-  const t = state.mesa;
-  if (!t || t.jogadores.length < 2) return;
-  const gone = t.jogadores.pop()!;
-  t.ativo = 0;
-  log(`${gone.nome} saiu da mesa`);
+  const t = state.table;
+  if (!t || t.players.length < 2) return;
+  const gone = t.players.pop()!;
+  t.active = 0;
+  log(`${gone.name} saiu da mesa`);
 }
 
 function activePlayer() {
-  return table().jogadores[table().ativo];
+  return table().players[table().active];
 }
 
 function drawFor(player: Player, n: number) {
@@ -305,12 +306,12 @@ function drawFor(player: Player, n: number) {
 }
 
 export function draw(playerIndex: number, n: number) {
-  const player = table().jogadores[playerIndex];
+  const player = table().players[playerIndex];
   const before = player.mao.length;
   drawFor(player, n);
   const drawn = player.mao.length - before;
-  if (drawn) log(`${player.nome}: comprou ${drawn}`);
-  else log(`${player.nome}: baralho vazio, nada a comprar`);
+  if (drawn) log(`${player.name}: comprou ${drawn}`);
+  else log(`${player.name}: baralho vazio, nada a comprar`);
 }
 
 /* ------------------------------------------------------------- mulligan */
@@ -330,28 +331,28 @@ function bottomCount(player: Player) {
 }
 
 export function bottomCountOnKeep(playerIndex: number) {
-  return bottomCount(table().jogadores[playerIndex]);
+  return bottomCount(table().players[playerIndex]);
 }
 
 export function londonMulligan(playerIndex: number) {
-  const player = table().jogadores[playerIndex];
+  const player = table().players[playerIndex];
   player.mulligans++;
   player.baralho = shuffle(player.baralho.concat(player.mao));
   player.mao = [];
-  player.aFundo = 0;
+  player.toBottom = 0;
   drawFor(player, OPENING_HAND);
-  log(`${player.nome}: mulligan ${player.mulligans}`);
+  log(`${player.name}: mulligan ${player.mulligans}`);
 }
 
 export function keepHand(playerIndex: number) {
-  const player = table().jogadores[playerIndex];
+  const player = table().players[playerIndex];
   // Nunca mais do que a mão tem: pedir pra devolver 3 de uma mão de 2 deixaria
   // a fase de fundo sem como terminar, e a mesa travada numa escolha
   // impossível. Só acontece em deck pequeno, que é justamente onde se testa.
-  player.aFundo = Math.min(bottomCount(player), player.mao.length);
+  player.toBottom = Math.min(bottomCount(player), player.mao.length);
   // Com zero a devolver a tela pula direto pro jogo: pedir "escolha 0 cartas"
   // é uma etapa que só existe pra ser fechada.
-  if (player.aFundo) player.fase = "fundo";
+  if (player.toBottom) player.phase = "fundo";
   else confirmHand(player);
 }
 
@@ -359,11 +360,11 @@ export function putOnBottom(uid: number) {
   const found = findCard(uid);
   if (!found) return;
   const player = found.player;
-  if (found.zone !== "mao" || !player.aFundo) return;
+  if (found.zone !== "mao" || !player.toBottom) return;
   player.mao.splice(found.index, 1);
   player.baralho.push(found.card);              // fundo, na ordem escolhida
-  player.aFundo--;
-  if (!player.aFundo) confirmHand(player);
+  player.toBottom--;
+  if (!player.toBottom) confirmHand(player);
 }
 
 /* A mão fechada — e com ela a COMPRA DO TURNO, se a vez for de quem manteve.
@@ -378,35 +379,35 @@ export function putOnBottom(uid: number) {
    devolve é a mão de sete que se viu, e a carta a mais é a do turno, não
    parte da escolha. */
 function confirmHand(player: Player) {
-  player.fase = "jogo";
+  player.phase = "jogo";
   const onTurn = activePlayer() === player;
   if (onTurn) drawFor(player, 1);
-  log(`${player.nome}: manteve com ${player.mao.length}${onTurn ? " (a do turno incluída)" : ""}`);
+  log(`${player.name}: manteve com ${player.mao.length}${onTurn ? " (a do turno incluída)" : ""}`);
 }
 
 /* --------------------------------------------------------------- turnos */
 
 export function passTurn() {
   const t = table();
-  t.ativo = (t.ativo + 1) % t.jogadores.length;
+  t.active = (t.active + 1) % t.players.length;
   // O número do turno anda quando a vez volta pro primeiro: com um jogador é
   // todo "passar turno", com dois é a rodada inteira.
-  if (t.ativo === 0) t.turno++;
+  if (t.active === 0) t.turn++;
   clearCombat();
   const player = activePlayer();
-  player.terrenosBaixados = 0;
+  player.landsThisTurn = 0;
   // Endireita tudo de quem está jogando, como o desendireitar de verdade.
-  for (const c of player.campo) c.deitada = false;
-  log(`— turno ${t.turno}, vez de ${player.nome}`);
+  for (const c of player.campo) c.tapped = false;
+  log(`— turno ${t.turn}, vez de ${player.name}`);
   // Quem ainda está no mulligan não compra aqui: a compra deste turno vem
   // junto com a mão confirmada (ver `confirmHand`).
-  if (player.fase === "jogo") drawFor(player, 1);
+  if (player.phase === "jogo") drawFor(player, 1);
 }
 
 /* ---------------------------------------------------------------- zonas */
 
 function findCard(uid: number) {
-  for (const player of table().jogadores) {
+  for (const player of table().players) {
     for (const zone of ZONES) {
       const index = player[zone].findIndex((c) => c.uid === uid);
       if (index >= 0) return { player, zone, index, card: player[zone][index] };
@@ -416,11 +417,11 @@ function findCard(uid: number) {
 }
 
 export function cardByUid(uid: number) {
-  return state.mesa ? findCard(uid)?.card ?? null : null;
+  return state.table ? findCard(uid)?.card ?? null : null;
 }
 
 export function zoneOf(uid: number) {
-  return state.mesa ? findCard(uid)?.zone ?? null : null;
+  return state.table ? findCard(uid)?.zone ?? null : null;
 }
 
 /* A ÚNICA mutação de zona. Tudo passa por aqui pra o invariante "cada uid
@@ -433,7 +434,7 @@ export function zoneOf(uid: number) {
    primeira no hoisting, e a mesa parava de mover carta sem nada na tela
    dizendo por quê. Foi o teste da mesa (hoje `test/goldfish.test.ts`) que pegou. */
 export function moveToZone(uid: number, to: string, toTop?: boolean) {
-  const t = state.mesa;
+  const t = state.table;
   if (!t || !ZONES.includes(to as Zone)) return;
   const dest = to as Zone;
   const found = findCard(uid);
@@ -444,31 +445,31 @@ export function moveToZone(uid: number, to: string, toTop?: boolean) {
 
   // Ficha que sai do campo SOME. Ela não existe fora dele, e um cemitério com
   // três Soldados mentiria sobre o que dá pra devolver de lá.
-  if (card.ficha && dest !== "campo") {
-    log(`${player.nome}: ${cardName(card)} (ficha) deixou de existir`);
+  if (card.token && dest !== "campo") {
+    log(`${player.name}: ${cardName(card)} (ficha) deixou de existir`);
     return;
   }
 
   // A carta vai pra zona do DONO dela, não de quem a moveu: matar a criatura
   // do outro manda ela pro cemitério dele.
-  const owner = t.jogadores[card.dono] || player;
+  const owner = t.players[card.owner] || player;
   if (dest === "campo" && zone !== "campo") {
-    card.deitada = false;   // entra em pé
-    if (isLand(card.carta)) owner.terrenosBaixados++;
-    owner.jogadas.push({ nome: cardName(card), cmc: card.carta?.cmc || 0,
-                         terreno: isLand(card.carta), turno: t.turno });
-    if (card.cmd && owner.turnoDoComandante === null) owner.turnoDoComandante = t.turno;
+    card.tapped = false;   // entra em pé
+    if (isLand(card.card)) owner.landsThisTurn++;
+    owner.plays.push({ name: cardName(card), cmc: card.card?.cmc || 0,
+                         land: isLand(card.card), turn: t.turn });
+    if (card.commander && owner.commanderTurn === null) owner.commanderTurn = t.turn;
   }
   if (dest !== "campo") {
     // Carta de duas faces que sai do campo volta a ser a frente, como na mesa.
-    card.deitada = false; card.marcas = {}; card.verso = false;
-    card.atacando = false; card.bloqueando = null;
+    card.tapped = false; card.counters = {}; card.backUp = false;
+    card.attacking = false; card.blocking = null;
   }
   // No campo a carta entra no FIM da fila: lá a ordem é a que a pessoa
   // arrumou (ver `reposition`), e entrar no começo empurraria todas.
   if ((dest === "baralho" && !toTop) || dest === "campo") owner[dest].push(card);
   else owner[dest].unshift(card);
-  log(`${owner.nome}: ${cardName(card)} — ${ZONE_NAMES[zone]} → ${ZONE_NAMES[dest]}`);
+  log(`${owner.name}: ${cardName(card)} — ${ZONE_NAMES[zone]} → ${ZONE_NAMES[dest]}`);
 }
 
 /* Arrumar o campo: uma carta vai pra antes ou depois de outra da MESMA fila —
@@ -485,7 +486,7 @@ export function fitsInRow(uid: number, target: number) {
   if (uid === target) return false;
   const a = findCard(uid);
   const b = findCard(target);
-  return !!(a && b && b.zone === "campo" && a.card.dono === b.card.dono &&
+  return !!(a && b && b.zone === "campo" && a.card.owner === b.card.owner &&
             fieldRow(a.card) === fieldRow(b.card));
 }
 
@@ -505,7 +506,7 @@ export function reposition(uid: number, target: number, after: boolean) {
 export function castCommander(uid: number) {
   const found = findCard(uid);
   if (!found) return;
-  table().jogadores[found.card.dono].impostoPago++;
+  table().players[found.card.owner].taxPaid++;
   moveToZone(uid, "campo");
 }
 
@@ -520,9 +521,9 @@ function hasType(card: Card | null | undefined, type: string) {
 /* ------------------------------------------------- vida, marcas, combate */
 
 export function adjustLife(playerIndex: number, n: number) {
-  const player = table().jogadores[playerIndex];
-  player.vida += n;
-  log(`${player.nome}: vida ${n > 0 ? "+" : ""}${n} (${player.vida})`);
+  const player = table().players[playerIndex];
+  player.life += n;
+  log(`${player.name}: vida ${n > 0 ? "+" : ""}${n} (${player.life})`);
 }
 
 /* Marcador de jogador (veneno, energia, experiência) mora no JOGADOR, e não
@@ -530,40 +531,40 @@ export function adjustLife(playerIndex: number, n: number) {
    envenenou. Zero apaga a linha — uma lista de marcadores em zero é uma lista
    de coisas que não estão acontecendo. */
 export function adjustPlayerCounter(playerIndex: number, name: string, n: number) {
-  const player = table().jogadores[playerIndex];
-  const value = Math.max(0, (player.marcas[name] || 0) + n);
-  if (value) player.marcas[name] = value; else delete player.marcas[name];
-  log(`${player.nome}: ${name} ${value}`);
+  const player = table().players[playerIndex];
+  const value = Math.max(0, (player.counters[name] || 0) + n);
+  if (value) player.counters[name] = value; else delete player.counters[name];
+  log(`${player.name}: ${name} ${value}`);
 }
 
 export function adjustCardCounter(uid: number, name: string, n: number) {
   const c = cardByUid(uid);
   if (!c) return;
-  const value = Math.max(0, (c.marcas[name] || 0) + n);
-  if (value) c.marcas[name] = value; else delete c.marcas[name];
+  const value = Math.max(0, (c.counters[name] || 0) + n);
+  if (value) c.counters[name] = value; else delete c.counters[name];
   log(`${cardName(c)}: ${name} ${value}`);
 }
 
 /* Dano de comandante é por ORIGEM: 21 do comandante de um não se soma aos 21
    do outro, e é essa separação que faz o número valer alguma coisa. */
 export function adjustCommanderDamage(playerIndex: number, from: number, n: number) {
-  const player = table().jogadores[playerIndex];
-  player.danoCmd[from] = Math.max(0, (player.danoCmd[from] || 0) + n);
-  log(`${player.nome}: dano de comandante ${player.danoCmd[from]}`);
+  const player = table().players[playerIndex];
+  player.commanderDamage[from] = Math.max(0, (player.commanderDamage[from] || 0) + n);
+  log(`${player.name}: dano de comandante ${player.commanderDamage[from]}`);
 }
 
 export function toggleTapped(uid: number) {
   const c = cardByUid(uid);
   if (!c) return;
-  c.deitada = !c.deitada;
-  log(`${cardName(c)}: ${c.deitada ? "deitada" : "endireitada"}`);
+  c.tapped = !c.tapped;
+  log(`${cardName(c)}: ${c.tapped ? "deitada" : "endireitada"}`);
 }
 
 export function toggleFaceDown(uid: number) {
   const c = cardByUid(uid);
   if (!c) return;
-  c.virada = !c.virada;
-  log(`${cardName(c)}: ${c.virada ? "virada pra baixo" : "desvirada"}`);
+  c.faceDown = !c.faceDown;
+  log(`${cardName(c)}: ${c.faceDown ? "virada pra baixo" : "desvirada"}`);
 }
 
 /* A face que está pra cima numa carta de duas faces (transformar, MDFC). Só
@@ -571,43 +572,43 @@ export function toggleFaceDown(uid: number) {
    metades numa imagem só, e a base as devolve sem `imagem_verso`. */
 export function toggleFace(uid: number) {
   const c = cardByUid(uid);
-  if (!c || !c.carta?.imagem_verso) return;
-  c.verso = !c.verso;
-  log(`${cardName(c)}: ${c.verso ? "virada pro verso" : "virada pra frente"}`);
+  if (!c || !c.card?.imagem_verso) return;
+  c.backUp = !c.backUp;
+  log(`${cardName(c)}: ${c.backUp ? "virada pro verso" : "virada pra frente"}`);
 }
 
 export function toggleAttack(uid: number) {
   const c = cardByUid(uid);
   if (!c) return;
-  c.atacando = !c.atacando;
-  c.bloqueando = null;
-  log(`${cardName(c)}: ${c.atacando ? "ataca" : "não ataca mais"}`);
+  c.attacking = !c.attacking;
+  c.blocking = null;
+  log(`${cardName(c)}: ${c.attacking ? "ataca" : "não ataca mais"}`);
 }
 
 export function setBlock(uid: number, target: number) {
   const c = cardByUid(uid);
   if (!c) return;
-  c.bloqueando = c.bloqueando === target ? null : target;
-  c.atacando = false;
-  const whom = c.bloqueando ? cardName(cardByUid(target)) : "";
+  c.blocking = c.blocking === target ? null : target;
+  c.attacking = false;
+  const whom = c.blocking ? cardName(cardByUid(target)) : "";
   log(`${cardName(c)}: ${whom ? "bloqueia " + whom : "não bloqueia mais"}`);
 }
 
 export function clearCombat() {
-  for (const player of table().jogadores) {
-    for (const c of player.campo) { c.atacando = false; c.bloqueando = null; }
+  for (const player of table().players) {
+    for (const c of player.campo) { c.attacking = false; c.blocking = null; }
   }
 }
 
 export function attackers() {
-  return table().jogadores.flatMap((player) => player.campo.filter((c) => c.atacando));
+  return table().players.flatMap((player) => player.campo.filter((c) => c.attacking));
 }
 
 /* ---------------------------------------------------------------- fichas */
 
 /* A ficha é uma carta inventada na hora, com a mesma forma das outras pra o
    desenho, a prévia e a modal não precisarem saber que ela é diferente. O que
-   a separa é `ficha`, e o efeito dele está no `moveToZone`: fora do campo, ela
+   a separa é `token`, e o efeito dele está no `moveToZone`: fora do campo, ela
    deixa de existir. */
 export type TokenModel = {
   nome?: string; tipo?: string; cores?: string[]; poder?: string; resistencia?: string;
@@ -615,7 +616,7 @@ export type TokenModel = {
 };
 
 export function createToken(playerIndex: number, model: TokenModel, howMany: number | string) {
-  const player = table().jogadores[playerIndex];
+  const player = table().players[playerIndex];
   const card: Card = {
     nome: model.nome || "Ficha",
     tipo: model.tipo || "Token Creature",
@@ -628,16 +629,16 @@ export function createToken(playerIndex: number, model: TokenModel, howMany: num
     chaveArte: model.chaveArte || "",
   };
   const n = Math.max(1, Math.min(20, Number(howMany) || 1));
-  for (let i = 0; i < n; i++) player.campo.push(makeCopy(card, playerIndex, { ficha: true }));
-  log(`${player.nome}: criou ${n} × ${card.nome}`);
+  for (let i = 0; i < n; i++) player.campo.push(makeCopy(card, playerIndex, { token: true }));
+  log(`${player.name}: criou ${n} × ${card.nome}`);
 }
 
 /* ------------------------------------------------------------------- log */
 
 function log(text: string) {
-  const t = state.mesa;
+  const t = state.table;
   if (!t) return;
-  t.log.push({ turno: t.turno, texto: text });
+  t.log.push({ turn: t.turn, text: text });
   if (t.log.length > LOG_LIMIT) t.log.shift();
 }
 
@@ -657,21 +658,21 @@ function curveOf(cmcs: number[]) {
    sem precisar guardar uma segunda cópia da lista. Terreno e comandante ficam
    de fora dos dois lados, como na curva da análise. */
 export function gameSummary() {
-  return table().jogadores.map((player) => {
-    const all = ZONES.flatMap((z) => player[z]).filter((c) => !c.ficha && !c.cmd);
-    const spells = all.filter((c) => !isLand(c.carta));
-    const played = player.jogadas.filter((x) => !x.terreno);
+  return table().players.map((player) => {
+    const all = ZONES.flatMap((z) => player[z]).filter((c) => !c.token && !c.commander);
+    const spells = all.filter((c) => !isLand(c.card));
+    const played = player.plays.filter((x) => !x.land);
     return {
-      nome: player.nome,
-      vida: player.vida,
-      turnoDoComandante: player.turnoDoComandante,
-      terrenosJogados: player.jogadas.filter((x) => x.terreno).length,
-      teorica: curveOf(spells.map((c) => c.carta?.cmc || 0)),
-      realizada: curveOf(played.map((x) => x.cmc)),
-      feiticosJogados: played.length,
-      feiticosNoDeck: spells.length,
-      naoPuxadas: player.baralho.length,
-      restante: player.baralho.map((c) => cardName(c)).sort(),
+      name: player.name,
+      life: player.life,
+      commanderTurn: player.commanderTurn,
+      landsPlayed: player.plays.filter((x) => x.land).length,
+      deckCurve: curveOf(spells.map((c) => c.card?.cmc || 0)),
+      playedCurve: curveOf(played.map((x) => x.cmc)),
+      spellsPlayed: played.length,
+      spellsInDeck: spells.length,
+      neverDrawn: player.baralho.length,
+      remaining: player.baralho.map((c) => cardName(c)).sort(),
     };
   });
 }
@@ -687,20 +688,20 @@ export function gameSummary() {
    como a curva da análise: terreno custa zero e puxaria a média pra um número
    que não diz o que dá pra lançar. E as cores são o que a mão PEDE, lidas dos
    símbolos do custo, como a distribuição da análise — não o que ela produz. */
-export function handSummary(hand: { carta: Card | null }[]) {
-  const spells = hand.filter((c) => !isLand(c.carta));
-  const total = spells.reduce((n, c) => n + (c.carta?.cmc || 0), 0);
+export function handSummary(hand: { card: Card | null }[]) {
+  const spells = hand.filter((c) => !isLand(c.card));
+  const total = spells.reduce((n, c) => n + (c.card?.cmc || 0), 0);
   const colors: Record<string, number> = {};
   for (const c of hand) {
-    for (const symbol of (c.carta?.mana_cost || "").match(/\{[^}]+\}/g) || []) {
+    for (const symbol of (c.card?.mana_cost || "").match(/\{[^}]+\}/g) || []) {
       // Híbrido conta pras duas cores: "{G/W}" é uma carta que cabe nas duas.
       for (const part of symbol.slice(1, -1).split("/")) {
         if ((COLORS as string[]).includes(part)) colors[part] = (colors[part] || 0) + 1;
       }
     }
   }
-  return { terrenos: hand.length - spells.length, feiticos: spells.length,
-           custoMedio: spells.length ? total / spells.length : 0, cores: colors };
+  return { lands: hand.length - spells.length, spells: spells.length,
+           averageCost: spells.length ? total / spells.length : 0, colors };
 }
 
 /* As filas do campo: terrenos, criaturas e o resto. Quem olha um tabuleiro
@@ -711,13 +712,13 @@ export function handSummary(hand: { carta: Card | null }[]) {
    Terreno-criatura entra em Terrenos, e pela mesma razão de `AUTO_CATEGORIES`:
    a primeira regra que casa ganha, porque pra quem joga ele é o terreno que
    entrou no turno. */
-const FIELD_ROWS: [string, (c: { carta: Card | null }) => boolean][] = [
-  ["Terrenos", (c) => isLand(c.carta)],
-  ["Criaturas", (c) => hasType(c.carta, "creature")],
+const FIELD_ROWS: [string, (c: { card: Card | null }) => boolean][] = [
+  ["Terrenos", (c) => isLand(c.card)],
+  ["Criaturas", (c) => hasType(c.card, "creature")],
   ["Outros", () => true],
 ];
 
-export function fieldRow(c: { carta: Card | null }) {
+export function fieldRow(c: { card: Card | null }) {
   return FIELD_ROWS.find(([, matches]) => matches(c))![0];
 }
 
@@ -784,8 +785,8 @@ function combosIndex() {
    Ashaya, e marcá-la diria que a peça está no campo quando ela não está. */
 export function comboCount(c: TableCard | null | undefined) {
   const index = combosIndex();
-  if (!index || !c || c.ficha) return 0;
-  const player = state.mesa?.jogadores[c.dono];
+  if (!index || !c || c.token) return 0;
+  const player = state.table?.players[c.owner];
   if (!player || player.deck) return 0;   // só o deck da tela tem resposta do Spellbook
   return (index.get(cardName(c).toLowerCase()) || []).length;
 }
@@ -797,7 +798,7 @@ function zonesByName(player: Player) {
   const where = new Map<string, Zone>();
   for (const zone of ZONES) {
     for (const c of player[zone]) {
-      if (c.ficha) continue;
+      if (c.token) continue;
       const key = cardName(c).toLowerCase();
       const current = where.get(key);
       if (current === undefined || NEAREST_TO_PLAY.indexOf(zone) < NEAREST_TO_PLAY.indexOf(current)) {
@@ -823,7 +824,7 @@ function zonesByName(player: Player) {
 export function combosOf(c: TableCard) {
   if (!comboCount(c)) return [];
   const self = cardName(c).toLowerCase();
-  const where = zonesByName(table().jogadores[c.dono]);
+  const where = zonesByName(table().players[c.owner]);
   const far = NEAREST_TO_PLAY.length;
   return combosIndex()!.get(self)!.map((combo) => {
     const pecas = (combo.pecas || []).map((piece) => ({
@@ -853,24 +854,24 @@ let lastGesture: string | null = null;
    devolveria 34, 35, 36… em vez da jogada que veio antes. Qualquer outra ação
    fecha a sequência, porque ela guarda sem nome. */
 export function saveTableSnapshot(gesture?: string) {
-  if (!state.mesa) return;
+  if (!state.table) return;
   if (gesture && gesture === lastGesture) return;
   lastGesture = gesture || null;
-  state.mesaDesfazer.push(JSON.stringify(state.mesa,
-    (key, value) => key === "carta" ? undefined : value));
-  if (state.mesaDesfazer.length > UNDO_LIMIT) state.mesaDesfazer.shift();
+  state.tableUndo.push(JSON.stringify(state.table,
+    (key, value) => key === "card" ? undefined : value));
+  if (state.tableUndo.length > UNDO_LIMIT) state.tableUndo.shift();
 }
 
 export function undoTableStep() {
-  const photo = state.mesaDesfazer.pop();
+  const photo = state.tableUndo.pop();
   if (!photo) return false;
   const restored: Table = JSON.parse(photo);
-  for (const player of restored.jogadores) {
+  for (const player of restored.players) {
     for (const zone of ZONES) {
-      for (const c of player[zone]) c.carta = cardsByUid.get(c.uid) || null;
+      for (const c of player[zone]) c.card = cardsByUid.get(c.uid) || null;
     }
   }
-  state.mesa = restored;
+  state.table = restored;
   lastGesture = null;
   return true;
 }

@@ -32,7 +32,7 @@ export type SuggestionsResponse = {
 };
 
 export async function loadSuggestions({ theme = null, card = null }: { theme?: string | null; card?: string | null } = {}) {
-  if (!state.comandantes.length) {
+  if (!state.commanders.length) {
     toast("Escolha o comandante primeiro: é ele que define o que combina.");
     return;
   }
@@ -40,17 +40,17 @@ export async function loadSuggestions({ theme = null, card = null }: { theme?: s
   // na linha seguinte, e um deck ainda sem id (que passa pelo salvamento
   // abaixo) abriria a janela em que `rodarAoAbrir` não veria pedido nenhum em
   // voo e pediria a página do comandante por cima desta.
-  state.sugestoesRodando = true;
-  state.sugestoesAlvo = card || state.comandantes.map((c) => c.nome).join(" e ");
-  state.sugestoesErro = null;
+  state.suggestionsLoading = true;
+  state.suggestionsTarget = card || state.commanders.map((c) => c.nome).join(" e ");
+  state.suggestionsError = null;
   touch();
   try {
     if (!state.id) await saveNow();
     if (!state.id) {
-      state.sugestoesErro = "Não consegui salvar o deck antes de sugerir.";
+      state.suggestionsError = "Não consegui salvar o deck antes de sugerir.";
       return;
     }
-    state.sugestoes = await api(`/decks/${state.id}/sugestoes`, {
+    state.suggestions = await api(`/decks/${state.id}/sugestoes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tema: card ? null : (theme || null), carta: card || null }),
@@ -58,11 +58,11 @@ export async function loadSuggestions({ theme = null, card = null }: { theme?: s
     // O tema é do comandante: a página de uma carta não tem nenhum, e deixar
     // o anterior guardado faria o "voltar ao comandante" cair num tema que a
     // pessoa escolheu duas listas atrás.
-    state.sugestoesTema = card ? null : (theme || null);
+    state.suggestionsTheme = card ? null : (theme || null);
   } catch (e) {
-    state.sugestoesErro = (e as Error).message;
+    state.suggestionsError = (e as Error).message;
   } finally {
-    state.sugestoesRodando = false;
+    state.suggestionsLoading = false;
     touch();
   }
 }
@@ -84,7 +84,7 @@ export function suggestFromCard(name: string) {
    lista parecer burra. */
 export function addSuggestion(card: Card) {
   addByDestination(card);
-  for (const list of (state.sugestoes as SuggestionsResponse | null)?.listas || []) {
+  for (const list of (state.suggestions as SuggestionsResponse | null)?.listas || []) {
     list.cartas = list.cartas.filter((c) => c.carta.nome !== card.nome);
   }
   touch();
@@ -108,7 +108,7 @@ export function setAverageDeck(change: Partial<typeof averageDeck.value>) {
 }
 
 export async function importAverageDeck() {
-  if (!state.comandantes.length) {
+  if (!state.commanders.length) {
     toast("Escolha o comandante primeiro: o deck médio é dele.");
     return;
   }
@@ -119,7 +119,7 @@ export async function importAverageDeck() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        comandantes: state.comandantes.map((c) => c.nome),
+        comandantes: state.commanders.map((c) => c.nome),
         bracket: averageDeck.value.bracket,
         orcamento: averageDeck.value.budget,
       }),
@@ -129,7 +129,7 @@ export async function importAverageDeck() {
   }
   setAverageDeck({ running: false });
 
-  const hasCards = state.cartas.length || state.maybe.length;
+  const hasCards = state.cards.length || state.maybe.length;
   if (hasCards && !confirm("Trocar as cartas do deck pelo deck médio do EDHREC?\n\n" +
       "O deck de agora continua salvo e na lista de Meus decks — mas esta janela passa a mostrar o deck médio.")) {
     return setAverageDeck({ notice: { note: "Importação cancelada." } });
@@ -140,5 +140,5 @@ export async function importAverageDeck() {
   // As sugestões foram zeradas junto com o deck antigo, e esta é a aba que
   // está à vista: pede de novo, contra o deck que acabou de entrar. Grava
   // antes, porque é o deck do SERVIDOR que filtra o que já está nele.
-  if (await flushSave()) loadSuggestions({ theme: state.sugestoesTema });
+  if (await flushSave()) loadSuggestions({ theme: state.suggestionsTheme });
 }

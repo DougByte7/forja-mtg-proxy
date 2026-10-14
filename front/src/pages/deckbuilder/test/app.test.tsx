@@ -10,7 +10,7 @@ afterEach(cleanup);
 async function app() {
   const p = await page();
   p.state.id = "abc123";
-  p.state.nome = "Atraxa";
+  p.state.name = "Atraxa";
   act(() => render(<p.App />, document.getElementById("app")!));
   act(() => p.redrawAll());
   const $ = (sel: string) => document.querySelector(sel) as HTMLElement | null;

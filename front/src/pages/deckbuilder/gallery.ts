@@ -103,8 +103,8 @@ export function cardFrames(card: Card, quantity: number): GalleryFrame[] {
    escolhido com todas as cópias dele cobertas. */
 export function galleryCount() {
   const entries: [Card, number][] = [
-    ...state.comandantes.map((c): [Card, number] => [c, 1]),
-    ...state.cartas.map((e): [Card, number] => [e.carta, e.quantidade]),
+    ...state.commanders.map((c): [Card, number] => [c, 1]),
+    ...state.cards.map((e): [Card, number] => [e.carta, e.quantidade]),
     ...deckTokens().map((f): [Card, number] => [f, 1]),
   ];
   let total = 0, chosen = 0;
@@ -122,18 +122,18 @@ export function galleryCount() {
    e as fichas no fim. */
 export function galleryGroups() {
   const groups: { title: string; frames: GalleryFrame[] }[] = [];
-  if (!state.comandantes.length) return groups;
+  if (!state.commanders.length) return groups;
   groups.push({
-    title: state.comandantes.length > 1 ? "Comandantes" : "Comandante",
-    frames: state.comandantes.flatMap((c) => cardFrames(c, 1)),
+    title: state.commanders.length > 1 ? "Comandantes" : "Comandante",
+    frames: state.commanders.flatMap((c) => cardFrames(c, 1)),
   });
   const byCategory = new Map<string, Entry[]>();
-  for (const e of state.cartas) {
+  for (const e of state.cards) {
     const cat = categoryOf(e);
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(e);
   }
-  for (const cat of categoryOrder(state.cartas)) {
+  for (const cat of categoryOrder(state.cards)) {
     const items = byCategory.get(cat);
     if (!items) continue;
     items.sort((a, b) => ((a.carta.cmc ?? 0) - (b.carta.cmc ?? 0)) || a.carta.nome.localeCompare(b.carta.nome));
@@ -165,7 +165,7 @@ export function orderLinkView() {
 /* O atalho "Usar a arte padrão nas que faltam" só aparece quando há o que
    aplicar, e num deck já salvo. */
 export function defaultsShortcutHidden() {
-  if (!state.comandantes.length || !state.id) return true;
+  if (!state.commanders.length || !state.id) return true;
   const { total, chosen } = galleryCount();
   return chosen === total;
 }

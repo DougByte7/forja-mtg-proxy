@@ -23,23 +23,23 @@ export type PowerResult = {
 };
 
 export async function estimatePower() {
-  if (!state.comandantes.length && !state.cartas.length) {
+  if (!state.commanders.length && !state.cards.length) {
     toast("Monte alguma coisa antes de estimar o nível.");
     return;
   }
   if (!state.id) await saveNow();
   if (!state.id) { toast("Não consegui salvar o deck antes de estimar."); return; }
 
-  state.poderRodando = true;
-  state.poderErro = null;
+  state.powerLoading = true;
+  state.powerError = null;
   touch();
   try {
-    state.poder = await api(`/decks/${state.id}/poder`, { method: "POST" });
-    state.poderAssinatura = deckSignature();
+    state.power = await api(`/decks/${state.id}/poder`, { method: "POST" });
+    state.powerSignature = deckSignature();
   } catch (e) {
-    state.poderErro = (e as Error).message;
+    state.powerError = (e as Error).message;
   } finally {
-    state.poderRodando = false;
+    state.powerLoading = false;
     touch();
   }
 }

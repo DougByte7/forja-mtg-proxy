@@ -45,22 +45,22 @@ function CardMenu({ uid }: { uid: number }) {
   const item = (label: string, fn: () => unknown, opts?: Parameters<typeof runMenuItem>[1]) => (
     <button onClick={() => runMenuItem(fn, opts)}>{label}</button>
   );
-  const enemies = attackers().filter((a) => a.dono !== c.dono);
-  const counters = CARD_COUNTERS.concat(Object.keys(c.marcas).filter((n) => !CARD_COUNTERS.includes(n)));
+  const enemies = attackers().filter((a) => a.owner !== c.owner);
+  const counters = CARD_COUNTERS.concat(Object.keys(c.counters).filter((n) => !CARD_COUNTERS.includes(n)));
   const destinations = (["mao", "cemiterio", "exilio", "comando"] as Zone[])
     // Só comandante volta pro comando.
-    .filter((z) => z !== zone && (z !== "comando" || c.cmd));
+    .filter((z) => z !== zone && (z !== "comando" || c.commander));
   return (
     <>
       {zone === "campo" && (
         <>
-          {item(c.deitada ? "Endireitar" : "Deitar", () => toggleTapped(uid))}
-          {hasBack(c.carta) && item(c.verso ? "Virar pra frente" : "Virar pro verso", () => toggleFace(uid))}
-          {item(c.atacando ? "Não atacar" : "Atacar", () => toggleAttack(uid))}
+          {item(c.tapped ? "Endireitar" : "Deitar", () => toggleTapped(uid))}
+          {hasBack(c.card) && item(c.backUp ? "Virar pra frente" : "Virar pro verso", () => toggleFace(uid))}
+          {item(c.attacking ? "Não atacar" : "Atacar", () => toggleAttack(uid))}
           {enemies.length > 0 && (
             <>
               <div class="gf-menu-titulo">Bloquear</div>
-              {enemies.map((a) => item((c.bloqueando === a.uid ? "✓ " : "") + cardName(a), () => setBlock(uid, a.uid)))}
+              {enemies.map((a) => item((c.blocking === a.uid ? "✓ " : "") + cardName(a), () => setBlock(uid, a.uid)))}
             </>
           )}
           <div class="gf-menu-titulo">Marcadores</div>
@@ -68,7 +68,7 @@ function CardMenu({ uid }: { uid: number }) {
             <div class="gf-linha">
               <span>{name}</span>
               {item("−", () => adjustCardCounter(uid, name, -1), { stay: true, gesture: `m${uid}${name}` })}
-              <b>{c.marcas[name] || 0}</b>
+              <b>{c.counters[name] || 0}</b>
               {item("+", () => adjustCardCounter(uid, name, 1), { stay: true, gesture: `m${uid}${name}` })}
             </div>
           ))}
@@ -92,8 +92,8 @@ function CardMenu({ uid }: { uid: number }) {
         </>
       )}
       <div class="gf-menu-titulo">Esta carta</div>
-      {item(c.virada ? "Desvirar" : "Virar pra baixo", () => toggleFaceDown(uid))}
-      {!c.ficha && item("Ver a carta", () => openCard(c.carta), { undo: false })}
+      {item(c.faceDown ? "Desvirar" : "Virar pra baixo", () => toggleFaceDown(uid))}
+      {!c.token && item("Ver a carta", () => openCard(c.card), { undo: false })}
     </>
   );
 }
@@ -165,19 +165,19 @@ function SearchZone({ player, zone }: { player: number; zone: Zone }) {
   const [term, setTerm] = useState("");
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
-  const p = state.mesa!.jogadores[player];
+  const p = state.table!.players[player];
   const destinations = (["mao", "campo", "cemiterio", "exilio"] as Zone[]).filter((z) => z !== zone);
   const t = term.trim().toLowerCase();
   const cards = p[zone].filter((c) => cardName(c).toLowerCase().includes(t))
     .sort((a, b) => cardName(a).localeCompare(cardName(b)));
   return (
-    <Modal title={`${ZONE_NAMES[zone]} de ${p.nome}`}>
+    <Modal title={`${ZONE_NAMES[zone]} de ${p.name}`}>
       <input class="campo gf-filtro" id="gf-busca-filtro" ref={input} autocomplete="off" spellcheck={false}
              placeholder="filtrar pelo nome…" onInput={(e) => setTerm(e.currentTarget.value)} />
       <div class="gf-lista" id="gf-busca-lista">
         {!cards.length ? <div class="gf-vazio">nada aqui</div> : cards.map((c) => (
           <div class="gf-lista-linha" key={c.uid}>
-            <span class="gf-lista-nome" title={c.carta?.tipo || ""}>{cardName(c)}</span>
+            <span class="gf-lista-nome" title={c.card?.tipo || ""}>{cardName(c)}</span>
             {destinations.map((z) => (
               <button class="mini" data-gf-manda={`${c.uid}:${z}`} onClick={() => sendFromSearch(c.uid, z)}>{ZONE_NAMES[z]}</button>
             ))}
@@ -298,23 +298,23 @@ function Summary() {
   return (
     <Modal title="Como foi a partida">
       {gameSummary().map((r) => {
-        const max = Math.max(1, ...r.teorica, ...r.realizada);
+        const max = Math.max(1, ...r.deckCurve, ...r.playedCurve);
         return (
           <div class="gf-resumo-bloco">
-            <div class="gf-secao">{r.nome}</div>
+            <div class="gf-secao">{r.name}</div>
             <ul class="gf-fatos">
-              <li>Comandante desceu {r.turnoDoComandante === null ? <b>nunca</b> : <>no turno <b>{r.turnoDoComandante}</b></>}</li>
-              <li>Terrenos jogados: <b>{r.terrenosJogados}</b></li>
-              <li>Feitiços jogados: <b>{r.feiticosJogados}</b> de {r.feiticosNoDeck}</li>
-              <li>Vida no fim: <b>{r.vida}</b></li>
-              <li>Nunca puxadas: <b>{r.naoPuxadas}</b></li>
+              <li>Comandante desceu {r.commanderTurn === null ? <b>nunca</b> : <>no turno <b>{r.commanderTurn}</b></>}</li>
+              <li>Terrenos jogados: <b>{r.landsPlayed}</b></li>
+              <li>Feitiços jogados: <b>{r.spellsPlayed}</b> de {r.spellsInDeck}</li>
+              <li>Vida no fim: <b>{r.life}</b></li>
+              <li>Nunca puxadas: <b>{r.neverDrawn}</b></li>
             </ul>
             <div class="gf-duas-curvas">
-              <div><span class="gf-legenda">Curva do deck</span><Bars curve={r.teorica} max={max} /></div>
-              <div><span class="gf-legenda">O que desceu</span><Bars curve={r.realizada} max={max} /></div>
+              <div><span class="gf-legenda">Curva do deck</span><Bars curve={r.deckCurve} max={max} /></div>
+              <div><span class="gf-legenda">O que desceu</span><Bars curve={r.playedCurve} max={max} /></div>
             </div>
             <details class="gf-nao-puxadas"><summary>As que ficaram no baralho</summary>
-              <p>{r.restante.join(", ") || "nenhuma"}</p></details>
+              <p>{r.remaining.join(", ") || "nenhuma"}</p></details>
           </div>
         );
       })}
@@ -327,7 +327,7 @@ function Summary() {
 export function TableModalView() {
   useTable();
   const modal = tableModal.value;
-  if (!modal || (modal.kind !== "second" && !state.mesa)) return null;
+  if (!modal || (modal.kind !== "second" && !state.table)) return null;
   switch (modal.kind) {
     case "search": return <SearchZone player={modal.player} zone={modal.zone} />;
     case "token": return <TokenMaker player={modal.player} />;

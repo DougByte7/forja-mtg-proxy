@@ -38,7 +38,7 @@ export function counterView() {
    duas vezes. Não cotado, é a base local em dólar, e aí sim a régua se
    aplica. */
 export function totalView() {
-  const hasDeck = !!(state.comandantes.length || state.cartas.length);
+  const hasDeck = !!(state.commanders.length || state.cards.length);
   const o = localBudget();
   const maybe = state.maybe.reduce((n, e) => n + e.quantidade, 0);
   const parts = [];
@@ -47,7 +47,7 @@ export function totalView() {
   if (o.semPreco) parts.push(`${o.semPreco} sem preço na base`);
   if (maybe) parts.push(`${maybe} no maybeboard, fora da conta`);
 
-  const source = (state.cotacao?.fontes || [])[0];
+  const source = (state.quote?.fontes || [])[0];
   const quoted = source && source.cartas_cotadas;
   const text = quoted
     ? `${source.moeda === "BRL" ? "R$" : "US$"} ` + Number(source.total).toFixed(2).replace(".", ",")
@@ -55,11 +55,11 @@ export function totalView() {
   // Entre mexer no deck e a cotação nova voltar existe uma janela em que o
   // número mostrado é de OUTRO deck. O giro cobre essa janela inteira — a
   // espera e a consulta — em vez de só a consulta.
-  const waiting = !!(state.cotacaoRodando ||
-    (state.id && quoteSignature() !== state.cotacaoAssinatura && o.cartas));
+  const waiting = !!(state.quoteLoading ||
+    (state.id && quoteSignature() !== state.quotedSignature && o.cartas));
   return {
     hasDeck,
-    showQuoteToggle: hasDeck && !!(state.cotacao || state.cotacaoErro),
+    showQuoteToggle: hasDeck && !!(state.quote || state.quoteError),
     text,
     label: quoted ? source.rotulo : "prévia",
     waiting,

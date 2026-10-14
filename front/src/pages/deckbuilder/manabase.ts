@@ -35,7 +35,7 @@ export type ManabaseResponse = {
 let latestRequest = 0;
 
 export async function analyzeManabase() {
-  if (!state.comandantes.length) {
+  if (!state.commanders.length) {
     toast("Escolha o comandante primeiro: é a identidade dele que define as cores.");
     return;
   }
@@ -44,30 +44,30 @@ export async function analyzeManabase() {
   // Só avisa que está calculando quando ainda não há resposta na tela. Nos
   // recálculos do autosave, apagar a conta anterior faria o painel piscar a
   // cada carta digitada.
-  if (!state.manabase) { state.manabaseRodando = true; touch(); }
+  if (!state.manabase) { state.manabaseLoading = true; touch(); }
   const request = ++latestRequest;
   const params = [];
-  if (state.manabaseTeto !== null) params.push(`teto=${state.manabaseTeto}`);
-  if (state.mbCategoria) params.push(`categoria=${encodeURIComponent(state.mbCategoria)}`);
+  if (state.manabaseCap !== null) params.push(`teto=${state.manabaseCap}`);
+  if (state.manabaseCycle) params.push(`categoria=${encodeURIComponent(state.manabaseCycle)}`);
   try {
     const response = await api(`/decks/${state.id}/manabase${params.length ? "?" + params.join("&") : ""}`);
     if (request !== latestRequest) return;
     state.manabase = response;
-    state.manabaseErro = null;
+    state.manabaseError = null;
     // O ciclo aberto pode sumir da resposta — o comandante mudou e a
     // identidade com ele. Aí a tela volta pra visão geral.
-    if (!response.fixadores.some((c: Cycle) => c.id === state.mbCategoria)) state.mbCategoria = "";
+    if (!response.fixadores.some((c: Cycle) => c.id === state.manabaseCycle)) state.manabaseCycle = "";
   } catch (e) {
     if (request !== latestRequest) return;
-    state.manabaseErro = (e as Error).message;
+    state.manabaseError = (e as Error).message;
   } finally {
-    if (request === latestRequest) { state.manabaseRodando = false; touch(); }
+    if (request === latestRequest) { state.manabaseLoading = false; touch(); }
   }
 }
 
 /** O teto de preço dos terrenos sugeridos, em DÓLAR (é o que o servidor filtra). */
 export function setPriceCap(usd: number) {
-  state.manabaseTeto = usd;
+  state.manabaseCap = usd;
   return analyzeManabase();
 }
 
@@ -77,7 +77,7 @@ export function setPriceCap(usd: number) {
    clicou numa pílula de "Sua base" abriu algo que está abaixo da dobra —
    nos dois casos a tela vai até o começo da seção. */
 export function openCycle(id: string) {
-  state.mbCategoria = id || "";
+  state.manabaseCycle = id || "";
   touch();
   requestAnimationFrame(() => {
     const section = document.querySelector("#mb-resultado .mb-fixacao");
@@ -97,9 +97,9 @@ export function addBatch(batch: { carta: Card; quantidade: number }[]) {
   for (const { carta, quantidade } of batch) {
     const entry = findEntry(carta.nome);
     if (entry) entry.quantidade += quantidade;
-    else state.cartas.push({ carta, quantidade, categoria: "" });
+    else state.cards.push({ carta, quantidade, categoria: "" });
   }
-  state.validacao = null;
+  state.validation = null;
   redrawAll();
   scheduleSave();
 }

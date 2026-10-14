@@ -15,7 +15,7 @@ const UNDO_LIMIT = 40;
 
 /** Depois de toda mudança: a validação local vale até a do servidor voltar. */
 function changed({ invalidate = true } = {}) {
-  if (invalidate) state.validacao = null;
+  if (invalidate) state.validation = null;
   redrawAll();
   scheduleSave();
 }
@@ -27,32 +27,29 @@ export function findEntry(name: string, board?: Board | string): Entry | undefin
 /* Onde a carta está — deck, maybeboard ou lugar nenhum. É o que os cliques
    usam pra não precisarem carregar o tabuleiro em cada botão. */
 export function whereIs(name: string): Board | null {
-  if (state.cartas.some((e) => e.carta.nome === name)) return "deck";
+  if (state.cards.some((e) => e.carta.nome === name)) return "deck";
   if (state.maybe.some((e) => e.carta.nome === name)) return "talvez";
   return null;
 }
 
 export function pushUndo() {
-  state.desfazer.push(JSON.stringify({
-    comandantes: state.comandantes,
-    cartas: state.cartas,
+  state.undoStack.push(JSON.stringify({
+    commanders: state.commanders,
+    cards: state.cards,
     maybe: state.maybe,
-    categorias: state.categorias,
+    categories: state.categories,
   }));
-  if (state.desfazer.length > UNDO_LIMIT) state.desfazer.shift();
+  if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
 }
 
 export function undo() {
-  const previous = state.desfazer.pop();
+  const previous = state.undoStack.pop();
   if (!previous) { toast("Nada pra desfazer."); return; }
   const data = JSON.parse(previous);
-  state.comandantes = data.comandantes;
-  state.cartas = data.cartas;
-  // Instantâneos gravados antes desta versão da tela não têm as duas
-  // chaves novas: `|| []` os aceita em vez de zerar o maybeboard com
-  // `undefined` na primeira vez que alguém apertar Ctrl+Z.
-  state.maybe = data.maybe || [];
-  state.categorias = data.categorias || [];
+  state.commanders = data.commanders;
+  state.cards = data.cards;
+  state.maybe = data.maybe;
+  state.categories = data.categories;
   changed();
   toast("Desfeito.");
 }
@@ -74,7 +71,7 @@ export function addCard(card: Card, board: Board = "deck", category?: string) {
 
 function setBoard(board: Board, entries: Entry[]) {
   if (board === "talvez") state.maybe = entries;
-  else state.cartas = entries;
+  else state.cards = entries;
 }
 
 function changeQuantity(name: string, delta: number, board?: Board) {
@@ -175,12 +172,12 @@ export function createCategory(name: string, cardName?: string, board: Board = "
     if (cardName) setCategory(cardName, board, existing);
     return existing;
   }
-  if (state.categorias.length >= MAX_CATEGORIES) {
+  if (state.categories.length >= MAX_CATEGORIES) {
     toast(`Já são ${MAX_CATEGORIES} categorias — apague alguma antes de criar outra.`);
     return null;
   }
   pushUndo();
-  state.categorias.push(name);
+  state.categories.push(name);
   if (cardName) {
     const entry = findEntry(cardName, board);
     if (entry) entry.categoria = name;
@@ -198,12 +195,12 @@ export function renameCategory(previous: string, next: string) {
     return;
   }
   pushUndo();
-  state.categorias = state.categorias.map((c) => c === previous ? next : c);
-  if (state.destinoCategoria === previous) state.destinoCategoria = next;
+  state.categories = state.categories.map((c) => c === previous ? next : c);
+  if (state.destinationCategory === previous) state.destinationCategory = next;
   // As duas listas: o maybeboard herda as categorias do deck, então
   // renomear no deck e não renomear lá deixaria um grupo órfão do outro
   // lado, com o nome velho e sem dono.
-  for (const e of state.cartas.concat(state.maybe)) {
+  for (const e of state.cards.concat(state.maybe)) {
     if (e.categoria === previous) e.categoria = next;
   }
   changed({ invalidate: false });
@@ -214,12 +211,12 @@ export function renameCategory(previous: string, next: string) {
    não pode custar 12 cartas. */
 export function deleteCategory(category: string) {
   pushUndo();
-  state.categorias = state.categorias.filter((c) => c !== category);
+  state.categories = state.categories.filter((c) => c !== category);
   // A busca que mandava cartas pra cá volta pro tipo da carta: senão as
   // próximas iriam pra uma categoria que não existe mais.
-  if (state.destinoCategoria === category) state.destinoCategoria = "";
+  if (state.destinationCategory === category) state.destinationCategory = "";
   let released = 0;
-  for (const e of state.cartas.concat(state.maybe)) {
+  for (const e of state.cards.concat(state.maybe)) {
     if (e.categoria === category) { e.categoria = ""; released++; }
   }
   changed({ invalidate: false });
@@ -229,12 +226,12 @@ export function deleteCategory(category: string) {
 }
 
 export function moveCategory(category: string, step: number) {
-  const i = state.categorias.indexOf(category);
+  const i = state.categories.indexOf(category);
   const target = i + step;
-  if (i < 0 || target < 0 || target >= state.categorias.length) return;
+  if (i < 0 || target < 0 || target >= state.categories.length) return;
   pushUndo();
-  state.categorias.splice(i, 1);
-  state.categorias.splice(target, 0, category);
+  state.categories.splice(i, 1);
+  state.categories.splice(target, 0, category);
   changed({ invalidate: false });
 }
 
@@ -245,13 +242,13 @@ export const commanderPick = { partner: false };
 
 export function chooseCommander(card: Card) {
   pushUndo();
-  if (commanderPick.partner && state.comandantes.length === 1) state.comandantes.push(card);
-  else state.comandantes = [card];
+  if (commanderPick.partner && state.commanders.length === 1) state.commanders.push(card);
+  else state.commanders = [card];
   commanderPick.partner = false;
-  if (!state.nome || state.nome === "Deck sem nome") {
-    state.nome = card.nome.split(",")[0];
+  if (!state.name || state.name === "Deck sem nome") {
+    state.name = card.nome.split(",")[0];
   }
-  state.validacao = null;
+  state.validation = null;
   redrawAll();
   search();          // a lista da lateral agora tem identidade pra filtrar
   scheduleSave();
@@ -268,8 +265,8 @@ export function startPartnerPick() {
 
 export function removeCommander(index: number) {
   pushUndo();
-  state.comandantes.splice(index, 1);
-  state.validacao = null;
+  state.commanders.splice(index, 1);
+  state.validation = null;
   redrawAll();
   search();
   scheduleSave();

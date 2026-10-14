@@ -31,15 +31,15 @@ async function loadDeckFromLink() {
   try {
     const r = await api(`/decks/${id}`);
     state.id = r.deck.id;
-    state.nome = r.deck.nome;
-    state.validacao = r.validacao;
-    state.versao = r.versao;
-    state.comandantes = (r.deck.comandantes_completos || []).filter(Boolean);
+    state.name = r.deck.nome;
+    state.validation = r.validacao;
+    state.version = r.versao;
+    state.commanders = (r.deck.comandantes_completos || []).filter(Boolean);
     const entry = (e: Entry): Entry => ({ carta: e.carta, quantidade: e.quantidade, categoria: e.categoria || "" });
-    state.cartas = ((r.deck.cartas_completas || []) as Entry[]).filter((e) => e.carta).map(entry);
+    state.cards = ((r.deck.cartas_completas || []) as Entry[]).filter((e) => e.carta).map(entry);
     state.maybe = ((r.deck.maybeboard_completo || []) as Entry[]).filter((e) => e.carta).map(entry);
-    state.categorias = r.deck.categorias || [];
-    state.dono = r.deck.dono || null;
+    state.categories = r.deck.categorias || [];
+    state.owner = r.deck.dono || null;
     rememberDeck();
     setSaveStatus("salvo", "ok");
   } catch (e) {
@@ -70,7 +70,7 @@ export async function boot() {
   // O foco na busca só faz sentido onde ela está sempre à vista: no celular
   // ela é uma folha fechada, e focar dentro dela abriria o teclado sobre uma
   // superfície invisível.
-  if (state.comandantes.length) {
+  if (state.commanders.length) {
     search();
     if (window.innerWidth > 900) document.getElementById("busca")?.focus();
   } else {

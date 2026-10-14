@@ -5,7 +5,7 @@
    criar uma. Com conta vem dono — e, com dono, "os meus" em qualquer
    aparelho.
 
-   `state.usuario` é null pra anônimo. Não é erro: é quem está só olhando. */
+   `state.user` é null pra anônimo. Não é erro: é quem está só olhando. */
 import { signal } from "@preact/signals";
 import { api } from "./save";
 import { state } from "./state";
@@ -19,16 +19,16 @@ export const accountDialog = signal<"invite" | "orphan" | null>(null);
    recusaria a gravação do mesmo jeito, e o convite ao menos diz por quê. */
 export async function loadAccount() {
   try {
-    state.usuario = (await api("/conta")).usuario || null;
+    state.user = (await api("/conta")).usuario || null;
   } catch {
-    state.usuario = null;
+    state.user = null;
   }
 }
 
 /* Chamada com o deck já em mãos: o reclamar precisa saber se ele tem dono,
    e o convite muda de texto quando há um deck aberto. */
 export function greetAccount() {
-  if (state.usuario) offerClaim();
+  if (state.user) offerClaim();
   else accountDialog.value = "invite";
 }
 
@@ -55,8 +55,8 @@ function dismissed(): string[] {
    quem montou no celular precisa poder reclamar no computador, e é
    justamente esse o caso que o login existe pra resolver. */
 function offerClaim() {
-  if (!state.usuario || !state.id) return;
-  if (state.dono) return;                       // já é de alguém
+  if (!state.user || !state.id) return;
+  if (state.owner) return;                       // já é de alguém
   if (dismissed().includes(state.id)) return;
   accountDialog.value = "orphan";
 }
@@ -65,7 +65,7 @@ export async function claimDeck() {
   accountDialog.value = null;
   try {
     const r = await api(`/decks/${state.id}/reclamar`, { method: "POST" });
-    state.dono = r.deck.dono;
+    state.owner = r.deck.dono;
     toast("Pronto, o baralho é seu.");
   } catch (e) {
     toast("Não consegui: " + (e as Error).message);

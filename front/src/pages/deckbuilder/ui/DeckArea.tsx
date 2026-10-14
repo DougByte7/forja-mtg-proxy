@@ -59,7 +59,7 @@ function importFromCommanderBox() {
    inteira é essa única pergunta. */
 function CommanderHero() {
   const state = useDeck();
-  if (state.comandantes.length && !commanderPick.partner) return null;
+  if (state.commanders.length && !commanderPick.partner) return null;
   return (
     <div class="painel heroi" id="heroi">
       <h1>Quem é o comandante?</h1>
@@ -115,7 +115,7 @@ function Tabs() {
     <div class="abas-painel" id="abas-deck" role="tablist">
       {TABS.map(([tab, label]) => (
         <button role="tab" data-painel={tab} id={tab === "historico" ? "aba-historico" : undefined}
-                class={state.aba === tab ? "ativa" : undefined} aria-selected={state.aba === tab}
+                class={state.tab === tab ? "ativa" : undefined} aria-selected={state.tab === tab}
                 hidden={tab === "historico" && !hasHistory} onClick={() => switchTab(tab)}>
           {label}<TabCount tab={tab} />
         </button>
@@ -128,7 +128,7 @@ function Panel({ tab, children, id, panelRef }: {
   tab: Tab; children: ComponentChildren; id?: string; panelRef?: preact.Ref<HTMLDivElement>;
 }) {
   return (
-    <div class="painel" id={id || `painel-${tab}`} data-painel={tab} hidden={deckState.aba !== tab} ref={panelRef}>
+    <div class="painel" id={id || `painel-${tab}`} data-painel={tab} hidden={deckState.tab !== tab} ref={panelRef}>
       {children}
     </div>
   );
@@ -139,11 +139,11 @@ function Panel({ tab, children, id, panelRef }: {
    fica grande o bastante pra se perder nela. */
 function ListTools() {
   const state = useDeck();
-  const hidden = state.cartas.length < MIN_FOR_TOOLS.deck && !state.listaBusca.deck;
+  const hidden = state.cards.length < MIN_FOR_TOOLS.deck && !state.listFilter.deck;
   return (
     <div class="ferramentas-lista" id="ferramentas-deck" hidden={hidden}>
       <input class="campo campo-lista" id="busca-deck" type="search" autocomplete="off" spellcheck={false}
-             placeholder="Achar no deck…" aria-label="Achar uma carta que já está no deck" value={state.listaBusca.deck}
+             placeholder="Achar no deck…" aria-label="Achar uma carta que já está no deck" value={state.listFilter.deck}
              onInput={(e) => filterList("deck", e.currentTarget.value)}
              onKeyDown={(e) => {
                // Esc num campo cheio limpa o campo, e só isso: sem parar aqui
@@ -154,7 +154,7 @@ function ListTools() {
              }} />
       {/* A ordem vale pras duas listas: o maybeboard é a mesma lista lida
           noutro canto, e ordená-lo diferente seria ler duas. */}
-      <select class="campo campo-ordem" id="ordem-lista" value={state.listaOrdem}
+      <select class="campo campo-ordem" id="ordem-lista" value={state.listOrder}
               title="Ordem das cartas dentro de cada categoria — vale também no maybeboard"
               aria-label="Ordenar as cartas dentro de cada categoria" onChange={(e) => sortLists(e.currentTarget.value)}>
         <option value="cmc">Custo — menor primeiro</option>
@@ -194,7 +194,7 @@ export function DeckArea() {
     <section class="principal">
       <CardBaseWarning />
       <CommanderHero />
-      <div id="area-deck" hidden={!state.comandantes.length}>
+      <div id="area-deck" hidden={!state.commanders.length}>
         <Tabs />
 
         <Panel tab="deck">
@@ -205,7 +205,7 @@ export function DeckArea() {
           <div id="alertas-deck"><DeckAlerts /></div>
           <ListTools />
           <div id="lista-deck"><BoardList board="deck" /></div>
-          <div class="vazio" id="deck-vazio" hidden={state.cartas.length > 0}>
+          <div class="vazio" id="deck-vazio" hidden={state.cards.length > 0}>
             As 99 cartas entram pela busca. Comece pelas que o comandante pede.
           </div>
           <div class="rodape-deck">

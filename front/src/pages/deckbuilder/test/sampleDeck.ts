@@ -31,10 +31,10 @@ export type Setup = { deck?: unknown[]; maybe?: unknown[]; categorias?: string[]
 /** A página com o deck de exemplo (ou o que o teste pedir). */
 export async function page({ deck = DECK, maybe = MAYBE, categorias = AUTO_CATEGORIES }: Setup = {}) {
   const p = await freshPage();
-  p.state.comandantes = clone([ATRAXA]);
-  p.state.cartas = clone(deck);
+  p.state.commanders = clone([ATRAXA]);
+  p.state.cards = clone(deck);
   p.state.maybe = clone(maybe);
-  p.state.categorias = clone(categorias);
+  p.state.categories = clone(categorias);
   return p;
 }
 

@@ -23,7 +23,7 @@ export type Rail = "buscar" | "sugestoes" | "combos";
    se ainda não houver resposta ou se o deck tiver mudado desde a última —
    trocar de aba ida e volta não repete consulta. */
 function runOnOpen(name: string) {
-  if (!state.comandantes.length) return;
+  if (!state.commanders.length) return;
   if (name === "manabase" && !state.manabase) return analyzeManabase();
   // Sempre, e não só na primeira vez: o bloco do que mudou desde a última
   // versão acompanha a lista gravada.
@@ -31,20 +31,20 @@ function runOnOpen(name: string) {
   // As sugestões dependem do comandante, não da lista: refazê-las a cada
   // carta adicionada seria uma consulta por clique pra receber quase a mesma
   // resposta. Busca uma vez; o botão do painel refaz quando a pessoa quiser.
-  if (name === "sugestoes" && !state.sugestoes && !state.sugestoesRodando) {
-    return loadSuggestions({ theme: state.sugestoesTema });
+  if (name === "sugestoes" && !state.suggestions && !state.suggestionsLoading) {
+    return loadSuggestions({ theme: state.suggestionsTheme });
   }
   const signature = deckSignature();
-  if (name === "analise" && state.poderAssinatura !== signature) return estimatePower();
-  if (name === "combos" && state.combosAssinatura !== signature) return searchCombos();
-  if (name === "tokens" && state.tokensAssinatura !== signature) return loadTokens();
+  if (name === "analise" && state.powerSignature !== signature) return estimatePower();
+  if (name === "combos" && state.combosSignature !== signature) return searchCombos();
+  if (name === "tokens" && state.tokensSignature !== signature) return loadTokens();
   // O goldfish NÃO embaralha sozinho ao abrir a aba, ao contrário das outras:
   // as demais recalculam algo sobre o deck, e recalcular é de graça; aqui
   // "recalcular" seria jogar fora a mesa que a pessoa está jogando.
 }
 
 export function switchTab(name: Tab) {
-  state.aba = name;
+  state.tab = name;
   touch();
   runOnOpen(name);
 }

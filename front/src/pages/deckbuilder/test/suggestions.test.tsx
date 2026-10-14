@@ -24,19 +24,19 @@ function mount(p: any) {
 
 it("do comandante: alvo por extenso, sinergia alta acima de 25, e adicionar tira da lista", async () => {
   const p = await page({ deck: [], maybe: [] });
-  p.state.sugestoes = RESPONSE();
+  p.state.suggestions = RESPONSE();
   const host = mount(p);
   expect(host.querySelector(".quem")!.textContent).toBe("Para o comandante Atraxa");
   expect(host.querySelector(".voltar")).toBeNull();
   expect([...host.querySelectorAll(".sinergia")].map((s) => s.className)).toEqual(["sinergia alta", "sinergia"]);
   act(() => (host.querySelector(".achado") as HTMLButtonElement).click());
-  expect(p.state.cartas.map((e: any) => e.carta.nome)).toEqual(["Doubling Season"]);
+  expect(p.state.cards.map((e: any) => e.carta.nome)).toEqual(["Doubling Season"]);
   expect([...host.querySelectorAll(".achado b")].map((b) => b.textContent)).toEqual(["Deepglow Skate"]);
 });
 
 it("de uma carta: o alvo é ela, a régua da sinergia é outra, e dá pra voltar", async () => {
   const p = await page();
-  p.state.sugestoes = RESPONSE({ tipo: "carta", nome: "Sol Ring" });
+  p.state.suggestions = RESPONSE({ tipo: "carta", nome: "Sol Ring" });
   const host = mount(p);
   expect(host.querySelector(".quem")!.textContent).toBe("A partir da carta Sol Ring");
   expect(host.querySelectorAll(".sinergia.alta")).toHaveLength(0);   // 30 < 100
@@ -46,13 +46,13 @@ it("de uma carta: o alvo é ela, a régua da sinergia é outra, e dá pra voltar
 it("o tema pede de novo, com o alvo dito enquanto espera; o erro toma o lugar", async () => {
   const p = await page();
   p.state.id = "abc";
-  p.state.sugestoes = RESPONSE();
+  p.state.suggestions = RESPONSE();
   const fetch = vi.fn((_url: string, _init?: any) => new Promise(() => {}));
   vi.stubGlobal("fetch", fetch);
   const host = mount(p);
   act(() => ([...host.querySelectorAll(".temas .chip")][1] as HTMLButtonElement).click());
   expect(host.textContent).toBe("Perguntando ao EDHREC sobre Atraxa…");
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ tema: "superfriends", carta: null });
-  act(() => { p.state.sugestoesRodando = false; p.state.sugestoesErro = "EDHREC fora do ar."; p.touch(); });
+  act(() => { p.state.suggestionsLoading = false; p.state.suggestionsError = "EDHREC fora do ar."; p.touch(); });
   expect(host.querySelector(".aponta.erro")!.textContent).toBe("EDHREC fora do ar.");
 });

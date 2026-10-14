@@ -43,7 +43,7 @@ describe("a mesa na tela", () => {
     // O primeiro mulligan é grátis: mantém sem mandar nada pro fundo.
     click(button(panel, "Manter esta mão"));
     expect(panel.querySelector(".gf-mulligan")).toBeNull();
-    expect(p.state.mesa.jogadores[0].fase).toBe("jogo");
+    expect(p.state.table.players[0].phase).toBe("jogo");
   });
 
   it("o menu da carta manda pro cemitério, e o Desfazer devolve", async () => {
@@ -67,7 +67,7 @@ describe("a mesa na tela", () => {
   it("o marcador da carta fica com o menu aberto, e clicar fora fecha", async () => {
     const { p, panel, overlays, click } = await table();
     click(panel.querySelector("#gf-embaralhar"));
-    const uid = p.state.mesa.jogadores[0].mao[0].uid;
+    const uid = p.state.table.players[0].mao[0].uid;
     act(() => { p.moveToZone(uid, "campo"); p.touchTable(); });
 
     click(panel.querySelector(`[data-gf-uid="${uid}"]`));
@@ -89,7 +89,7 @@ describe("a mesa na tela", () => {
     click(panel.querySelector("#gf-embaralhar"));
     click(panel.querySelector('[aria-label="Mais 1 de vida"]'), { shiftKey: true });
     click(panel.querySelector('[aria-label="Menos 1 de vida"]'));
-    expect([p.state.mesa.jogadores[0].vida, panel.querySelector(".gf-vida b")!.textContent]).toEqual([44, "44"]);
+    expect([p.state.table.players[0].life, panel.querySelector(".gf-vida b")!.textContent]).toEqual([44, "44"]);
   });
 
   it("buscar no deck manda a carta e reembaralha ao fechar", async () => {
@@ -98,13 +98,13 @@ describe("a mesa na tela", () => {
     click(panel.querySelector(".gf-baralho .gf-pilha"));
     click(button(overlays, "Buscar no deck"));
     const modal = overlays.querySelector(".gf-modal")!;
-    expect(modal.querySelector("h3")!.textContent).toBe("Baralho de " + p.state.mesa.jogadores[0].nome);
+    expect(modal.querySelector("h3")!.textContent).toBe("Baralho de " + p.state.table.players[0].name);
     const rows = modal.querySelectorAll(".gf-lista-linha").length;
 
     click(modal.querySelector('[data-gf-manda$=":campo"]'));
     expect(overlays.querySelectorAll(".gf-lista-linha")).toHaveLength(rows - 1);
     click(overlays.querySelector("[data-gf-fechar]"));
     expect(overlays.querySelector(".gf-modal")).toBeNull();
-    expect(p.state.mesa.log.at(-1).texto).toContain("baralho reembaralhado");
+    expect(p.state.table.log.at(-1).text).toContain("baralho reembaralhado");
   });
 });

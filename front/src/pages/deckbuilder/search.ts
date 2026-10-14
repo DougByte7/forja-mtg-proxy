@@ -2,7 +2,7 @@
 
    Duas caixas de busca: a do comandante (na abertura, antes de existir deck)
    e a do painel de adicionar. As duas falam com a base local (`cartas.py`),
-   e o que voltou mora no estado — `state.resultados.main` e `.cmd` —, de onde
+   e o que voltou mora no estado — `state.results.main` e `.cmd` —, de onde
    `ui/Search.tsx` desenha. */
 import { signal } from "@preact/signals";
 import { deckIdentity } from "./deck";
@@ -32,12 +32,12 @@ export type SearchResult = {
 const emptyResult = (): SearchResult => ({
   cards: [], term: "", paged: false, error: null, pastedLink: null, highlight: -1, done: false,
 });
-state.resultados = { main: emptyResult(), cmd: emptyResult() };
+state.results = { main: emptyResult(), cmd: emptyResult() };
 
-const result = (box: SearchBox): SearchResult => state.resultados[box];
+const result = (box: SearchBox): SearchResult => state.results[box];
 function setResult(box: SearchBox, next: Partial<SearchResult>) {
   // A lista trocou: o índice destacado apontava pra outra carta.
-  state.resultados[box] = { ...emptyResult(), done: true, ...next };
+  state.results[box] = { ...emptyResult(), done: true, ...next };
   touch();
 }
 
@@ -61,14 +61,14 @@ export function scheduleSearch() {
   // Quem digitou uma letra ou mexeu num filtro está fazendo outra pergunta:
   // continuar na página 4 da pergunta anterior seria cair no meio de uma
   // lista que ninguém viu começar.
-  state.buscaPagina = 0;
+  state.searchPage = 0;
   searchTimer = window.setTimeout(search, 220);
 }
 
 /* A busca de novo, do começo. É o que os filtros chamam quando mudam sem
    passar pelo atraso do teclado — tirar um chip, limpar tudo. */
 export function searchFromStart() {
-  state.buscaPagina = 0;
+  state.searchPage = 0;
   return search();
 }
 
@@ -92,31 +92,31 @@ export function isPaged(term: string) {
 
 export async function search(): Promise<void> {
   const term = searchText.main.value.trim();
-  const identity = state.comandantes.length ? deckIdentity() : null;
+  const identity = state.commanders.length ? deckIdentity() : null;
   const paged = isPaged(term);
-  const params = new URLSearchParams({ q: term, limite: paged ? String(state.buscaPorPagina) : "24" });
+  const params = new URLSearchParams({ q: term, limite: paged ? String(state.searchPageSize) : "24" });
   if (paged) {
-    params.set("pular", String(state.buscaPagina * state.buscaPorPagina));
+    params.set("pular", String(state.searchPage * state.searchPageSize));
     params.set("com_total", "true");
   }
   if (identity !== null) params.set("identidade", identity);
-  const f = state.filtros;
-  if (f.tipo) params.set("tipo", f.tipo);
-  if (f.texto) params.set("texto", f.texto);
-  if (f.cores) params.set("cores", f.cores);
+  const f = state.filters;
+  if (f.type) params.set("tipo", f.type);
+  if (f.text) params.set("texto", f.text);
+  if (f.colors) params.set("cores", f.colors);
   if (f.cmcMin !== "") params.set("cmc_min", f.cmcMin);
   if (f.cmcMax !== "") params.set("cmc_max", f.cmcMax);
-  if (f.precoMax !== "") params.set("preco_max", String(maxPriceInUsd(f.precoMax)));
-  if (f.ordem && f.ordem !== "nome") params.set("ordem", f.ordem);
-  if (f.ineditas) params.set("ineditas", "true");
+  if (f.maxPrice !== "") params.set("preco_max", String(maxPriceInUsd(f.maxPrice)));
+  if (f.order && f.order !== "nome") params.set("ordem", f.order);
+  if (f.unreleased) params.set("ineditas", "true");
   try {
     const r = await api("/cartas/busca?" + params);
-    state.buscaTotal = paged ? (r.total ?? r.cartas.length) : 0;
+    state.searchTotal = paged ? (r.total ?? r.cartas.length) : 0;
     // A página em que se estava pode ter deixado de existir por baixo — um
     // comandante escolhido depois encurta a lista sem ninguém tocar no
     // filtro. Voltar pro começo é mais honesto do que mostrar nada.
-    if (paged && !r.cartas.length && state.buscaPagina > 0) {
-      state.buscaPagina = 0;
+    if (paged && !r.cartas.length && state.searchPage > 0) {
+      state.searchPage = 0;
       return search();
     }
     setResult("main", { cards: r.cartas, term, paged });
@@ -143,7 +143,7 @@ export async function searchCommander() {
   const params = new URLSearchParams({ q: term, comandante: "true", limite: "25" });
   // O mesmo interruptor da gaveta, ligado aqui pelo da abertura: quem monta o
   // deck da coleção nova começa pelo comandante dela.
-  if (state.filtros.ineditas) params.set("ineditas", "true");
+  if (state.filters.unreleased) params.set("ineditas", "true");
   try {
     const r = await api("/cartas/busca?" + params);
     setResult("cmd", { cards: r.cartas, term });
@@ -164,24 +164,24 @@ export function clearCommanderResults() {
 export const PAGE_SIZES = [5, 10, 15];
 
 export function pagerView() {
-  const per = state.buscaPorPagina;
-  const pages = Math.max(1, Math.ceil(state.buscaTotal / per));
-  return { per, total: state.buscaTotal, pages, page: Math.min(state.buscaPagina, pages - 1) };
+  const per = state.searchPageSize;
+  const pages = Math.max(1, Math.ceil(state.searchTotal / per));
+  return { per, total: state.searchTotal, pages, page: Math.min(state.searchPage, pages - 1) };
 }
 
 export function turnPage(step: number) {
   const { pages } = pagerView();
-  const next = Math.min(Math.max(state.buscaPagina + step, 0), pages - 1);
-  if (next === state.buscaPagina) return;
-  state.buscaPagina = next;
+  const next = Math.min(Math.max(state.searchPage + step, 0), pages - 1);
+  if (next === state.searchPage) return;
+  state.searchPage = next;
   search();
 }
 
 /* Mudar o tamanho da página volta pro começo: a carta que estava na tela
    está em outra página agora. */
 export function setPageSize(size: number) {
-  state.buscaPorPagina = size;
-  state.buscaPagina = 0;
+  state.searchPageSize = size;
+  state.searchPage = 0;
   search();
 }
 
@@ -246,19 +246,19 @@ export function onSearchKey(e: KeyboardEvent, box: SearchBox) {
    categoria — e o seletor ao lado se desliga em vez de oferecer uma escolha
    que seria ignorada. */
 export function addByDestination(card: Card) {
-  const d = state.destino;
+  const d = state.destination;
   if (d === "side") {
     addCard(card, "deck", SIDEBOARD);
     toast(`${card.nome} entrou no sideboard.`);
   } else if (d === "talvez") {
-    addCard(card, "talvez", state.destinoCategoria || undefined);
+    addCard(card, "talvez", state.destinationCategory || undefined);
     toast(`${card.nome} foi pro maybeboard.`);
   } else {
-    addCard(card, "deck", state.destinoCategoria || undefined);
+    addCard(card, "deck", state.destinationCategory || undefined);
   }
 }
 
 export function chooseDestination(destination: string) {
-  state.destino = destination;
+  state.destination = destination;
   touch();
 }

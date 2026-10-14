@@ -36,7 +36,7 @@ export function openCardMenu(anchor: Element | DOMRect, name: string, board: Boa
     "sep",
     { title: `Categoria de ${name}` },
     { label: `Automática (${autoCategory(entry.carta)})`, icon: check(""), onClick: () => setCategory(name, board, "") },
-    ...state.categorias.map((cat): MenuItem => ({ label: cat, icon: check(cat), onClick: () => setCategory(name, board, cat) })),
+    ...state.categories.map((cat): MenuItem => ({ label: cat, icon: check(cat), onClick: () => setCategory(name, board, cat) })),
     { label: `${SIDEBOARD} — fora das 100`, icon: check(SIDEBOARD), onClick: () => setCategory(name, board, SIDEBOARD) },
     { label: "Nova categoria…", icon: "plus", onClick: () => {
       const chosen = askNewCategory();
@@ -57,7 +57,7 @@ export function openCardMenu(anchor: Element | DOMRect, name: string, board: Boa
 /* O menu de uma categoria própria. Só as próprias têm: renomear "Criaturas"
    não faria sentido — ela não é um nome, é o tipo da carta. */
 export function openGroupMenu(anchor: Element, cat: string) {
-  const i = state.categorias.indexOf(cat);
+  const i = state.categories.indexOf(cat);
   const items: MenuItem[] = [
     { title: cat },
     { label: "Renomear…", icon: "pencil-simple", onClick: () => {
@@ -66,7 +66,7 @@ export function openGroupMenu(anchor: Element, cat: string) {
     } },
   ];
   if (i > 0) items.push({ label: "Subir", icon: "arrow-up", onClick: () => moveCategory(cat, -1) });
-  if (i >= 0 && i < state.categorias.length - 1) {
+  if (i >= 0 && i < state.categories.length - 1) {
     items.push({ label: "Descer", icon: "arrow-down", onClick: () => moveCategory(cat, +1) });
   }
   items.push("sep", { label: "Apagar categoria", icon: "x", cls: "perigo", onClick: () => deleteCategory(cat) });
@@ -78,7 +78,7 @@ export function openGroupMenu(anchor: Element, cat: string) {
    novo noutra aba e deixa este onde está. */
 function startNew(e: MouseEvent) {
   if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-  if (state.cartas.length && !confirm("Começar um deck novo? O atual fica salvo e continua em Meus decks.")) {
+  if (state.cards.length && !confirm("Começar um deck novo? O atual fica salvo e continua em Meus decks.")) {
     e.preventDefault();
   }
 }
@@ -95,7 +95,7 @@ export function openHeaderMenu(anchor: Element) {
   items.push("sep");
   items.push({ label: "Novo deck", href: location.pathname, onClick: startNew });
   items.push({ label: "Imprimir proxies", href: "/" });
-  if (!state.usuario) {
+  if (!state.user) {
     items.push("sep");
     items.push({ label: "Entrar", href: accountLink("entrar") });
     items.push({ label: "Criar conta", href: accountLink("cadastro") });

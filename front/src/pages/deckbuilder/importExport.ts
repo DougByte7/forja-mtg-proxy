@@ -53,7 +53,7 @@ export async function runImport() {
     imported = await api("/decks/importar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(url ? { url } : { texto: text, nome: state.nome }),
+      body: JSON.stringify(url ? { url } : { texto: text, nome: state.name }),
     });
   } catch (e) {
     return setForm({ running: false, notice: { error: (e as Error).message } });
@@ -62,7 +62,7 @@ export async function runImport() {
 
   const count = (list: Entry[] | undefined) => (list || []).reduce((n, e) => n + e.quantidade, 0);
   const total = count(imported.cartas_completas) + imported.comandantes_completos.length + count(imported.maybeboard_completo);
-  if (state.cartas.length || state.comandantes.length) {
+  if (state.cards.length || state.commanders.length) {
     if (!confirm(`Trocar o deck atual pelas ${total} cartas importadas?\n\n` +
                  "O deck de agora continua salvo e na lista de Meus decks — " +
                  "mas esta janela passa a mostrar o importado.")) {
@@ -98,27 +98,27 @@ export function applyImported(imported: Imported, { sameDeck = false } = {}) {
   // Deck novo nasce WIP, e o histórico era do deck que ficou pra trás.
   if (!sameDeck) {
     state.id = null;
-    state.versao = state.historico = null;
+    state.version = state.history = null;
   }
-  state.validacao = null;
-  state.comandantes = imported.comandantes_completos;
+  state.validation = null;
+  state.commanders = imported.comandantes_completos;
   const entry = (e: Entry): Entry => ({ carta: e.carta, quantidade: e.quantidade, categoria: e.categoria || "" });
-  state.cartas = imported.cartas_completas.map(entry);
+  state.cards = imported.cartas_completas.map(entry);
   // O maybeboard do site de origem vem junto: é o mesmo rascunho, e trazer
   // só as 100 obrigaria a copiar à mão a parte da lista que a pessoa ainda
   // estava decidindo (ver `importar.py`).
   state.maybe = (imported.maybeboard_completo || []).map(entry);
-  state.categorias = imported.categorias || [];
+  state.categories = imported.categorias || [];
   // As análises são do deck que acabou de ser substituído. Deixá-las na
   // tela mostraria a curva de um deck e os combos de outro — e a cotação
   // também: os preços da loja eram das cartas de lá.
-  state.combos = state.poder = state.sugestoes = state.manabase = null;
-  state.combosMexidos = 0;
-  state.cotacao = state.cotacaoErro = null;
+  state.combos = state.power = state.suggestions = state.manabase = null;
+  state.combosAdded = 0;
+  state.quote = state.quoteError = null;
 
   // No mesmo deck, o nome que a pessoa deu fica: ele é dela, e o que mudou
   // foram as cartas. Só o nome de fábrica cede lugar ao que veio.
-  if (imported.nome && (!sameDeck || state.nome === "Deck sem nome")) state.nome = imported.nome;
+  if (imported.nome && (!sameDeck || state.name === "Deck sem nome")) state.name = imported.nome;
   if (!sameDeck) history.replaceState(null, "", location.pathname);
   redrawAll();
   search();
@@ -146,8 +146,8 @@ export function importSummary(imported: Imported) {
    lista é o que vai pra impressão, e o que ainda está sendo decidido não vai
    pra impressão. Igual ao `decks.lista_texto` do servidor. */
 export function listText() {
-  const lines = state.comandantes.map((c) => `1 ${c.nome}`);
-  for (const e of state.cartas) lines.push(`${e.quantidade} ${e.carta.nome}`);
+  const lines = state.commanders.map((c) => `1 ${c.nome}`);
+  for (const e of state.cards) lines.push(`${e.quantidade} ${e.carta.nome}`);
   return lines.join("\n");
 }
 

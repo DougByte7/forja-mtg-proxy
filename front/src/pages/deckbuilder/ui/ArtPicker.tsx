@@ -27,7 +27,7 @@ function Faces({ card }: { card: Card }) {
     <div class="segmento arte-faces" id="arte-faces" hidden={!hasBack(card)} role="group" aria-label="Lado da carta">
       {(["frente", "verso"] as Face[]).map((f) => {
         const on = f === artState.face;
-        const done = !!chosenArt(card, f, null, artState.copia);
+        const done = !!chosenArt(card, f, null, artState.copy);
         return (
           <button type="button" data-face={f} class={on ? "ativa" : undefined} aria-pressed={on}
                   title={done ? "Arte escolhida pra este lado" : "Este lado está na arte padrão"}
@@ -46,18 +46,18 @@ function Faces({ card }: { card: Card }) {
 function Copies({ card }: { card: Card }) {
   useDeck();
   const quantity = paperQuantity(card);
-  const copies = (artState.escolhas[artKeyOf(card)] || {}).copias || {};
+  const copies = (artState.choices[artKeyOf(card)] || {}).copias || {};
   return (
     <div class="arte-copias" id="arte-copias" hidden={quantity <= 1}>
       <label class="interruptor">
-        <input type="checkbox" id="arte-por-copia" checked={artState.porCopia}
+        <input type="checkbox" id="arte-por-copia" checked={artState.perCopy}
                onChange={(e) => setPerCopy(e.currentTarget.checked)} />
         <span class="trilho-int" aria-hidden="true" />
         Uma arte por cópia
       </label>
-      <select class="campo" id="arte-copia" aria-label="Cópia" hidden={!artState.porCopia}
-              value={String(artState.copia)} onChange={(e) => setCopy(Number(e.currentTarget.value))}>
-        {artState.porCopia && Array.from({ length: quantity }, (_, i) => (
+      <select class="campo" id="arte-copia" aria-label="Cópia" hidden={!artState.perCopy}
+              value={String(artState.copy)} onChange={(e) => setCopy(Number(e.currentTarget.value))}>
+        {artState.perCopy && Array.from({ length: quantity }, (_, i) => (
           <option value={String(i + 1)}>Cópia {i + 1}{copies[i + 1]?.[artState.face] ? " ✓" : ""}</option>
         ))}
       </select>
@@ -86,7 +86,7 @@ function TokenShowcase({ token }: { token: Card }) {
 
 function Showcase({ card }: { card: Card }) {
   useDeck();
-  const printings = artState.impressoes;
+  const printings = artState.printings;
   let body;
   if (card.ficha) body = <TokenShowcase token={card} />;
   else if (printings === null) body = <span class="arte-nota">Carregando as impressões oficiais…</span>;
@@ -95,7 +95,7 @@ function Showcase({ card }: { card: Card }) {
   } else if (printings.length) {
     const back = artState.face === "verso";
     const lying = !!card.deitada;
-    const lit = artState.filtro.impressao ? artState.filtro.impressao.k : -1;
+    const lit = artState.filter.printing ? artState.filter.printing.k : -1;
     body = (
       <>
         <span class="arte-nota" style={{ maxWidth: "120px" }}>Estas são as artes oficiais. Clique numa pra
@@ -111,25 +111,25 @@ function Showcase({ card }: { card: Card }) {
       </>
     );
   }
-  return <div class="arte-vitrine" id="arte-vitrine" hidden={artState.origem !== "mpcfill"}>{body}</div>;
+  return <div class="arte-vitrine" id="arte-vitrine" hidden={artState.origin !== "mpcfill"}>{body}</div>;
 }
 
 function Filters() {
   useDeck();
   const timer = useRef(0);
-  const f = artState.filtro;
+  const f = artState.filter;
   useEffect(() => () => clearTimeout(timer.current), []);
   return (
-    <div class="arte-filtros" id="arte-filtros" hidden={artState.origem !== "mpcfill" || !artState.ids.length}>
+    <div class="arte-filtros" id="arte-filtros" hidden={artState.origin !== "mpcfill" || !artState.ids.length}>
       <input class="campo" id="arte-busca" placeholder="filtrar pelo nome do arquivo" autocomplete="off"
              spellcheck={false} onInput={(e) => {
                clearTimeout(timer.current);
                const v = e.currentTarget.value.trim().toLowerCase();
                timer.current = window.setTimeout(() => setArtFilter({ texto: v }), 250);
              }} />
-      <select class="campo" id="arte-fonte" value={f.fonte} onChange={(e) => setArtFilter({ fonte: e.currentTarget.value })}>
+      <select class="campo" id="arte-fonte" value={f.source} onChange={(e) => setArtFilter({ fonte: e.currentTarget.value })}>
         <option value="">todas as fontes</option>
-        {artState.fontes.map((s) => <option value={s.nome}>{s.nome}</option>)}
+        {artState.sources.map((s) => <option value={s.nome}>{s.nome}</option>)}
       </select>
       <select class="campo" id="arte-dpi" value={String(f.dpi)}
               onChange={(e) => setArtFilter({ dpi: Number(e.currentTarget.value) || 0 })}>
@@ -143,11 +143,11 @@ function Filters() {
    vazia), as opções e quantas páginas há. */
 function gridView(card: Card) {
   const what = `${artState.face === "verso" ? "o verso desta" : "esta"} ${card.ficha ? "ficha" : "carta"}`;
-  const chosen = chosenArt(card, artState.face, null, artState.copia)?.arte_id || "";
-  if (artState.origem === "scryfall") {
+  const chosen = chosenArt(card, artState.face, null, artState.copy)?.arte_id || "";
+  if (artState.origin === "scryfall") {
     const options = scryfallOptions();
-    const empty = artState.impressoes === null ? "Carregando as impressões oficiais…"
-      : artState.impressoes === false ? "Não consegui falar com a Scryfall agora."
+    const empty = artState.printings === null ? "Carregando as impressões oficiais…"
+      : artState.printings === false ? "Não consegui falar com a Scryfall agora."
       : !options.length ? `A Scryfall não tem imagem pra ${what}.` : "";
     if (empty) return { count: empty, pages: 0, page: 0, buttons: [] };
     const p = pageOf(options);
@@ -168,12 +168,12 @@ function gridView(card: Card) {
       }),
     };
   }
-  if (artState.carregandoIds || artState.erroIds) {
-    return { count: artState.erroIds || "Procurando as artes…", pages: 0, page: 0, buttons: [] };
+  if (artState.loadingIds || artState.idsError) {
+    return { count: artState.idsError || "Procurando as artes…", pages: 0, page: 0, buttons: [] };
   }
   const ids = filteredIds();
   if (!ids.length) {
-    const printing = artState.filtro.impressao;
+    const printing = artState.filter.printing;
     const count = !artState.ids.length ? `O MPC Fill não tem arte pra ${what}.`
       : printing
         ? `Nenhum arquivo do MPC Fill identificado como ${printing.sigla}${
@@ -221,10 +221,10 @@ function Pages({ page, pages }: { page: number; pages: number }) {
 function Upload({ card }: { card: Card }) {
   useDeck();
   const [over, setOver] = useState(false);
-  const choice = chosenArt(card, artState.face, null, artState.copia);
+  const choice = chosenArt(card, artState.face, null, artState.copy);
   const uploaded = choice && UPLOADED_ID.test(choice.arte_id) ? choice : null;
   return (
-    <div class="arte-envio" id="arte-envio" hidden={artState.origem !== "enviar"}>
+    <div class="arte-envio" id="arte-envio" hidden={artState.origin !== "enviar"}>
       <div class="arte-envio-atual" id="arte-envio-atual">
         {uploaded && (
           <>
@@ -249,14 +249,14 @@ function Upload({ card }: { card: Card }) {
         <span>ou arraste a imagem pra cá</span>
         <span class="arte-nota">PNG, JPG ou WebP no formato da carta (63 × 88 mm), com ou sem sangria.</span>
       </label>
-      <div class="arte-conta" id="arte-envio-estado" role="status">{artState.envioEstado}</div>
+      <div class="arte-conta" id="arte-envio-estado" role="status">{artState.uploadStatus}</div>
     </div>
   );
 }
 
 function Picker({ card }: { card: Card }) {
   useDeck();
-  const upload = artState.origem === "enviar";
+  const upload = artState.origin === "enviar";
   const grid = upload ? null : gridView(card);
   const gridRef = useRef<HTMLDivElement>(null);
   // A página nova começa do começo: trocar de página com a grade rolada até o
@@ -275,8 +275,8 @@ function Picker({ card }: { card: Card }) {
 
         <div class="segmento arte-origens" id="arte-origens" role="group" aria-label="De onde vem a arte">
           {ORIGINS.map(([o, label]) => (
-            <button type="button" data-origem={o} class={o === artState.origem ? "ativa" : undefined}
-                    aria-pressed={o === artState.origem} onClick={() => setOrigin(o)}>{label}</button>
+            <button type="button" data-origem={o} class={o === artState.origin ? "ativa" : undefined}
+                    aria-pressed={o === artState.origin} onClick={() => setOrigin(o)}>{label}</button>
           ))}
         </div>
 
@@ -292,14 +292,14 @@ function Picker({ card }: { card: Card }) {
 
         <div class="arte-rodape">
           <label class="interruptor" title="Lembrado neste navegador">
-            <input type="checkbox" id="arte-fecha" checked={artState.fechaAoEscolher}
+            <input type="checkbox" id="arte-fecha" checked={artState.closeOnPick}
                    onChange={(e) => setCloseOnPick(e.currentTarget.checked)} />
             <span class="trilho-int" aria-hidden="true" />
             Fechar ao escolher
           </label>
           {upload ? <nav class="arte-paginas" id="arte-paginas" hidden /> : <Pages page={grid!.page} pages={grid!.pages} />}
           <button class="btn" id="arte-padrao" onClick={revertToDefault}>
-            {artState.copia ? "Igual às outras cópias" : "Voltar ao padrão"}
+            {artState.copy ? "Igual às outras cópias" : "Voltar ao padrão"}
           </button>
         </div>
       </div>
@@ -314,6 +314,6 @@ function Picker({ card }: { card: Card }) {
    (`aberturas`), e é isso que limpa o filtro digitado na carta anterior. */
 export function ArtPicker() {
   useDeck();
-  const card = artState.carta;
-  return card ? <Picker key={artState.aberturas} card={card} /> : null;
+  const card = artState.card;
+  return card ? <Picker key={artState.opens} card={card} /> : null;
 }

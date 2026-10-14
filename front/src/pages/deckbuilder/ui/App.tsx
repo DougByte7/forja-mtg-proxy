@@ -63,9 +63,9 @@ function MaybeColumn() {
           <p class="nota talvez-nota">Cartas em dúvida. Não contam pras 100, não entram na cotação e não aparecem em
             análise nenhuma — ficam aqui até você decidir.</p>
           <input class="campo campo-lista" id="busca-talvez" type="search" autocomplete="off" spellcheck={false}
-                 hidden={state.maybe.length < MIN_FOR_TOOLS.talvez && !state.listaBusca.talvez}
+                 hidden={state.maybe.length < MIN_FOR_TOOLS.talvez && !state.listFilter.talvez}
                  placeholder="Achar aqui…" aria-label="Achar uma carta que já está no maybeboard"
-                 value={state.listaBusca.talvez} onInput={(e) => filterList("talvez", e.currentTarget.value)}
+                 value={state.listFilter.talvez} onInput={(e) => filterList("talvez", e.currentTarget.value)}
                  onKeyDown={(e) => {
                    if (e.key !== "Escape" || !e.currentTarget.value) return;
                    e.stopPropagation();
@@ -208,7 +208,7 @@ export function App() {
       unbindDrag();
     };
   }, []);
-  const noCommander = !state.comandantes.length;
+  const noCommander = !state.commanders.length;
   return (
     <>
       <Header />

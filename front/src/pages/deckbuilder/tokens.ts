@@ -21,7 +21,7 @@ export type TokenGroup = { carta: string; tokens: Token[]; [field: string]: unkn
 export type TokensResponse = { total: number; grupos: TokenGroup[] };
 
 export async function loadTokens() {
-  if (!state.comandantes.length) return;
+  if (!state.commanders.length) return;
   if (!state.id) await saveNow();
   if (!state.id) {
     toast("Não consegui salvar o deck antes de listar as fichas.");
@@ -30,15 +30,15 @@ export async function loadTokens() {
   // Só avisa que está procurando quando ainda não há lista na tela. Nos
   // recálculos do autosave, apagar a grade faria as artes piscarem a cada
   // carta adicionada.
-  if (!state.tokens) { state.tokensRodando = true; touch(); }
+  if (!state.tokens) { state.tokensLoading = true; touch(); }
   try {
     state.tokens = await api(`/decks/${state.id}/tokens`);
-    state.tokensAssinatura = deckSignature();
-    state.tokensErro = null;
+    state.tokensSignature = deckSignature();
+    state.tokensError = null;
   } catch (e) {
-    state.tokensErro = (e as Error).message;
+    state.tokensError = (e as Error).message;
   } finally {
-    state.tokensRodando = false;
+    state.tokensLoading = false;
     // As fichas também vão pro papel: a aba Artes tem um quadro por ficha, e
     // o "Gerar pedido" conta as artes delas. O redesenho alcança os dois.
     touch();
