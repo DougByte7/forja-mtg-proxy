@@ -80,11 +80,11 @@ export const EMPTY_FILTERS: Readonly<Filters> = {
 };
 
 /* Tem algum filtro ligado? É a mesma pergunta que a bolinha do botão
-   responde com um número (ver `filtrosLigados`, em `filtros.js`), e a que
+   responde com um número (ver `activeFilters`, em `filters.ts`), e a que
    decide se a lista de resultados é paginada: sem filtro ela é uma vitrine
    curta de cinco, com filtro é um recorte que a pessoa pediu e quer ver
    inteiro. Mora aqui, e não lá, porque quem pergunta é a busca — e a busca
-   já é importada por `filtros.js`.
+   já é importada por `filters.ts`.
 
    As inéditas ficam de fora da conta porque elas ALARGAM a lista em vez de
    estreitá-la: deixar passar a coleção que ainda não saiu não é um recorte

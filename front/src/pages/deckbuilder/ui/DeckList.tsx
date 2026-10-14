@@ -3,12 +3,12 @@
    A marcação é a mesma que o HTML em string tinha — mesmas classes, mesmos
    `data-*` —, porque os cliques, o menu de clique direito e o arrastar ainda
    são ligados por delegação (`eventos.js`, `menus.js`, `arrastar.js`). */
-import { useLayoutEffect, useRef } from "preact/hooks";
 import { deckIdentity, totalCards } from "../deck";
 import { boardView, rowProblem, type GroupView } from "../lists";
 import { subtotalTexto, subtotalTitulo } from "../orcamento.js";
 import type { Board, Entry } from "../types";
 import { ArtButton, PriceCell, UnreleasedTag } from "./CardBits";
+import { GuardedInput } from "./GuardedInput";
 import { ManaCost } from "./Mana";
 import { previewProps } from "./preview";
 import { SpriteIcon } from "./SpriteIcon";
@@ -20,15 +20,10 @@ import { useDeck } from "./useDeck";
    chega, o autosave), e reescrever o valor no meio da digitação apagaria o
    que a pessoa acabou de digitar. */
 function QuantityInput({ name, quantity }: { name: string; quantity: number }) {
-  const ref = useRef<HTMLInputElement>(null);
-  useLayoutEffect(() => {
-    const input = ref.current!;
-    if (document.activeElement !== input && input.value !== String(quantity)) input.value = String(quantity);
-  });
   return (
-    <input ref={ref} class="qtd" type="number" min="0" max="99" step="1" inputMode="numeric"
-           defaultValue={String(quantity)} data-qtd={name} aria-label={`Quantidade de ${name}`}
-           title="Quantidade — zero tira a carta. Clique direito na linha pro menu." />
+    <GuardedInput class="qtd" type="number" min="0" max="99" step="1" inputMode="numeric"
+                  value={String(quantity)} data-qtd={name} aria-label={`Quantidade de ${name}`}
+                  title="Quantidade — zero tira a carta. Clique direito na linha pro menu." />
   );
 }
 

@@ -11,9 +11,8 @@ import {fecharCotacao} from "./cotacao.js";
 import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
 import {commanderPick, createCategory, findEntry, removeCard,
         removeCommander, setQuantity, undo} from "./editing";
-import {abrirGaveta, desenharBarraFiltros, fecharGaveta, gavetaAberta,
-        lerGavetaFiltros, limparFiltros, montarGavetaFiltros, mudarIneditas,
-        preencherGavetaFiltros, tirarFiltro} from "./filtros.js";
+import {closeDrawer, openDrawer, openDrawerId} from "./drawers";
+import {clearFilters} from "./filters";
 import {atalhoDaMesa, desfazerMesa, fecharModalGf, modalGfAberto} from "./goldfish-acoes.js";
 import {exportar, fazerImportar} from "./importar-exportar.js";
 import {callManabase} from "./manabase";
@@ -30,10 +29,6 @@ import {toast} from "./utilidades.js";
 export function ligarEventos(){
   $("busca").addEventListener("input", scheduleSearch);
   $("busca-cmd").addEventListener("input", scheduleCommanderSearch);
-  // O interruptor da abertura escreve no mesmo filtro da gaveta — por isso
-  // ele não tem tratador próprio aqui, e sim o de lá (ver `mudarIneditas`).
-  $("cmd-ineditas").addEventListener("change",
-    (e) => mudarIneditas(e.target.checked));
 
   // Achar no que já está montado. Sem atraso, ao contrário da busca da
   // esquerda: aqui não há rede nenhuma — é filtrar uma lista de 100 que já
@@ -83,9 +78,9 @@ export function ligarEventos(){
       e.preventDefault();
       return fecharCarta();
     }
-    if (e.key === "Escape" && gavetaAberta){
+    if (e.key === "Escape" && openDrawerId){
       e.preventDefault();
-      return fecharGaveta();
+      return closeDrawer();
     }
     if (e.key === "Escape" && modalGfAberto()){
       e.preventDefault();
@@ -99,7 +94,7 @@ export function ligarEventos(){
       e.preventDefault();
       return fecharFolha();
     }
-    if (gavetaAberta) return;   // dentro da gaveta, o teclado é dela
+    if (openDrawerId) return;   // dentro da gaveta, o teclado é dela
     if (cartaAberta) return;    // e dentro da modal, dela
     // D e Espaço só valem com a mesa à vista e nada por cima dela.
     if (state.aba === "goldfish" && !digitando && !modalGfAberto() &&
@@ -127,17 +122,9 @@ export function ligarEventos(){
     }
   });
 
-  montarGavetaFiltros();
-  preencherGavetaFiltros();
-  desenharBarraFiltros();
-
-  $("btn-gaveta-filtros").addEventListener("click", () => {
-    preencherGavetaFiltros();
-    abrirGaveta("gaveta-filtros");
-  });
   $("btn-fazer-importar").addEventListener("click", fazerImportar);
-  $("btn-limpar-filtros").addEventListener("click", limparFiltros);
-  $("gaveta-fundo").addEventListener("click", fecharGaveta);
+  $("btn-limpar-filtros").addEventListener("click", clearFilters);
+  $("gaveta-fundo").addEventListener("click", closeDrawer);
   $("btn-fechar-carta").addEventListener("click", fecharCarta);
   // Só o fundo fecha: clique dentro da modal (selecionar um trecho de ruling,
   // por exemplo) não pode fechá-la.
@@ -145,19 +132,6 @@ export function ligarEventos(){
     if (e.target === $("carta-fundo")) fecharCarta();
   });
 
-  // Os controles da gaveta buscam sozinhos ao mudar: obrigar a apertar
-  // "aplicar" pra ver o efeito de marcar "verde" transformaria uma
-  // exploração de dois segundos em três cliques.
-  $("gaveta-filtros").addEventListener("input", lerGavetaFiltros);
-  $("gaveta-filtros").addEventListener("change", lerGavetaFiltros);
-  $("f-cores").addEventListener("click", (e) => {
-    const botao = e.target.closest("[data-cor]");
-    if (!botao) return;
-    const ligada = !botao.classList.contains("ativo");
-    botao.classList.toggle("ativo", ligada);
-    botao.setAttribute("aria-pressed", ligada ? "true" : "false");
-    lerGavetaFiltros();
-  });
 
   // Clique nos resultados (os dois painéis) e nos controles do deck.
   document.addEventListener("click", (e) => {
@@ -169,9 +143,7 @@ export function ligarEventos(){
     const caixaCot = $("cotacao-caixa");
     if (!caixaCot.hidden && !caixaCot.contains(e.target) &&
         !e.target.closest("#btn-cotacao")) fecharCotacao();
-    if (e.target.closest("[data-fecha-gaveta]")) return fecharGaveta();
-    const tira = e.target.closest("[data-tira-filtro]");
-    if (tira) return tirarFiltro(tira.dataset.tiraFiltro);
+    if (e.target.closest("[data-fecha-gaveta]")) return closeDrawer();
     // Sugestão do EDHREC: a carta completa já veio junto, então adicionar é
     // o mesmo clique da busca — sem consulta nenhuma.
     const sugerida = e.target.closest("[data-sug]");
@@ -399,7 +371,7 @@ export function importarLinkColado(){
   $("i-texto").value = "";
   $("busca-cmd").value = "";
   clearCommanderResults();
-  abrirGaveta("gaveta-importar");
+  openDrawer("gaveta-importar");
   fazerImportar();
 }
 
@@ -412,7 +384,7 @@ function menuDoCabecalho(){
   if (meus.length){
     itens.push({rotulo: `Meus decks (${meus.length})`, href: "/meus-decks"});
   }
-  itens.push({rotulo: "Importar lista", aoClicar: () => abrirGaveta("gaveta-importar")});
+  itens.push({rotulo: "Importar lista", aoClicar: () => openDrawer("gaveta-importar")});
   itens.push({rotulo: "Exportar lista (copiar)", aoClicar: exportar});
   itens.push("risco");
   itens.push({rotulo: "Novo deck", href: location.pathname, aoClicar: comecarNovo});

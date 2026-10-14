@@ -10,6 +10,7 @@ import {
 import { CombosTabCount, DeckCombos, NearCombos } from "./ui/Combos";
 import { BoardList, CommanderBox, DeckTabCount, MaybeCount } from "./ui/DeckList";
 import { importarLinkColado } from "./eventos.js";
+import { FilterFields, FiltersButton, FilterTape, HeroUnreleasedSwitch } from "./ui/Filters";
 import { ManabasePanel } from "./ui/Manabase";
 import { Meters } from "./ui/Meters";
 import { DestinationCategory, DestinationSegment, SearchResults } from "./ui/Search";
@@ -46,4 +47,8 @@ export function mountIslands() {
   render(<SearchResults box="cmd" onImportLink={importarLinkColado} />, $("res-cmd")!);
   render(<DestinationSegment />, $("ilha-destino")!);
   render(<DestinationCategory />, $("ilha-categoria-destino")!);
+  render(<FiltersButton />, $("ilha-btn-filtros")!);
+  render(<FilterTape />, $("ligados")!);
+  render(<FilterFields />, $("campos-filtros")!);
+  render(<HeroUnreleasedSwitch />, $("ilha-cmd-ineditas")!);
 }
