@@ -10,15 +10,14 @@ import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
 import {linkDeConta} from "./conta.js";
 import {fecharCotacao} from "./cotacao.js";
 import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
-import {addCard, commanderPick, createCategory, findEntry, removeCard,
+import {commanderPick, createCategory, findEntry, removeCard,
         removeCommander, setQuantity, undo} from "./editing";
 import {abrirGaveta, desenharBarraFiltros, fecharGaveta, gavetaAberta,
         lerGavetaFiltros, limparFiltros, montarGavetaFiltros, mudarIneditas,
         preencherGavetaFiltros, tirarFiltro} from "./filtros.js";
 import {atalhoDaMesa, desfazerMesa, fecharModalGf, modalGfAberto} from "./goldfish-acoes.js";
 import {exportar, fazerImportar} from "./importar-exportar.js";
-import {abrirCiclo, adicionarLote, analisarManabase, chamarManabase,
-        fixadoresPlanos} from "./manabase.js";
+import {callManabase} from "./manabase";
 import {abrirMenu, fecharMenu, menuAberto, menuDaCarta, menuDoGrupo} from "./menus.js";
 import {abrirFolha, fecharFolha, folhaAberta, recolherTalvez, trocarAba,
         trocarRail} from "./paineis.js";
@@ -202,42 +201,6 @@ export function ligarEventos(){
     // outro momento (ver `buscarSugestoes`).
     if (e.target.closest("[data-sug-comandante]")) return buscarSugestoes();
 
-    // Mana base: básicos em lote, fixadores um a um, o teto de preço e o
-    // ciclo aberto.
-    const basico = e.target.closest("[data-basico]");
-    if (basico){
-      const b = state.manabase?.basicos[Number(basico.dataset.basico)];
-      if (b?.carta){
-        adicionarLote([{carta: b.carta, quantidade: b.quantidade}]);
-        toast(`${b.quantidade}× ${b.carta.nome} no deck.`);
-      }
-      return;
-    }
-    if (e.target.closest("[data-basicos-todos]")){
-      const lote = (state.manabase?.basicos || []).filter(b => b.carta);
-      if (lote.length){
-        adicionarLote(lote);
-        toast(`${lote.reduce((s, b) => s + b.quantidade, 0)} básicos no deck.`);
-      }
-      return;
-    }
-    const fix = e.target.closest("[data-fix]");
-    if (fix){
-      const terreno = fixadoresPlanos[Number(fix.dataset.fix)];
-      if (terreno && !terreno.no_deck){
-        addCard(terreno);
-        toast(`${terreno.nome} entrou no deck.`);
-      }
-      return;
-    }
-    const teto = e.target.closest("[data-teto]");
-    if (teto){
-      state.manabaseTeto = Number(teto.dataset.teto);
-      return analisarManabase();
-    }
-    const ciclo = e.target.closest("[data-mb-cat]");
-    if (ciclo) return abrirCiclo(ciclo.dataset.mbCat);
-
     // As setas do paginador da busca, que só existe com filtro ligado.
     const resPag = e.target.closest("[data-res-pag]");
     if (resPag) return virarPagina(Number(resPag.dataset.resPag));
@@ -292,7 +255,7 @@ export function ligarEventos(){
       return abrirMenu($("btn-mais"), menuDoCabecalho());
     }
     // A pílula da versão abre daqui pelo mesmo motivo do "···".
-    if (e.target.closest("[data-abrir-manabase]")) return chamarManabase();
+    if (e.target.closest("[data-abrir-manabase]")) return callManabase();
     const verCmd = e.target.closest("[data-ver-cmd]");
     if (verCmd) return abrirCarta(state.comandantes[Number(verCmd.dataset.verCmd)]);
     const saiCmd = e.target.closest("[data-tirar-cmd]");

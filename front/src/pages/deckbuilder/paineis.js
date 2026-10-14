@@ -9,7 +9,7 @@
 import {$} from "../../shared/dom.js";
 import {deckSignature, searchCombos} from "./combos";
 import {desenharMesa} from "./goldfish-desenho.js";
-import {analisarManabase} from "./manabase.js";
+import {analyzeManabase} from "./manabase";
 import {estimatePower} from "./power";
 import {state} from "./state";
 import {buscarSugestoes} from "./sugestoes.js";
@@ -22,7 +22,7 @@ import {loadHistory} from "./versions";
    de aba ida e volta não repete consulta. */
 function rodarAoAbrir(nome){
   if (!state.comandantes.length) return;
-  if (nome === "manabase" && !state.manabase) return analisarManabase();
+  if (nome === "manabase" && !state.manabase) return analyzeManabase();
   // Sempre, e não só na primeira vez: o bloco do que mudou desde a última
   // versão acompanha a lista gravada.
   if (nome === "historico") return loadHistory();

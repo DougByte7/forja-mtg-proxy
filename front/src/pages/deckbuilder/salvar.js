@@ -9,7 +9,7 @@ import {$} from "../../shared/dom.js";
 import {deckIdentity, totalCards} from "./deck";
 import {desenharAnalise, desenharContador} from "./desenho.js";
 import {atualizarBotaoPedido} from "./galeria.js";
-import {analisarManabase} from "./manabase.js";
+import {analyzeManabase} from "./manabase";
 import {agendarCotacao} from "./orcamento.js";
 import {state} from "./state";
 import {brDate} from "./text";
@@ -161,7 +161,7 @@ export async function salvarAgora(){
     agendarCotacao();
     // A mana base é conta local, sem custo de fora: depois de aberta uma
     // vez, acompanha cada autosave em vez de envelhecer com aviso.
-    if (state.manabase) analisarManabase();
+    if (state.manabase) analyzeManabase();
     // Fichas sempre, aberta a aba ou não: elas vão pro papel, e a aba Artes
     // e o "Gerar pedido" contam as artes delas. A resposta sai da base
     // local, sem rede de fora.
