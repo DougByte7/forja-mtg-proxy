@@ -128,7 +128,10 @@ CARD_OUTLINE = os.environ.get("CARD_OUTLINE", "0") == "1"
 # não sair torto quando a folha entrou meio enviesada na impressora.
 # O verde forte é de propósito — destaca em cima de arte escura e some
 # depois do corte.
-CROSS_COLOR = os.environ.get("CROSS_COLOR", "#8aff0c")
+# `or` em vez de padrão do `get`: `CROSS_COLOR=` vazio no .env (ou um `#` que
+# o parser do compose leu como comentário) chegava aqui como "", e o
+# `HexColor("")` derrubava a folha inteira com `invalid literal for int()`.
+CROSS_COLOR = os.environ.get("CROSS_COLOR", "").strip() or "#8aff0c"
 CROSS_ARM_MM = float(os.environ.get("CROSS_ARM_MM", "3"))  # cada braço do "+"
 CROSS_THICKNESS_MM = float(os.environ.get("CROSS_THICKNESS_MM", "0.2"))
 CORNER_CROSSES = os.environ.get("CORNER_CROSSES", "1") == "1"
