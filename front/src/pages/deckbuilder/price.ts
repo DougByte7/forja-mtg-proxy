@@ -12,7 +12,7 @@
    MOEDA. A base é dólar e quem monta deck aqui pensa em real, então a tela
    mostra real. A regra que sustenta isso: TODO NÚMERO INTERNO CONTINUA EM
    DÓLAR e a conversão acontece na borda, dentro de `money()`. Converter cedo
-   — guardar real em `entryPrice`, em `localBudget`, no `data-teto` —
+   — guardar real em `entryPrice`, em `localBudget`, no teto da mana base —
    espalharia a taxa por contas que não são dela e faria o mesmo deck mudar de
    número conforme o dólar do dia sem ninguém ter mexido nele.
 

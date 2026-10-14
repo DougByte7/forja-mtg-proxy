@@ -107,19 +107,17 @@ python -m uvicorn app.main:app --reload --port 8000
 ```
 
 Junte a isso as variáveis do `.env` que o que você vai testar precisa (Pix,
-SMTP, `ADMIN_TOKEN`). O `--reload` cuida do Python; o HTML, o CSS e o
-JavaScript das telas são lidos do disco a cada pedido, então pra mexer no
-front basta recarregar o navegador.
+SMTP, `ADMIN_TOKEN`). O `--reload` cuida do Python. As telas saem do build do
+front (ver abaixo): pra mexer nelas, use o `pnpm dev`, ou rode `pnpm build` de
+novo e recarregue o navegador.
 
 #### As telas em Preact (`front/`)
 
-O front está migrando, uma tela por vez, de HTML com JavaScript solto em
-`app/static/` pra Preact + TypeScript em `front/`, com build no Vite. Até agora
-migraram a página inicial (`/`), o login (`/entrar`), o cadastro
-(`/cadastro`), a lista de decks (`/meus-decks`) e o admin (`/admin`). O
-deckbuilder já sai do mesmo build, mas ainda com os módulos JS de antes, em
-conversão. Essas telas saem do build, em `app/static/dist/`
-(fora do git), e sem ele a rota responde 503 dizendo o comando que falta.
+Todas as telas são Preact + TypeScript em `front/`, com build no Vite: a
+página inicial (`/`), o login (`/entrar`), o cadastro (`/cadastro`), a lista
+de decks (`/meus-decks`), o admin (`/admin`) e o deckbuilder (`/deckbuilder`).
+Elas saem do build, em `app/static/dist/` (fora do git), e sem ele a rota
+responde 503 dizendo o comando que falta.
 Precisa de Node 22 ou mais novo e do pnpm (a versão está no `packageManager`
 do `front/package.json`):
 
@@ -425,9 +423,9 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   por tela em `front/pages/`, o código em `front/src/pages/<tela>/` e o que
   é comum em `front/src/shared/`). O build vai pra `app/static/dist/`, e
   `app/frontend.py` serve o HTML de cada tela com `no-cache`; os assets têm
-  hash no nome e vão pelo mount estático. Hoje: a página inicial (`/`),
+  hash no nome e vão pelo mount estático. São a página inicial (`/`),
   login (`/entrar`), cadastro (`/cadastro`), a lista de decks
-  (`/meus-decks`) e o admin (`/admin`). Ver
+  (`/meus-decks`), o admin (`/admin`) e o deckbuilder (`/deckbuilder`). Ver
   *As telas em Preact*.
 - `front/src/pages/home/` — a Forja de Proxies em `/`: orçamento, revisão da
   folha, cotação e cobrança Pix. A lógica pura (XML, folha, totais, cotação,
@@ -437,17 +435,19 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `front/pages/deckbuilder.html` + `front/src/pages/deckbuilder/` — a tela
   de montar deck de Commander, em `/deckbuilder`. Três colunas (maybeboard,
   deck, busca), categorias próprias e as análises embaixo do deck. Ver
-  *Deckbuilder de Commander*. A página guarda só a marcação; o resto é um
-  módulo por assunto, que o Vite empacota a partir da entrada
-  (`abertura.js`). A lógica sem tela já é TypeScript: `state.ts` (o estado
-  e as categorias), `deck.ts` (o que conta pras 100, identidade, grupos),
-  `editing.ts` (mexer no deck e desfazer), `price.ts` (a régua do câmbio),
-  `goldfish.ts` (as regras da mesa) e `types.ts` (o formato da API). O
-  desenho e os cliques (`desenho.js`, `busca.js`, `combos.js`…) ainda são
-  JS e estão virando componentes Preact; até lá, `$` e `escapar` moram em
-  `front/src/shared/dom.js`. Módulo novo só
-  precisa ser importado por alguém; os testes seguem o mesmo grafo a partir
-  da entrada, e acusam arquivo na pasta que nenhum `import` alcança.
+  *Deckbuilder de Commander*. A página guarda só o sprite de ícones; a tela
+  inteira é o `<App/>` (`ui/App.tsx`), montado por `main.tsx`, que depois
+  chama `boot.ts` (conta e deck do link). A lógica fica em módulos `.ts`
+  sem JSX — `state.ts` (o estado), `deck.ts` (o que conta pras 100,
+  identidade, grupos), `editing.ts` (mexer no deck e desfazer), `save.ts`
+  (validação local e autosave), `budget.ts` (preço e cotação), `goldfish.ts`
+  (as regras da mesa), `table.ts` (os cliques da mesa), `art.ts` (a escolha
+  de arte) e assim por diante — e o desenho em `ui/`. O estado é um objeto
+  comum mudado no lugar; toda mudança termina num `touch()`, que sobe o
+  signal `deckRevision`, e os componentes que leem `useDeck()` se redesenham
+  (a mesa tem o dela, `tableRevision`). Módulo novo só precisa ser importado
+  por alguém; os testes seguem o mesmo grafo a partir da entrada, e acusam
+  arquivo na pasta que nenhum `import` alcança.
 - `app/cartas.py` — a cópia local do bulk data da Scryfall (busca instantânea
   sem tocar na API deles) e a sincronização diária que a mantém.
 - `app/decks.py` — as regras do formato (identidade de cor, singleton, 100
@@ -555,12 +555,13 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   das 100 mas dentro do preço: `python tests/test_decks.py`.
 - `front/src/pages/deckbuilder/test/` (Vitest) — as mesmas regras do outro lado: as de
   categoria, sideboard e maybeboard existem DUAS vezes, porque a tela responde
-  ao clique sem esperar a rede. `rules.test.ts` roda os módulos da página
-  sobre a marcação dela, pra que as duas implementações não divirjam calado —
+  ao clique sem esperar a rede. `rules.test.tsx` roda os módulos da página e
+  desenha a lista, pra que as duas implementações não divirjam calado —
   e confere que nenhuma carta pode ficar invisível na lista por causa de uma
   categoria que não foi desenhada. Ao lado: `goldfish.test.ts` (a mesa),
-  `prices.test.ts` (o câmbio), `art.test.ts`, `search.test.ts` e
-  `versions.test.ts`. O `pnpm lint` (ESLint) pega o import esquecido, que só
+  `table.test.tsx` (a mesa na tela), `prices.test.tsx` (o câmbio),
+  `art.test.tsx`, `search.test.tsx`, `versions.test.tsx` e `app.test.tsx`
+  (a página inteira, com cliques e teclado). O `pnpm lint` (ESLint) pega o import esquecido, que só
   quebraria no clique, e o build recusa import de nome que o outro módulo não
   exporta.
 - `tests/test_spellbook.py` — o cliente do Commander Spellbook contra uma
@@ -1024,8 +1025,8 @@ nenhuma categoria.
 A regra do sideboard mora num lugar só de cada lado
 (`decks.CATEGORIAS_FORA_DA_CONTA` no servidor, `OUT_OF_COUNT` em `state.ts` na
 tela) porque ela existe duas vezes: a tela responde ao clique sem esperar a
-rede, e o servidor valida de novo ao gravar. `front/src/pages/deckbuilder/test/rules.test.ts`
-roda o JavaScript da página justamente pra que as duas não divirjam calado.
+rede, e o servidor valida de novo ao gravar. `front/src/pages/deckbuilder/test/rules.test.tsx`
+roda os módulos da página justamente pra que as duas não divirjam calado.
 
 ### Onde os decks ficam
 
@@ -1229,7 +1230,7 @@ dois), com a data de lançamento no `title`. E no deck ela é **aviso, não
 erro**: a linha não fica vermelha e o deck continua `ok` — um deck montado com
 a coleção nova na mão não é um deck quebrado, e um alarme que fica três semanas
 ligado é um alarme que se aprende a ignorar. A regra vale nos dois lados, como
-toda regra de formato daqui: `decks.validar` e o `validarLocal` da tela.
+toda regra de formato daqui: `decks.validar` e o `validateLocally` da tela.
 
 ### Onde cada coisa fica na tela
 
@@ -1338,11 +1339,11 @@ destaque acender e apagar sozinho.
 #### A régua, pro que a loja não cobre
 
 A regra que sustenta isso: **todo número interno continua em dólar, e a
-conversão acontece na borda, dentro de `moeda()`.** Converter cedo — guardar
-real em `precoDaEntrada`, em `orcamentoLocal`, no `data-teto` que viaja pro
+conversão acontece na borda, dentro de `money()`.** Converter cedo — guardar
+real em `entryPrice`, em `localBudget`, no teto que viaja pro
 `manabase.py` — espalharia a taxa por contas que não são dela, e faria o mesmo
 deck mudar de número conforme o dólar do dia sem ninguém ter mexido nele.
-Quatro consequências disso, todas travadas em `front/src/pages/deckbuilder/test/prices.test.ts`:
+Quatro consequências disso, todas travadas em `front/src/pages/deckbuilder/test/prices.test.tsx`:
 
 * **Sem taxa, tudo volta pra dólar.** Se a rota falhar, `0 × preço` daria
   "R$ 0,00" em toda carta — a mesma mentira que o `—` existe pra não contar.
@@ -1593,7 +1594,7 @@ Seis coisas que ele deliberadamente não sabe:
 * **Não cobra o imposto do comandante.** O comandante vai pra zona de comando
   (não pro baralho, senão o goldfish testaria um deck que ninguém joga) e a
   tela diz quanto custaria a próxima vez. Pagar é decisão de quem joga.
-* **Não guarda nada.** `corpoDoDeck` não sabe que `estado.mesa` existe: uma mão
+* **Não guarda nada.** `deckBody` não sabe que `state.table` existe: uma mão
   de goldfish gravada no deck é uma mão que volta três semanas depois, em outra
   máquina, no meio de uma edição.
 
@@ -1669,15 +1670,15 @@ curva do deck contra a curva do que de fato desceu (na mesma escala — duas
 escalas desfariam a comparação em silêncio) e quantas cartas nunca foram
 puxadas. A mesa continua de pé depois dele: encerrar é uma leitura, não um fim.
 
-O baralho sai de `cartasContadas()`, a mesma função do contador, da curva e da
+O baralho sai de `countedCards()`, a mesma função do contador, da curva e da
 assinatura de cotação: sideboard e maybeboard ficam de fora aqui pelo mesmo
 motivo que ficam lá. O segundo deck passa pela mesma régua, só que sobre a
 resposta do servidor.
 
-**São três módulos**, e a divisão é o que deixa o teste existir:
-`goldfish.ts` tem as regras e não toca em DOM nenhum, `goldfish-desenho.js` só
-lê a mesa e escreve HTML, e `goldfish-acoes.js` tem os cliques, o menu de cada
-carta, o arrastar e as quatro modais. Toda ação passa por `saveTableSnapshot()` antes
+**São três partes**, e a divisão é o que deixa o teste existir:
+`goldfish.ts` tem as regras e não toca em DOM nenhum, `table.ts` junta regra e
+redesenho (os cliques, o menu de cada carta, o arrastar e as quatro modais) e
+`ui/Goldfish.tsx` e `ui/GoldfishOverlays.tsx` só leem a mesa e desenham. Toda ação passa por `saveTableSnapshot()` antes
 — é o que faz o Ctrl+Z valer pra qualquer jogada, e não só pras que alguém
 lembrou de tratar. A fotografia do desfazer guarda o estado **sem as cartas**
 (elas voltam pelo registro de `uid`): uma mesa de dois decks tem 200 cartas

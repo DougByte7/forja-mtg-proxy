@@ -52,8 +52,7 @@ export async function runImport() {
   try {
     imported = await api("/decks/importar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(url ? { url } : { texto: text, nome: state.name }),
+      body: url ? { url } : { texto: text, nome: state.name },
     });
   } catch (e) {
     return setForm({ running: false, notice: { error: (e as Error).message } });

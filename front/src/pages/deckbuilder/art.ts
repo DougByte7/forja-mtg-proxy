@@ -411,8 +411,7 @@ async function loadCardArts(search: string) {
 async function requestArts(names: string[] | null) {
   const r = await api(`/decks/${state.id}/artes/buscar`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(names ? { nomes: names } : {}),
+    body: names ? { nomes: names } : {},
   });
   artState.byName = Object.assign(artState.byName || {}, r.por_nome || {});
   artState.sources = r.fontes || artState.sources;
@@ -429,8 +428,7 @@ async function loadMetadata(search: string, ids: string[]) {
   try {
     const r = await api("/artes/metadados", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: missing }),
+      body: { ids: missing },
     });
     if (artState.query !== search) return;   // trocou de carta ou de lado
     Object.assign(artState.meta, r.artes || {});
@@ -599,8 +597,7 @@ async function storeChoice(choice: Choice) {
   try {
     r = await api(`/decks/${state.id}/artes`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome: artName(card), face, copia: copy, ...choice }),
+      body: { nome: artName(card), face, copia: copy, ...choice },
     });
   } catch (e) {
     return toast("Não consegui guardar: " + (e as Error).message);
@@ -677,8 +674,7 @@ export async function uploadArtFile(file: File | null | undefined) {
       setUploadStatus("Conferindo a imagem…");
       r = await api(`/decks/${state.id}/artes/enviar/blob`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url, nome: artName(card), face, copia: copy, arquivo: file.name || "" }),
+        body: { url, nome: artName(card), face, copia: copy, arquivo: file.name || "" },
       });
     } else {
       const body = new FormData();

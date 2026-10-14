@@ -52,8 +52,7 @@ export async function loadSuggestions({ theme = null, card = null }: { theme?: s
     }
     state.suggestions = await api(`/decks/${state.id}/sugestoes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tema: card ? null : (theme || null), carta: card || null }),
+      body: { tema: card ? null : (theme || null), carta: card || null },
     });
     // O tema é do comandante: a página de uma carta não tem nenhum, e deixar
     // o anterior guardado faria o "voltar ao comandante" cair num tema que a
@@ -117,12 +116,11 @@ export async function importAverageDeck() {
   try {
     imported = await api("/decks/deck-medio", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: {
         comandantes: state.commanders.map((c) => c.nome),
         bracket: averageDeck.value.bracket,
         orcamento: averageDeck.value.budget,
-      }),
+      },
     });
   } catch (e) {
     return setAverageDeck({ running: false, notice: { error: (e as Error).message } });

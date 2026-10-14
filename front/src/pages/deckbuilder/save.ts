@@ -5,6 +5,7 @@
    existe porque esperar a rede pra dizer "essa carta é de outra cor" tornaria
    a tela lenta justamente no momento em que a informação importa. */
 import { signal } from "@preact/signals";
+import { api as sharedApi, type ApiOptions } from "../../shared/api";
 import { rememberLocalDeck } from "../../shared/localDecks";
 import { analyzeManabase } from "./manabase";
 import { scheduleQuote } from "./budget";
@@ -67,14 +68,11 @@ export function currentValidation() {
 
 /* ------------------------------------------------------------------ servidor */
 
-export async function api(path: string, options?: RequestInit) {
-  const r = await fetch(path, options);
-  if (!r.ok) {
-    let detail = r.statusText;
-    try { detail = (await r.json()).detail || detail; } catch { /* sem corpo JSON */ }
-    throw new Error(detail);
-  }
-  return r.status === 204 ? null : r.json();
+/* As chamadas da tela passam pelo `api` de `shared/api.ts` (o mesmo das
+   outras telas: o corpo vai em JSON e a frase do `detail` vira a mensagem do
+   erro). As respostas daqui ainda não têm tipo, por isso o `any`. */
+export function api(path: string, options?: ApiOptions) {
+  return sharedApi<any>(path, options);
 }
 
 export function deckBody() {
@@ -132,8 +130,7 @@ export async function saveNow() {
   saving = true;
   setSaveStatus("salvando…");
   try {
-    const body = { method: state.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
-                   body: JSON.stringify(deckBody()) };
+    const body = { method: state.id ? "PUT" : "POST", body: deckBody() };
     const response = await api(state.id ? `/decks/${state.id}` : "/decks", body);
     const isNew = !state.id;
     state.id = response.deck.id;
