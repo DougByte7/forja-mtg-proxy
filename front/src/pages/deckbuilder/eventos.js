@@ -5,7 +5,8 @@ import {ligarArrastar} from "./arrastar.js";
 import {artState, openArtPicker, closeArtPicker} from "./art";
 import {bindSearchKeys, clearCommanderResults, scheduleCommanderSearch,
         scheduleSearch, searchCommander} from "./search";
-import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
+import {closeCard, isCardOpen, openCard} from "./cardDetail";
+import {bindHoverPreview} from "./hoverPreview";
 import {linkDeConta} from "./conta.js";
 import {fecharCotacao} from "./cotacao.js";
 import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
@@ -73,9 +74,9 @@ export function ligarEventos(){
     }
     // A modal da carta vem antes da gaveta pelo mesmo motivo do menu: ela
     // está por cima, e é nela que a pessoa está olhando.
-    if (e.key === "Escape" && cartaAberta){
+    if (e.key === "Escape" && isCardOpen()){
       e.preventDefault();
-      return fecharCarta();
+      return closeCard();
     }
     if (e.key === "Escape" && openDrawerId){
       e.preventDefault();
@@ -94,7 +95,7 @@ export function ligarEventos(){
       return fecharFolha();
     }
     if (openDrawerId) return;   // dentro da gaveta, o teclado é dela
-    if (cartaAberta) return;    // e dentro da modal, dela
+    if (isCardOpen()) return;   // e dentro da modal, dela
     // D e Espaço só valem com a mesa à vista e nada por cima dela.
     if (state.aba === "goldfish" && !digitando && !isTableModalOpen() &&
         tableShortcut(e)) return;
@@ -121,12 +122,6 @@ export function ligarEventos(){
   $("btn-fazer-importar").addEventListener("click", fazerImportar);
   $("btn-limpar-filtros").addEventListener("click", clearFilters);
   $("gaveta-fundo").addEventListener("click", closeDrawer);
-  $("btn-fechar-carta").addEventListener("click", fecharCarta);
-  // Só o fundo fecha: clique dentro da modal (selecionar um trecho de ruling,
-  // por exemplo) não pode fechá-la.
-  $("carta-fundo").addEventListener("click", (e) => {
-    if (e.target === $("carta-fundo")) fecharCarta();
-  });
 
 
   // Clique nos resultados (os dois painéis) e nos controles do deck.
@@ -173,7 +168,7 @@ export function ligarEventos(){
     // devolveram acima. Clicar no nome é o gesto óbvio pra "me conta mais
     // sobre esta carta", e o "Ver a carta" do menu é o caminho do teclado.
     const linhaCarta = e.target.closest(".linha[data-nome]");
-    if (linhaCarta) return abrirCarta(
+    if (linhaCarta) return openCard(
       findEntry(linhaCarta.dataset.nome, doTabuleiro(linhaCarta))?.carta);
     // O "···" do cabeçalho abre daqui, e não de um listener próprio no botão:
     // a linha lá em cima que fecha o menu ao clicar fora roda na bolha, isto
@@ -185,7 +180,7 @@ export function ligarEventos(){
     // A pílula da versão abre daqui pelo mesmo motivo do "···".
     if (e.target.closest("[data-abrir-manabase]")) return callManabase();
     const verCmd = e.target.closest("[data-ver-cmd]");
-    if (verCmd) return abrirCarta(state.comandantes[Number(verCmd.dataset.verCmd)]);
+    if (verCmd) return openCard(state.comandantes[Number(verCmd.dataset.verCmd)]);
     const saiCmd = e.target.closest("[data-tirar-cmd]");
     if (saiCmd) return removeCommander(Number(saiCmd.dataset.tirarCmd));
     if (e.target.closest("#btn-parceiro")){
@@ -314,7 +309,7 @@ export function ligarEventos(){
   $("btn-subir").addEventListener("click", () =>
     window.scrollTo({top: 0, behavior: "smooth"}));
 
-  ligarPrevia();
+  bindHoverPreview();
 }
 
 /* Importar o link que foi colado na busca de comandante.

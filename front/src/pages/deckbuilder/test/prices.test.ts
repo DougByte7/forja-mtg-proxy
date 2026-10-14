@@ -188,8 +188,6 @@ describe("o subtotal do grupo não soma moedas diferentes", () => {
 it("os preços de referência da modal não são convertidos", async () => {
   // Uma taxa de dólar não fala por euro nem por tix.
   const p = await page(fixed());
-  const html = p.precosHTML({ precos: { usd: "2.50", eur: "1.80", tix: "0.03" } });
-  expect(html).toContain("2.50");
-  expect(html).toContain("1.80");
-  expect(html).not.toContain("R$");
+  expect(p.referencePrices({ precos: { usd: "2.50", eur: "1.80", tix: "0.03" } }))
+    .toEqual([["US$", "2.50"], ["€", "1.80"], ["tix", "0.03"]]);
 });

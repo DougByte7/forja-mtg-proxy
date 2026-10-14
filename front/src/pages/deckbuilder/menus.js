@@ -11,7 +11,7 @@
 
 import {escapar} from "../../shared/dom.js";
 import {openArtPicker} from "./art";
-import {abrirCarta} from "./carta.js";
+import {openCard} from "./cardDetail";
 import {autoCategory} from "./deck";
 import {createCategory, deleteCategory, findEntry, moveCard, moveCategory,
         removeCard, renameCategory, setCategory} from "./editing";
@@ -96,7 +96,7 @@ export function menuDaCarta(ancora, nome, tabuleiro){
   // teclado pra mesma modal que o clique na linha abre — sem ele, ver a carta
   // inteira seria coisa só de quem usa mouse.
   const itens = [{rotulo: "Ver a carta", marca: ico("cards"),
-                  aoClicar: () => abrirCarta(entrada.carta)},
+                  aoClicar: () => openCard(entrada.carta)},
                  // O botão de arte fica nos controles da linha do deck, que
                  // só aparecem no hover, e o maybeboard nem tem. Este item é
                  // a porta de teclado, a do maybeboard — e a de quem procura

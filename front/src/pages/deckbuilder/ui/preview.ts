@@ -1,5 +1,5 @@
 /* Os atributos que ligam um elemento à prévia que segue o mouse (ver
-   `ligarPrevia`, em `carta.js`, que lê `data-arte` por delegação). Passar a
+   `bindHoverPreview`, em `hoverPreview.ts`, que lê `data-arte` por delegação). Passar a
    carta inteira em vez de só a URL é o que faz a carta de duas faces aparecer
    inteira; cada lado sai pela `faceImage`, então com arte escolhida a
    prévia mostra o arquivo que vai pro papel. */

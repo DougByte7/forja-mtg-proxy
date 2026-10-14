@@ -8,6 +8,7 @@ import {
   ColorDistribution, Curve, DeckAlerts, IdentityNote, Issues, Odds, Power, TypeDistribution,
 } from "./ui/Analysis";
 import { ArtPicker } from "./ui/ArtPicker";
+import { CardModal } from "./ui/CardModal";
 import { CombosTabCount, DeckCombos, NearCombos } from "./ui/Combos";
 import { BoardList, CommanderBox, DeckTabCount, MaybeCount } from "./ui/DeckList";
 import { importarLinkColado } from "./eventos.js";
@@ -63,4 +64,5 @@ export function mountIslands() {
   render(<ArtPicker />, $("ilha-arte")!);
   render(<GoldfishPanel />, $("ilha-goldfish")!);
   render(<TableOverlays />, $("ilha-mesa-sobre")!);
+  render(<CardModal />, $("ilha-carta")!);
 }

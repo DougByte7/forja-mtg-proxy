@@ -15,7 +15,7 @@
    mesa, e não a lista, a análise e as chances do deck inteiro. */
 import { signal } from "@preact/signals";
 import { $ } from "../../shared/dom.js";
-import { detalheDaCarta } from "./carta.js";
+import { fetchCardInfo } from "./cardDetail";
 import { countedCards } from "./deck";
 import {
   addSecondDeck, adjustCommanderDamage, adjustLife, adjustPlayerCounter, cardByUid, clearCombat,
@@ -269,7 +269,7 @@ export async function putSecondDeck(id: string) {
 
 /* -------------------------------------------------------- o painel da carta */
 
-/* `data` é o detalhe da Scryfall quando já chegou (ver `detalheDaCarta`), e é
+/* `data` é o detalhe da Scryfall quando já chegou (ver `fetchCardInfo`), e é
    dele que saem poder, resistência, lealdade e defesa, que a base local não
    guarda. `floats` e `left` são medidos ao abrir. */
 export const detail = signal<{ uid: number; data: any; floats: boolean; left: string } | null>(null);
@@ -311,7 +311,7 @@ export async function showDetail(uid: number) {
   if (!name) return;
   let data;
   try {
-    data = await detalheDaCarta(name);
+    data = await fetchCardInfo(name);
   } catch {
     return;   // fica o que a base local sabe, que é o que já está na tela
   }

@@ -61,11 +61,11 @@ describe("nomes e chaves", () => {
     const p = await page();
     p.artState.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
     p.artState.escolhas["delver of secrets insectile aberration"] = { verso: { arte_id: "id-inseto" } };
-    expect(p.ganchosDaPrevia(SOL_RING)).toContain("thumbnail?id=id-sol");
-    expect(p.ganchosDaPrevia(ELVES)).toContain('data-arte="http://arte/Llanowar Elves"');
-    const delver = p.ganchosDaPrevia(DELVER);
-    expect(delver).toContain('data-arte="http://arte/Delver');
-    expect(delver).toContain("thumbnail?id=id-inseto");
+    expect(p.previewProps(SOL_RING)["data-arte"]).toContain("thumbnail?id=id-sol");
+    expect(p.previewProps(ELVES)["data-arte"]).toBe("http://arte/Llanowar Elves");
+    const delver = p.previewProps(DELVER);
+    expect(delver["data-arte"]).toMatch(/^http:\/\/arte\/Delver/);
+    expect(delver["data-arte-verso"]).toContain("thumbnail?id=id-inseto");
   });
 
   it("cada origem com a sua miniatura, e a URL da Scryfall virando id", async () => {

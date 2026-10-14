@@ -7,7 +7,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { hasBack } from "../art";
-import { abrirCarta } from "../carta.js";
+import { openCard } from "../cardDetail";
 import {
   adjustCardCounter, adjustPlayerCounter, attackers, CARD_COUNTERS, cardByUid, cardName, castCommander,
   draw, gameSummary, moveToZone, PLAYER_COUNTERS, setBlock, toggleAttack, toggleFace, toggleFaceDown,
@@ -93,7 +93,7 @@ function CardMenu({ uid }: { uid: number }) {
       )}
       <div class="gf-menu-titulo">Esta carta</div>
       {item(c.virada ? "Desvirar" : "Virar pra baixo", () => toggleFaceDown(uid))}
-      {!c.ficha && item("Ver a carta", () => abrirCarta(c.carta), { undo: false })}
+      {!c.ficha && item("Ver a carta", () => openCard(c.carta), { undo: false })}
     </>
   );
 }

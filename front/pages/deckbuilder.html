@@ -525,15 +525,8 @@
 <!-- O menu e as modais da mesa (`ui/GoldfishOverlays.tsx`). -->
 <div id="ilha-mesa-sobre"></div>
 
-<div class="carta-fundo" id="carta-fundo" hidden>
-  <div class="carta-modal" role="dialog" aria-modal="true"
-       aria-labelledby="carta-titulo">
-    <button class="mini sai carta-x" id="btn-fechar-carta"
-            aria-label="Fechar" title="Fechar (Esc)"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
-    <div class="carta-arte" id="carta-arte"></div>
-    <div class="carta-corpo" id="carta-corpo"></div>
-  </div>
-</div>
+<!-- A carta inteira (`ui/CardModal.tsx`). -->
+<div id="ilha-carta"></div>
 
 <div class="previa" id="previa" aria-hidden="true">
   <!-- Sem referrer pelo mesmo motivo da grade de artes: a prévia também
