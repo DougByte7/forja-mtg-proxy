@@ -260,53 +260,8 @@
       </div>
 
       <div class="painel" id="painel-goldfish" data-painel="goldfish" hidden>
-        <div class="gf-topo">
-          <h2 class="secao" style="margin:0">Goldfish</h2>
-          <span class="gf-dica">
-            <button class="gf-dica-botao" type="button" aria-label="Sobre o goldfish"
-              aria-describedby="gf-aviso">?</button>
-            <span class="gf-dica-texto" role="tooltip" id="gf-aviso">Aqui não tem
-              juiz: nada impede de baixar dois terrenos no mesmo turno nem de jogar
-              uma carta de 8 manas no turno 1. O que se mede aqui é a <b>mão</b>,
-              não a legalidade. Clique numa carta pra abrir o menu dela — ou
-              arraste pra outra zona.</span>
-          </span>
-          <span class="gf-turno" id="gf-turno"></span>
-          <button class="btn ouro" id="gf-passar" disabled
-            title="Passar turno (Espaço)">Passar turno</button>
-          <button class="btn" id="gf-fim-combate" hidden>Fim do combate</button>
-          <span class="gf-espaco"></span>
-          <button class="btn" id="gf-segundo" disabled
-            title="Pôr um deck seu do outro lado da mesa">Segundo deck</button>
-          <button class="btn" id="gf-encerrar" disabled
-            title="Resumo da partida: comandante, curva realizada e o que não foi puxado"
-            >Como foi</button>
-          <button class="btn" id="gf-desfazer" title="Desfaz a última jogada (Ctrl+Z)"
-            disabled>Desfazer</button>
-          <button class="btn" id="gf-tela">Tela cheia</button>
-          <button class="btn ouro" id="gf-embaralhar">Embaralhar</button>
-        </div>
-
-        <div class="gf-area">
-          <div id="gf-mesa"></div>
-          <div class="gf-coluna">
-            <aside class="gf-detalhe" id="gf-detalhe" aria-hidden="true">
-              <img id="gf-detalhe-arte" alt="" referrerpolicy="no-referrer">
-              <div id="gf-detalhe-corpo"></div>
-            </aside>
-            <div class="gf-nota-combos" id="gf-nota-combos"></div>
-            <div class="gf-log" id="gf-log"></div>
-            <div class="gf-atalhos">
-              <div class="gf-atalhos-titulo">Atalhos</div>
-              <dl>
-                <dt><kbd>D</kbd></dt><dd>Comprar</dd>
-                <dt><kbd>Espaço</kbd></dt><dd>Passar turno</dd>
-                <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd></dt><dd>Desfazer</dd>
-                <dt><kbd>Shift</kbd>+clique</dt><dd>Vida e dano de 5 em 5</dd>
-              </dl>
-            </div>
-          </div>
-        </div>
+        <!-- A mesa é um componente (`ui/Goldfish.tsx`). -->
+        <div id="ilha-goldfish"></div>
       </div>
     </div>
   </section>
@@ -567,6 +522,8 @@
 <!-- ================= escolher a arte =================
      A modal é um componente (`ui/ArtPicker.tsx`); fechada, ela não existe. -->
 <div id="ilha-arte"></div>
+<!-- O menu e as modais da mesa (`ui/GoldfishOverlays.tsx`). -->
+<div id="ilha-mesa-sobre"></div>
 
 <div class="carta-fundo" id="carta-fundo" hidden>
   <div class="carta-modal" role="dialog" aria-modal="true"

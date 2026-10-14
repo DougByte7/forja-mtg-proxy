@@ -7,7 +7,6 @@ import {lerConta, ligarConvite, ligarOrfao, receberConta} from "./conta.js";
 import {desenharTudo} from "./desenho.js";
 import {ligarEventos} from "./eventos.js";
 import {mountIslands} from "./islands";
-import {ligarGoldfish} from "./goldfish-acoes.js";
 import {CHAVE_TALVEZ, recolherTalvez, trocarAba, trocarRail} from "./paineis.js";
 import {loadExchangeRate} from "./price";
 import {api, atualizarBotaoMeus, lembrarDeck, marcarEstado} from "./salvar.js";
@@ -40,7 +39,6 @@ async function abrir(){
   ligarEventos();
   ligarOrfao();
   ligarConvite();
-  ligarGoldfish();
   atualizarBotaoMeus();
   conferirBase();
   // Sem `await`: a taxa é a régua do preço, não o deck. Ela redesenha sozinha

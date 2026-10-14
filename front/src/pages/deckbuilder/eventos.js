@@ -13,7 +13,7 @@ import {commanderPick, createCategory, findEntry, removeCard,
         removeCommander, setQuantity, undo} from "./editing";
 import {closeDrawer, openDrawer, openDrawerId} from "./drawers";
 import {clearFilters} from "./filters";
-import {atalhoDaMesa, desfazerMesa, fecharModalGf, modalGfAberto} from "./goldfish-acoes.js";
+import {closeTableModal, fullscreen, isTableModalOpen, setFullscreen, tableShortcut, undoTable} from "./table";
 import {exportar, fazerImportar} from "./importar-exportar.js";
 import {callManabase} from "./manabase";
 import {abrirMenu, fecharMenu, menuAberto, menuDaCarta, menuDoGrupo} from "./menus.js";
@@ -81,9 +81,9 @@ export function ligarEventos(){
       e.preventDefault();
       return closeDrawer();
     }
-    if (e.key === "Escape" && modalGfAberto()){
+    if (e.key === "Escape" && isTableModalOpen()){
       e.preventDefault();
-      return fecharModalGf();
+      return closeTableModal();
     }
     if (e.key === "Escape" && !$("cotacao-caixa").hidden){
       e.preventDefault();
@@ -96,8 +96,8 @@ export function ligarEventos(){
     if (openDrawerId) return;   // dentro da gaveta, o teclado é dela
     if (cartaAberta) return;    // e dentro da modal, dela
     // D e Espaço só valem com a mesa à vista e nada por cima dela.
-    if (state.aba === "goldfish" && !digitando && !modalGfAberto() &&
-        atalhoDaMesa(e)) return;
+    if (state.aba === "goldfish" && !digitando && !isTableModalOpen() &&
+        tableShortcut(e)) return;
     if (e.key === "/" && !digitando){
       e.preventDefault();
       (state.comandantes.length ? $("busca") : $("busca-cmd")).focus();
@@ -107,7 +107,7 @@ export function ligarEventos(){
       // Na aba do goldfish, Ctrl+Z desfaz a JOGADA, não a edição do deck.
       // São duas pilhas separadas de propósito: desfazer uma jogada não pode
       // tirar uma carta do deck, e vice-versa.
-      if (state.aba === "goldfish" && state.mesa) desfazerMesa();
+      if (state.aba === "goldfish" && state.mesa) undoTable();
       else undo();
     }
     if (e.key === "Escape" && artState.carta){
@@ -115,10 +115,7 @@ export function ligarEventos(){
       return;   // fecha uma coisa por Esc: a modal, não a tela cheia atrás dela
     }
     // Sair da tela cheia pelo Esc, que é onde a mão vai primeiro.
-    if (e.key === "Escape" && document.body.classList.contains("gf-cheia")){
-      document.body.classList.remove("gf-cheia");
-      $("gf-tela").textContent = "Tela cheia";
-    }
+    if (e.key === "Escape" && fullscreen.value) setFullscreen(false);
   });
 
   $("btn-fazer-importar").addEventListener("click", fazerImportar);

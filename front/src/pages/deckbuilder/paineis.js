@@ -8,7 +8,6 @@
 
 import {$} from "../../shared/dom.js";
 import {deckSignature, searchCombos} from "./combos";
-import {desenharMesa} from "./goldfish-desenho.js";
 import {analyzeManabase} from "./manabase";
 import {estimatePower} from "./power";
 import {state} from "./state";
@@ -45,7 +44,6 @@ function rodarAoAbrir(nome){
   // O goldfish NÃO embaralha sozinho ao abrir a aba, ao contrário das outras:
   // as demais recalculam algo sobre o deck, e recalcular é de graça; aqui
   // "recalcular" seria jogar fora a mesa que a pessoa está jogando.
-  if (nome === "goldfish") return desenharMesa();
 }
 
 export function trocarAba(nome){

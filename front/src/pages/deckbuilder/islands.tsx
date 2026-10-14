@@ -12,6 +12,8 @@ import { CombosTabCount, DeckCombos, NearCombos } from "./ui/Combos";
 import { BoardList, CommanderBox, DeckTabCount, MaybeCount } from "./ui/DeckList";
 import { importarLinkColado } from "./eventos.js";
 import { DefaultArtsButton, Gallery, OrderLink } from "./ui/Gallery";
+import { GoldfishPanel } from "./ui/Goldfish";
+import { TableOverlays } from "./ui/GoldfishOverlays";
 import { FilterFields, FiltersButton, FilterTape, HeroUnreleasedSwitch } from "./ui/Filters";
 import { ManabasePanel } from "./ui/Manabase";
 import { Meters } from "./ui/Meters";
@@ -59,4 +61,6 @@ export function mountIslands() {
   render(<DefaultArtsButton />, $("ilha-artes-padrao")!);
   render(<OrderLink />, $("ilha-pedido")!);
   render(<ArtPicker />, $("ilha-arte")!);
+  render(<GoldfishPanel />, $("ilha-goldfish")!);
+  render(<TableOverlays />, $("ilha-mesa-sobre")!);
 }
