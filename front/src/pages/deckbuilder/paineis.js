@@ -10,7 +10,7 @@ import {$} from "../../shared/dom.js";
 import {assinaturaDoDeck, procurarCombos} from "./combos.js";
 import {desenharMesa} from "./goldfish-desenho.js";
 import {analisarManabase} from "./manabase.js";
-import {estimarPoder} from "./poder.js";
+import {estimatePower} from "./power";
 import {state} from "./state";
 import {buscarSugestoes} from "./sugestoes.js";
 import {buscarTokens} from "./tokens.js";
@@ -34,7 +34,7 @@ function rodarAoAbrir(nome){
   }
   const assinatura = assinaturaDoDeck();
   if (nome === "analise" && state.poderAssinatura !== assinatura){
-    return estimarPoder();
+    return estimatePower();
   }
   if (nome === "combos" && state.combosAssinatura !== assinatura){
     return procurarCombos();

@@ -4,17 +4,13 @@ import {$, escapar} from "../../shared/dom.js";
 import {botaoDeArte} from "./artes.js";
 import {atualizarCategoriasDoDestino} from "./busca.js";
 import {ganchosDaPrevia} from "./carta.js";
-import {desenharChances} from "./chances.js";
 import {desenharCombos} from "./combos.js";
-import {autoCategory, categoryOf, categoryOrder, countedCards, deckIdentity,
-        isCustomCategory, totalCards} from "./deck";
+import {categoryOf, categoryOrder, deckIdentity, isCustomCategory, totalCards} from "./deck";
 import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
 import {agendarCotacao, desenharPreviaOrcamento, subtotalDoGrupo,
         subtotalTexto, subtotalTitulo, valorComparavel, valorHTML} from "./orcamento.js";
-import {desenharPoder} from "./poder.js";
 import {screenCurrency} from "./price";
-import {validacaoAtual} from "./salvar.js";
-import {COLOR_NAMES, COLORS, OUT_OF_COUNT, state, touch} from "./state";
+import {OUT_OF_COUNT, state, touch} from "./state";
 import {foldAccents} from "./text";
 import {ico, manaHTML, seloInedita} from "./utilidades.js";
 import {desenharVersao} from "./versoes.js";
@@ -25,17 +21,14 @@ export function desenharTudo(){
   desenharMaybe();
   desenharGaleria();
   atualizarBotaoPedido();
-  desenharAnalise();
   desenharContador();
   desenharVersao();
   desenharPreviaOrcamento();
   $("rot-preco-moeda").textContent = screenCurrency();
-  atualizarNotaIdentidade();
   atualizarCategoriasDoDestino();
   // Redesenha os combos pra o aviso de "o deck mudou desde esta busca"
   // aparecer no mesmo instante em que ele passa a ser verdade.
   if (state.combos) desenharCombos();
-  if (state.poder) desenharPoder();
   // A cotação persegue o deck: cada mudança marca uma nova, que só sai depois
   // de o deck ficar quieto.
   agendarCotacao();
@@ -333,169 +326,10 @@ function linhaHTML(entrada, identidade, tabuleiro){
    espera a pessoa lembrar de conferir. Então a análise se divide em duas: os
    erros de verdade ficam presos acima da lista do deck, e o resto (progresso,
    curva, cores) fica na aba, que é conferência e não alarme. */
-function desenharAlertasDoDeck(){
-  const v = validacaoAtual();
-  const graves = (v.apontamentos || []).filter(
-    a => a.nivel === "erro" && a.tipo !== "faltam" && a.tipo !== "sobram");
-  const caixa = $("alertas-deck");
-  if (!graves.length){ caixa.innerHTML = ""; return; }
-
-  // Agrupado por tipo, como na aba: um erro por carta vira ruído numa lista
-  // de 99, e "12 cartas fora da identidade" é a mesma informação numa linha.
-  const porTipo = new Map();
-  for (const a of graves){
-    if (!porTipo.has(a.tipo)) porTipo.set(a.tipo, []);
-    porTipo.get(a.tipo).push(a);
-  }
-  caixa.innerHTML = [...porTipo.values()].map(grupo => {
-    const a = grupo[0];
-    const nomes = grupo.map(x => x.carta).filter(Boolean);
-    const texto = nomes.length > 1
-      ? `${nomes.length} cartas: ${escapar(nomes.slice(0, 6).join(", "))}` +
-        (nomes.length > 6 ? ` e mais ${nomes.length - 6}` : "")
-      : escapar(a.mensagem);
-    const titulo = nomes.length > 1 ? rotuloTipo(a.tipo) : "";
-    return `<div class="aponta erro" style="margin-bottom:8px">
-      <span>${titulo ? `<b>${titulo}</b> — ` : ""}${texto}</span></div>`;
-  }).join("");
-}
-
+/* A análise (apontamentos, curva, distribuição, chances) e os alertas em
+   cima da lista viraram componentes (`ui/Analysis.tsx`); quem ainda chama
+   isto quer só o redesenho. */
 export function desenharAnalise(){
-  const v = validacaoAtual();
-  const caixa = $("apontamentos");
-  desenharAlertasDoDeck();
-
-  if (!state.comandantes.length){
-    caixa.innerHTML = `<div class="vazio" style="padding:8px 0;">Escolha o
-      comandante pra análise começar.</div>`;
-  } else if (v.ok){
-    caixa.innerHTML = `<div class="aponta ok">${ico("check")} Deck legal: 100 cartas,
-      singleton respeitado e tudo dentro da identidade
-      ${v.identidade ? pipsHTML(v.identidade) : "incolor"}.</div>`;
-  } else {
-    // "Faltam 43 cartas" sai da lista de erros e vira barra de progresso: é o
-    // estado normal de quem está montando, e pintá-lo de vermelho junto com
-    // uma carta banida ensinaria a ignorar os dois.
-    const faltam = v.apontamentos.filter(a => a.tipo === "faltam" || a.tipo === "sobram");
-    const resto = v.apontamentos.filter(a => a.tipo !== "faltam" && a.tipo !== "sobram");
-    let html = "";
-    if (faltam.length){
-      const pct = Math.min(100, (v.total / 100) * 100);
-      html += `<div class="progresso">
-        <div class="texto"><span>${v.total > 100 ? "Passou das 100" : "Montando o deck"}</span>
-          <b>${v.total}/100</b></div>
-        <span class="trilho"><span class="cheio" style="width:${pct}%"></span></span>
-      </div>`;
-    }
-
-    // Um erro por carta vira ruído numa lista de 99: agrupa por tipo e mostra
-    // "12 cartas fora da identidade" com os nomes juntos.
-    const porTipo = new Map();
-    for (const a of resto){
-      if (!porTipo.has(a.tipo)) porTipo.set(a.tipo, []);
-      porTipo.get(a.tipo).push(a);
-    }
-    caixa.innerHTML = html + [...porTipo.values()].map(grupo => {
-      const a = grupo[0];
-      const nomes = grupo.map(x => x.carta).filter(Boolean);
-      const texto = nomes.length > 1
-        ? `${nomes.length} cartas: ${escapar(nomes.slice(0, 6).join(", "))}` +
-          (nomes.length > 6 ? ` e mais ${nomes.length - 6}` : "")
-        : escapar(a.mensagem);
-      const titulo = nomes.length > 1 ? rotuloTipo(a.tipo) : "";
-      return `<div class="aponta ${a.nivel}">
-        <span>${titulo ? `<b>${titulo}</b> — ` : ""}${texto}</span></div>`;
-    }).join("");
-  }
-
-  desenharCurva();
-  desenharDistribuicao();
-  desenharChances();
+  touch();
 }
 
-function rotuloTipo(tipo){
-  return {
-    identidade: "Fora da identidade de cor",
-    singleton: "Singleton quebrado",
-    banida: "Não é legal em Commander",
-    desconhecida: "Não achei na base local",
-    "comandante-repetido": "Comandante repetido nas 99",
-  }[tipo] || "";
-}
-
-function pipsHTML(identidade){
-  return `<span class="mana" title="${identidade.split("").map(c => COLOR_NAMES[c]).join(", ")}">` +
-    identidade.split("").map(c => `<span class="pip ${c}"></span>`).join("") +
-    "</span>";
-}
-
-function desenharCurva(){
-  // Terreno fica de fora: ele não tem custo, e incluí-lo achataria a curva
-  // toda no zero, que é justamente o número que ninguém quer ler.
-  const faixas = [0,1,2,3,4,5,6,7];
-  const contas = faixas.map(() => 0);
-  for (const {carta, quantidade} of countedCards()){
-    if (!carta || (carta.tipo||"").toLowerCase().includes("land")) continue;
-    const cmc = Math.min(7, Math.floor(carta.cmc || 0));
-    contas[cmc] += quantidade;
-  }
-  const teto = Math.max(1, ...contas);
-  $("curva").innerHTML = faixas.map((f, i) => `
-    <div class="barra" title="${contas[i]} carta(s) com custo ${f}${f === 7 ? "+" : ""}">
-      <span class="qt">${contas[i] || ""}</span>
-      <div class="haste" style="height:${(contas[i] / teto) * 100}%"></div>
-      <span class="cmc">${f}${f === 7 ? "+" : ""}</span>
-    </div>`).join("");
-}
-
-function desenharDistribuicao(){
-  // Fontes de cor (terreno e o que produz mana não entram: isso é a
-  // distribuição do que o deck PEDE de cor, não do que ele produz).
-  const pedidos = {W:0,U:0,B:0,R:0,G:0};
-  let totalPips = 0;
-  for (const {carta, quantidade} of countedCards()){
-    if (!carta) continue;
-    for (const s of (carta.mana_cost || "").match(/\{[^}]+\}/g) || []){
-      for (const c of s.slice(1,-1).split("/")){
-        if (pedidos[c] !== undefined){ pedidos[c] += quantidade; totalPips += quantidade; }
-      }
-    }
-  }
-  const cores = COLORS.filter(c => pedidos[c] > 0).map(c => `
-    <div class="item">
-      <span class="pip ${c}"></span>
-      <span style="width:56px">${COLOR_NAMES[c]}</span>
-      <span class="trilho"><span class="cheio" style="width:${totalPips ? (pedidos[c]/totalPips)*100 : 0}%;background:var(--mana-${c})"></span></span>
-      <span class="num">${pedidos[c]}</span>
-    </div>`).join("");
-
-  // Por tipo, e não pela categoria escolhida à mão: aqui a pergunta é "meu
-  // deck tem criatura demais?", e um deck cujas criaturas estão em "combo
-  // principal" responderia zero.
-  const porCat = new Map();
-  for (const {carta, quantidade} of countedCards()){
-    const cat = autoCategory(carta);
-    porCat.set(cat, (porCat.get(cat) || 0) + quantidade);
-  }
-  const maiorCat = Math.max(1, ...porCat.values());
-  const tipos = [...porCat.entries()].sort((a,b) => b[1]-a[1]).map(([cat, n]) => `
-    <div class="item">
-      <span style="width:70px">${cat}</span>
-      <span class="trilho"><span class="cheio" style="width:${(n/maiorCat)*100}%;background:var(--purple)"></span></span>
-      <span class="num">${n}</span>
-    </div>`).join("");
-
-  const vazio = '<div class="vazio" style="padding:8px 0;">Sem cartas ainda.</div>';
-  $("distrib-cores").innerHTML = cores || vazio;
-  $("distrib-tipos").innerHTML = tipos || vazio;
-}
-
-function atualizarNotaIdentidade(){
-  const nota = $("nota-identidade");
-  if (!state.comandantes.length){ nota.hidden = true; return; }
-  const identidade = deckIdentity();
-  nota.hidden = false;
-  nota.innerHTML = identidade
-    ? `Mostrando só o que cabe na identidade ${pipsHTML(identidade)} do comandante.`
-    : "Comandante incolor: só cartas sem cor aparecem na busca.";
-}
