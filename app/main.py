@@ -729,8 +729,9 @@ def conta_entrar(resposta: Response, request: Request,
 
 @app.get("/cadastro")
 def pagina_de_cadastro():
-    """A tela de criar conta. Rota própria pra a URL não ter .html."""
-    return FileResponse("app/static/cadastro.html", media_type="text/html")
+    """A tela de criar conta (`front/src/pages/signup`). Rota própria pra a
+    URL não ter .html."""
+    return frontend.page("signup")
 
 
 @app.post("/conta/criar")
@@ -803,8 +804,9 @@ def pagina_de_decks():
     vêm de `/admin/pedidos`): o HTML aqui não tem deck nenhum dentro. Quais
     decks aparecem, quem decide é o navegador, com a lista que ele guarda —
     e é por isso que servir este arquivo publicamente não é problema.
+    A tela mora em `front/src/pages/decks`.
     """
-    return FileResponse("app/static/decks.html", media_type="text/html")
+    return frontend.page("decks")
 
 
 @app.get("/cartas/estado")

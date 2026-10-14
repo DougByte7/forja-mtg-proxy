@@ -1,42 +1,35 @@
+import { useMutation } from "@tanstack/preact-query";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { api, currentUser } from "../../shared/api";
+import { useLeaveIfLoggedIn } from "../../shared/account";
+import { api } from "../../shared/api";
 import { returnPath } from "../../shared/redirect";
 
 export function Login() {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
-  const [error, setError] = useState("");
-  const [sending, setSending] = useState(false);
   const loginRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const target = returnPath();
+  useLeaveIfLoggedIn(target);
 
-  /* Já logado? Então esta tela não tem o que fazer. Acontece com quem clica
-     "Entrar" num cabeçalho desatualizado, ou volta pelo histórico. */
-  useEffect(() => {
-    loginRef.current?.focus();
-    currentUser()
-      .then((u) => { if (u) location.replace(target); })
-      .catch(() => { /* sem rede, a tela de login é o lugar certo pra estar */ });
-  }, []);
-
-  async function submit(e: Event) {
-    e.preventDefault();
-    setError("");
-    setSending(true);
-    try {
-      await api("/conta/entrar", {
-        body: { login, senha: password, lembrar: remember },
-      });
-      location.href = target;
-      return;   // não reabilita o botão: a página está indo embora
-    } catch (err) {
-      setError((err as Error).message);
+  const enter = useMutation({
+    mutationFn: () =>
+      api("/conta/entrar", { body: { login, senha: password, lembrar: remember } }),
+    // Não volta o botão ao normal no sucesso: a página está indo embora.
+    onSuccess: () => { location.href = target; },
+    onError: () => {
       setPassword("");
       passwordRef.current?.focus();
-    }
-    setSending(false);
+    },
+  });
+  const busy = enter.isPending || enter.isSuccess;
+
+  useEffect(() => { loginRef.current?.focus(); }, []);
+
+  function submit(e: Event) {
+    e.preventDefault();
+    enter.mutate();
   }
 
   return (
@@ -48,7 +41,7 @@ export function Login() {
       <p class="sub">Com a conta você monta baralhos e encontra seus baralhos e
         pedidos em qualquer aparelho.</p>
 
-      {error && <div class="erro" role="alert">{error}</div>}
+      {enter.error && <div class="erro" role="alert">{enter.error.message}</div>}
 
       <form onSubmit={submit}>
         <label for="login">E-mail ou login</label>
@@ -67,8 +60,8 @@ export function Login() {
           {" "}Continuar conectado neste aparelho
         </label>
 
-        <button class="btn" type="submit" disabled={sending}>
-          {sending ? "Entrando…" : "Entrar"}
+        <button class="btn" type="submit" disabled={busy}>
+          {busy ? "Entrando…" : "Entrar"}
         </button>
       </form>
 

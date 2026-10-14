@@ -547,7 +547,9 @@ try:
         eq("GET /decks/resumo não é confundido com um deck chamado 'resumo'",
            cliente.get("/decks/resumo").status_code, 404)
 
-        eq("a página /meus-decks é servida", cliente.get("/meus-decks").status_code, 200)
+        # 503 é a rota certa sem o build do front (ver `test_frontend.py`).
+        check("a página /meus-decks tem rota",
+              cliente.get("/meus-decks").status_code in (200, 503))
 
     # ------------------------------------------------------------- versões
     print("\n--- versões ---")

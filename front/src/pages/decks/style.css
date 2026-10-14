@@ -1,0 +1,135 @@
+/* Mesma paleta, mesmas fontes e mesmos nomes de classe do deckbuilder: é a
+   mesma casa, e esta é a porta de entrada dela. */
+:root{
+  --bg:#0F0D17;
+  --surface:#1B1730;
+  --surface-2:#241F3D;
+  --border:#382F5C;
+  --text:#EDE6D6;
+  --text-muted:#A79BC7;
+  --inset:#16112A;
+  --gold:#E9C765;
+  --gold-light:#F5DC92;
+  --sobre-gold:#1A1024;
+  --purple:#8B6BFF;
+  --green:#4C9A6B;
+  --red:#D9634A;
+  --mana-W:#F5F0D8; --mana-U:#9FC7E8; --mana-B:#3b3540;
+  --mana-R:#E4907A; --mana-G:#89B894; --mana-C:#B9B4C8;
+  --largura:1100px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(circle at 12% 0%, rgba(139,107,255,0.12), transparent 42%),
+    radial-gradient(circle at 88% 100%, rgba(233,199,101,0.10), transparent 42%),
+    var(--bg);
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+  min-height:100vh;
+}
+button{font-family:inherit;}
+input:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
+[hidden]{display:none !important;}
+.sprite{position:absolute;width:0;height:0;overflow:hidden;}
+.ico{width:1em;height:1em;fill:currentColor;flex:none;vertical-align:-0.125em;}
+
+/* ---------------- cabeçalho ---------------- */
+.topo{border-bottom:1px solid var(--border);background:rgba(27,23,48,0.72);
+  backdrop-filter:blur(8px);position:sticky;top:0;z-index:5;}
+.topo-in{max-width:var(--largura);margin:0 auto;padding:12px 20px;
+  display:flex;align-items:center;gap:12px;}
+.rune{width:30px;height:30px;border-radius:8px;flex:none;display:grid;
+  place-items:center;background:linear-gradient(150deg,var(--gold),#B9913C);
+  color:var(--sobre-gold);font-weight:700;}
+.marca{font-family:'Cinzel',serif;font-size:15px;letter-spacing:0.04em;}
+.topo .espaco{flex:1;}
+
+.btn{background:var(--surface-2);color:var(--text);border:1px solid var(--border);
+  border-radius:9px;padding:7px 13px;font-size:13px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
+.btn:hover{border-color:var(--purple);}
+.btn.ouro{background:linear-gradient(150deg,var(--gold),#C9A24B);
+  color:var(--sobre-gold);border-color:transparent;font-weight:600;}
+.btn.mini{padding:5px 9px;font-size:12px;}
+.btn.perigo:hover{border-color:var(--red);color:var(--red);}
+.btn:disabled{opacity:0.5;cursor:default;}
+
+/* ---------------- corpo ---------------- */
+.corpo{max-width:var(--largura);margin:0 auto;padding:22px 20px 60px;}
+h1{font-family:'Cinzel',serif;font-size:24px;margin:0 0 4px;}
+.sub{color:var(--text-muted);font-size:13px;margin:0 0 20px;line-height:1.5;}
+.secao{font-family:'Cinzel',serif;font-size:13px;letter-spacing:0.05em;
+  color:var(--text-muted);margin:26px 0 10px;text-transform:uppercase;}
+
+.grade{display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));}
+
+/* ---------------- cartão de deck ---------------- */
+.cartao{background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;display:flex;flex-direction:column;}
+.cartao:hover{border-color:var(--purple);}
+.cartao.sumiu{opacity:0.62;}
+.capa{height:112px;background:var(--inset);position:relative;flex:none;
+  display:grid;place-items:center;overflow:hidden;}
+/* A arte do comandante é um retrato; o pedaço que interessa é o alto. */
+.capa img{width:118%;height:100%;position:relative;bottom:14%;
+  display:block;}
+.capa .semarte{color:var(--text-muted);font-size:11px;padding:0 12px;
+  text-align:center;}
+.capa::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(15,13,23,0.92),transparent 62%);}
+
+.cartao .miolo{padding:11px 13px 13px;display:flex;flex-direction:column;
+  gap:7px;flex:1;}
+.cartao .titulo{display:flex;align-items:flex-start;gap:8px;}
+.cartao h2{font-size:15px;margin:0;font-weight:600;line-height:1.25;
+  overflow-wrap:anywhere;flex:1;min-width:0;}
+/* A mesma pílula do deckbuilder, ao lado do nome como lá. */
+.versao{flex:none;font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+  font-weight:600;letter-spacing:.05em;line-height:1;padding:4px 8px;
+  border-radius:999px;border:1px solid var(--gold);color:var(--gold-light);
+  margin-top:1px;}
+.versao.wip{border-style:dashed;border-color:var(--text-muted);
+  color:var(--text-muted);}
+.cartao .cmd{color:var(--text-muted);font-size:12px;line-height:1.35;
+  overflow-wrap:anywhere;}
+.cartao .linha-info{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--text-muted);margin-top:auto;}
+.contagem{font-family:'IBM Plex Mono',monospace;}
+.contagem.completo{color:var(--green);}
+.contagem.falta{color:var(--gold-light);}
+.pip{width:11px;height:11px;border-radius:50%;display:inline-block;
+  border:1px solid rgba(0,0,0,0.35);}
+.pip.W{background:var(--mana-W);} .pip.U{background:var(--mana-U);}
+.pip.B{background:var(--mana-B);} .pip.R{background:var(--mana-R);}
+.pip.G{background:var(--mana-G);} .pip.C{background:var(--mana-C);}
+.cores{display:inline-flex;gap:2px;}
+.acoes{display:flex;gap:6px;flex-wrap:wrap;padding:0 13px 13px;}
+
+/* ---------------- estados ---------------- */
+.vazio{border:1px dashed var(--border);border-radius:12px;padding:28px 20px;
+  text-align:center;color:var(--text-muted);font-size:13.5px;line-height:1.6;}
+.aviso{background:var(--surface-2);border:1px solid var(--border);
+  border-left:3px solid var(--gold);border-radius:9px;padding:11px 13px;
+  font-size:12.5px;color:var(--text-muted);line-height:1.5;margin-bottom:14px;}
+.aviso.erro{border-left-color:var(--red);}
+.adotar{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+.campo{background:var(--inset);border:1px solid var(--border);border-radius:9px;
+  color:var(--text);padding:8px 11px;font-size:13px;font-family:inherit;
+  flex:1;min-width:200px;}
+.campo::placeholder{color:#6F6490;}
+
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+  padding:9px 15px;font-size:13px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.4);}
+
+@media (max-width:520px){
+  .grade{grid-template-columns:1fr;}
+  .topo-in{flex-wrap:wrap;}
+}
+
+/* O Preact monta dentro de #app; sem caixa própria, o layout continua
+   sendo o de antes, com o cabeçalho e o corpo direto no body. */
+#app{display:contents;}

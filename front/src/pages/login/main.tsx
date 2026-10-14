@@ -1,5 +1,5 @@
-import { render } from "preact";
+import { mount } from "../../shared/query";
 import { Login } from "./Login";
 import "./style.css";
 
-render(<Login />, document.getElementById("app")!);
+mount(<Login />);

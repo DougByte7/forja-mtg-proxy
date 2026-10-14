@@ -68,8 +68,21 @@ check("/entrar serve o HTML do build", r.status_code == 200
 check("como HTML", r.headers["content-type"].startswith("text/html"))
 check("com no-cache", r.headers.get("cache-control") == "no-cache",
       r.headers.get("cache-control"))
-check("/entrar.html antigo não existe mais",
-      c.get("/entrar.html").status_code == 404)
+
+# Cada rota aponta pra tela certa do build: trocar o nome de um entry no
+# vite.config.ts sem trocar aqui é tela em branco (503) só naquela rota.
+TELAS = {"/entrar": "login", "/cadastro": "signup", "/meus-decks": "decks"}
+for nome in TELAS.values():
+    (frontend.DIST / "pages" / f"{nome}.html").write_text(
+        f"<!DOCTYPE html><title>{nome}</title>", encoding="utf-8")
+for rota, nome in TELAS.items():
+    r = c.get(rota)
+    check(f"{rota} serve a tela {nome}", r.status_code == 200
+          and f"<title>{nome}</title>" in r.text, r.status_code)
+
+for antigo in ("entrar.html", "cadastro.html", "decks.html"):
+    check(f"/{antigo} antigo não existe mais",
+          c.get(f"/{antigo}").status_code == 404)
 
 print()
 if falhas:

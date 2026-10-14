@@ -115,7 +115,8 @@ front basta recarregar o navegador.
 
 O front está migrando, uma tela por vez, de HTML com JavaScript solto em
 `app/static/` pra Preact + TypeScript em `front/`, com build no Vite. Até agora
-migrou o login (`/entrar`). Essas telas saem do build, em `app/static/dist/`
+migraram o login (`/entrar`), o cadastro (`/cadastro`) e a lista de
+decks (`/meus-decks`). Essas telas saem do build, em `app/static/dist/`
 (fora do git), e sem ele a rota responde 503 dizendo o comando que falta.
 Precisa de Node 22 ou mais novo e do pnpm (a versão está no `packageManager`
 do `front/package.json`):
@@ -135,7 +136,11 @@ pnpm dev           # http://localhost:5173/pages/login.html
 ```
 
 Nomes de arquivo e código em `front/` ficam em inglês; textos da tela e
-comentários, em português. A Vercel roda o build sozinha (`buildCommand` no
+comentários, em português. Dado que vem do servidor (conta, decks, pedidos)
+passa pelo TanStack Query (`@tanstack/preact-query`): leitura com `useQuery`,
+escrita com `useMutation`, que invalida a lista depois. Cada tela monta com
+`mount()` de `front/src/shared/query.tsx`, que já põe o cliente em volta.
+Estado só da tela (campo digitado, botão armado) fica no componente. A Vercel roda o build sozinha (`buildCommand` no
 `vercel.json`). O container não roda, porque o site não mora mais no homelab.
 
 ### 4. Abra a tela
@@ -417,7 +422,8 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   por tela em `front/pages/`, o código em `front/src/pages/<tela>/` e o que
   é comum em `front/src/shared/`). O build vai pra `app/static/dist/`, e
   `app/frontend.py` serve o HTML de cada tela com `no-cache`; os assets têm
-  hash no nome e vão pelo mount estático. Hoje: o login (`/entrar`). Ver
+  hash no nome e vão pelo mount estático. Hoje: login (`/entrar`), cadastro
+  (`/cadastro`) e a lista de decks (`/meus-decks`). Ver
   *As telas em Preact*.
 - `app/static/index.html` — o front-end (a Forja de Proxies), servido pelo
   próprio FastAPI.
@@ -1416,7 +1422,7 @@ A ordenação usa o `atualizado_em` **do servidor**, não o carimbo local: o
 deck mexido no celular os dois discordam. Quem responde "no que eu estava
 mexendo" é o servidor.
 
-Página em arquivo próprio (`app/static/decks.html`), e não mais uma aba do
+Página própria (`front/src/pages/decks`), e não mais uma aba do
 deckbuilder: aquele já tem 5700 linhas, e a lista é a *porta de entrada* —
 uma porta que exige carregar o editor inteiro pra mostrar seis cartões está de
 costas. Vale a mesma separação do admin: `/meus-decks` é a casca, e o dado vem

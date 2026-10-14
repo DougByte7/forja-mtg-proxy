@@ -1,14 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, screen, waitFor } from "@testing-library/preact";
+import { mockFetch, renderWithQuery, sentBody } from "../../shared/testing";
 import { Login } from "./Login";
-
-function mockFetch(handler: (url: string, init?: RequestInit) => [number, unknown]) {
-  const fn = vi.fn(async (url: string, init?: RequestInit) => {
-    const [status, body] = handler(url, init);
-    return new Response(JSON.stringify(body), { status });
-  });
-  vi.stubGlobal("fetch", fn);
-  return fn;
-}
 
 describe("Login", () => {
   beforeEach(() => {
@@ -17,9 +9,9 @@ describe("Login", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("manda login, senha e lembrar e volta pro destino", async () => {
-    const fetch = mockFetch((url) =>
+    const fetch = mockFetch((_, url) =>
       url === "/conta" ? [200, { usuario: null }] : [200, { usuario: { login: "ana" } }]);
-    render(<Login />);
+    renderWithQuery(<Login />);
 
     fireEvent.input(screen.getByLabelText("E-mail ou login"), { target: { value: "ana" } });
     fireEvent.input(screen.getByLabelText("Senha"), { target: { value: "segredo" } });
@@ -27,14 +19,14 @@ describe("Login", () => {
     fireEvent.submit(screen.getByRole("button", { name: "Entrar" }));
 
     await waitFor(() => expect(location.href).toBe("/deckbuilder"));
-    const [, init] = fetch.mock.calls.find(([u]) => u === "/conta/entrar")!;
-    expect(JSON.parse(init!.body as string)).toEqual({ login: "ana", senha: "segredo", lembrar: true });
+    expect(sentBody(fetch, "POST", "/conta/entrar"))
+      .toEqual({ login: "ana", senha: "segredo", lembrar: true });
   });
 
   it("mostra o erro do servidor e limpa a senha", async () => {
-    mockFetch((url) =>
+    mockFetch((_, url) =>
       url === "/conta" ? [200, { usuario: null }] : [401, { detail: "Login ou senha não conferem." }]);
-    render(<Login />);
+    renderWithQuery(<Login />);
 
     const password = screen.getByLabelText("Senha") as HTMLInputElement;
     fireEvent.input(screen.getByLabelText("E-mail ou login"), { target: { value: "ana" } });
@@ -48,13 +40,13 @@ describe("Login", () => {
 
   it("quem já está logado vai direto pro destino", async () => {
     mockFetch(() => [200, { usuario: { login: "ana" } }]);
-    render(<Login />);
+    renderWithQuery(<Login />);
     await waitFor(() => expect(location.replace).toHaveBeenCalledWith("/deckbuilder"));
   });
 
   it("o link de cadastro leva o destino junto", () => {
     mockFetch(() => [200, { usuario: null }]);
-    render(<Login />);
+    renderWithQuery(<Login />);
     expect(screen.getByText("Criar conta").getAttribute("href"))
       .toBe("/cadastro?voltar=%2Fdeckbuilder");
   });

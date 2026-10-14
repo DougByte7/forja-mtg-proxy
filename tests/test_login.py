@@ -347,7 +347,9 @@ try:
 
     print("\n--- cadastro com token de acesso ---")
 
-    eq("a página /cadastro abre", anonimo.get("/cadastro").status_code, 200)
+    # 503 é a rota certa sem o build do front (ver `test_frontend.py`).
+    check("a página /cadastro tem rota",
+          anonimo.get("/cadastro").status_code in (200, 503))
     carla = TestClient(app)
     base = {"nome": "Carla", "email": "Carla@Exemplo.com",
             "senha": "senha-da-carla", "confirmacao": "senha-da-carla",
