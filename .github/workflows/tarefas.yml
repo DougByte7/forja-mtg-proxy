@@ -31,7 +31,8 @@ permissions:
 jobs:
   tarefas:
     if: github.repository == 'DougByte7/forja-mtg-proxy'
-    runs-on: ubuntu-latest
+    # 24.04 fixo: é o Python 3.12 dele que o passo de dependências usa.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       DB_URL: ${{ secrets.DB_URL }}
@@ -55,14 +56,25 @@ jobs:
             fi
           done
 
-      - uses: actions/checkout@v4
+      # Sem actions de terceiros: a política do repositório só aceita action
+      # do próprio DougByte7 fixada por SHA. Checkout e Python saem na mão.
+      - name: Baixar o código
+        run: |
+          set -euo pipefail
+          git init -q .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch -q --depth 1 origin "$GITHUB_SHA"
+          git checkout -q FETCH_HEAD
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - run: pip install -r requirements.txt
+      # Python do próprio sistema (3.12 no 24.04), num venv porque o pip do
+      # sistema recusa instalar fora de um (PEP 668).
+      - name: Instalar dependências
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/venv/bin/pip" install -q -r requirements.txt
 
       - name: Rodar
         env:
