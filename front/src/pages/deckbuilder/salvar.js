@@ -9,7 +9,7 @@ import {$} from "../../shared/dom.js";
 import {deckIdentity, totalCards} from "./deck";
 import {desenharAnalise, desenharContador} from "./desenho.js";
 import {analyzeManabase} from "./manabase";
-import {agendarCotacao} from "./orcamento.js";
+import {scheduleQuote} from "./budget";
 import {state} from "./state";
 import {brDate} from "./text";
 import {loadTokens} from "./tokens";
@@ -156,7 +156,7 @@ export async function salvarAgora(){
     // O primeiro salvamento é o instante em que o deck ganha id — e é só com
     // id que dá pra cotar. Sem esta chamada, um deck de uma carta só nunca
     // seria cotado: a cotação esperaria uma segunda mudança que não vem.
-    agendarCotacao();
+    scheduleQuote();
     // A mana base é conta local, sem custo de fora: depois de aberta uma
     // vez, acompanha cada autosave em vez de envelhecer com aviso.
     if (state.manabase) analyzeManabase();

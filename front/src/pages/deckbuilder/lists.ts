@@ -2,7 +2,7 @@
    dentro de cada um, o que a busca da lista deixa à vista e o que marca uma
    linha de vermelho. O desenho é `ui/DeckList.tsx`. */
 import { categoryOf, categoryOrder, isCustomCategory } from "./deck";
-import { subtotalDoGrupo, valorComparavel } from "./orcamento.js";
+import { groupSubtotal, sortablePrice } from "./budget";
 import { OUT_OF_COUNT, state } from "./state";
 import { foldAccents } from "./text";
 import type { Board, Entry } from "./types";
@@ -17,9 +17,9 @@ import type { Board, Entry } from "./types";
 type Compare = (a: Entry, b: Entry) => number;
 const byName: Compare = (a, b) => a.carta.nome.localeCompare(b.carta.nome);
 
-/* Preço desconhecido vai pro fim nos DOIS sentidos — ver `valorComparavel`. */
+/* Preço desconhecido vai pro fim nos DOIS sentidos — ver `sortablePrice`. */
 function byPrice(a: Entry, b: Entry, sign: number) {
-  const va = valorComparavel(a), vb = valorComparavel(b);
+  const va = sortablePrice(a), vb = sortablePrice(b);
   if (va === null && vb === null) return byName(a, b);
   if (va === null) return 1;
   if (vb === null) return -1;
@@ -46,7 +46,7 @@ export type GroupView = {
   collapsed: boolean;
   custom: boolean;
   outOfCount: boolean;
-  subtotal: ReturnType<typeof subtotalDoGrupo> | null;
+  subtotal: ReturnType<typeof groupSubtotal> | null;
 };
 
 /* Os grupos de uma lista, do jeito que as duas áreas desenham.
@@ -95,7 +95,7 @@ export function boardView(entries: Entry[], board: Board) {
       // lado do grupo diria o contrário. Somado sobre o grupo INTEIRO mesmo
       // com busca ligada: é quanto o grupo custa no deck, e filtrar a tela
       // não barateia o deck.
-      subtotal: board === "talvez" ? null : subtotalDoGrupo(all),
+      subtotal: board === "talvez" ? null : groupSubtotal(all),
     });
   }
   // Busca sem resultado precisa DIZER isso: lista vazia é o mesmo desenho de

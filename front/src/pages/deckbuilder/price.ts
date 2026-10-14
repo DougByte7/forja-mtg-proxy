@@ -12,7 +12,7 @@
    MOEDA. A base é dólar e quem monta deck aqui pensa em real, então a tela
    mostra real. A regra que sustenta isso: TODO NÚMERO INTERNO CONTINUA EM
    DÓLAR e a conversão acontece na borda, dentro de `money()`. Converter cedo
-   — guardar real em `precoDaEntrada`, em `orcamentoLocal`, no `data-teto` —
+   — guardar real em `entryPrice`, em `localBudget`, no `data-teto` —
    espalharia a taxa por contas que não são dela e faria o mesmo deck mudar de
    número conforme o dólar do dia sem ninguém ter mexido nele.
 
@@ -42,7 +42,7 @@ export function exchangeRate() {
 
    Sem taxa (a rota ainda não voltou, ou voltou torta) volta pra dólar em vez
    de multiplicar por zero: "R$ 0,00" em toda carta seria a mesma mentira que
-   o `—` de `valorHTML` existe pra não contar. Dólar é o número honesto que a
+   o `—` de `priceView` existe pra não contar. Dólar é o número honesto que a
    tela tem enquanto não tem o outro. */
 export function money(usd: number | null | undefined) {
   const t = exchangeRate();

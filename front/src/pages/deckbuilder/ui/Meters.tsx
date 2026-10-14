@@ -3,9 +3,8 @@
    O que vai na tela sai de `counterView` e `totalView`, funções puras (os
    testes as conferem); o componente só desenha. */
 import { exportar } from "../importar-exportar.js";
-import { alternarCotacao } from "../cotacao.js";
 import { totalCards } from "../deck";
-import { assinaturaDeCotacao, orcamentoLocal } from "../orcamento.js";
+import { localBudget, quoteBox, quoteSignature, toggleQuote } from "../budget";
 import { exchangeNote, money } from "../price";
 import { validacaoAtual } from "../salvar.js";
 import { state } from "../state";
@@ -40,7 +39,7 @@ export function counterView() {
    aplica. */
 export function totalView() {
   const hasDeck = !!(state.comandantes.length || state.cartas.length);
-  const o = orcamentoLocal();
+  const o = localBudget();
   const maybe = state.maybe.reduce((n, e) => n + e.quantidade, 0);
   const parts = [];
   if (o.cartas) parts.push(`${o.cartas} carta(s) contadas`);
@@ -57,7 +56,7 @@ export function totalView() {
   // número mostrado é de OUTRO deck. O giro cobre essa janela inteira — a
   // espera e a consulta — em vez de só a consulta.
   const waiting = !!(state.cotacaoRodando ||
-    (state.id && assinaturaDeCotacao() !== state.cotacaoAssinatura && o.cartas));
+    (state.id && quoteSignature() !== state.cotacaoAssinatura && o.cartas));
   return {
     hasDeck,
     showQuoteToggle: hasDeck && !!(state.cotacao || state.cotacaoErro),
@@ -93,7 +92,7 @@ export function Meters() {
       </button>
       <button class="btn redondo" id="btn-cotacao" type="button" hidden={!t.showQuoteToggle}
               aria-controls="cotacao-caixa" title="Detalhe da cotação" aria-label="Detalhe da cotação"
-              onClick={() => alternarCotacao()}>
+              aria-expanded={!!quoteBox.value} onClick={(e) => toggleQuote(e.currentTarget)}>
         <SpriteIcon name="caret-down" />
       </button>
     </>

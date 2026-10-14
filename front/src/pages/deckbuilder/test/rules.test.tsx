@@ -42,7 +42,7 @@ function seen(p: Page) {
     categorias: e.categorias,
     total: p.totalCards(),
     contadas: p.countedCards().map((x: any) => x.carta.nome),
-    orcamento: p.orcamentoLocal(),
+    orcamento: p.localBudget(),
     ordem: p.categoryOrder(e.cartas),
     apontamentos: p.validarLocal().apontamentos.map((a: any) => a.tipo),
     corpo: p.corpoDoDeck(),

@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------- desenhar */
 
 import {$} from "../../shared/dom.js";
-import {agendarCotacao, desenharPreviaOrcamento} from "./orcamento.js";
+import {scheduleQuote} from "./budget";
 import {state, touch} from "./state";
 import {LIST_ORDERS, MIN_FOR_TOOLS} from "./lists";
 import {syncVersion} from "./versions";
@@ -12,10 +12,9 @@ export function desenharTudo(){
   desenharMaybe();
   desenharContador();
   syncVersion();
-  desenharPreviaOrcamento();
   // A cotação persegue o deck: cada mudança marca uma nova, que só sai depois
   // de o deck ficar quieto.
-  agendarCotacao();
+  scheduleQuote();
 }
 
 /* O contador do cabeçalho virou componente (`ui/Meters.tsx`); quem ainda

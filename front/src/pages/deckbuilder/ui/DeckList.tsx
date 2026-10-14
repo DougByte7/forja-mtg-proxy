@@ -5,7 +5,7 @@
    são ligados por delegação (`eventos.js`, `menus.js`, `arrastar.js`). */
 import { deckIdentity, totalCards } from "../deck";
 import { boardView, rowProblem, type GroupView } from "../lists";
-import { subtotalTexto, subtotalTitulo } from "../orcamento.js";
+import { subtotalText, subtotalTitle } from "../budget";
 import type { Board, Entry } from "../types";
 import { ArtButton, PriceCell, UnreleasedTag } from "./CardBits";
 import { GuardedInput } from "./GuardedInput";
@@ -81,7 +81,7 @@ function CardGroup({ group: g, identity, board }: { group: GroupView; identity: 
           <span class="fora-rot" title={"O sideboard fica fora das 100\ne fora das análises, mas entra na cotação e na lista de impressão — é carta\nque você quer ter."}>fora das 100</span>
         )}
         {g.subtotal && g.subtotal.valor > 0 && (
-          <span class="valor-grupo" title={subtotalTitulo(g.subtotal)}>{subtotalTexto(g.subtotal)}</span>
+          <span class="valor-grupo" title={subtotalTitle(g.subtotal)}>{subtotalText(g.subtotal)}</span>
         )}
         <span class="traco" />
         {g.category === "Terrenos" && board === "deck" && (

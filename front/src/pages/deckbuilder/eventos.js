@@ -8,7 +8,7 @@ import {bindSearchKeys, clearCommanderResults, scheduleCommanderSearch,
 import {closeCard, isCardOpen, openCard} from "./cardDetail";
 import {bindHoverPreview} from "./hoverPreview";
 import {linkDeConta} from "./conta.js";
-import {fecharCotacao} from "./cotacao.js";
+import {closeQuote, quoteBox} from "./budget";
 import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
 import {commanderPick, createCategory, findEntry, removeCard,
         removeCommander, setQuantity, undo} from "./editing";
@@ -86,9 +86,9 @@ export function ligarEventos(){
       e.preventDefault();
       return closeTableModal();
     }
-    if (e.key === "Escape" && !$("cotacao-caixa").hidden){
+    if (e.key === "Escape" && quoteBox.value){
       e.preventDefault();
-      return fecharCotacao();
+      return closeQuote();
     }
     if (e.key === "Escape" && folhaAberta()){
       e.preventDefault();
@@ -129,11 +129,6 @@ export function ligarEventos(){
     // Clique fora fecha o menu aberto — inclusive quando o clique é num
     // botão que abre OUTRO menu, que o `abrirMenu` fecha de novo sozinho.
     if (menuAberto && !menuAberto.contains(e.target)) fecharMenu();
-    // O popover da cotação fecha no clique de fora, como o menu — menos o
-    // clique no próprio ⌄, que é quem o alterna.
-    const caixaCot = $("cotacao-caixa");
-    if (!caixaCot.hidden && !caixaCot.contains(e.target) &&
-        !e.target.closest("#btn-cotacao")) fecharCotacao();
     if (e.target.closest("[data-fecha-gaveta]")) return closeDrawer();
     // Os botões da linha herdam o tabuleiro dela: o mesmo ✕ serve o deck e
     // o maybeboard, e sem isto o ✕ de uma carta em dúvida tiraria a cópia
@@ -250,10 +245,6 @@ export function ligarEventos(){
       toast("Link copiado. Quem abrir vê e edita este mesmo deck.");
     } catch(e){ prompt("Link do deck:", url); }
   });
-
-  // Copiar a lista é a ação que se faz olhando pro total, então ela mora no
-  // próprio número em vez de num botão separado.
-  $("btn-fechar-cotacao").addEventListener("click", fecharCotacao);
 
   $("btn-nova-categoria").addEventListener("click", () => {
     const nome = prompt("Nome da nova categoria:\n\n" +

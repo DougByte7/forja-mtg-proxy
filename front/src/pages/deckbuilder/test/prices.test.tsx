@@ -14,6 +14,8 @@
    3. O limiar de "caro" virando real: ele é um julgamento sobre a CARTA.
    4. O filtro de preço convertendo de um lado só.
    ------------------------------------------------------------------------- */
+import { render } from "preact";
+import { act } from "preact/test-utils";
 import { carta, entrada } from "./fixtures";
 import { cleanup, clone, freshPage, type Page } from "./harness";
 
@@ -25,6 +27,12 @@ const FOREST = carta("Forest", "Basic Land — Forest", "", "", 0.0, 0.1, true);
 const DECK = [entrada(SOL_RING, 3), entrada(RHYSTIC), entrada(NO_PRICE), entrada(FOREST, 10)];
 
 // 5.43 é uma taxa plausível e com casas que denunciam arredondamento torto.
+/** O preço da linha num texto só: classe, valor e title. */
+const priceHtml = (p: Page, entry: unknown) => {
+  const v = p.priceView(entry);
+  return [v.classe, v.texto, v.titulo].join(" ");
+};
+
 const RATE = 5.43;
 const daily = { valor: RATE, fonte: "awesomeapi" };
 const fixed = (valor = RATE) => ({ valor, fonte: "fixa" });
@@ -79,9 +87,9 @@ describe("moeda(): o único ponto de conversão", () => {
 describe("o que NÃO pode converter", () => {
   it("precoDaEntrada e orcamentoLocal continuam em dólar, com ou sem taxa", async () => {
     const p = await page(fixed());
-    expect(p.precoDaEntrada(p.state.cartas[0])).toBe(6.0);
-    expect(p.orcamentoLocal().total).toBe(36.0);
-    expect((await page()).orcamentoLocal().total).toBe(36.0);
+    expect(p.entryPrice(p.state.cartas[0])).toBe(6.0);
+    expect(p.localBudget().total).toBe(36.0);
+    expect((await page()).localBudget().total).toBe(36.0);
   });
 
   it("o filtro de preço viaja em dólar quando digitado em real", async () => {
@@ -94,27 +102,27 @@ describe("o que NÃO pode converter", () => {
   });
 });
 
-describe("valorHTML: o travessão e o vermelho", () => {
+describe("o preço da linha: o travessão e o vermelho", () => {
   it("carta sem preço mostra o travessão, nunca R$ 0,00", async () => {
     const p = await page(fixed());
-    expect(p.valorHTML(p.state.cartas[2])).toContain("—");
-    expect(p.valorHTML(p.state.cartas[2])).not.toContain("0,00");
+    expect(priceHtml(p, p.state.cartas[2])).toContain("—");
+    expect(priceHtml(p, p.state.cartas[2])).not.toContain("0,00");
     const noRate = await page();
-    expect(noRate.valorHTML(noRate.state.cartas[2])).toContain("—");
+    expect(priceHtml(noRate, noRate.state.cartas[2])).toContain("—");
   });
 
   it("'caro' é julgamento sobre a carta: não muda com a taxa", async () => {
     // CARO_USD é 20 e o Rhystic custa 30; o Sol Ring, 2.
     for (const t of [1, 5.43, 50]) {
       const p = await page(fixed(t));
-      expect(p.valorHTML(p.state.cartas[1])).toContain("caro");
-      expect(p.valorHTML(p.state.cartas[0])).not.toContain("caro");
+      expect(priceHtml(p, p.state.cartas[1])).toContain("caro");
+      expect(priceHtml(p, p.state.cartas[0])).not.toContain("caro");
     }
   });
 
   it("o valor convertido carrega a nota do câmbio no title", async () => {
     const p = await page(daily);
-    expect(p.valorHTML(p.state.cartas[0])).toContain("5,43");
+    expect(priceHtml(p, p.state.cartas[0])).toContain("5,43");
   });
 });
 
@@ -139,49 +147,49 @@ describe("o preço da loja ganha do preço convertido", () => {
   it("carta cotada usa a loja; a que a loja não achou, comandante e básico caem na base", async () => {
     const p = await quoted();
     const c = p.state.cartas;
-    expect(p.precoUnitario(c[0].carta).valor).toBe(7.5);
-    expect(p.precoUnitario(c[0].carta).fonte).toBe("cotacao");
-    expect(p.precoUnitario(c[1].carta).fonte).toBe("base");
-    expect(p.precoUnitario(c[3].carta).fonte).toBe("base");
+    expect(p.unitPrice(c[0].carta).valor).toBe(7.5);
+    expect(p.unitPrice(c[0].carta).fonte).toBe("cotacao");
+    expect(p.unitPrice(c[1].carta).fonte).toBe("base");
+    expect(p.unitPrice(c[3].carta).fonte).toBe("base");
   });
 
   it("o preço da loja não passa pela régua; o da base passa", async () => {
     const p = await quoted();
     const c = p.state.cartas;
-    expect(p.precoTexto(p.precoUnitario(c[0].carta))).toBe("R$ 7,50");
-    expect(p.precoTexto(p.precoUnitario(c[0].carta), 3)).toBe("R$ 22,50");
-    expect(p.precoTexto(p.precoUnitario(c[1].carta))).toBe("R$ 162,90");
+    expect(p.priceText(p.unitPrice(c[0].carta))).toBe("R$ 7,50");
+    expect(p.priceText(p.unitPrice(c[0].carta), 3)).toBe("R$ 22,50");
+    expect(p.priceText(p.unitPrice(c[1].carta))).toBe("R$ 162,90");
   });
 
   it("estimativa leva o tracejado; cotado nomeia a loja; cada mercado com o seu 'caro'", async () => {
     const p = await quoted();
     const c = p.state.cartas;
-    expect(p.valorHTML(c[0])).not.toContain("estimado");
-    expect(p.valorHTML(c[1])).toContain("estimado");
-    expect(p.valorHTML(c[0])).toContain("Loja X");
-    expect(p.valorHTML(c[0])).not.toContain("caro");   // R$ 7,50 na loja
-    expect(p.valorHTML(c[1])).toContain("caro");       // US$ 30 na base
+    expect(priceHtml(p, c[0])).not.toContain("estimado");
+    expect(priceHtml(p, c[1])).toContain("estimado");
+    expect(priceHtml(p, c[0])).toContain("Loja X");
+    expect(priceHtml(p, c[0])).not.toContain("caro");   // R$ 7,50 na loja
+    expect(priceHtml(p, c[1])).toContain("caro");       // US$ 30 na base
   });
 });
 
 describe("o subtotal do grupo não soma moedas diferentes", () => {
   it("com câmbio, tudo em real, contando medidas e estimativas", async () => {
     const p = await quoted();
-    const s = p.subtotalDoGrupo([p.state.cartas[0], p.state.cartas[1]]);
-    expect(p.subtotalTexto(s)).toBe("R$ 185,40");
+    const s = p.groupSubtotal([p.state.cartas[0], p.state.cartas[1]]);
+    expect(p.subtotalText(s)).toBe("R$ 185,40");
     expect([s.medidas, s.estimadas].join("/")).toBe("3/1");
   });
 
   it("sem câmbio, o que está em real fica fora da soma, e o title avisa", async () => {
     const p = await quoted(null);
-    const s = p.subtotalDoGrupo([p.state.cartas[0], p.state.cartas[1]]);
-    expect([p.subtotalTexto(s), s.foraDaSoma].join(" | ")).toBe("US$ 30.00 | 3");
-    expect(p.subtotalTitulo(s)).toContain("fora da soma");
+    const s = p.groupSubtotal([p.state.cartas[0], p.state.cartas[1]]);
+    expect([p.subtotalText(s), s.foraDaSoma].join(" | ")).toBe("US$ 30.00 | 3");
+    expect(p.subtotalTitle(s)).toContain("fora da soma");
   });
 
   it("carta sem preço nenhum é contada, não somada", async () => {
     const p = await quoted();
-    expect(p.subtotalDoGrupo([p.state.cartas[2]]).sem).toBe(1);
+    expect(p.groupSubtotal([p.state.cartas[2]]).sem).toBe(1);
   });
 });
 
@@ -190,4 +198,43 @@ it("os preços de referência da modal não são convertidos", async () => {
   const p = await page(fixed());
   expect(p.referencePrices({ precos: { usd: "2.50", eur: "1.80", tix: "0.03" } }))
     .toEqual([["US$", "2.50"], ["€", "1.80"], ["tix", "0.03"]]);
+});
+
+describe("o detalhe da cotação", () => {
+  const drawn = (p: Page) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    act(() => render(<p.QuoteBox />, host));
+    return host;
+  };
+
+  it("abre pelo ⌄, mostra as fontes e fecha no clique de fora", async () => {
+    const p = await quoted();
+    p.state.cotacao.fontes[0].cartas_faltando = 1;
+    p.state.cotacao.fontes.push({ id: "ck", rotulo: "Card Kingdom", moeda: "USD", total: 0,
+                                  cartas_cotadas: 0, cartas_faltando: 4 });
+    const host = drawn(p);
+    expect(host.querySelector<HTMLElement>("#cotacao-caixa")!.hidden).toBe(true);
+    const anchor = document.createElement("button");
+    anchor.id = "btn-cotacao";
+    document.body.append(anchor);
+    act(() => p.toggleQuote(anchor));
+    const box = host.querySelector<HTMLElement>("#cotacao-caixa")!;
+    expect(box.hidden).toBe(false);
+    expect(box.querySelector(".fonte")!.textContent).toBe("LigaMagic2 de 3 cartas — total incompletoR$ 120.00");
+    // Fonte que não cotou nada diz isso no lugar do total.
+    expect(box.querySelector(".aponta.aviso")!.textContent).toContain("Card Kingdom não devolveu preço");
+
+    act(() => anchor.click());   // o próprio ⌄ não fecha pelo clique de fora
+    expect(box.hidden).toBe(false);
+    act(() => document.body.click());
+    expect(box.hidden).toBe(true);
+  });
+
+  it("o erro da cotação no lugar do detalhe", async () => {
+    const p = await page();
+    p.state.cotacaoErro = "LigaMagic fora do ar.";
+    const host = drawn(p);
+    expect(host.querySelector(".aponta.erro")!.textContent).toBe("LigaMagic fora do ar.");
+  });
 });

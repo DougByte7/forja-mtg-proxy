@@ -1,7 +1,7 @@
 /* Os pedaços de uma linha de carta que aparecem em mais de um lugar: o botão
    de arte, o preço e a etiqueta de inédita. */
 import { artButtonView } from "../art";
-import { valorView } from "../orcamento.js";
+import { priceView } from "../budget";
 import { brDate } from "../text";
 import type { Card, Entry } from "../types";
 import { SpriteIcon } from "./SpriteIcon";
@@ -21,7 +21,7 @@ export function ArtButton({ card }: { card: Card }) {
 }
 
 export function PriceCell({ entry }: { entry: Entry }) {
-  const v = valorView(entry);
+  const v = priceView(entry);
   return <span class={v.classe} title={v.titulo}>{v.texto}</span>;
 }
 

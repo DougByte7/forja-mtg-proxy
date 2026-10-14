@@ -19,6 +19,7 @@ import { FilterFields, FiltersButton, FilterTape, HeroUnreleasedSwitch } from ".
 import { ManabasePanel } from "./ui/Manabase";
 import { Meters } from "./ui/Meters";
 import { DestinationCategory, DestinationSegment, SearchResults } from "./ui/Search";
+import { QuoteBox } from "./ui/Quote";
 import { SuggestionsPanel } from "./ui/Suggestions";
 import { TokensPanel, TokensTabCount } from "./ui/Tokens";
 import { History, VersionPill } from "./ui/Versions";
@@ -65,4 +66,5 @@ export function mountIslands() {
   render(<GoldfishPanel />, $("ilha-goldfish")!);
   render(<TableOverlays />, $("ilha-mesa-sobre")!);
   render(<CardModal />, $("ilha-carta")!);
+  render(<QuoteBox />, $("ilha-cotacao")!);
 }

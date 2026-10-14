@@ -91,9 +91,8 @@ export function aplicarImportado(trazido, {mesmoDeck = false} = {}){
   // tela mostraria a curva de um deck e os combos de outro.
   state.combos = state.poder = state.sugestoes = state.manabase = null;
   state.combosMexidos = 0;
-  // (Os painéis que são componente se apagam sozinhos no redesenho; só a
-  // cotação ainda é escrita à mão.)
-  $("orc-resultado").innerHTML = "";
+  // A cotação também: os preços da loja eram das cartas de lá.
+  state.cotacao = state.cotacaoErro = null;
 
   // No mesmo deck, o nome que a pessoa deu fica: ele é dela, e o que mudou
   // foram as cartas. Só o nome de fábrica cede lugar ao que veio.
