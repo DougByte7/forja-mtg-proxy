@@ -11,18 +11,19 @@
 
    MOEDA. A base é dólar e quem monta deck aqui pensa em real, então a tela
    mostra real. A regra que sustenta isso: TODO NÚMERO INTERNO CONTINUA EM
-   DÓLAR e a conversão acontece na borda, dentro de `moeda()`. Converter cedo
+   DÓLAR e a conversão acontece na borda, dentro de `money()`. Converter cedo
    — guardar real em `precoDaEntrada`, em `orcamentoLocal`, no `data-teto` —
    espalharia a taxa por contas que não são dela e faria o mesmo deck mudar de
    número conforme o dólar do dia sem ninguém ter mexido nele.
 
    A taxa vem de `GET /cambio` uma vez, ao abrir (ver `abrir`). É aproximação
-   e a tela diz isso: todo valor convertido carrega `notaDoCambio()` no title,
+   e a tela diz isso: todo valor convertido carrega `exchangeNote()` no title,
    com o valor da taxa e se ela veio do câmbio do dia ou do padrão fixo. */
 
-import {desenharTudo} from "./desenho.js";
-import {estado} from "./estado.js";
-import {api} from "./salvar.js";
+import { desenharTudo } from "./desenho.js";
+import { api } from "./salvar.js";
+import { state } from "./state";
+import type { Card } from "./types";
 
 /* Acima disto a carta é "cara" e o valor fica em destaque. Dois números, um
    por mercado, INDEPENDENTES de propósito: US$ 20 lá fora e R$ 100 aqui não
@@ -30,11 +31,11 @@ import {api} from "./salvar.js";
    mais é justamente o que o ▲ da cotação existe pra apontar. Amarrar um ao
    outro pela taxa do dia faria o destaque acender e apagar sozinho, sem
    ninguém ter mexido no deck. */
-export const CARO_USD = 20;
-export const CARO_BRL = 100;
+export const PRICEY_USD = 20;
+export const PRICEY_BRL = 100;
 
-export function taxa(){
-  return (estado.cambio && estado.cambio.valor > 0) ? estado.cambio.valor : 0;
+export function exchangeRate() {
+  return state.cambio && state.cambio.valor > 0 ? state.cambio.valor : 0;
 }
 
 /* Um valor em dólar, escrito do jeito que a tela mostra.
@@ -43,11 +44,11 @@ export function taxa(){
    de multiplicar por zero: "R$ 0,00" em toda carta seria a mesma mentira que
    o `—` de `valorHTML` existe pra não contar. Dólar é o número honesto que a
    tela tem enquanto não tem o outro. */
-export function moeda(valorUsd){
-  const t = taxa();
-  const n = Number(valorUsd || 0);
+export function money(usd: number | null | undefined) {
+  const t = exchangeRate();
+  const n = Number(usd || 0);
   if (!t) return "US$ " + n.toFixed(2);
-  return "R$ " + reais(n * t);
+  return "R$ " + formatBRL(n * t);
 }
 
 /* Um número no formato de dinheiro daqui: ponto no milhar, vírgula no
@@ -56,7 +57,7 @@ export function moeda(valorUsd){
    levanta — devolve "108.6" calado, com o ponto no lugar da vírgula. Foi o
    que o teste do câmbio (hoje `test/prices.test.ts`) pegou. Formato de dinheiro é regra da
    tela, e regra da tela tem que dar pra testar. */
-export function reais(n){
+export function formatBRL(n: number) {
   const partes = Math.abs(n).toFixed(2).split(".");
   const milhar = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return (n < 0 ? "-" : "") + milhar + "," + partes[1];
@@ -64,8 +65,8 @@ export function reais(n){
 
 /* A nota que acompanha todo valor convertido, no title. É ela que faz a
    diferença entre aproximação honesta e número inventado. */
-export function notaDoCambio(){
-  const c = estado.cambio;
+export function exchangeNote() {
+  const c = state.cambio;
   if (!c || !(c.valor > 0)) return "Preço em dólar: o câmbio ainda não chegou.";
   return `Convertido a R$ ${c.valor.toFixed(2).replace(".", ",")} por dólar (`
     + (c.fonte === "fixa" ? "taxa padrão do servidor" : "câmbio do dia") + ").";
@@ -74,8 +75,8 @@ export function notaDoCambio(){
 /* O símbolo sozinho, pros lugares que escrevem o número por conta própria.
    Nome comprido porque `desenharCotacao` tem um `const simbolo` local, com
    outro sentido: lá é a moeda DA FONTE cotada, aqui é a moeda da tela. */
-export function simboloDaTela(){
-  return taxa() ? "R$" : "US$";
+export function screenCurrency() {
+  return exchangeRate() ? "R$" : "US$";
 }
 
 /* O filtro de preço é DIGITADO na moeda da tela e VIAJA em dólar, que é o que
@@ -84,9 +85,9 @@ export function simboloDaTela(){
    valer cinco vezes mais ou menos do que a pessoa pediu, sem nada na tela
    denunciando. Guardamos o que foi digitado, não o convertido, pra o campo
    mostrar de volta o número que a pessoa escreveu. */
-export function precoMaxEmUsd(digitado){
-  const t = taxa();
-  const n = Number(digitado);
+export function maxPriceInUsd(typed: number | string) {
+  const t = exchangeRate();
+  const n = Number(typed);
   return t ? (n / t) : n;
 }
 
@@ -95,11 +96,16 @@ export function precoMaxEmUsd(digitado){
    rede e cortam em `abrir();`, então buscar na carga quebraria os testes. E o
    deckbuilder tem que abrir mesmo sem esta rota — sem taxa, tudo cai pra
    dólar e nada mais muda. */
-export async function carregarCambio(){
+export async function loadExchangeRate() {
   try {
-    estado.cambio = await api("/cambio");
-  } catch (e) {
+    state.cambio = await api("/cambio");
+  } catch {
     return;   // silêncio de propósito: isto é a régua, não o serviço
   }
   desenharTudo();
+}
+
+/* O preço de uma carta na moeda da tela, ou nada quando a base não tem. */
+export function cardPrice(card: Card) {
+  return card.preco_usd ? money(card.preco_usd) : "";
 }

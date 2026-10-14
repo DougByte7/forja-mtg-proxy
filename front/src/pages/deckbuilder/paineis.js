@@ -8,10 +8,10 @@
 
 import {$} from "../../shared/dom.js";
 import {assinaturaDoDeck, procurarCombos} from "./combos.js";
-import {estado} from "./estado.js";
 import {desenharMesa} from "./goldfish-desenho.js";
 import {analisarManabase} from "./manabase.js";
 import {estimarPoder} from "./poder.js";
+import {state} from "./state";
 import {buscarSugestoes} from "./sugestoes.js";
 import {buscarTokens} from "./tokens.js";
 import {ico} from "./utilidades.js";
@@ -21,25 +21,25 @@ import {buscarHistorico} from "./versoes.js";
    ainda não houver resposta ou se o deck tiver mudado desde a última — trocar
    de aba ida e volta não repete consulta. */
 function rodarAoAbrir(nome){
-  if (!estado.comandantes.length) return;
-  if (nome === "manabase" && !estado.manabase) return analisarManabase();
+  if (!state.comandantes.length) return;
+  if (nome === "manabase" && !state.manabase) return analisarManabase();
   // Sempre, e não só na primeira vez: o bloco do que mudou desde a última
   // versão acompanha a lista gravada.
   if (nome === "historico") return buscarHistorico();
   // As sugestões dependem do comandante, não da lista: refazê-las a cada
   // carta adicionada seria uma consulta por clique pra receber quase a mesma
   // resposta. Busca uma vez; o botão do painel refaz quando a pessoa quiser.
-  if (nome === "sugestoes" && !estado.sugestoes && !estado.sugestoesRodando){
-    return buscarSugestoes({tema: estado.sugestoesTema});
+  if (nome === "sugestoes" && !state.sugestoes && !state.sugestoesRodando){
+    return buscarSugestoes({tema: state.sugestoesTema});
   }
   const assinatura = assinaturaDoDeck();
-  if (nome === "analise" && estado.poderAssinatura !== assinatura){
+  if (nome === "analise" && state.poderAssinatura !== assinatura){
     return estimarPoder();
   }
-  if (nome === "combos" && estado.combosAssinatura !== assinatura){
+  if (nome === "combos" && state.combosAssinatura !== assinatura){
     return procurarCombos();
   }
-  if (nome === "tokens" && estado.tokensAssinatura !== assinatura){
+  if (nome === "tokens" && state.tokensAssinatura !== assinatura){
     return buscarTokens();
   }
   // O goldfish NÃO embaralha sozinho ao abrir a aba, ao contrário das outras:
@@ -49,7 +49,7 @@ function rodarAoAbrir(nome){
 }
 
 export function trocarAba(nome){
-  estado.aba = nome;
+  state.aba = nome;
   const fita = $("abas-deck");
   for (const b of fita.children){
     const ativa = b.dataset.painel === nome;
@@ -63,7 +63,7 @@ export function trocarAba(nome){
 }
 
 export function trocarRail(nome){
-  estado.rail = nome;
+  state.rail = nome;
   const fita = $("abas-rail");
   for (const b of fita.children){
     const ativa = b.dataset.rail === nome;
@@ -88,7 +88,7 @@ export function trocarRail(nome){
 export function abrirFolha(){
   $("lateral").classList.add("aberta");
   $("folha-fundo").classList.add("aberta");
-  trocarRail(estado.rail);
+  trocarRail(state.rail);
   setTimeout(() => $("busca").focus(), 220);
 }
 

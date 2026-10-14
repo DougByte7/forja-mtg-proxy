@@ -39,11 +39,12 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {desenharDeck, desenharMaybe} from "./desenho.js";
-import {estado} from "./estado.js";
 import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
 import {api} from "./salvar.js";
+import {state} from "./state";
+import {foldAccents} from "./text";
 import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
-import {ico, semAcento, toast} from "./utilidades.js";
+import {ico, toast} from "./utilidades.js";
 
 const ARTES_POR_PAGINA = 24;
 // Guardado no navegador pelo mesmo motivo da coluna do maybeboard: é jeito de
@@ -151,7 +152,7 @@ export function ladoPronto(carta, face, quantidade){
 /* Quantas cópias da carta vão pro papel. Comandante e ficha são uma. */
 function quantidadeNoPapel(carta){
   if (!carta || carta.ficha) return 1;
-  const entrada = estado.cartas.find(e => e.carta && e.carta.nome === carta.nome);
+  const entrada = state.cartas.find(e => e.carta && e.carta.nome === carta.nome);
   return entrada ? entrada.quantidade : 1;
 }
 
@@ -253,9 +254,9 @@ function redesenharArtes(){
 /* As escolhas do deck inteiro, uma vez, ao abrir. Sem rede por linha: a lista
    desenha 100 botões e uma consulta por botão seria 100 requisições. */
 export async function carregarArtes(){
-  if (!estado.id) return;
+  if (!state.id) return;
   try {
-    const r = await api(`/decks/${estado.id}/artes`);
+    const r = await api(`/decks/${state.id}/artes`);
     arte.escolhas = r.escolhas || {};
   } catch (e){
     return;   // sem isto a lista mostra todos no padrão, que é o que eles são
@@ -266,9 +267,9 @@ export async function carregarArtes(){
 /* `nome` é o que o quadro carrega em `data-arte-carta`: o nome da carta, ou a
    chave da ficha (ver `nomeDaArte`). */
 export function acharCartaDaArte(nome){
-  const noDeck = estado.cartas.find(e => e.carta && e.carta.nome === nome);
+  const noDeck = state.cartas.find(e => e.carta && e.carta.nome === nome);
   if (noDeck) return noDeck.carta;
-  return estado.comandantes.find(c => c.nome === nome) ||
+  return state.comandantes.find(c => c.nome === nome) ||
     fichasDoDeck().find(f => f.chaveArte === nome) || null;
 }
 
@@ -277,7 +278,7 @@ export function acharCartaDaArte(nome){
 export async function abrirEscolhaDeArte(nome, face, copia){
   const carta = acharCartaDaArte(nome);
   if (!carta) return;
-  if (!estado.id) return toast("Salve o deck antes de escolher artes.");
+  if (!state.id) return toast("Salve o deck antes de escolher artes.");
 
   arte.carta = carta;
   arte.meta = {};
@@ -456,7 +457,7 @@ async function buscarArtesDaCarta(busca){
 
 /* `nomes` null = o deck inteiro, que é o que o servidor busca sem lista. */
 async function pedirArtes(nomes){
-  const r = await api(`/decks/${estado.id}/artes/buscar`, {
+  const r = await api(`/decks/${state.id}/artes/buscar`, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(nomes ? {nomes} : {}),
@@ -604,11 +605,11 @@ function idsFiltrados(){
    "CC" não pode achar "(CC10007)", que é CC1 nº 0007. O artista cobre as
    edições antigas, cujos scans quase nunca levam sigla. */
 function casaImpressao(arquivo, imp){
-  const nome = semAcento(arquivo);
-  const sigla = semAcento(imp.sigla).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const nome = foldAccents(arquivo);
+  const sigla = foldAccents(imp.sigla).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (sigla && new RegExp(`(^|[^a-z0-9])${sigla}(\\d{4}\\)|[^a-z0-9]|$)`).test(nome))
     return true;
-  return !!imp.artista && nome.includes(semAcento(imp.artista));
+  return !!imp.artista && nome.includes(foldAccents(imp.artista));
 }
 
 /* As páginas que o paginador mostra: a primeira, a última e duas de cada lado
@@ -820,7 +821,7 @@ async function guardarEscolha(escolha){
   const carta = arte.carta, face = arte.face, copia = arte.copia;
   let r;
   try {
-    r = await api(`/decks/${estado.id}/artes`, {
+    r = await api(`/decks/${state.id}/artes`, {
       method: "PUT",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(Object.assign({nome: nomeDaArte(carta), face, copia}, escolha)),
@@ -892,14 +893,14 @@ async function enviarArquivo(arquivo){
   let r;
   try {
     // O site diz como subir: direto pra ele (disco, no homelab) ou pro Blob.
-    const envio = await api(`/decks/${estado.id}/artes/enviar/inicio`, {method: "POST"});
+    const envio = await api(`/decks/${state.id}/artes/enviar/inicio`, {method: "POST"});
     if (envio.modo === "blob") {
       if (arquivo.size > envio.maximo_bytes) {
         throw new Error(`O arquivo passa de ${Math.round(envio.maximo_bytes / 1048576)} MB.`);
       }
       const url = await subirProBlob(arquivo, envio);
       $("arte-envio-estado").textContent = "Conferindo a imagem…";
-      r = await api(`/decks/${estado.id}/artes/enviar/blob`, {
+      r = await api(`/decks/${state.id}/artes/enviar/blob`, {
         method: "POST",
         headers: {"content-type": "application/json"},
         body: JSON.stringify({url, nome: nomeDaArte(carta), face, copia,
@@ -911,7 +912,7 @@ async function enviarArquivo(arquivo){
       corpo.append("nome", nomeDaArte(carta));
       corpo.append("face", face);
       corpo.append("copia", String(copia));
-      r = await api(`/decks/${estado.id}/artes/enviar`, {method: "POST", body: corpo});
+      r = await api(`/decks/${state.id}/artes/enviar`, {method: "POST", body: corpo});
     }
   } catch (e){
     if (arte.carta === carta) $("arte-envio-estado").textContent = e.message;
@@ -927,7 +928,7 @@ async function voltarAoPadrao(){
   if (!arte.carta) return;
   const carta = arte.carta, face = arte.face, copia = arte.copia;
   try {
-    await api(`/decks/${estado.id}/artes?nome=${
+    await api(`/decks/${state.id}/artes?nome=${
       encodeURIComponent(nomeDaArte(carta))}&face=${face}&copia=${copia}`, {method: "DELETE"});
   } catch (e){
     return toast("Não consegui: " + e.message);
@@ -957,7 +958,7 @@ async function mudarPorCopia(interruptor){
       return;
     }
     try {
-      await api(`/decks/${estado.id}/artes/copias?nome=${
+      await api(`/decks/${state.id}/artes/copias?nome=${
         encodeURIComponent(nomeDaArte(carta))}`, {method: "DELETE"});
     } catch (e){
       interruptor.checked = true;
@@ -975,12 +976,12 @@ async function mudarPorCopia(interruptor){
 /* O "Usar a arte padrão nas que faltam" da aba Artes (ver
    `artes.aplicar_padrao`). */
 async function aplicarPadraoNasQueFaltam(){
-  if (!estado.id) return;
+  if (!state.id) return;
   const botao = $("btn-artes-padrao");
   botao.disabled = true;
   let r;
   try {
-    r = await api(`/decks/${estado.id}/artes/padrao`, {method: "POST"});
+    r = await api(`/decks/${state.id}/artes/padrao`, {method: "POST"});
   } catch (e){
     return toast("Não consegui: " + e.message);
   } finally {

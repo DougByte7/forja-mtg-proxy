@@ -1,9 +1,13 @@
-/* ---------------------------------------------------------------- utilidades */
+/* ---------------------------------------------------------------- utilidades
+
+   O que ainda sai em HTML: o aviso que some sozinho, os símbolos de mana, os
+   ícones e a etiqueta de inédita. As regras do deck moram em `deck.ts`, o
+   texto em `text.ts` e o preço em `price.ts`; isto aqui vira componente
+   quando a tela virar Preact. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {CATEGORIA_SIDEBOARD, CATEGORIAS, CATEGORIAS_FORA_DA_CONTA, CORES,
-        estado, NOME_COR} from "./estado.js";
-import {moeda} from "./preco.js";
+import {COLOR_NAMES, COLORS} from "./state";
+import {brDate} from "./text";
 
 export function toast(msg){
   const t = $("toast");
@@ -11,81 +15,6 @@ export function toast(msg){
   t.classList.add("mostra");
   clearTimeout(toast._t);
   toast._t = setTimeout(() => t.classList.remove("mostra"), 2200);
-}
-
-export function identidadeDoDeck(){
-  const cores = new Set();
-  estado.comandantes.forEach(c => (c.identidade||"").split("").forEach(x => cores.add(x)));
-  return CORES.filter(c => cores.has(c)).join("");
-}
-
-/* As cartas que valem pras 100. Toda conta sobre "o deck" passa por aqui:
-   contador, curva, distribuição, assinatura pros combos. O sideboard fica de
-   fora, e o maybeboard nem está nesta lista. */
-export function cartasContadas(){
-  return estado.cartas.filter(e => !foraDaConta(e));
-}
-
-function foraDaConta(entrada){
-  return CATEGORIAS_FORA_DA_CONTA.has(entrada.categoria || "");
-}
-
-export function totalCartas(){
-  return estado.comandantes.length +
-         cartasContadas().reduce((n, e) => n + e.quantidade, 0);
-}
-
-/* A categoria automática, a que sai do tipo da carta. */
-export function categoriaAutomatica(carta){
-  const t = ((carta && carta.tipo) || "").toLowerCase();
-  for (const [nome, casa] of CATEGORIAS) if (casa(t)) return nome;
-  return "Outros";
-}
-
-/* Onde a carta é desenhada. A escolhida à mão ganha da automática — é o
-   único jeito de "combo principal" existir, já que nenhum type_line diz
-   isso. */
-export function categoriaDe(entrada){
-  return (entrada && entrada.categoria) || categoriaAutomatica(entrada?.carta);
-}
-
-/* A ordem dos grupos na lista, e ela conta uma história: primeiro o que a
-   pessoa decidiu (as categorias próprias, na ordem em que ela as pôs),
-   depois o que a carta é (os tipos), e por último o que está fora da conta.
-   O contrário — tipos primeiro — enterraria a organização que ela fez no
-   meio de nove grupos automáticos. */
-export function ordemDasCategorias(entradas){
-  const usadas = new Set(entradas.map(categoriaDe));
-  const automaticas = CATEGORIAS.map(c => c[0]).concat(["Outros"]);
-  const proprias = estado.categorias.filter(c => !automaticas.includes(c));
-  const ordem = [
-    ...proprias,
-    ...automaticas.filter(c => usadas.has(c)),
-    ...[...CATEGORIAS_FORA_DA_CONTA].filter(c => usadas.has(c)),
-  ];
-  // Rede de segurança, e ela não é teórica: uma carta pode carregar uma
-  // categoria que a lista não tem (um deck salvo por uma versão anterior, um
-  // Ctrl+Z pra antes da categoria existir). Sem isto o grupo dela não seria
-  // desenhado e a carta SUMIRIA da tela — continuando no deck, no contador e
-  // na cotação. Uma carta invisível que se paga é o pior estrago possível
-  // aqui, e custa uma linha evitá-lo.
-  for (const cat of usadas) if (!ordem.includes(cat)) ordem.push(cat);
-  return ordem;
-}
-
-/* Toda categoria que a tela sabe oferecer no menu, própria ou não. */
-export function todasAsCategorias(){
-  return [...estado.categorias,
-          ...CATEGORIAS.map(c => c[0]), "Outros", CATEGORIA_SIDEBOARD];
-}
-
-export function ehPropria(cat){
-  return estado.categorias.includes(cat);
-}
-
-/* As duas listas pelo nome que o resto do código usa pra falar delas. */
-export function lista(tabuleiro){
-  return tabuleiro === "talvez" ? estado.maybe : estado.cartas;
 }
 
 /* Símbolos de mana: "{2}{G}{W}" vira bolinhas. Híbrido ("{G/W}") sai com as
@@ -117,13 +46,13 @@ function pipsHTMLdoCusto(custo){
   // e num pip de 13px o daltônico não é o único que agradece.
   return simbolos.map(s => {
     const bruto = s.slice(1, -1);
-    const partes = bruto.split("/").filter(p => CORES.includes(p));
+    const partes = bruto.split("/").filter(p => COLORS.includes(p));
     if (partes.length === 2){
-      return `<span class="pip" title="${NOME_COR[partes[0]]} ou ${NOME_COR[partes[1]]}"
+      return `<span class="pip" title="${COLOR_NAMES[partes[0]]} ou ${COLOR_NAMES[partes[1]]}"
         style="background:linear-gradient(135deg,var(--mana-${partes[0]}) 50%,var(--mana-${partes[1]}) 50%)"></span>`;
     }
     if (partes.length === 1){
-      return `<span class="pip ${partes[0]}" title="${NOME_COR[partes[0]]}"></span>`;
+      return `<span class="pip ${partes[0]}" title="${COLOR_NAMES[partes[0]]}"></span>`;
     }
     const rotulo = bruto.replace(/[^0-9A-Za-z+\-−]/g, "") || "•";
     return `<span class="pip C" title="${NOME_SIMBOLO[rotulo] ||
@@ -154,15 +83,6 @@ export function ico(nome, rotulo){
   }><use href="#i-${nome}"/></svg>`;
 }
 
-export function preco(carta){
-  return carta.preco_usd ? moeda(carta.preco_usd) : "";
-}
-
-/* "2026-11-13" vira "13/11/2026". */
-export function dataBR(iso){
-  return String(iso || "").split("-").reverse().join("/");
-}
-
 /* A marca da carta que ainda não saiu.
 
    Ela é a única carta da lista que não se pode comprar nem jogar hoje, e nada
@@ -177,27 +97,6 @@ export function dataBR(iso){
 export function seloInedita(carta){
   if (!carta || !carta.inedita) return "";
   return `<span class="selo-inedita" title="Ainda não lançada${
-    carta.sai_em ? " — sai em " + escapar(dataBR(carta.sai_em)) : ""
+    carta.sai_em ? " — sai em " + escapar(brDate(carta.sai_em)) : ""
   }">inédita</span>`;
-}
-
-/* Texto reduzido ao que se digita de fato: minúsculo e sem acento. Quem
-   procura "jotun" no deck quer achar o Jötun Grunt — o trema está no nome da
-   carta, não no teclado de quem busca. */
-export function semAcento(s){
-  return String(s || "").toLowerCase().normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-/* De que site é este link de deck — `"Archidekt"`, `"Moxfield"` ou nada.
-
-   Serve pra uma caixa de texto saber que o que caiu nela não é nome de
-   carta: nenhuma carta tem "moxfield.com" no nome, então a pergunta não é
-   ambígua e nada precisa ser adivinhado. Os dois padrões são os do
-   `importar.py` — quem decide de verdade se o link presta é o servidor, e
-   este teste só escolhe o que oferecer na tela. */
-export function fonteDoLink(texto){
-  if (/archidekt\.com\/(?:api\/)?decks\/\d+/i.test(texto)) return "Archidekt";
-  if (/moxfield\.com\/decks\/[A-Za-z0-9_-]+/i.test(texto)) return "Moxfield";
-  return null;
 }

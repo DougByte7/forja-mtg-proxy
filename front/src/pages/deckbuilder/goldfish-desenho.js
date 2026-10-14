@@ -21,19 +21,18 @@ import {$, escapar} from "../../shared/dom.js";
 import {imagemDaFace} from "./artes.js";
 import {detalheDaCarta} from "./carta.js";
 import {assinaturaDoDeck} from "./combos.js";
-import {CORES, estado, NOME_COR} from "./estado.js";
-import {artesDoJogador, atacantes, cartaPorUid, combosDaCarta, devolveAoManterDe,
-        ehTerreno, grupoDoCampo, nomeDaCarta, NOME_DA_ZONA, quantosCombos,
-        resumoDaMao} from "./goldfish.js";
+import {attackers, bottomCountOnKeep, cardByUid, cardName, comboCount,
+        combosOf, fieldRow, handSummary, isLand, playerArts, ZONE_NAMES} from "./goldfish";
+import {COLOR_NAMES, COLORS, state} from "./state";
 import {manaEmTexto, manaHTML} from "./utilidades.js";
 
 /* A arte de uma carta da mesa: a escolhida no deck DO DONO, e a padrão quando
    não há. O dono importa com dois decks na mesa — o Sol Ring de um não pode
    aparecer com a arte que o outro escolheu. A face é a que está pra cima
-   (ver `alternarFace`). */
+   (ver `toggleFace`). */
 function arteNaMesa(c){
   const face = c.verso ? "verso" : "frente";
-  return imagemDaFace(c.carta || {}, face, 0, artesDoJogador(c.dono));
+  return imagemDaFace(c.carta || {}, face, 0, playerArts(c.dono));
 }
 
 /* Cada selo diz a quantidade e o nome ("5: +1/+1"): marcador de Magic é
@@ -60,10 +59,10 @@ function gfCartaHTML(c, zona){
   if (c.atacando) classes.push("atacando");
   if (c.bloqueando) classes.push("bloqueando");
   if (c.ficha) classes.push("ficha");
-  const bloqueado = c.bloqueando ? cartaPorUid(c.bloqueando) : null;
+  const bloqueado = c.bloqueando ? cardByUid(c.bloqueando) : null;
   const marca = c.atacando ? `<span class="gf-combate" title="Atacando">⚔</span>`
     : c.bloqueando ? `<span class="gf-combate" title="Bloqueia ${
-        escapar(nomeDaCarta(bloqueado))}">🛡</span>` : "";
+        escapar(cardName(bloqueado))}">🛡</span>` : "";
   // Só a mão leva o nome: é onde a decisão acontece. Ficha não tem arte da
   // Scryfall se foi inventada na hora: o nome dentro do quadro é tudo o que
   // ela tem pra se identificar.
@@ -75,7 +74,7 @@ function gfCartaHTML(c, zona){
   // "quais combos", mas ninguém passa o mouse numa carta que não deu sinal de
   // ter o que contar. Carta virada pra baixo não ganha selo — ela está
   // escondida, e o selo a entregaria.
-  const quantos = c.virada ? 0 : quantosCombos(c);
+  const quantos = c.virada ? 0 : comboCount(c);
   const selo = quantos
     ? `<span class="gf-combo-selo" title="Peça de ${quantos} combo(s) do deck"
         >${quantos}</span>`
@@ -131,7 +130,7 @@ function estadoDaCartaHTML(c){
   if (c.verso) itens.push("Mostrando o verso");
   if (c.deitada) itens.push("Deitada");
   if (c.atacando) itens.push("Atacando");
-  if (c.bloqueando) itens.push("Bloqueia " + nomeDaCarta(cartaPorUid(c.bloqueando)));
+  if (c.bloqueando) itens.push("Bloqueia " + cardName(cardByUid(c.bloqueando)));
   for (const nome of Object.keys(c.marcas || {})) itens.push(`${nome}: ${c.marcas[nome]}`);
   if (!itens.length) return "";
   return `<div class="gf-detalhe-estado">${
@@ -165,7 +164,7 @@ function estadoDaCartaHTML(c){
    link aqui seria um link que não clica. */
 function pecaDoComboHTML(p){
   const zona = p.zona
-    ? `<i>${escapar(NOME_DA_ZONA[p.zona])}</i>`
+    ? `<i>${escapar(ZONE_NAMES[p.zona])}</i>`
     : `<i title="Esta peça não foi embaralhada: ou saiu do deck depois da busca
         de combos, ou a base local não conhece a carta.">fora da mesa</i>`;
   return `<span class="gf-peca z-${p.zona || "fora"}${p.esta ? " esta" : ""}"
@@ -196,12 +195,12 @@ function comboDoPainelHTML(achado){
 }
 
 function combosDaCartaHTML(c){
-  const achados = combosDaCarta(c);
+  const achados = combosOf(c);
   if (!achados.length) return "";
   // A lista fecha com o deck de quando a busca rodou, não com o de agora —
   // mesma ressalva que a aba de combos faz, e pelo mesmo motivo: a mesa foi
   // embaralhada de um deck que pode ter mudado desde então.
-  const velho = estado.combosAssinatura !== assinaturaDoDeck()
+  const velho = state.combosAssinatura !== assinaturaDoDeck()
     ? `<div class="gf-combo-velho">O deck mudou desde a busca de combos.</div>` : "";
   return `<div class="gf-combos">
     <div class="gf-combos-titulo">Combos <b>${achados.length}</b></div>
@@ -286,7 +285,7 @@ export async function mostrarPainel(uid){
   // O mouseover dispara de novo a cada filho da carta (o nome, um marcador):
   // repintar ali pediria o detalhe de novo à toa.
   if (painelUid === uid && painel.classList.contains("mostra")) return;
-  const c = cartaPorUid(uid);
+  const c = cardByUid(uid);
   if (!c) return esconderPainel();
   painelUid = uid;
 
@@ -328,7 +327,7 @@ export async function mostrarPainel(uid){
     return;   // fica o que a base local sabe, que é o que já está na tela
   }
   // A carta pode ter mudado enquanto o detalhe vinha (um marcador, o verso).
-  const agora = painelUid === uid && cartaPorUid(uid);
+  const agora = painelUid === uid && cardByUid(uid);
   if (!agora) return;
   // A rolagem sobrevive à segunda pintura. Trocar o `innerHTML` zera o
   // `scrollTop`, e quem já tinha descido até os combos enquanto a Scryfall
@@ -347,7 +346,7 @@ export async function mostrarPainel(uid){
 function atualizarPainel(){
   if (painelUid === null) return;
   const uid = painelUid;
-  if (!estado.mesa || !cartaPorUid(uid) || painelFlutua()) return esconderPainel();
+  if (!state.mesa || !cardByUid(uid) || painelFlutua()) return esconderPainel();
   painelUid = null;   // senão `mostrarPainel` acharia que já está mostrando
   mostrarPainel(uid);
 }
@@ -356,11 +355,11 @@ function atualizarPainel(){
 
 function resumoHTML(mao){
   if (!mao.length) return "";
-  const r = resumoDaMao(mao);
+  const r = handSummary(mao);
   // `title` em cada cor porque bolinha colorida sozinha não é informação
   // acessível — a mesma regra dos pips do resto da página.
-  const pips = CORES.filter(c => r.cores[c]).map(c =>
-    `<span class="gf-cor" title="${NOME_COR[c]}"><span class="pip ${c}"></span>${
+  const pips = COLORS.filter(c => r.cores[c]).map(c =>
+    `<span class="gf-cor" title="${COLOR_NAMES[c]}"><span class="pip ${c}"></span>${
       r.cores[c]}</span>`).join("");
   return `<span class="gf-resumo">
     <span><b>${r.terrenos}</b> terreno(s)</span>
@@ -397,7 +396,7 @@ function vazioHTML(texto){
    de uma carta só. Cada lado cresce na proporção das cartas que tem, e as
    criaturas ficam à esquerda nos dois jogadores: com a mesa espelhada, as de
    um ficam em cima das do outro. A ordem dentro de cada lado é a que a pessoa
-   arrumou (ver `reposicionar`). */
+   arrumou (ver `reposition`). */
 function campoDeBatalhaHTML(j, ij){
   const lado = (nome, lista, vazio) => `<div class="gf-lado"
       style="flex-grow:${Math.max(1, lista.length)}">
@@ -405,8 +404,8 @@ function campoDeBatalhaHTML(j, ij){
       <div class="gf-area-corpo">${
         lista.length ? cartasHTML(lista, "campo") : vazioHTML(vazio)}</div>
     </div>`;
-  const criaturas = j.campo.filter(c => grupoDoCampo(c) === "Criaturas");
-  const outras = j.campo.filter(c => grupoDoCampo(c) === "Outros");
+  const criaturas = j.campo.filter(c => fieldRow(c) === "Criaturas");
+  const outras = j.campo.filter(c => fieldRow(c) === "Outros");
   return `<div class="gf-area-mesa gf-batalha" data-gf-solta="campo" data-gf-j="${ij}">
     ${lado("Criaturas", criaturas, "nenhuma criatura")}
     ${lado("Outros", outras, "nada mais em jogo")}
@@ -424,7 +423,7 @@ function campoDeBatalhaHTML(j, ij){
 function montesHTML(terrenos){
   const montes = new Map();
   for (const c of terrenos){
-    const chave = [nomeDaCarta(c), c.deitada, c.virada, c.verso, c.ficha,
+    const chave = [cardName(c), c.deitada, c.virada, c.verso, c.ficha,
                    c.atacando, c.bloqueando, JSON.stringify(c.marcas)].join("|");
     if (!montes.has(chave)) montes.set(chave, []);
     montes.get(chave).push(c);
@@ -436,10 +435,10 @@ function montesHTML(terrenos){
   ).join("")}</div>`;
 }
 
-/* Terreno-criatura mora aqui, e pela mesma razão de `CATEGORIAS`: a primeira
+/* Terreno-criatura mora aqui, e pela mesma razão de `AUTO_CATEGORIES`: a primeira
    regra que casa ganha, e pra quem joga ele é o terreno que entrou no turno. */
 function terrenosHTML(j, ij){
-  const terrenos = j.campo.filter(c => grupoDoCampo(c) === "Terrenos");
+  const terrenos = j.campo.filter(c => fieldRow(c) === "Terrenos");
   const corpo = terrenos.length ? montesHTML(terrenos) : vazioHTML("nenhum terreno");
   return areaHTML(contaHTML("Terrenos", terrenos.length), corpo, "campo", ij, "gf-terrenos");
 }
@@ -552,7 +551,7 @@ function danoHTML(j, ij, mesa){
    quantos deitados. Ver o cabeçalho de `goldfish.js`. Os três ficam sempre,
    mesmo em zero, pra barra não mudar de largura a cada terreno. */
 function terrenosDaBarraHTML(j){
-  const terrenos = j.campo.filter(c => ehTerreno(c.carta));
+  const terrenos = j.campo.filter(c => isLand(c.carta));
   const emPe = terrenos.filter(c => !c.deitada).length;
   const deitados = terrenos.length - emPe;
   return `<span class="gf-fatos-j">Terrenos <b>${emPe}</b> em pé ·
@@ -581,9 +580,9 @@ function barraHTML(j, ij, mesa){
 /* ------------------------------------------------- a escolha do mulligan */
 
 function notaDoMulliganHTML(j, ij){
-  const devolve = devolveAoManterDe(ij);
+  const devolve = bottomCountOnKeep(ij);
   // A compra do turno só vem pra quem está na vez (ver `confirmarMao`).
-  const naVez = estado.mesa.ativo === ij;
+  const naVez = state.mesa.ativo === ij;
   const depois = naVez ? "" : " A compra do turno vem quando chegar a vez.";
   if (j.fase === "fundo"){
     return `<p class="nota">Escolha <b>${j.aFundo}</b> carta(s) pra mandar pro
@@ -642,16 +641,16 @@ function logHTML(m){
    MESA: repetida em cada carta que se olha, viraria aviso que se aprende a
    não ler. */
 function notaDeCombosHTML(m){
-  if (!estado.combos){
+  if (!state.combos){
     return `A mesa marca as peças de combo nas cartas — procure os combos do
       deck na aba <b>Combos</b> pra ligar as marcas.`;
   }
-  const n = (estado.combos.no_deck || []).length;
+  const n = (state.combos.no_deck || []).length;
   // As duas ressalvas são sobre o que a marcação NÃO cobre, e nenhuma delas
   // dá pra deduzir olhando a mesa: um deck editado depois da busca e o
   // segundo deck, que entrou pelo id e nunca foi perguntado.
   const ressalvas = [];
-  if (estado.combosAssinatura !== assinaturaDoDeck()){
+  if (state.combosAssinatura !== assinaturaDoDeck()){
     ressalvas.push("o deck mudou desde a busca");
   }
   if (m.jogadores.length > 1) ressalvas.push("o segundo deck não foi perguntado");
@@ -672,12 +671,12 @@ function tituloDoTurno(m){
 
 export function desenharMesa(){
   const alvo = $("gf-mesa");
-  const m = estado.mesa;
-  $("gf-desfazer").disabled = !estado.mesaDesfazer.length;
+  const m = state.mesa;
+  $("gf-desfazer").disabled = !state.mesaDesfazer.length;
   $("gf-segundo").disabled = !m;
   $("gf-encerrar").disabled = !m;
   $("gf-passar").disabled = !m;
-  $("gf-fim-combate").hidden = !(m && (atacantes().length ||
+  $("gf-fim-combate").hidden = !(m && (attackers().length ||
     m.jogadores.some(j => j.campo.some(c => c.bloqueando))));
   if (!m){
     $("gf-turno").textContent = "";

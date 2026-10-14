@@ -6,17 +6,17 @@ import {atualizarCategoriasDoDestino} from "./busca.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {desenharChances} from "./chances.js";
 import {desenharCombos} from "./combos.js";
-import {CATEGORIAS_FORA_DA_CONTA, CORES, estado, NOME_COR} from "./estado.js";
+import {autoCategory, categoryOf, categoryOrder, countedCards, deckIdentity,
+        isCustomCategory, totalCards} from "./deck";
 import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
 import {agendarCotacao, desenharPreviaOrcamento, subtotalDoGrupo,
-        subtotalTexto, subtotalTitulo, valorComparavel,
-        valorHTML} from "./orcamento.js";
+        subtotalTexto, subtotalTitulo, valorComparavel, valorHTML} from "./orcamento.js";
 import {desenharPoder} from "./poder.js";
-import {simboloDaTela} from "./preco.js";
+import {screenCurrency} from "./price";
 import {validacaoAtual} from "./salvar.js";
-import {cartasContadas, categoriaAutomatica, categoriaDe, ehPropria, ico,
-        identidadeDoDeck, manaHTML, ordemDasCategorias, seloInedita,
-        semAcento, totalCartas} from "./utilidades.js";
+import {COLOR_NAMES, COLORS, OUT_OF_COUNT, state} from "./state";
+import {foldAccents} from "./text";
+import {ico, manaHTML, seloInedita} from "./utilidades.js";
 import {desenharVersao} from "./versoes.js";
 
 export function desenharTudo(){
@@ -28,13 +28,13 @@ export function desenharTudo(){
   desenharContador();
   desenharVersao();
   desenharPreviaOrcamento();
-  $("rot-preco-moeda").textContent = simboloDaTela();
+  $("rot-preco-moeda").textContent = screenCurrency();
   atualizarNotaIdentidade();
   atualizarCategoriasDoDestino();
   // Redesenha os combos pra o aviso de "o deck mudou desde esta busca"
   // aparecer no mesmo instante em que ele passa a ser verdade.
-  if (estado.combos) desenharCombos();
-  if (estado.poder) desenharPoder();
+  if (state.combos) desenharCombos();
+  if (state.poder) desenharPoder();
   // A cotação persegue o deck: cada mudança marca uma nova, que só sai depois
   // de o deck ficar quieto.
   agendarCotacao();
@@ -46,7 +46,7 @@ export function desenharTudo(){
    que não é erro nenhum e por isso não é vermelho. O título diz o que o ponto
    resume, pra quem quiser a frase. */
 export function desenharContador(){
-  const total = totalCartas();
+  const total = totalCards();
   const v = validacaoAtual();
   const graves = (v.apontamentos || []).filter(
     a => a.nivel === "erro" && a.tipo !== "faltam" && a.tipo !== "sobram");
@@ -66,15 +66,15 @@ export function desenharContador(){
 }
 
 export function desenharDeck(){
-  const temComandante = estado.comandantes.length > 0;
+  const temComandante = state.comandantes.length > 0;
   $("heroi").hidden = temComandante;
   $("area-deck").hidden = !temComandante;
   $("corpo").classList.toggle("sem-comandante", !temComandante);
-  $("aba-deck-n").textContent = totalCartas();
+  $("aba-deck-n").textContent = totalCards();
   if (!temComandante) return;
 
-  const identidade = identidadeDoDeck();
-  $("cmd-box").innerHTML = estado.comandantes.map((c, i) => `
+  const identidade = deckIdentity();
+  $("cmd-box").innerHTML = state.comandantes.map((c, i) => `
     <button class="ver" data-ver-cmd="${i}"${ganchosDaPrevia(c)}
             title="Ver ${escapar(c.nome)} inteira">
       <img src="${escapar(c.imagem)}" alt="" loading="lazy">
@@ -90,14 +90,14 @@ export function desenharDeck(){
   `).join('<div style="width:100%;height:1px;background:var(--border)"></div>');
 
   // Segundo comandante só faz sentido quando o primeiro tem parceria.
-  if (estado.comandantes.length === 1 && estado.comandantes[0].parceiro){
+  if (state.comandantes.length === 1 && state.comandantes[0].parceiro){
     $("cmd-box").insertAdjacentHTML("beforeend",
       `<button class="btn" id="btn-parceiro" style="width:100%;margin-top:8px;">
          ${ico("plus")} Adicionar parceiro</button>`);
   }
 
-  $("lista-deck").innerHTML = gruposHTML(estado.cartas, identidade, "deck");
-  $("deck-vazio").hidden = estado.cartas.length > 0;
+  $("lista-deck").innerHTML = gruposHTML(state.cartas, identidade, "deck");
+  $("deck-vazio").hidden = state.cartas.length > 0;
   atualizarFerramentasDaLista();
 }
 
@@ -110,9 +110,9 @@ const MINIMO_PRA_FERRAMENTAS = {deck: 10, talvez: 5};
 
 function atualizarFerramentasDaLista(){
   $("ferramentas-deck").hidden =
-    estado.cartas.length < MINIMO_PRA_FERRAMENTAS.deck && !estado.listaBusca.deck;
-  escreverBusca("busca-deck", estado.listaBusca.deck);
-  $("ordem-lista").value = estado.listaOrdem;
+    state.cartas.length < MINIMO_PRA_FERRAMENTAS.deck && !state.listaBusca.deck;
+  escreverBusca("busca-deck", state.listaBusca.deck);
+  $("ordem-lista").value = state.listaOrdem;
 }
 
 /* O campo só é reescrito quando discorda do estado. Escrever por cima do que
@@ -125,7 +125,7 @@ function escreverBusca(id, texto){
 /* ------------------------------------------------------ ordem dentro do grupo
 
    A ordem vale DENTRO de cada categoria; a ordem dos grupos é outra coisa
-   (`ordemDasCategorias`) e continua sendo a decisão de quem monta.
+   (`categoryOrder`) e continua sendo a decisão de quem monta.
 
    Todas desempatam pelo nome: sem isso, duas cartas de custo 3 trocariam de
    lugar entre um desenho e o outro, e a lista tremeria a cada tecla. */
@@ -155,15 +155,15 @@ const ORDENS_DA_LISTA = {
    mesma carta, no mesmo deck, com a decisão adiada. O que muda é uma coluna
    só (a área é estreita) e o fato de nada aqui contar em lugar nenhum. */
 export function desenharMaybe(){
-  const n = estado.maybe.reduce((soma, e) => soma + e.quantidade, 0);
+  const n = state.maybe.reduce((soma, e) => soma + e.quantidade, 0);
   $("talvez-n").hidden = !n;
   $("talvez-n").textContent = n;
   $("talvez-vazio").hidden = n > 0;
   $("busca-talvez").hidden =
-    estado.maybe.length < MINIMO_PRA_FERRAMENTAS.talvez && !estado.listaBusca.talvez;
-  escreverBusca("busca-talvez", estado.listaBusca.talvez);
+    state.maybe.length < MINIMO_PRA_FERRAMENTAS.talvez && !state.listaBusca.talvez;
+  escreverBusca("busca-talvez", state.listaBusca.talvez);
   $("talvez-lista").innerHTML = n
-    ? gruposHTML(estado.maybe, identidadeDoDeck(), "talvez") : "";
+    ? gruposHTML(state.maybe, deckIdentity(), "talvez") : "";
 }
 
 /* Os grupos de uma lista, do jeito que as duas áreas desenham.
@@ -176,33 +176,33 @@ export function desenharMaybe(){
 export function gruposHTML(entradas, identidade, tabuleiro){
   const porCategoria = new Map();
   for (const entrada of entradas){
-    const cat = categoriaDe(entrada);
+    const cat = categoryOf(entrada);
     if (!porCategoria.has(cat)) porCategoria.set(cat, []);
     porCategoria.get(cat).push(entrada);
   }
 
-  let ordem = ordemDasCategorias(entradas);
+  let ordem = categoryOrder(entradas);
   if (tabuleiro === "talvez") ordem = ordem.filter(c => porCategoria.has(c));
 
   // Procurar é uma pergunta sobre a lista inteira, e ela atravessa os dois
   // estados que escondem carta: os grupos recolhidos se abrem e as categorias
   // vazias somem. Nenhum dos dois é apagado — os recolhidos voltam a fechar
   // quando a busca sai do campo.
-  const procurado = semAcento(estado.listaBusca[tabuleiro] || "").trim();
-  const casa = (e) => semAcento(e.carta.nome).includes(procurado);
+  const procurado = foldAccents(state.listaBusca[tabuleiro] || "").trim();
+  const casa = (e) => foldAccents(e.carta.nome).includes(procurado);
 
   const html = ordem.map(cat => {
     const todos = porCategoria.get(cat) || [];
     const itens = procurado ? todos.filter(casa) : todos.slice();
     if (procurado && !itens.length) return "";
-    itens.sort(ORDENS_DA_LISTA[estado.listaOrdem] || ORDENS_DA_LISTA.cmc);
+    itens.sort(ORDENS_DA_LISTA[state.listaOrdem] || ORDENS_DA_LISTA.cmc);
     // A conta do cabeçalho é sempre a do GRUPO, não a do que sobrou do
     // filtro: ela é o número de cartas que o deck tem ali, e uma busca não
     // muda isso. Com filtro ligado ela ganha o "de", que diz as duas coisas.
     const n = todos.reduce((soma, e) => soma + e.quantidade, 0);
     const nFiltrado = itens.reduce((soma, e) => soma + e.quantidade, 0);
     const contaTexto = procurado ? `${nFiltrado} de ${n}` : String(n);
-    const fechado = !procurado && estado.gruposFechados.has(`${tabuleiro}:${cat}`);
+    const fechado = !procurado && state.gruposFechados.has(`${tabuleiro}:${cat}`);
     // Sem subtotal no maybeboard: ele não entra na cotação, e um preço ao
     // lado do grupo diria o contrário — a pessoa somaria de cabeça um
     // dinheiro que a faixa de orçamento não está cobrando dela. O preço de
@@ -213,8 +213,8 @@ export function gruposHTML(entradas, identidade, tabuleiro){
     // barateia o deck.
     const subtotal = tabuleiro === "talvez"
       ? null : subtotalDoGrupo(todos);
-    const propria = ehPropria(cat);
-    const fora = CATEGORIAS_FORA_DA_CONTA.has(cat);
+    const propria = isCustomCategory(cat);
+    const fora = OUT_OF_COUNT.has(cat);
     const corpo = fechado ? ""
       : itens.length
         ? `<div class="colunas">${itens.map(e =>
@@ -255,7 +255,7 @@ que você quer ter.">fora das 100</span>` : ""}
   // nenhuma" — e aí o susto é achar que o filtro apagou o deck.
   if (procurado && !html){
     return `<div class="vazio lista-sem-achado">Nenhuma carta com
-      “${escapar(estado.listaBusca[tabuleiro].trim())}” ${tabuleiro === "talvez"
+      “${escapar(state.listaBusca[tabuleiro].trim())}” ${tabuleiro === "talvez"
         ? "no maybeboard" : "no deck"}.</div>`;
   }
   return html;
@@ -266,8 +266,8 @@ que você quer ter.">fora das 100</span>` : ""}
    devolve tudo aberto, de propósito. */
 export function alternarGrupo(cat, tabuleiro){
   const chave = `${tabuleiro}:${cat}`;
-  if (estado.gruposFechados.has(chave)) estado.gruposFechados.delete(chave);
-  else estado.gruposFechados.add(chave);
+  if (state.gruposFechados.has(chave)) state.gruposFechados.delete(chave);
+  else state.gruposFechados.add(chave);
   if (tabuleiro === "talvez") desenharMaybe(); else desenharDeck();
 }
 
@@ -276,12 +276,12 @@ export function alternarGrupo(cat, tabuleiro){
    estavam — e a cotação, a curva e o resto não têm por que recalcular por
    causa de uma letra digitada. */
 export function procurarNaLista(tabuleiro, texto){
-  estado.listaBusca[tabuleiro] = texto;
+  state.listaBusca[tabuleiro] = texto;
   if (tabuleiro === "talvez") desenharMaybe(); else desenharDeck();
 }
 
 export function ordenarLista(ordem){
-  estado.listaOrdem = ORDENS_DA_LISTA[ordem] ? ordem : "cmc";
+  state.listaOrdem = ORDENS_DA_LISTA[ordem] ? ordem : "cmc";
   desenharDeck();
   desenharMaybe();
 }
@@ -383,7 +383,7 @@ export function desenharAnalise(){
   const caixa = $("apontamentos");
   desenharAlertasDoDeck();
 
-  if (!estado.comandantes.length){
+  if (!state.comandantes.length){
     caixa.innerHTML = `<div class="vazio" style="padding:8px 0;">Escolha o
       comandante pra análise começar.</div>`;
   } else if (v.ok){
@@ -442,7 +442,7 @@ function rotuloTipo(tipo){
 }
 
 function pipsHTML(identidade){
-  return `<span class="mana" title="${identidade.split("").map(c => NOME_COR[c]).join(", ")}">` +
+  return `<span class="mana" title="${identidade.split("").map(c => COLOR_NAMES[c]).join(", ")}">` +
     identidade.split("").map(c => `<span class="pip ${c}"></span>`).join("") +
     "</span>";
 }
@@ -452,7 +452,7 @@ function desenharCurva(){
   // toda no zero, que é justamente o número que ninguém quer ler.
   const faixas = [0,1,2,3,4,5,6,7];
   const contas = faixas.map(() => 0);
-  for (const {carta, quantidade} of cartasContadas()){
+  for (const {carta, quantidade} of countedCards()){
     if (!carta || (carta.tipo||"").toLowerCase().includes("land")) continue;
     const cmc = Math.min(7, Math.floor(carta.cmc || 0));
     contas[cmc] += quantidade;
@@ -471,7 +471,7 @@ function desenharDistribuicao(){
   // distribuição do que o deck PEDE de cor, não do que ele produz).
   const pedidos = {W:0,U:0,B:0,R:0,G:0};
   let totalPips = 0;
-  for (const {carta, quantidade} of cartasContadas()){
+  for (const {carta, quantidade} of countedCards()){
     if (!carta) continue;
     for (const s of (carta.mana_cost || "").match(/\{[^}]+\}/g) || []){
       for (const c of s.slice(1,-1).split("/")){
@@ -479,10 +479,10 @@ function desenharDistribuicao(){
       }
     }
   }
-  const cores = CORES.filter(c => pedidos[c] > 0).map(c => `
+  const cores = COLORS.filter(c => pedidos[c] > 0).map(c => `
     <div class="item">
       <span class="pip ${c}"></span>
-      <span style="width:56px">${NOME_COR[c]}</span>
+      <span style="width:56px">${COLOR_NAMES[c]}</span>
       <span class="trilho"><span class="cheio" style="width:${totalPips ? (pedidos[c]/totalPips)*100 : 0}%;background:var(--mana-${c})"></span></span>
       <span class="num">${pedidos[c]}</span>
     </div>`).join("");
@@ -491,8 +491,8 @@ function desenharDistribuicao(){
   // deck tem criatura demais?", e um deck cujas criaturas estão em "combo
   // principal" responderia zero.
   const porCat = new Map();
-  for (const {carta, quantidade} of cartasContadas()){
-    const cat = categoriaAutomatica(carta);
+  for (const {carta, quantidade} of countedCards()){
+    const cat = autoCategory(carta);
     porCat.set(cat, (porCat.get(cat) || 0) + quantidade);
   }
   const maiorCat = Math.max(1, ...porCat.values());
@@ -510,8 +510,8 @@ function desenharDistribuicao(){
 
 function atualizarNotaIdentidade(){
   const nota = $("nota-identidade");
-  if (!estado.comandantes.length){ nota.hidden = true; return; }
-  const identidade = identidadeDoDeck();
+  if (!state.comandantes.length){ nota.hidden = true; return; }
+  const identidade = deckIdentity();
   nota.hidden = false;
   nota.innerHTML = identidade
     ? `Mostrando só o que cabe na identidade ${pipsHTML(identidade)} do comandante.`

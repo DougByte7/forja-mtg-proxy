@@ -8,9 +8,13 @@
    autosave — quando essa resposta chega, ela substitui a validação local,
    que é só a versão instantânea da mesma regra.
    ========================================================================= */
+import type { Combo, Table } from "./goldfish";
+import type { Card, Color, Entry } from "./types";
 
-export const CORES = ["W","U","B","R","G"];
-export const NOME_COR = {W:"Branco",U:"Azul",B:"Preto",R:"Vermelho",G:"Verde",C:"Incolor"};
+export const COLORS: Color[] = ["W", "U", "B", "R", "G"];
+export const COLOR_NAMES: Record<string, string> = {
+  W: "Branco", U: "Azul", B: "Preto", R: "Vermelho", G: "Verde", C: "Incolor",
+};
 
 /* -------------------------------------------------------------- categorias
 
@@ -32,14 +36,14 @@ export const NOME_COR = {W:"Branco",U:"Azul",B:"Preto",R:"Vermelho",G:"Verde",C:
    lista de impressão — é carta que a pessoa quer ter. É o que a separa do
    maybeboard, e o servidor tem a mesma regra em `decks.CATEGORIAS_FORA_DA_CONTA`. */
 
-export const CATEGORIA_SIDEBOARD = "Sideboard";
-export const CATEGORIAS_FORA_DA_CONTA = new Set([CATEGORIA_SIDEBOARD]);
+export const SIDEBOARD = "Sideboard";
+export const OUT_OF_COUNT: ReadonlySet<string> = new Set([SIDEBOARD]);
 
 /* Categorias automáticas, na ordem em que aparecem. A primeira que casar o
    type_line ganha — daí Terreno vir antes de Criatura (terreno-criatura é
    terreno pra quem monta) e Artefato vir depois de Criatura (o Solemn é
    criatura, não artefato, na hora de contar bicho). */
-export const CATEGORIAS = [
+export const AUTO_CATEGORIES: [string, (typeLine: string) => boolean][] = [
   ["Terrenos",      (t) => t.includes("land")],
   ["Criaturas",     (t) => t.includes("creature")],
   ["Planeswalkers", (t) => t.includes("planeswalker")],
@@ -52,19 +56,24 @@ export const CATEGORIAS = [
 /* Os tipos, como seletor dentro da gaveta de filtros. São treze opções, e
    treze controles soltos na coluna de 372px comeriam a lista de resultados
    que eles existem pra filtrar. */
-export const TIPOS = [
+export const TYPE_OPTIONS: [string, string][] = [
   ["", "Qualquer tipo"],
   ["creature","Criatura"], ["instant","Instantâneo"], ["sorcery","Feitiço"],
   ["artifact","Artefato"], ["enchantment","Encantamento"],
   ["planeswalker","Planeswalker"], ["land","Terreno"], ["battle","Batalha"],
   ["legendary","Lendária"], ["equipment","Equipamento"], ["aura","Aura"],
 ];
-export const NOME_DO_TIPO = Object.fromEntries(TIPOS);
+export const TYPE_LABELS: Record<string, string> = Object.fromEntries(TYPE_OPTIONS);
 
 /* O estado neutro da gaveta. Serve pra duas coisas: começar, e comparar —
    `filtrosLigados` conta o que difere daqui, e é essa conta que vira o
    número na bolinha do botão. */
-export const FILTROS_VAZIOS = {
+export type Filters = {
+  tipo: string; texto: string; cores: string; cmcMin: string; cmcMax: string;
+  precoMax: string; ordem: string; ineditas: boolean;
+};
+
+export const EMPTY_FILTERS: Readonly<Filters> = {
   tipo: "", texto: "", cores: "", cmcMin: "", cmcMax: "", precoMax: "",
   ordem: "nome", ineditas: false,
 };
@@ -81,12 +90,40 @@ export const FILTROS_VAZIOS = {
    que alguém pediu pra ver inteiro, e paginar por causa dele trocaria a
    vitrine de cinco por um paginador que ninguém abriu. Na fita de etiquetas
    ela aparece, porque lá a pergunta é outra: o que está ligado. */
-export function algumFiltro(){
-  return Object.keys(FILTROS_VAZIOS)
-    .some(k => k !== "ineditas" && estado.filtros[k] !== FILTROS_VAZIOS[k]);
+export function anyFilterOn() {
+  return (Object.keys(EMPTY_FILTERS) as (keyof Filters)[])
+    .some((k) => k !== "ineditas" && state.filtros[k] !== EMPTY_FILTERS[k]);
 }
 
-export const estado = {
+/** O estado da tela. Os campos que espelham a API ficam com o nome de lá
+    (ver `types.ts`); as respostas que só passam por aqui e são desenhadas
+    pelos módulos de tela ficam soltas (`any`) até esses módulos virarem
+    componentes. */
+export interface DeckState {
+  id: string | null;
+  nome: string;
+  comandantes: Card[];
+  cartas: Entry[];
+  maybe: Entry[];
+  categorias: string[];
+  validacao: any;
+  cambio: { valor: number; fonte?: string; quando?: number } | null;
+  usuario: any;
+  dono: string | null;
+  versao: any;
+  historico: any;
+  mesa: Table | null;
+  mesaDesfazer: string[];
+  filtros: Filters;
+  buscaPagina: number;
+  buscaPorPagina: number;
+  buscaTotal: number;
+  desfazer: string[];
+  combos: { no_deck?: Combo[]; [k: string]: unknown } | null;
+  [field: string]: any;
+}
+
+export const state: DeckState = {
   id: null,
   nome: "Deck sem nome",
   comandantes: [],   // cartas completas
@@ -110,7 +147,7 @@ export const estado = {
   // semanas depois, em outra máquina.
   mesa: null,
   mesaDesfazer: [],  // pilha de fotografias do JSON da mesa
-  filtros: {...FILTROS_VAZIOS},
+  filtros: {...EMPTY_FILTERS},
   // A paginação da busca, que só existe com filtro ligado. `buscaTotal` é o
   // que o servidor contou na última resposta paginada — sem ele o paginador
   // não saberia quantas páginas tem.

@@ -12,9 +12,9 @@
 import {$, escapar} from "../../shared/dom.js";
 import {buscar} from "./busca.js";
 import {desenharTudo} from "./desenho.js";
-import {guardarDesfazer} from "./edicao.js";
-import {CATEGORIA_SIDEBOARD, estado} from "./estado.js";
+import {pushUndo} from "./editing";
 import {agendarSalvar, api} from "./salvar.js";
+import {SIDEBOARD, state} from "./state";
 import {toast} from "./utilidades.js";
 
 export async function fazerImportar(){
@@ -34,7 +34,7 @@ export async function fazerImportar(){
     trazido = await api("/decks/importar", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(url ? {url} : {texto, nome: estado.nome}),
+      body: JSON.stringify(url ? {url} : {texto, nome: state.nome}),
     });
   } catch (e){
     $("i-resultado").innerHTML =
@@ -48,7 +48,7 @@ export async function fazerImportar(){
                 + trazido.comandantes_completos.length
                 + (trazido.maybeboard_completo || [])
                     .reduce((n, e) => n + e.quantidade, 0);
-  if (estado.cartas.length || estado.comandantes.length){
+  if (state.cartas.length || state.comandantes.length){
     if (!confirm(`Trocar o deck atual pelas ${quantas} cartas importadas?\n\n` +
                  `O deck de agora continua salvo e na lista de Meus decks — ` +
                  `mas esta janela passa a mostrar o importado.`)){
@@ -71,26 +71,26 @@ export async function fazerImportar(){
    o que perder: só o comandante, nenhuma carta (ver `importarDeckMedio`). Aí
    o id novo é que faria estrago — deixaria em Meus decks um deck vazio. */
 export function aplicarImportado(trazido, {mesmoDeck = false} = {}){
-  guardarDesfazer();
+  pushUndo();
   // Deck novo nasce WIP, e o histórico era do deck que ficou pra trás.
   if (!mesmoDeck){
-    estado.id = null;
-    estado.versao = estado.historico = null;
+    state.id = null;
+    state.versao = state.historico = null;
   }
-  estado.validacao = null;
-  estado.comandantes = trazido.comandantes_completos;
+  state.validacao = null;
+  state.comandantes = trazido.comandantes_completos;
   const entrada = (e) => ({carta: e.carta, quantidade: e.quantidade,
                            categoria: e.categoria || ""});
-  estado.cartas = trazido.cartas_completas.map(entrada);
+  state.cartas = trazido.cartas_completas.map(entrada);
   // O maybeboard do site de origem vem junto: é o mesmo rascunho, e trazer
   // só as 100 obrigaria a copiar à mão a parte da lista que a pessoa ainda
   // estava decidindo (ver `importar.py`).
-  estado.maybe = (trazido.maybeboard_completo || []).map(entrada);
-  estado.categorias = trazido.categorias || [];
+  state.maybe = (trazido.maybeboard_completo || []).map(entrada);
+  state.categorias = trazido.categorias || [];
   // As análises são do deck que acabou de ser substituído. Deixá-las na
   // tela mostraria a curva de um deck e os combos de outro.
-  estado.combos = estado.poder = estado.sugestoes = estado.manabase = null;
-  estado.combosMexidos = 0;
+  state.combos = state.poder = state.sugestoes = state.manabase = null;
+  state.combosMexidos = 0;
   $("combos-resultado").innerHTML = "";
   $("poder-resultado").innerHTML = "";
   $("sug-resultado").innerHTML = "";
@@ -99,9 +99,9 @@ export function aplicarImportado(trazido, {mesmoDeck = false} = {}){
 
   // No mesmo deck, o nome que a pessoa deu fica: ele é dela, e o que mudou
   // foram as cartas. Só o nome de fábrica cede lugar ao que veio.
-  if (trazido.nome && (!mesmoDeck || estado.nome === "Deck sem nome")){
-    estado.nome = trazido.nome;
-    $("nome-deck").value = estado.nome;
+  if (trazido.nome && (!mesmoDeck || state.nome === "Deck sem nome")){
+    state.nome = trazido.nome;
+    $("nome-deck").value = state.nome;
   }
   if (!mesmoDeck){
     history.replaceState(null, "", location.pathname);
@@ -120,7 +120,7 @@ export function mostrarResultadoImportacao(trazido, caixa = $("i-resultado")){
   const talvez = (trazido.maybeboard_completo || [])
     .reduce((n, e) => n + e.quantidade, 0);
   const side = trazido.cartas_completas
-    .filter(e => e.categoria === CATEGORIA_SIDEBOARD)
+    .filter(e => e.categoria === SIDEBOARD)
     .reduce((n, e) => n + e.quantidade, 0);
   const faltando = trazido.nao_encontradas || [];
   let html = `<div class="aponta ok"><span><b>${total} carta(s)</b> vieram do
@@ -163,8 +163,8 @@ export function mostrarResultadoImportacao(trazido, caixa = $("i-resultado")){
    lista é o que vai pra impressão, e o que ainda está sendo decidido não vai
    pra impressão. Igual ao `decks.lista_texto` do servidor. */
 export function listaTexto(){
-  const linhas = estado.comandantes.map(c => `1 ${c.nome}`);
-  for (const e of estado.cartas) linhas.push(`${e.quantidade} ${e.carta.nome}`);
+  const linhas = state.comandantes.map(c => `1 ${c.nome}`);
+  for (const e of state.cartas) linhas.push(`${e.quantidade} ${e.carta.nome}`);
   return linhas.join("\n");
 }
 

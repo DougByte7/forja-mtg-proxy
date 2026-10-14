@@ -7,11 +7,12 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
-import {adicionar} from "./edicao.js";
-import {estado} from "./estado.js";
-import {moeda, notaDoCambio} from "./preco.js";
+import {countedCards} from "./deck";
+import {addCard} from "./editing";
+import {exchangeNote, money} from "./price";
 import {api, salvarAgora} from "./salvar.js";
-import {cartasContadas, ico, manaEmTexto, toast} from "./utilidades.js";
+import {state} from "./state";
+import {ico, manaEmTexto, toast} from "./utilidades.js";
 
 /* O deck como o servidor o viu quando a busca rodou. Só o que conta: mexer
    no maybeboard ou no sideboard não muda combo nem bracket, e avisar "o deck
@@ -20,18 +21,18 @@ let combosRodando = false;
 
 export function assinaturaDoDeck(){
   return JSON.stringify([
-    estado.comandantes.map(c => c.nome).sort(),
-    cartasContadas().map(e => [e.carta.nome, e.quantidade]).sort(),
+    state.comandantes.map(c => c.nome).sort(),
+    countedCards().map(e => [e.carta.nome, e.quantidade]).sort(),
   ]);
 }
 
 export async function procurarCombos(){
-  if (!estado.comandantes.length && !estado.cartas.length){
+  if (!state.comandantes.length && !state.cartas.length){
     toast("Monte alguma coisa antes de procurar combos.");
     return;
   }
-  if (!estado.id) await salvarAgora();
-  if (!estado.id){ toast("Não consegui salvar o deck antes de buscar."); return; }
+  if (!state.id) await salvarAgora();
+  if (!state.id){ toast("Não consegui salvar o deck antes de buscar."); return; }
 
   // As duas abas de combo podem pedir a mesma consulta quase junto (abrir uma
   // e a outra em seguida): a segunda desiste em vez de repetir a chamada.
@@ -43,9 +44,9 @@ export async function procurarCombos(){
   $("combos-resultado").innerHTML = esperando;
   $("combos-rail-resultado").innerHTML = esperando;
   try {
-    estado.combos = await api(`/decks/${estado.id}/combos`, {method: "POST"});
-    estado.combosAssinatura = assinaturaDoDeck();
-    estado.combosMexidos = 0;   // a resposta nova já sabe de tudo
+    state.combos = await api(`/decks/${state.id}/combos`, {method: "POST"});
+    state.combosAssinatura = assinaturaDoDeck();
+    state.combosMexidos = 0;   // a resposta nova já sabe de tudo
   } catch (e){
     // "Não sei" nunca pode virar "não tem combo": são opostos que parecem
     // iguais numa lista vazia.
@@ -71,7 +72,7 @@ export async function procurarCombos(){
    Eram os dois na mesma coluna, um embaixo do outro, e a segunda lista (a
    longa, a de doze itens) empurrava a primeira pra fora da vista. */
 export function desenharCombos(){
-  const dados = estado.combos;
+  const dados = state.combos;
   const noDeck = dados?.no_deck || [];
   const faltando = dados?.faltando_uma || [];
 
@@ -85,7 +86,7 @@ export function desenharCombos(){
 /* O aviso de "esta resposta é sobre um deck que não existe mais". Vale pras
    duas listas, e por isso é uma função. */
 function avisoDeCombosVelhos(){
-  return estado.combosAssinatura !== assinaturaDoDeck()
+  return state.combosAssinatura !== assinaturaDoDeck()
     ? `<div class="combo-desatualizado">O deck mudou desde esta busca —
        procure de novo pra atualizar.</div>` : "";
 }
@@ -100,8 +101,8 @@ function desenharCombosNoDeck(noDeck, dados){
   // entrou pode ter deixado OUTROS combos a uma peça de fechar, e isso só o
   // Spellbook responde. Não vale a pena dizer isso quando a resposta inteira
   // já está marcada como velha — seriam dois avisos sobre a mesma coisa.
-  if (estado.combosMexidos && !velho){
-    html += `<div class="combo-mexido">${ico("check")} ${estado.combosMexidos} combo(s)
+  if (state.combosMexidos && !velho){
+    html += `<div class="combo-mexido">${ico("check")} ${state.combosMexidos} combo(s)
       fecharam aqui na tela com as cartas que você adicionou. Procure de novo
       pra ver os combos <b>novos</b> que essas cartas abriram — essa parte só
       o Spellbook sabe.</div>`;
@@ -145,7 +146,7 @@ function comboHTML(combo, ehSugestao){
   // entra nela só por carregar os atributos.
   const pecas = combo.pecas.map(p => {
     const arte = ganchosDaPrevia(p);
-    const preco = p.preco_usd ? ` — ${moeda(p.preco_usd)}` : "";
+    const preco = p.preco_usd ? ` — ${money(p.preco_usd)}` : "";
     const titulo = p.tipo ? `${escapar(p.tipo)}${escapar(preco)}` : "";
     return `<span class="peca ${p.no_deck ? "tem" : "falta"} ${p.comandante ? "comandante" : ""}"
       ${arte}${titulo ? ` title="${titulo}"` : ""}>${escapar(p.nome)}</span>`;
@@ -183,7 +184,7 @@ function comboHTML(combo, ehSugestao){
 Sincronize a base e tente de novo.">${ico("plus")} ${escapar(faltante.nome)}</button>`
         : `<button class="add-peca" data-add-peca="${escapar(faltante.nome)}"
             >${ico("plus")} ${escapar(faltante.nome)}${faltante.preco_usd
-              ? ` · ${moeda(faltante.preco_usd)}` : ""}</button>`)
+              ? ` · ${money(faltante.preco_usd)}` : ""}</button>`)
     : "";
 
   const bracket = combo.bracket_rotulo
@@ -232,12 +233,12 @@ function custoHTML(combo, ehSugestao){
       "preço de nenhuma delas — costuma ser carta nova, com a base atrasada.")}"
       >preço ?</span>`;
   }
-  const rotulo = (semPreco ? "a partir de " : "") + moeda(valor);
+  const rotulo = (semPreco ? "a partir de " : "") + money(valor);
   const ressalva = semPreco
     ? ` ${semPreco} peça(s) sem preço conhecido ficam de fora da soma.`
     : " Não é cotação: é o preço do dia da última sincronização.";
   return `<span class="custo ${fechar ? "fechar" : ""}"
-    title="${escapar(titulo + ressalva + " " + notaDoCambio())}"
+    title="${escapar(titulo + ressalva + " " + exchangeNote())}"
     >${fechar ? "fechar por " : ""}${rotulo}</span>`;
 }
 
@@ -255,7 +256,7 @@ export async function adicionarPeca(nome, botao){
       botao.disabled = false;
       return;
     }
-    adicionar(alvo);
+    addCard(alvo);
     const fechados = fecharCombosCom(alvo.nome);
     toast(fechados
       ? `${alvo.nome} entrou no deck e fechou ${fechados} combo(s).`
@@ -280,7 +281,7 @@ export async function adicionarPeca(nome, botao){
 
    Devolve quantos combos fecharam, pra quem chamou saber o que dizer. */
 function fecharCombosCom(nome){
-  const dados = estado.combos;
+  const dados = state.combos;
   if (!dados) return 0;
   const alvo = nome.toLowerCase();
   const fecharam = [];
@@ -312,10 +313,10 @@ function fecharCombosCom(nome){
   dados.no_deck = fecharam.concat(dados.no_deck || []);
 
   if (fecharam.length){
-    estado.combosMexidos += fecharam.length;
+    state.combosMexidos += fecharam.length;
     // A lista voltou a bater com o deck: o aviso de "procure de novo" seria
     // falso agora. O recado do `combosMexidos` toma o lugar dele.
-    estado.combosAssinatura = assinaturaDoDeck();
+    state.combosAssinatura = assinaturaDoDeck();
   }
   return fecharam.length;
 }

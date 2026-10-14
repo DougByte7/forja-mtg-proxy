@@ -3,12 +3,12 @@
 import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {desenharTudo} from "./desenho.js";
-import {acharEntrada, guardarDesfazer} from "./edicao.js";
-import {estado, NOME_COR} from "./estado.js";
+import {findEntry, pushUndo} from "./editing";
 import {trocarAba} from "./paineis.js";
-import {moeda, notaDoCambio} from "./preco.js";
+import {cardPrice, exchangeNote, money} from "./price";
 import {agendarSalvar, api, salvarAgora} from "./salvar.js";
-import {ico, preco, toast} from "./utilidades.js";
+import {COLOR_NAMES, state} from "./state";
+import {ico, toast} from "./utilidades.js";
 
 /* Os grupos em que `manabase.py` junta os ciclos, com o rótulo que a lista
    de ciclos mostra acima de cada um. */
@@ -26,26 +26,26 @@ const GRUPOS_DE_CICLO = {
 let pedidoDeManabase = 0;
 
 export async function analisarManabase(){
-  if (!estado.comandantes.length){
+  if (!state.comandantes.length){
     toast("Escolha o comandante primeiro: é a identidade dele que define as cores.");
     return;
   }
-  if (!estado.id) await salvarAgora();
-  if (!estado.id){ toast("Não consegui salvar o deck antes de analisar."); return; }
+  if (!state.id) await salvarAgora();
+  if (!state.id){ toast("Não consegui salvar o deck antes de analisar."); return; }
   // Só avisa que está calculando quando ainda não há resposta na tela. Nos
   // recálculos do autosave, apagar a conta anterior faria o painel piscar a
   // cada carta digitada.
-  if (!estado.manabase){
+  if (!state.manabase){
     $("mb-nota").hidden = false;
     $("mb-resultado").innerHTML = `<div class="nota">Calculando…</div>`;
   }
   const pedido = ++pedidoDeManabase;
   const params = [];
-  if (estado.manabaseTeto !== null) params.push(`teto=${estado.manabaseTeto}`);
-  if (estado.mbCategoria) params.push(`categoria=${encodeURIComponent(estado.mbCategoria)}`);
+  if (state.manabaseTeto !== null) params.push(`teto=${state.manabaseTeto}`);
+  if (state.mbCategoria) params.push(`categoria=${encodeURIComponent(state.mbCategoria)}`);
   let resposta;
   try {
-    resposta = await api(`/decks/${estado.id}/manabase${
+    resposta = await api(`/decks/${state.id}/manabase${
       params.length ? "?" + params.join("&") : ""}`);
   } catch (e){
     if (pedido !== pedidoDeManabase) return;
@@ -55,13 +55,13 @@ export async function analisarManabase(){
     return;
   }
   if (pedido !== pedidoDeManabase) return;
-  estado.manabase = resposta;
+  state.manabase = resposta;
   desenharManabase();
 }
 
 function desenharManabase(){
   const caixa = $("mb-resultado");
-  const m = estado.manabase;
+  const m = state.manabase;
   if (!m){ $("mb-nota").hidden = false; caixa.innerHTML = ""; return; }
   // A conta está na tela: a explicação do que o painel faz vira ruído acima
   // dela.
@@ -205,8 +205,8 @@ function htmlFixacao(m){
   // faria o teto mudar de significado conforme o dólar do dia.
   const chips = [1, 3, 10, 999].map(v => `
     <button class="chip ${m.teto_usd === v || (v === 999 && m.teto_usd >= 999) ? "ativo" : ""}"
-      data-teto="${v}"${v >= 999 ? "" : ` title="${escapar(notaDoCambio())}"`
-      }>${v >= 999 ? "Sem teto" : "até " + moeda(v)}</button>`).join("");
+      data-teto="${v}"${v >= 999 ? "" : ` title="${escapar(exchangeNote())}"`
+      }>${v >= 999 ? "Sem teto" : "até " + money(v)}</button>`).join("");
   let html = `<section class="mb-fixacao">
     <div class="mb-fix-cab">
       <h2 class="secao">${m.monocolor ? "Terrenos recomendados" : "Terrenos que fixam"}</h2>
@@ -225,8 +225,8 @@ function htmlFixacao(m){
   }
   // O ciclo aberto pode sumir da resposta — o comandante mudou e a
   // identidade com ele. Aí a tela volta pra visão geral.
-  let aberto = ciclos.find(c => c.id === estado.mbCategoria);
-  if (!aberto) estado.mbCategoria = "";
+  let aberto = ciclos.find(c => c.id === state.mbCategoria);
+  if (!aberto) state.mbCategoria = "";
 
   const faltando = new Set(m.cores.filter(c => c.faltam > 0).map(c => c.cor));
   const lista = aberto
@@ -318,14 +318,14 @@ function htmlTerreno(t, ciclo, faltando){
   const pips = t.produz.split("").map(c => {
     const falta = faltando.has(c);
     return `<span class="pip ${c} ${falta ? "cobre" : ""}"
-      title="${NOME_COR[c]}${falta ? " — o deck pede mais fontes" : ""}"></span>`;
+      title="${COLOR_NAMES[c]}${falta ? " — o deck pede mais fontes" : ""}"></span>`;
   }).join("");
   return `<button class="achado mb-terreno ${t.no_deck ? "no-deck" : ""}" data-fix="${i}"${
       t.no_deck ? ` aria-disabled="true" title="Já está no deck"` : ""}${ganchosDaPrevia(t)}>
     <span class="nome"><b>${escapar(t.nome)}</b>
       <small>${escapar(legenda.join(" · "))}</small></span>
     <span class="mana">${pips}</span>
-    <span class="preco">${preco(t) || "—"}</span>
+    <span class="preco">${cardPrice(t) || "—"}</span>
   </button>`;
 }
 
@@ -335,27 +335,27 @@ function htmlTerreno(t, ciclo, faltando){
    clicou numa pílula de "Sua base" abriu algo que está abaixo da dobra —
    nos dois casos a tela vai até o começo da seção. */
 export function abrirCiclo(id){
-  estado.mbCategoria = id || "";
+  state.mbCategoria = id || "";
   desenharManabase();
   const secao = document.querySelector("#mb-resultado .mb-fixacao");
   const topo = secao ? secao.getBoundingClientRect().top : 0;
   if (secao && (topo < 0 || topo > window.innerHeight - 160)){
     secao.scrollIntoView({behavior: "smooth", block: "start"});
   }
-  const ciclo = (estado.manabase?.fixadores || []).find(c => c.id === id);
+  const ciclo = (state.manabase?.fixadores || []).find(c => c.id === id);
   if (ciclo && ciclo.terrenos.length < ciclo.total + ciclo.no_deck) analisarManabase();
 }
 
 /* Põe um lote de cartas de uma vez — é o que "3× Forest" e "Todos" fazem.
    Uma entrada só de desfazer, senão Ctrl+Z tiraria uma floresta por vez. */
 export function adicionarLote(lote){
-  guardarDesfazer();
+  pushUndo();
   for (const {carta, quantidade} of lote){
-    const entrada = acharEntrada(carta.nome);
+    const entrada = findEntry(carta.nome);
     if (entrada) entrada.quantidade += quantidade;
-    else estado.cartas.push({carta, quantidade, categoria: ""});
+    else state.cartas.push({carta, quantidade, categoria: ""});
   }
-  estado.validacao = null;
+  state.validacao = null;
   desenharTudo();
   agendarSalvar();
 }
@@ -370,5 +370,5 @@ export function chamarManabase(){
   painel.classList.remove("chamado");
   void painel.offsetWidth;          // reinicia a animação se já tiver rodado
   painel.classList.add("chamado");
-  if (!estado.manabase) analisarManabase();
+  if (!state.manabase) analisarManabase();
 }

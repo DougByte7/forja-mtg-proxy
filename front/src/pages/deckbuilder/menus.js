@@ -12,10 +12,11 @@
 import {escapar} from "../../shared/dom.js";
 import {abrirEscolhaDeArte} from "./artes.js";
 import {abrirCarta} from "./carta.js";
-import {acharEntrada, apagarCategoria, criarCategoria, definirCategoria, mover,
-        moverCategoria, renomearCategoria, tirar} from "./edicao.js";
-import {CATEGORIA_SIDEBOARD, estado} from "./estado.js";
-import {categoriaAutomatica, ico} from "./utilidades.js";
+import {autoCategory} from "./deck";
+import {createCategory, deleteCategory, findEntry, moveCard, moveCategory,
+        removeCard, renameCategory, setCategory} from "./editing";
+import {SIDEBOARD, state} from "./state";
+import {ico} from "./utilidades.js";
 
 export let menuAberto = null;
 
@@ -87,7 +88,7 @@ export function abrirMenu(ancora, itens){
    ordem da frequência — trocar de categoria é o que se faz o tempo todo,
    tirar do deck é o que se faz uma vez. */
 export function menuDaCarta(ancora, nome, tabuleiro){
-  const entrada = acharEntrada(nome, tabuleiro);
+  const entrada = findEntry(nome, tabuleiro);
   if (!entrada) return;
   const atual = entrada.categoria || "";
   const marca = (cat) => atual === cat ? ico("check") : "";
@@ -105,21 +106,21 @@ export function menuDaCarta(ancora, nome, tabuleiro){
                  "risco",
                  {titulo: `Categoria de ${nome}`}];
 
-  itens.push({rotulo: `Automática (${categoriaAutomatica(entrada.carta)})`,
+  itens.push({rotulo: `Automática (${autoCategory(entrada.carta)})`,
               marca: marca(""),
-              aoClicar: () => definirCategoria(nome, tabuleiro, "")});
-  for (const cat of estado.categorias){
+              aoClicar: () => setCategory(nome, tabuleiro, "")});
+  for (const cat of state.categorias){
     itens.push({rotulo: cat, marca: marca(cat),
-                aoClicar: () => definirCategoria(nome, tabuleiro, cat)});
+                aoClicar: () => setCategory(nome, tabuleiro, cat)});
   }
-  itens.push({rotulo: `${CATEGORIA_SIDEBOARD} — fora das 100`,
-              marca: marca(CATEGORIA_SIDEBOARD),
-              aoClicar: () => definirCategoria(nome, tabuleiro,
-                                               CATEGORIA_SIDEBOARD)});
+  itens.push({rotulo: `${SIDEBOARD} — fora das 100`,
+              marca: marca(SIDEBOARD),
+              aoClicar: () => setCategory(nome, tabuleiro,
+                                               SIDEBOARD)});
   itens.push({rotulo: "Nova categoria…", marca: ico("plus"), aoClicar: () => {
     const escolhido = prompt("Nome da nova categoria:\n\n" +
       "Ex.: Combo principal, Sac outlet, Proteção do comandante");
-    if (escolhido) criarCategoria(escolhido, nome, tabuleiro);
+    if (escolhido) createCategory(escolhido, nome, tabuleiro);
   }});
 
   itens.push("risco");
@@ -128,34 +129,34 @@ export function menuDaCarta(ancora, nome, tabuleiro){
   // discordar do que os olhos veem acontecer.
   itens.push(tabuleiro === "talvez"
     ? {rotulo: "Mover pro deck", marca: ico("arrow-left"),
-       aoClicar: () => mover(nome, "talvez", "deck")}
+       aoClicar: () => moveCard(nome, "talvez", "deck")}
     : {rotulo: "Mover pro maybeboard", marca: ico("arrow-right"),
-       aoClicar: () => mover(nome, "deck", "talvez")});
+       aoClicar: () => moveCard(nome, "deck", "talvez")});
   itens.push({rotulo: tabuleiro === "talvez" ? "Tirar do maybeboard" : "Tirar do deck",
               marca: ico("x"), classe: "perigo",
-              aoClicar: () => tirar(nome, tabuleiro)});
+              aoClicar: () => removeCard(nome, tabuleiro)});
   abrirMenu(ancora, itens);
 }
 
 /* O menu de uma categoria própria. Só as próprias têm: renomear "Criaturas"
    não faria sentido — ela não é um nome, é o tipo da carta. */
 export function menuDoGrupo(ancora, cat){
-  const i = estado.categorias.indexOf(cat);
+  const i = state.categorias.indexOf(cat);
   const itens = [
     {titulo: cat},
     {rotulo: "Renomear…", marca: ico("pencil-simple"), aoClicar: () => {
       const novo = prompt("Novo nome da categoria:", cat);
-      if (novo) renomearCategoria(cat, novo);
+      if (novo) renameCategory(cat, novo);
     }},
   ];
   if (i > 0) itens.push({rotulo: "Subir", marca: ico("arrow-up"),
-                         aoClicar: () => moverCategoria(cat, -1)});
-  if (i >= 0 && i < estado.categorias.length - 1){
+                         aoClicar: () => moveCategory(cat, -1)});
+  if (i >= 0 && i < state.categorias.length - 1){
     itens.push({rotulo: "Descer", marca: ico("arrow-down"),
-                aoClicar: () => moverCategoria(cat, +1)});
+                aoClicar: () => moveCategory(cat, +1)});
   }
   itens.push("risco");
   itens.push({rotulo: "Apagar categoria", marca: ico("x"), classe: "perigo",
-              aoClicar: () => apagarCategoria(cat)});
+              aoClicar: () => deleteCategory(cat)});
   abrirMenu(ancora, itens);
 }

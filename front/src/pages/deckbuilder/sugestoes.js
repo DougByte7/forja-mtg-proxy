@@ -15,19 +15,19 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
-import {estado} from "./estado.js";
-import {aplicarImportado,
-        mostrarResultadoImportacao} from "./importar-exportar.js";
+import {aplicarImportado, mostrarResultadoImportacao} from "./importar-exportar.js";
 import {abrirFolha, folhaAberta, trocarRail} from "./paineis.js";
+import {cardPrice} from "./price";
 import {api, salvarAgora, salvarJa} from "./salvar.js";
-import {ico, manaHTML, preco, toast} from "./utilidades.js";
+import {state} from "./state";
+import {ico, manaHTML, toast} from "./utilidades.js";
 
 // As cartas das sugestões, achatadas numa lista só — é o que o clique usa
 // pra adicionar, igual ao `ultimosResultados` da busca.
 export let sugestoesPlanas = [];
 
 export async function buscarSugestoes({tema = null, carta = null} = {}){
-  if (!estado.comandantes.length){
+  if (!state.comandantes.length){
     toast("Escolha o comandante primeiro: é ele que define o que combina.");
     return;
   }
@@ -35,17 +35,17 @@ export async function buscarSugestoes({tema = null, carta = null} = {}){
   // na linha seguinte, e um deck ainda sem id (que passa pelo salvamento
   // abaixo) abriria a janela em que `rodarAoAbrir` não veria pedido nenhum em
   // voo e pediria a página do comandante por cima desta.
-  estado.sugestoesRodando = true;
+  state.sugestoesRodando = true;
   $("sug-resultado").innerHTML = `<div class="nota">Perguntando ao EDHREC sobre
-    ${escapar(carta || estado.comandantes.map(c => c.nome).join(" e "))}…</div>`;
+    ${escapar(carta || state.comandantes.map(c => c.nome).join(" e "))}…</div>`;
   try {
-    if (!estado.id) await salvarAgora();
-    if (!estado.id){
+    if (!state.id) await salvarAgora();
+    if (!state.id){
       $("sug-resultado").innerHTML = `<div class="aponta erro"><span>Não
         consegui salvar o deck antes de sugerir.</span></div>`;
       return;
     }
-    estado.sugestoes = await api(`/decks/${estado.id}/sugestoes`, {
+    state.sugestoes = await api(`/decks/${state.id}/sugestoes`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({tema: carta ? null : (tema || null),
@@ -54,13 +54,13 @@ export async function buscarSugestoes({tema = null, carta = null} = {}){
     // O tema é do comandante: a página de uma carta não tem nenhum, e deixar
     // o anterior guardado faria o "voltar ao comandante" cair num tema que a
     // pessoa escolheu duas listas atrás.
-    estado.sugestoesTema = carta ? null : (tema || null);
+    state.sugestoesTema = carta ? null : (tema || null);
   } catch (e){
     $("sug-resultado").innerHTML =
       `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
     return;
   } finally {
-    estado.sugestoesRodando = false;
+    state.sugestoesRodando = false;
   }
   desenharSugestoes();
 }
@@ -77,7 +77,7 @@ export function sugerirPelaCarta(nome){
 
 export function desenharSugestoes(){
   const caixa = $("sug-resultado");
-  const s = estado.sugestoes;
+  const s = state.sugestoes;
   if (!s){ caixa.innerHTML = ""; return; }
 
   let html = "";
@@ -94,7 +94,7 @@ export function desenharSugestoes(){
   // uma lista de quatro. A tela junta com "e", que é como ela escreve dupla em
   // todo o resto.
   const alvo = daCarta ? (s.alvo.nome || "")
-                       : estado.comandantes.map(c => c.nome).join(" e ");
+                       : state.comandantes.map(c => c.nome).join(" e ");
   html += `<div class="sug-alvo">
     ${ico("sparkle")}
     <span class="quem">${daCarta ? "A partir da carta" : "Para o comandante"}
@@ -106,10 +106,10 @@ export function desenharSugestoes(){
 
   if (s.temas && s.temas.length){
     html += `<div class="temas">
-      <button class="chip ${!estado.sugestoesTema ? "ativo" : ""}"
+      <button class="chip ${!state.sugestoesTema ? "ativo" : ""}"
               data-tema="">Tudo</button>` +
       s.temas.slice(0, 14).map(t => `
-        <button class="chip ${estado.sugestoesTema === t.slug ? "ativo" : ""}"
+        <button class="chip ${state.sugestoesTema === t.slug ? "ativo" : ""}"
                 data-tema="${escapar(t.slug)}"
                 title="${t.decks ? escapar(t.decks) + " decks" : ""}"
           >${escapar(t.nome)}</button>`).join("") + `</div>`;
@@ -154,7 +154,7 @@ export function desenharSugestoes(){
             <small>${escapar(item.carta.tipo)}</small>
           </span>
           ${manaHTML(item.carta.mana_cost)}
-          <span class="preco">${preco(item.carta)}</span>
+          <span class="preco">${cardPrice(item.carta)}</span>
           ${chip}
         </button>`;
     }).join("");
@@ -182,7 +182,7 @@ export function desenharSugestoes(){
    perder. Com carta no deck, vale a regra do importar — pergunta antes, e o
    resultado vira um deck novo, com o de agora intacto em Meus decks. */
 export async function importarDeckMedio(){
-  if (!estado.comandantes.length){
+  if (!state.comandantes.length){
     toast("Escolha o comandante primeiro: o deck médio é dele.");
     return;
   }
@@ -196,7 +196,7 @@ export async function importarDeckMedio(){
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        comandantes: estado.comandantes.map(c => c.nome),
+        comandantes: state.comandantes.map(c => c.nome),
         bracket: $("dm-bracket").value,
         orcamento: $("seg-orcamento-medio").querySelector(".ativa")
                      ?.dataset.orcamento || "",
@@ -210,7 +210,7 @@ export async function importarDeckMedio(){
     botao.disabled = false;
   }
 
-  const temCarta = estado.cartas.length || estado.maybe.length;
+  const temCarta = state.cartas.length || state.maybe.length;
   if (temCarta && !confirm(`Trocar as cartas do deck pelo deck médio do ` +
       `EDHREC?\n\nO deck de agora continua salvo e na lista de Meus decks — ` +
       `mas esta janela passa a mostrar o deck médio.`)){
@@ -231,5 +231,5 @@ export async function importarDeckMedio(){
   // As sugestões foram zeradas junto com o deck antigo, e esta é a aba que
   // está à vista: pede de novo, contra o deck que acabou de entrar. Grava
   // antes, porque é o deck do SERVIDOR que filtra o que já está nele.
-  if (await salvarJa()) buscarSugestoes({tema: estado.sugestoesTema});
+  if (await salvarJa()) buscarSugestoes({tema: state.sugestoesTema});
 }

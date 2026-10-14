@@ -2,25 +2,24 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {desenharDeck} from "./desenho.js";
-import {estado} from "./estado.js";
-import {agendarCotacao, assinaturaDeCotacao,
-        desenharPreviaOrcamento} from "./orcamento.js";
+import {agendarCotacao, assinaturaDeCotacao, desenharPreviaOrcamento} from "./orcamento.js";
 import {api, salvarAgora} from "./salvar.js";
+import {state} from "./state";
 
 let cotacaoTimer = null;
 
 export async function cotar(){
-  if (estado.cotacaoRodando) return;
-  if (!estado.id) await salvarAgora();
-  if (!estado.id) return;
+  if (state.cotacaoRodando) return;
+  if (!state.id) await salvarAgora();
+  if (!state.id) return;
   // A assinatura é gravada ANTES da resposta: se o deck mudar durante a
   // cotação, `agendarCotacao` vê a diferença e marca outra pra depois desta.
-  estado.cotacaoAssinatura = assinaturaDeCotacao();
-  estado.cotacaoRodando = true;
-  estado.cotacaoErro = null;
+  state.cotacaoAssinatura = assinaturaDeCotacao();
+  state.cotacaoRodando = true;
+  state.cotacaoErro = null;
   desenharPreviaOrcamento();
   try {
-    const inicio = await api(`/decks/${estado.id}/cotacao`, {method: "POST"});
+    const inicio = await api(`/decks/${state.id}/cotacao`, {method: "POST"});
     acompanharCotacao(inicio.job_id);
   } catch (e){
     terminarCotacao(null, e.message);
@@ -32,9 +31,9 @@ export async function cotar(){
    precisa desligar o giro, guardar o resultado e redesenhar. */
 function terminarCotacao(resultado, erro){
   clearTimeout(cotacaoTimer);
-  estado.cotacaoRodando = false;
-  estado.cotacaoErro = erro || null;
-  if (resultado) estado.cotacao = resultado;
+  state.cotacaoRodando = false;
+  state.cotacaoErro = erro || null;
+  if (resultado) state.cotacao = resultado;
   desenharCotacao();
   desenharPreviaOrcamento();
   // A lista também muda: cada carta que a loja achou troca o preço estimado
@@ -73,12 +72,12 @@ function acompanharCotacao(jobId){
    fora. */
 function desenharCotacao(){
   const caixa = $("orc-resultado");
-  if (estado.cotacaoErro){
+  if (state.cotacaoErro){
     caixa.innerHTML = `<div class="aponta erro" style="grid-column:1/-1">
-      <span>${escapar(estado.cotacaoErro)}</span></div>`;
+      <span>${escapar(state.cotacaoErro)}</span></div>`;
     return;
   }
-  const resultado = estado.cotacao;
+  const resultado = state.cotacao;
   if (!resultado){ caixa.innerHTML = ""; return; }
 
   // Total que não cobre o deck inteiro precisa dizer isso NO LUGAR do número,
@@ -115,7 +114,7 @@ function desenharCotacao(){
        ${Number(c.fontes[principal.id].preco).toFixed(2)}</span></div>`).join("");
 
   const excluidas = (resultado.excluidas || []).length;
-  const talvez = estado.maybe.reduce((n, e) => n + e.quantidade, 0);
+  const talvez = state.maybe.reduce((n, e) => n + e.quantidade, 0);
   caixa.innerHTML =
     `<div>${fontes}</div>` +
     (caras ? `<div class="caras"><h2 class="secao">Onde está o dinheiro</h2>${caras}</div>` : "") +

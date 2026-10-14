@@ -5,33 +5,30 @@ import {ligarArrastar} from "./arrastar.js";
 import {abrirEscolhaDeArte, fecharArte} from "./artes.js";
 import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,
         atualizarCategoriasDoDestino, buscarComandante, escolherDestino,
-        escolherPorPagina, ligarTecladoDaBusca, ultimosResultados,
-        virarPagina} from "./busca.js";
+        escolherPorPagina, ligarTecladoDaBusca, ultimosResultados, virarPagina} from "./busca.js";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
-import {linkDeConta} from "./conta.js";
 import {adicionarPeca} from "./combos.js";
-import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
+import {linkDeConta} from "./conta.js";
 import {alternarCotacao, fecharCotacao} from "./cotacao.js";
-import {acharEntrada, adicionar, criarCategoria, definirQuantidade, desfazer,
-        escolherComandante, tirar, tirarComandante} from "./edicao.js";
-import {estado} from "./estado.js";
+import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
+import {addCard, commanderPick, createCategory, findEntry, removeCard,
+        removeCommander, setQuantity, undo} from "./editing";
 import {abrirGaveta, desenharBarraFiltros, fecharGaveta, gavetaAberta,
         lerGavetaFiltros, limparFiltros, montarGavetaFiltros, mudarIneditas,
         preencherGavetaFiltros, tirarFiltro} from "./filtros.js";
-import {atalhoDaMesa, desfazerMesa, fecharModalGf,
-        modalGfAberto} from "./goldfish-acoes.js";
+import {atalhoDaMesa, desfazerMesa, fecharModalGf, modalGfAberto} from "./goldfish-acoes.js";
 import {exportar, fazerImportar} from "./importar-exportar.js";
 import {abrirCiclo, adicionarLote, analisarManabase, chamarManabase,
         fixadoresPlanos} from "./manabase.js";
-import {abrirMenu, fecharMenu, menuAberto, menuDaCarta,
-        menuDoGrupo} from "./menus.js";
+import {abrirMenu, fecharMenu, menuAberto, menuDaCarta, menuDoGrupo} from "./menus.js";
 import {abrirFolha, fecharFolha, folhaAberta, recolherTalvez, trocarAba,
         trocarRail} from "./paineis.js";
-import {agendarSalvar, lidos, salvando, salvarJa,
-        salvarTimer} from "./salvar.js";
+import {agendarSalvar, lidos, salvando, salvarJa, salvarTimer} from "./salvar.js";
+import {state} from "./state";
 import {buscarSugestoes, desenharSugestoes, importarDeckMedio,
         sugerirPelaCarta, sugestoesPlanas} from "./sugestoes.js";
-import {fonteDoLink, toast} from "./utilidades.js";
+import {deckLinkSource} from "./text";
+import {toast} from "./utilidades.js";
 import {concluirVersao, menuDaVersao} from "./versoes.js";
 
 export function ligarEventos(){
@@ -70,7 +67,7 @@ export function ligarEventos(){
   // da busca de propósito — lá o Enter sem resultado não faz nada, e link
   // nenhum deixa resultado na lista (ver `oferecerImportar`).
   $("busca-cmd").addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" || !fonteDoLink($("busca-cmd").value)) return;
+    if (e.key !== "Enter" || !deckLinkSource($("busca-cmd").value)) return;
     e.preventDefault();
     importarLinkColado();
   });
@@ -109,19 +106,19 @@ export function ligarEventos(){
     if (gavetaAberta) return;   // dentro da gaveta, o teclado é dela
     if (cartaAberta) return;    // e dentro da modal, dela
     // D e Espaço só valem com a mesa à vista e nada por cima dela.
-    if (estado.aba === "goldfish" && !digitando && !modalGfAberto() &&
+    if (state.aba === "goldfish" && !digitando && !modalGfAberto() &&
         atalhoDaMesa(e)) return;
     if (e.key === "/" && !digitando){
       e.preventDefault();
-      (estado.comandantes.length ? $("busca") : $("busca-cmd")).focus();
+      (state.comandantes.length ? $("busca") : $("busca-cmd")).focus();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === "z" && !digitando){
       e.preventDefault();
       // Na aba do goldfish, Ctrl+Z desfaz a JOGADA, não a edição do deck.
       // São duas pilhas separadas de propósito: desfazer uma jogada não pode
       // tirar uma carta do deck, e vice-versa.
-      if (estado.aba === "goldfish" && estado.mesa) desfazerMesa();
-      else desfazer();
+      if (state.aba === "goldfish" && state.mesa) desfazerMesa();
+      else undo();
     }
     if (e.key === "Escape" && !$("arte-fundo").hidden){
       fecharArte();
@@ -193,7 +190,7 @@ export function ligarEventos(){
         adicionarPeloDestino(carta);
         // Sai da lista: já está no deck, e continuar sugerindo o que a pessoa
         // acabou de adicionar é o jeito mais rápido de a lista parecer burra.
-        for (const lista of (estado.sugestoes?.listas || [])){
+        for (const lista of (state.sugestoes?.listas || [])){
           lista.cartas = lista.cartas.filter(c => c.carta.nome !== carta.nome);
         }
         desenharSugestoes();
@@ -211,7 +208,7 @@ export function ligarEventos(){
     // ciclo aberto.
     const basico = e.target.closest("[data-basico]");
     if (basico){
-      const b = estado.manabase?.basicos[Number(basico.dataset.basico)];
+      const b = state.manabase?.basicos[Number(basico.dataset.basico)];
       if (b?.carta){
         adicionarLote([{carta: b.carta, quantidade: b.quantidade}]);
         toast(`${b.quantidade}× ${b.carta.nome} no deck.`);
@@ -219,7 +216,7 @@ export function ligarEventos(){
       return;
     }
     if (e.target.closest("[data-basicos-todos]")){
-      const lote = (estado.manabase?.basicos || []).filter(b => b.carta);
+      const lote = (state.manabase?.basicos || []).filter(b => b.carta);
       if (lote.length){
         adicionarLote(lote);
         toast(`${lote.reduce((s, b) => s + b.quantidade, 0)} básicos no deck.`);
@@ -230,14 +227,14 @@ export function ligarEventos(){
     if (fix){
       const terreno = fixadoresPlanos[Number(fix.dataset.fix)];
       if (terreno && !terreno.no_deck){
-        adicionar(terreno);
+        addCard(terreno);
         toast(`${terreno.nome} entrou no deck.`);
       }
       return;
     }
     const teto = e.target.closest("[data-teto]");
     if (teto){
-      estado.manabaseTeto = Number(teto.dataset.teto);
+      state.manabaseTeto = Number(teto.dataset.teto);
       return analisarManabase();
     }
     const ciclo = e.target.closest("[data-mb-cat]");
@@ -262,7 +259,7 @@ export function ligarEventos(){
     // Clicar no número é ir editá-lo, não abrir a carta.
     if (e.target.closest("[data-qtd]")) return;
     const sai = e.target.closest("[data-tirar]");
-    if (sai) return tirar(sai.dataset.tirar, doTabuleiro(sai));
+    if (sai) return removeCard(sai.dataset.tirar, doTabuleiro(sai));
     const sugCarta = e.target.closest("[data-sug-carta]");
     if (sugCarta) return sugerirPelaCarta(sugCarta.dataset.sugCarta);
     // O quadro de verso da galeria abre a modal já no verso, e o de uma
@@ -288,7 +285,7 @@ export function ligarEventos(){
     // sobre esta carta", e o "Ver a carta" do menu é o caminho do teclado.
     const linhaCarta = e.target.closest(".linha[data-nome]");
     if (linhaCarta) return abrirCarta(
-      acharEntrada(linhaCarta.dataset.nome, doTabuleiro(linhaCarta))?.carta);
+      findEntry(linhaCarta.dataset.nome, doTabuleiro(linhaCarta))?.carta);
     // O "···" do cabeçalho abre daqui, e não de um listener próprio no botão:
     // a linha lá em cima que fecha o menu ao clicar fora roda na bolha, isto
     // é, DEPOIS de um listener do próprio botão — o menu abriria e sumiria no
@@ -301,13 +298,13 @@ export function ligarEventos(){
     if (e.target.closest("[data-concluir-versao]")) return concluirVersao();
     if (e.target.closest("[data-abrir-manabase]")) return chamarManabase();
     const verCmd = e.target.closest("[data-ver-cmd]");
-    if (verCmd) return abrirCarta(estado.comandantes[Number(verCmd.dataset.verCmd)]);
+    if (verCmd) return abrirCarta(state.comandantes[Number(verCmd.dataset.verCmd)]);
     const saiCmd = e.target.closest("[data-tirar-cmd]");
-    if (saiCmd) return tirarComandante(Number(saiCmd.dataset.tirarCmd));
+    if (saiCmd) return removeCommander(Number(saiCmd.dataset.tirarCmd));
     const peca = e.target.closest("[data-add-peca]");
     if (peca) return adicionarPeca(peca.dataset.addPeca, peca);
     if (e.target.closest("#btn-parceiro")){
-      escolherComandante.parceiro = true;
+      commanderPick.partner = true;
       $("heroi").hidden = false;
       $("busca-cmd").value = "";
       $("busca-cmd").focus();
@@ -344,7 +341,7 @@ export function ligarEventos(){
     const tabuleiro = campo.closest(".linha").dataset.tabuleiro;
     const n = Math.floor(Number(campo.value));
     if (campo.value.trim() === "" || !Number.isFinite(n)){
-      campo.value = acharEntrada(nome, tabuleiro)?.quantidade ?? "";
+      campo.value = findEntry(nome, tabuleiro)?.quantidade ?? "";
       return;
     }
     // Ainda em foco é Enter ou seta: a lista se redesenha por baixo, e o
@@ -353,7 +350,7 @@ export function ligarEventos(){
     // Escrito de volta porque, quando a conta não muda (150 num deck que já
     // tem 99, 2,5 onde já há 2), nada se redesenha e o campo ficaria mentindo.
     campo.value = Math.min(99, n);
-    definirQuantidade(nome, Math.min(99, n), tabuleiro);
+    setQuantity(nome, Math.min(99, n), tabuleiro);
     if (!emFoco) return;
     const novo = [...document.querySelectorAll("[data-qtd]")].find(el =>
       el.dataset.qtd === nome && el.closest(".linha").dataset.tabuleiro === tabuleiro);
@@ -368,12 +365,12 @@ export function ligarEventos(){
   });
 
   $("nome-deck").addEventListener("input", () => {
-    estado.nome = $("nome-deck").value.trim() || "Deck sem nome";
+    state.nome = $("nome-deck").value.trim() || "Deck sem nome";
     agendarSalvar();
   });
 
   $("btn-compartilhar").addEventListener("click", async () => {
-    const url = location.origin + location.pathname + "?deck=" + estado.id;
+    const url = location.origin + location.pathname + "?deck=" + state.id;
     try {
       await navigator.clipboard.writeText(url);
       toast("Link copiado. Quem abrir vê e edita este mesmo deck.");
@@ -399,7 +396,7 @@ export function ligarEventos(){
   $("btn-nova-categoria").addEventListener("click", () => {
     const nome = prompt("Nome da nova categoria:\n\n" +
       "Ex.: Combo principal, Sac outlet, Proteção do comandante");
-    if (nome) criarCategoria(nome);
+    if (nome) createCategory(nome);
   });
 
   $("btn-recolher-talvez").addEventListener("click", () => recolherTalvez());
@@ -426,7 +423,7 @@ export function ligarEventos(){
     if (b) escolherDestino(b.dataset.destino);
   });
   $("sel-categoria").addEventListener("change", (e) => {
-    estado.destinoCategoria = e.target.value;
+    state.destinoCategoria = e.target.value;
   });
   // Criar daqui não mexe em carta nenhuma: cria a categoria vazia e já a deixa
   // escolhida, pra que as próximas cartas da busca caiam nela.
@@ -434,7 +431,7 @@ export function ligarEventos(){
     const nome = prompt("Nome da nova categoria:\n\n" +
       "Ex.: Combo principal, Sac outlet, Proteção do comandante");
     if (!nome) return;
-    estado.destinoCategoria = criarCategoria(nome) || "";
+    state.destinoCategoria = createCategory(nome) || "";
     atualizarCategoriasDoDestino();
   });
 
@@ -468,7 +465,7 @@ export function ligarEventos(){
    comandante desaparece no instante em que o deck importado traz um. */
 function importarLinkColado(){
   const url = $("busca-cmd").value.trim();
-  if (!fonteDoLink(url)) return;
+  if (!deckLinkSource(url)) return;
   $("i-url").value = url;
   // A lista em texto que tenha sobrado de uma importação anterior não vale
   // aqui: quem colou um link pediu o link.
@@ -493,7 +490,7 @@ function menuDoCabecalho(){
   itens.push("risco");
   itens.push({rotulo: "Novo deck", href: location.pathname, aoClicar: comecarNovo});
   itens.push({rotulo: "Imprimir proxies", href: "/"});
-  if (!estado.usuario){
+  if (!state.usuario){
     itens.push("risco");
     itens.push({rotulo: "Entrar", href: linkDeConta("entrar")});
     itens.push({rotulo: "Criar conta", href: linkDeConta("cadastro")});
@@ -506,6 +503,6 @@ function menuDoCabecalho(){
    novo noutra aba e deixa este onde está. */
 function comecarNovo(e){
   if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-  if (estado.cartas.length && !confirm("Começar um deck novo? O atual fica " +
+  if (state.cartas.length && !confirm("Começar um deck novo? O atual fica " +
       "salvo e continua em Meus decks.")) e.preventDefault();
 }

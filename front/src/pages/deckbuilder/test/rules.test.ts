@@ -19,26 +19,26 @@
 import { entrada } from "./fixtures";
 import { cleanup, type Page } from "./harness";
 import {
-  BOLT, CATEGORIAS, DECK, ELVES, INEDITA, LOTUS, MAYBE, page, SOL_RING, type Setup,
+  BOLT, AUTO_CATEGORIES, DECK, ELVES, INEDITA, LOTUS, MAYBE, page, SOL_RING, type Setup,
 } from "./sampleDeck";
 
 /** O que a tela ficou pensando. */
 function seen(p: Page) {
-  const e = p.estado;
+  const e = p.state;
   type Row = [string, number, string];
   const row = (x: any): Row => [x.carta.nome, x.quantidade, x.categoria || ""];
   return {
     cartas: e.cartas.map(row) as Row[],
     maybe: e.maybe.map(row) as Row[],
     categorias: e.categorias,
-    total: p.totalCartas(),
-    contadas: p.cartasContadas().map((x: any) => x.carta.nome),
+    total: p.totalCards(),
+    contadas: p.countedCards().map((x: any) => x.carta.nome),
     orcamento: p.orcamentoLocal(),
-    ordem: p.ordemDasCategorias(e.cartas),
+    ordem: p.categoryOrder(e.cartas),
     apontamentos: p.validarLocal().apontamentos.map((a: any) => a.tipo),
     corpo: p.corpoDoDeck(),
-    htmlDeck: p.gruposHTML(e.cartas, p.identidadeDoDeck(), "deck") as string,
-    htmlTalvez: p.gruposHTML(e.maybe, p.identidadeDoDeck(), "talvez") as string,
+    htmlDeck: p.gruposHTML(e.cartas, p.deckIdentity(), "deck") as string,
+    htmlTalvez: p.gruposHTML(e.maybe, p.deckIdentity(), "talvez") as string,
     lista: p.listaTexto() as string,
   };
 }
@@ -71,7 +71,7 @@ describe("a lista, agrupada", () => {
   });
 
   it("carta com categoria que a lista não conhece continua visível", async () => {
-    // A rede de segurança do `ordemDasCategorias`: um deck salvo por uma
+    // A rede de segurança do `categoryOrder`: um deck salvo por uma
     // versão anterior pode trazer categoria que a lista não conhece.
     const r = await run(undefined, { deck: [entrada(SOL_RING, 1, "Categoria fantasma")], categorias: [] });
     expect(names(r.htmlDeck)).toEqual(["Sol Ring"]);
@@ -145,7 +145,7 @@ describe("o que a validação acusa", () => {
 
 describe("mover entre o deck e o maybeboard", () => {
   it("a carta muda de lado com a categoria intacta, e sai das contas", async () => {
-    const r = await run((p) => p.mover("Sol Ring", "deck", "talvez"));
+    const r = await run((p) => p.moveCard("Sol Ring", "deck", "talvez"));
     expect(r.cartas.map((c) => c[0])).not.toContain("Sol Ring");
     expect(r.maybe).toContainEqual(["Sol Ring", 1, "Combo principal"]);
     expect(r.total).toBe(13);
@@ -153,12 +153,12 @@ describe("mover entre o deck e o maybeboard", () => {
   });
 
   it("voltar pro deck traz a categoria de volta", async () => {
-    const r = await run((p) => p.mover("Rhystic Study", "talvez", "deck"));
+    const r = await run((p) => p.moveCard("Rhystic Study", "talvez", "deck"));
     expect(r.cartas).toContainEqual(["Rhystic Study", 1, "Combo principal"]);
   });
 
   it("a mesma carta nos dois lados soma ao voltar, sem duplicar", async () => {
-    const r = await run((p) => p.mover("Llanowar Elves", "talvez", "deck"),
+    const r = await run((p) => p.moveCard("Llanowar Elves", "talvez", "deck"),
                         { maybe: [...MAYBE, entrada(ELVES, 2)] });
     expect(r.cartas).toContainEqual(["Llanowar Elves", 3, ""]);
     expect(r.maybe.map((c) => c[0])).not.toContain("Llanowar Elves");
@@ -167,21 +167,21 @@ describe("mover entre o deck e o maybeboard", () => {
 
 describe("categorias", () => {
   it("categorizar não move de lista nem muda quantidade", async () => {
-    const r = await run((p) => p.definirCategoria("Llanowar Elves", "deck", "Sac outlet"));
+    const r = await run((p) => p.setCategory("Llanowar Elves", "deck", "Sac outlet"));
     expect(r.cartas).toContainEqual(["Llanowar Elves", 1, "Sac outlet"]);
   });
 
   it("o Sideboard tira das 100 mas mantém na prévia; sair dele devolve", async () => {
-    const r = await run((p) => p.definirCategoria("Llanowar Elves", "deck", "Sideboard"));
+    const r = await run((p) => p.setCategory("Llanowar Elves", "deck", "Sideboard"));
     expect(r.total).toBe(13);
     expect(r.orcamento.total).toBeCloseTo(13.5, 2);
-    expect((await run((p) => p.definirCategoria("Swords to Plowshares", "deck", ""))).total).toBe(15);
+    expect((await run((p) => p.setCategory("Swords to Plowshares", "deck", ""))).total).toBe(15);
   });
 
   it("renomear alcança a lista, as cartas do deck e o maybeboard", async () => {
     // O maybeboard herda as categorias do deck: renomear num lado e não no
     // outro deixaria um grupo órfão lá, com o nome velho e sem dono.
-    const r = await run((p) => p.renomearCategoria("Combo principal", "Motor do deck"));
+    const r = await run((p) => p.renameCategory("Combo principal", "Motor do deck"));
     expect(r.categorias).toContain("Motor do deck");
     expect(r.categorias).not.toContain("Combo principal");
     expect(r.cartas).toContainEqual(["Sol Ring", 1, "Motor do deck"]);
@@ -189,7 +189,7 @@ describe("categorias", () => {
   });
 
   it("apagar a categoria não apaga carta nenhuma", async () => {
-    const r = await run((p) => p.apagarCategoria("Combo principal"));
+    const r = await run((p) => p.deleteCategory("Combo principal"));
     expect([r.cartas.length, r.maybe.length]).toEqual([5, 2]);
     expect(r.cartas).toContainEqual(["Sol Ring", 1, ""]);
     expect(r.maybe).toContainEqual(["Rhystic Study", 1, ""]);
@@ -197,29 +197,29 @@ describe("categorias", () => {
   });
 
   it("criar a partir de uma carta já a põe dentro; nome repetido não duplica", async () => {
-    const r = await run((p) => p.criarCategoria("Proteção", "Llanowar Elves", "deck"));
+    const r = await run((p) => p.createCategory("Proteção", "Llanowar Elves", "deck"));
     expect(r.categorias).toContain("Proteção");
     expect(r.cartas).toContainEqual(["Llanowar Elves", 1, "Proteção"]);
-    const dup = await run((p) => p.criarCategoria("SAC OUTLET", "Llanowar Elves", "deck"));
-    expect(dup.categorias).toEqual(CATEGORIAS);
+    const dup = await run((p) => p.createCategory("SAC OUTLET", "Llanowar Elves", "deck"));
+    expect(dup.categorias).toEqual(AUTO_CATEGORIES);
     expect(dup.cartas).toContainEqual(["Llanowar Elves", 1, "Sac outlet"]);
   });
 
   it("subir reordena as categorias", async () => {
-    const r = await run((p) => p.moverCategoria("Sac outlet", -1));
+    const r = await run((p) => p.moveCategory("Sac outlet", -1));
     expect(r.categorias).toEqual(["Sac outlet", "Combo principal", "Ainda vazia"]);
   });
 });
 
 describe("desfazer", () => {
   it("Ctrl+Z devolve a carta pro deck", async () => {
-    const r = await run((p) => { p.mover("Sol Ring", "deck", "talvez"); p.desfazer(); });
+    const r = await run((p) => { p.moveCard("Sol Ring", "deck", "talvez"); p.undo(); });
     expect(r.cartas).toContainEqual(["Sol Ring", 1, "Combo principal"]);
     expect(r.maybe.map((c) => c[0])).not.toContain("Sol Ring");
   });
 
   it("Ctrl+Z devolve a categoria apagada", async () => {
-    const r = await run((p) => { p.apagarCategoria("Sac outlet"); p.desfazer(); });
+    const r = await run((p) => { p.deleteCategory("Sac outlet"); p.undo(); });
     expect(r.categorias).toContain("Sac outlet");
     expect(r.cartas).toContainEqual(["Ashnod's Altar", 1, "Sac outlet"]);
   });

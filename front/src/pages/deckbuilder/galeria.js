@@ -22,9 +22,10 @@
 import {$, escapar} from "../../shared/dom.js";
 import {arteEscolhida, imagemDaFace, ladoPronto, nomeDaArte, quadroHTML,
         temArtePorCopia, temVerso} from "./artes.js";
-import {estado} from "./estado.js";
+import {categoryOf, categoryOrder} from "./deck";
+import {state} from "./state";
 import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
-import {categoriaDe, ico, ordemDasCategorias} from "./utilidades.js";
+import {ico} from "./utilidades.js";
 
 // O HTML da última pintura. O autosave redesenha a tela a cada carta, e
 // reescrever cem <img> iguais faria a galeria piscar inteira a cada clique.
@@ -104,8 +105,8 @@ function quadrosDaCarta(carta, quantidade){
    que é o que vai pro papel. Ficha conta como carta. Um lado só conta como
    escolhido com todas as cópias dele cobertas. */
 function contaDaGaleria(){
-  const entradas = estado.comandantes.map(c => [c, 1]).concat(
-    estado.cartas.map(e => [e.carta, e.quantidade]),
+  const entradas = state.comandantes.map(c => [c, 1]).concat(
+    state.cartas.map(e => [e.carta, e.quantidade]),
     fichasDoDeck().map(f => [f, 1]));
   let total = 0, escolhidas = 0;
   for (const [c, quantidade] of entradas){
@@ -125,10 +126,10 @@ function contaDaGaleria(){
    o Compartilhar. */
 export function atualizarBotaoPedido(){
   const link = $("btn-pedido");
-  link.hidden = !estado.id;
+  link.hidden = !state.id;
   const {total, escolhidas} = contaDaGaleria();
-  const pronto = !!estado.id && total > 0 && escolhidas === total;
-  if (pronto) link.href = `/?deck=${encodeURIComponent(estado.id)}`;
+  const pronto = !!state.id && total > 0 && escolhidas === total;
+  if (pronto) link.href = `/?deck=${encodeURIComponent(state.id)}`;
   else link.removeAttribute("href");
   link.setAttribute("aria-disabled", String(!pronto));
   link.title = pronto ? "Levar este deck pra tela de orçamento"
@@ -138,14 +139,14 @@ export function atualizarBotaoPedido(){
 
 export function desenharGaleria(){
   const caixa = $("galeria-resultado");
-  if (!estado.comandantes.length){
+  if (!state.comandantes.length){
     $("btn-artes-padrao").hidden = true;
     galeriaDesenhada = caixa.innerHTML = "";
     return;
   }
   const {total, escolhidas} = contaDaGaleria();
   // O atalho só aparece quando há o que aplicar, e num deck já salvo.
-  $("btn-artes-padrao").hidden = !estado.id || escolhidas === total;
+  $("btn-artes-padrao").hidden = !state.id || escolhidas === total;
   const pct = total ? (escolhidas / total) * 100 : 0;
   let html = `<div class="progresso">
       <div class="texto"><span>${escolhidas === total
@@ -154,19 +155,19 @@ export function desenharGaleria(){
       <span class="trilho"><span class="cheio" style="width:${pct}%"></span></span>
     </div>`;
 
-  html += `<div class="galeria-grupo"><h3>${estado.comandantes.length > 1
+  html += `<div class="galeria-grupo"><h3>${state.comandantes.length > 1
       ? "Comandantes" : "Comandante"}</h3><div class="galeria-grade">${
-    estado.comandantes.map(c => quadrosDaCarta(c, 1)).join("")}</div></div>`;
+    state.comandantes.map(c => quadrosDaCarta(c, 1)).join("")}</div></div>`;
 
   // Os mesmos grupos, na mesma ordem e com o mesmo desempate da lista: a
   // pessoa acha a carta aqui onde ela já sabe que a carta mora lá.
   const porCategoria = new Map();
-  for (const e of estado.cartas){
-    const cat = categoriaDe(e);
+  for (const e of state.cartas){
+    const cat = categoryOf(e);
     if (!porCategoria.has(cat)) porCategoria.set(cat, []);
     porCategoria.get(cat).push(e);
   }
-  for (const cat of ordemDasCategorias(estado.cartas)){
+  for (const cat of categoryOrder(state.cartas)){
     const itens = porCategoria.get(cat);
     if (!itens) continue;
     itens.sort((a, b) => (a.carta.cmc - b.carta.cmc) ||

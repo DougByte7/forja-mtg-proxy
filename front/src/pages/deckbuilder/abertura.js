@@ -5,13 +5,12 @@ import {carregarArtes, ligarArte} from "./artes.js";
 import {buscar, buscarComandante, escolherDestino} from "./busca.js";
 import {lerConta, ligarConvite, ligarOrfao, receberConta} from "./conta.js";
 import {desenharTudo} from "./desenho.js";
-import {estado} from "./estado.js";
 import {ligarEventos} from "./eventos.js";
 import {ligarGoldfish} from "./goldfish-acoes.js";
-import {CHAVE_TALVEZ, recolherTalvez, trocarAba,
-        trocarRail} from "./paineis.js";
-import {carregarCambio} from "./preco.js";
+import {CHAVE_TALVEZ, recolherTalvez, trocarAba, trocarRail} from "./paineis.js";
+import {loadExchangeRate} from "./price";
 import {api, atualizarBotaoMeus, lembrarDeck, marcarEstado} from "./salvar.js";
+import {state} from "./state";
 import {buscarTokens} from "./tokens.js";
 import {toast} from "./utilidades.js";
 
@@ -43,7 +42,7 @@ async function abrir(){
   conferirBase();
   // Sem `await`: a taxa é a régua do preço, não o deck. Ela redesenha sozinha
   // quando chega, e enquanto não chega a tela mostra dólar em vez de esperar.
-  carregarCambio();
+  loadExchangeRate();
   trocarAba("deck");
   trocarRail("buscar");
   escolherDestino("deck");
@@ -59,20 +58,20 @@ async function abrir(){
   if (id){
     try {
       const r = await api(`/decks/${id}`);
-      estado.id = r.deck.id;
-      estado.nome = r.deck.nome;
-      estado.validacao = r.validacao;
-      estado.versao = r.versao;
-      estado.comandantes = (r.deck.comandantes_completos || []).filter(Boolean);
+      state.id = r.deck.id;
+      state.nome = r.deck.nome;
+      state.validacao = r.validacao;
+      state.versao = r.versao;
+      state.comandantes = (r.deck.comandantes_completos || []).filter(Boolean);
       const entrada = (e) => ({carta: e.carta, quantidade: e.quantidade,
                                categoria: e.categoria || ""});
-      estado.cartas = (r.deck.cartas_completas || []).filter(e => e.carta)
+      state.cartas = (r.deck.cartas_completas || []).filter(e => e.carta)
         .map(entrada);
-      estado.maybe = (r.deck.maybeboard_completo || []).filter(e => e.carta)
+      state.maybe = (r.deck.maybeboard_completo || []).filter(e => e.carta)
         .map(entrada);
-      estado.categorias = r.deck.categorias || [];
-      estado.dono = r.deck.dono || null;
-      $("nome-deck").value = estado.nome;
+      state.categorias = r.deck.categorias || [];
+      state.dono = r.deck.dono || null;
+      $("nome-deck").value = state.nome;
       $("btn-compartilhar").hidden = false;
       lembrarDeck();
       marcarEstado("salvo", "ok");
@@ -91,13 +90,13 @@ async function abrir(){
   carregarArtes();
   // As fichas vão pro papel com o deck: sem elas, a aba Artes e o "Gerar
   // pedido" contariam só as cartas até a aba Tokens ser aberta.
-  if (estado.id) buscarTokens();
-  if (estado.comandantes.length){ buscar(); }
+  if (state.id) buscarTokens();
+  if (state.comandantes.length){ buscar(); }
   else { buscarComandante(); $("busca-cmd").focus(); }
   // O foco na busca só faz sentido onde ela está sempre à vista: no celular
   // ela é uma folha fechada, e focar dentro dela abriria o teclado sobre uma
   // superfície invisível.
-  if (estado.comandantes.length && window.innerWidth > 900) $("busca").focus();
+  if (state.comandantes.length && window.innerWidth > 900) $("busca").focus();
 }
 
 abrir();

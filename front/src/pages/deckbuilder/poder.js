@@ -2,9 +2,10 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {assinaturaDoDeck} from "./combos.js";
-import {estado} from "./estado.js";
+import {totalCards} from "./deck";
 import {api, salvarAgora} from "./salvar.js";
-import {toast, totalCartas} from "./utilidades.js";
+import {state} from "./state";
+import {toast} from "./utilidades.js";
 
 const BRACKETS = [
   [1, "Exibição",  "Deck de mesa leve: sem combo, sem game changer."],
@@ -16,17 +17,17 @@ const BRACKETS = [
 ];
 
 export async function estimarPoder(){
-  if (!estado.comandantes.length && !estado.cartas.length){
+  if (!state.comandantes.length && !state.cartas.length){
     toast("Monte alguma coisa antes de estimar o nível.");
     return;
   }
-  if (!estado.id) await salvarAgora();
-  if (!estado.id){ toast("Não consegui salvar o deck antes de estimar."); return; }
+  if (!state.id) await salvarAgora();
+  if (!state.id){ toast("Não consegui salvar o deck antes de estimar."); return; }
 
   $("poder-resultado").innerHTML = `<div class="nota">Classificando…</div>`;
   try {
-    estado.poder = await api(`/decks/${estado.id}/poder`, {method: "POST"});
-    estado.poderAssinatura = assinaturaDoDeck();
+    state.poder = await api(`/decks/${state.id}/poder`, {method: "POST"});
+    state.poderAssinatura = assinaturaDoDeck();
   } catch (e){
     $("poder-resultado").innerHTML =
       `<div class="aponta erro"><span>${escapar(e.message)}</span></div>`;
@@ -37,18 +38,18 @@ export async function estimarPoder(){
 
 export function desenharPoder(){
   const caixa = $("poder-resultado");
-  const p = estado.poder;
+  const p = state.poder;
   if (!p){ caixa.innerHTML = ""; return; }
 
   let html = "";
-  if (estado.poderAssinatura !== assinaturaDoDeck()){
+  if (state.poderAssinatura !== assinaturaDoDeck()){
     html += `<div class="combo-desatualizado">O deck mudou desde esta
       estimativa.<button class="refazer" data-repoder>Atualizar</button></div>`;
   }
   // Deck pela metade não tem nível: a estimativa só descreve as cartas que
   // existem, e dizer "bracket 1" pra um deck de 20 cartas seria mentira por
   // omissão.
-  const total = totalCartas();
+  const total = totalCards();
   if (total < 100){
     html += `<div class="combo-desatualizado">O deck tem ${total} de 100
       cartas — esta estimativa vale só pelo que já está montado.</div>`;

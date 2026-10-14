@@ -6,8 +6,8 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {agendarBusca, buscarComandante, buscarDoComeco} from "./busca.js";
-import {estado, FILTROS_VAZIOS, NOME_DO_TIPO, TIPOS} from "./estado.js";
-import {simboloDaTela} from "./preco.js";
+import {screenCurrency} from "./price";
+import {EMPTY_FILTERS, state, TYPE_LABELS, TYPE_OPTIONS} from "./state";
 import {ico} from "./utilidades.js";
 
 export let gavetaAberta = null;
@@ -42,9 +42,9 @@ export function fecharGaveta(){
 /* Quais filtros estão ligados, no formato que a fita desenha: `{chave,
    rotulo}`. Também é o que conta o número na bolinha do botão. */
 function filtrosLigados(){
-  const f = estado.filtros;
+  const f = state.filtros;
   const ligados = [];
-  if (f.tipo) ligados.push({chave:"tipo", rotulo: NOME_DO_TIPO[f.tipo] || f.tipo});
+  if (f.tipo) ligados.push({chave:"tipo", rotulo: TYPE_LABELS[f.tipo] || f.tipo});
   if (f.texto) ligados.push({chave:"texto", rotulo: `“${f.texto}”`});
   if (f.cores) ligados.push({chave:"cores", rotulo: f.cores.split("").join("")});
   if (f.cmcMin !== "" || f.cmcMax !== ""){
@@ -53,8 +53,8 @@ function filtrosLigados(){
     ligados.push({chave:"cmc", rotulo: `custo ${de}–${ate}`});
   }
   if (f.precoMax !== "") ligados.push({chave:"precoMax",
-    rotulo: `até ${simboloDaTela()} ${f.precoMax}`});
-  // Este não estreita a lista, alarga (ver `algumFiltro`) — mas está ligado,
+    rotulo: `até ${screenCurrency()} ${f.precoMax}`});
+  // Este não estreita a lista, alarga (ver `anyFilterOn`) — mas está ligado,
   // e a fita é onde se vê o que está ligado. Sem ele aqui, a carta que ainda
   // não saiu apareceria na busca sem nada dizendo por quê, e sem o ✕ que a
   // tira de volta.
@@ -99,7 +99,7 @@ const CORES_FILTRO = [["W","Branco"],["U","Azul"],["B","Preto"],
                       ["R","Vermelho"],["G","Verde"],["C","Incolor"]];
 
 export function montarGavetaFiltros(){
-  $("f-tipo").innerHTML = TIPOS.map(([valor, rotulo]) =>
+  $("f-tipo").innerHTML = TYPE_OPTIONS.map(([valor, rotulo]) =>
     `<option value="${valor}">${rotulo}</option>`).join("");
   $("f-cores").innerHTML = CORES_FILTRO.map(([c, nome]) => `
     <button class="cor-btn" data-cor="${c}" title="${nome}"
@@ -110,7 +110,7 @@ export function montarGavetaFiltros(){
 /* Escreve o estado nos controles. Roda ao abrir a gaveta e ao limpar, pra a
    gaveta nunca discordar da fita que está do lado de fora dela. */
 export function preencherGavetaFiltros(){
-  const f = estado.filtros;
+  const f = state.filtros;
   $("f-tipo").value = f.tipo;
   $("f-texto").value = f.texto;
   $("f-cmc-min").value = f.cmcMin;
@@ -139,7 +139,7 @@ export function lerGavetaFiltros(){
     const n = Number(v);
     return Number.isFinite(n) && n >= 0 ? String(n) : "";
   };
-  estado.filtros = {
+  state.filtros = {
     tipo: $("f-tipo").value,
     texto: $("f-texto").value.trim(),
     cores: [...$("f-cores").children]
@@ -160,7 +160,7 @@ export function lerGavetaFiltros(){
    de diferente é a busca que ele refaz: a de comandante, que é a única
    acontecendo enquanto essa tela está no ar. */
 export function mudarIneditas(ligado){
-  estado.filtros.ineditas = ligado;
+  state.filtros.ineditas = ligado;
   preencherGavetaFiltros();
   desenharBarraFiltros();
   // Só refaz a busca se houver o que buscar: com a caixa vazia a lista está
@@ -172,14 +172,14 @@ export function mudarIneditas(ligado){
 export function tirarFiltro(chave){
   if (chave === "cmc"){
     // A única etiqueta que fala por dois controles: "custo 2–4" é o par.
-    estado.filtros.cmcMin = "";
-    estado.filtros.cmcMax = "";
+    state.filtros.cmcMin = "";
+    state.filtros.cmcMax = "";
   } else {
     // Tirar um filtro é devolvê-lo ao estado neutro da gaveta, e quem sabe
-    // qual é ele é o `FILTROS_VAZIOS` — a ordenação volta pra "nome" e o
+    // qual é ele é o `EMPTY_FILTERS` — a ordenação volta pra "nome" e o
     // interruptor das inéditas pra desligado, sem uma lista de exceções aqui
     // que envelhece a cada filtro novo.
-    estado.filtros[chave] = FILTROS_VAZIOS[chave];
+    state.filtros[chave] = EMPTY_FILTERS[chave];
   }
   preencherGavetaFiltros();
   desenharBarraFiltros();
@@ -187,7 +187,7 @@ export function tirarFiltro(chave){
 }
 
 export function limparFiltros(){
-  estado.filtros = {...FILTROS_VAZIOS};
+  state.filtros = {...EMPTY_FILTERS};
   preencherGavetaFiltros();
   desenharBarraFiltros();
   buscarDoComeco();

@@ -437,12 +437,15 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `front/pages/deckbuilder.html` + `front/src/pages/deckbuilder/` — a tela
   de montar deck de Commander, em `/deckbuilder`. Três colunas (maybeboard,
   deck, busca), categorias próprias e as análises embaixo do deck. Ver
-  *Deckbuilder de Commander*. A página guarda só a marcação; o CSS e o
-  JavaScript são um módulo ES por assunto (`estado.js`, `busca.js`,
-  `goldfish.js`, `combos.js`…), que o Vite empacota a partir da entrada
-  (`abertura.js`). Cada módulo importa o que usa e exporta só o que outro
-  módulo importa — o resto é privado dele. Está sendo convertido pra Preact;
-  até lá, `$` e `escapar` moram em `front/src/shared/dom.js`. Módulo novo só
+  *Deckbuilder de Commander*. A página guarda só a marcação; o resto é um
+  módulo por assunto, que o Vite empacota a partir da entrada
+  (`abertura.js`). A lógica sem tela já é TypeScript: `state.ts` (o estado
+  e as categorias), `deck.ts` (o que conta pras 100, identidade, grupos),
+  `editing.ts` (mexer no deck e desfazer), `price.ts` (a régua do câmbio),
+  `goldfish.ts` (as regras da mesa) e `types.ts` (o formato da API). O
+  desenho e os cliques (`desenho.js`, `busca.js`, `combos.js`…) ainda são
+  JS e estão virando componentes Preact; até lá, `$` e `escapar` moram em
+  `front/src/shared/dom.js`. Módulo novo só
   precisa ser importado por alguém; os testes seguem o mesmo grafo a partir
   da entrada, e acusam arquivo na pasta que nenhum `import` alcança.
 - `app/cartas.py` — a cópia local do bulk data da Scryfall (busca instantânea
@@ -1019,7 +1022,7 @@ antes desta mudança continua abrindo** — ele volta com maybeboard vazio e
 nenhuma categoria.
 
 A regra do sideboard mora num lugar só de cada lado
-(`decks.CATEGORIAS_FORA_DA_CONTA` no servidor, `CATEGORIAS_FORA_DA_CONTA` na
+(`decks.CATEGORIAS_FORA_DA_CONTA` no servidor, `OUT_OF_COUNT` em `state.ts` na
 tela) porque ela existe duas vezes: a tela responde ao clique sem esperar a
 rede, e o servidor valida de novo ao gravar. `front/src/pages/deckbuilder/test/rules.test.ts`
 roda o JavaScript da página justamente pra que as duas não divirjam calado.
@@ -1672,9 +1675,9 @@ motivo que ficam lá. O segundo deck passa pela mesma régua, só que sobre a
 resposta do servidor.
 
 **São três módulos**, e a divisão é o que deixa o teste existir:
-`goldfish.js` tem as regras e não toca em DOM nenhum, `goldfish-desenho.js` só
+`goldfish.ts` tem as regras e não toca em DOM nenhum, `goldfish-desenho.js` só
 lê a mesa e escreve HTML, e `goldfish-acoes.js` tem os cliques, o menu de cada
-carta, o arrastar e as quatro modais. Toda ação passa por `guardarMesa()` antes
+carta, o arrastar e as quatro modais. Toda ação passa por `saveTableSnapshot()` antes
 — é o que faz o Ctrl+Z valer pra qualquer jogada, e não só pras que alguém
 lembrou de tratar. A fotografia do desfazer guarda o estado **sem as cartas**
 (elas voltam pelo registro de `uid`): uma mesa de dois decks tem 200 cartas

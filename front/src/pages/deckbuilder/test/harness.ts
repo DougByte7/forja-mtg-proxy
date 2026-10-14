@@ -1,7 +1,7 @@
 /* O aparato dos testes do deckbuilder: a página de verdade, sem rede.
 
    Cada `freshPage()` sobe um deckbuilder novo — marcação da página, módulos
-   recarregados do zero (o `estado` é por módulo) e tempo de mentira, pra o
+   recarregados do zero (o `state` é por módulo) e tempo de mentira, pra o
    autosave agendado nunca disparar. Só a entrada (`abertura.js`) fica de
    fora: ela é a única que vai à rede e liga a tela. O `fetch` devolve uma
    promessa que nunca resolve, e assim nada que um teste dispare por tabela
@@ -13,7 +13,7 @@ const HTML = readFileSync(resolve(import.meta.dirname, "../../../../pages/deckbu
 const BODY = HTML.slice(HTML.indexOf("<body>") + 6, HTML.indexOf("</body>"))
   .replace(/<script[\s\S]*?<\/script>/g, "");
 
-const MODULES = import.meta.glob(["../*.js", "!../abertura.js"]);
+const MODULES = import.meta.glob(["../*.{js,ts}", "!../abertura.js", "!../*.test.ts", "!../types.ts"]);
 
 export type Page = Record<string, any>;
 

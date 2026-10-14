@@ -10,9 +10,8 @@
    o deck leva. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {estado} from "./estado.js";
-import {cartasContadas, categoriaAutomatica, categoriaDe,
-        ehPropria} from "./utilidades.js";
+import {autoCategory, categoryOf, countedCards, isCustomCategory} from "./deck";
+import {state} from "./state";
 
 const VISTAS_MAO = 7;   // a mão inicial
 const VISTAS_T3 = 9;    // a mão mais as compras dos turnos 2 e 3
@@ -80,7 +79,7 @@ function riscoDaMana(p){
 
 export function desenharChances(){
   const caixa = $("chances");
-  const entradas = cartasContadas();
+  const entradas = countedCards();
   const N = entradas.reduce((n, e) => n + e.quantidade, 0);
   if (N < VISTAS_T4){
     caixa.innerHTML = `<div class="vazio" style="padding:8px 0;">Com menos de
@@ -101,10 +100,10 @@ export function desenharChances(){
   const porTipo = new Map();
   const porPropria = new Map();
   for (const entrada of entradas){
-    const auto = categoriaAutomatica(entrada.carta);
+    const auto = autoCategory(entrada.carta);
     porTipo.set(auto, (porTipo.get(auto) || 0) + entrada.quantidade);
-    const cat = categoriaDe(entrada);
-    if (ehPropria(cat)){
+    const cat = categoryOf(entrada);
+    if (isCustomCategory(cat)){
       porPropria.set(cat, (porPropria.get(cat) || 0) + entrada.quantidade);
     }
   }
@@ -112,7 +111,7 @@ export function desenharChances(){
   // As próprias em cima e na ordem em que a pessoa as pôs, como na lista: é a
   // organização dela, e ela vem antes do que a carta é. Os tipos seguem
   // ordenados por tamanho, que é a ordem que ninguém escolheu.
-  const proprias = estado.categorias.filter(c => porPropria.has(c))
+  const proprias = state.categorias.filter(c => porPropria.has(c))
     .map(c => [c, porPropria.get(c), true]);
   const tipos = [...porTipo.entries()].sort((a, b) => b[1] - a[1])
     .map(([cat, K]) => [cat, K, false]);

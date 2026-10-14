@@ -49,10 +49,13 @@ it("todo módulo da pasta é alcançado pela entrada", () => {
     if (seen.has(file)) return;
     seen.add(file);
     const text = readFileSync(resolve(dir, file), "utf-8");
-    for (const m of text.matchAll(/^import\s*\{[^}]*\}\s*from\s*"\.\/([^"]+)";/gm)) visit(m[1]);
+    for (const m of text.matchAll(/^import\s*(?:type\s*)?\{[^}]*\}\s*from\s*"\.\/([^"]+)";/gm)) {
+      // "./state" é "./state.ts": o Vite resolve sem extensão.
+      visit(/\.(js|ts)$/.test(m[1]) ? m[1] : m[1] + ".ts");
+    }
   };
   visit("abertura.js");
-  const all = readdirSync(dir).filter((f) => f.endsWith(".js"));
+  const all = readdirSync(dir).filter((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".test.ts"));
   expect(all.filter((f) => !seen.has(f))).toEqual([]);
   expect(seen.size).toBeGreaterThan(20);
 });

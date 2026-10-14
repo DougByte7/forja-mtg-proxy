@@ -6,9 +6,9 @@
    coluna do maybeboard (que aceita a carta na categoria em que ela já
    estava). */
 
-import {acharEntrada, definirCategoria, mover} from "./edicao.js";
-import {CATEGORIAS_FORA_DA_CONTA} from "./estado.js";
-import {categoriaAutomatica, ehPropria} from "./utilidades.js";
+import {autoCategory, isCustomCategory} from "./deck";
+import {findEntry, moveCard, setCategory} from "./editing";
+import {OUT_OF_COUNT} from "./state";
 let arrastando = null;
 
 export function ligarArrastar(){
@@ -55,18 +55,18 @@ export function ligarArrastar(){
     // Move primeiro, categoriza depois: as duas coisas guardam desfazer, e
     // o Ctrl+Z devolve o passo inteiro em dois toques em vez de um. Vale o
     // preço — a alternativa seria uma terceira função que faz as duas.
-    if (destino !== tabuleiro) mover(nome, tabuleiro, destino);
+    if (destino !== tabuleiro) moveCard(nome, tabuleiro, destino);
     if (grupo){
       const cat = grupo.dataset.categoria;
       // Grupo automático: a carta perde a categoria à mão e volta a ser
       // agrupada pelo tipo. Só faz sentido se for o tipo DELA — soltar uma
       // criatura em "Artefatos" não a transforma em artefato, então nesse
       // caso não há o que fazer e o silêncio é a resposta certa.
-      const propria = ehPropria(cat) || CATEGORIAS_FORA_DA_CONTA.has(cat);
-      const entrada = acharEntrada(nome, destino);
-      if (propria) definirCategoria(nome, destino, cat);
-      else if (entrada && categoriaAutomatica(entrada.carta) === cat){
-        definirCategoria(nome, destino, "");
+      const propria = isCustomCategory(cat) || OUT_OF_COUNT.has(cat);
+      const entrada = findEntry(nome, destino);
+      if (propria) setCategory(nome, destino, cat);
+      else if (entrada && autoCategory(entrada.carta) === cat){
+        setCategory(nome, destino, "");
       }
     }
   });

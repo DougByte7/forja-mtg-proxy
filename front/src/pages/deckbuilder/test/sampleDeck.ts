@@ -24,17 +24,17 @@ export const DECK = [
   entrada(SWORDS, 1, "Sideboard"),
 ];
 export const MAYBE = [entrada(RHYSTIC, 1, "Combo principal"), entrada(BOLT)];
-export const CATEGORIAS = ["Combo principal", "Sac outlet", "Ainda vazia"];
+export const AUTO_CATEGORIES = ["Combo principal", "Sac outlet", "Ainda vazia"];
 
 export type Setup = { deck?: unknown[]; maybe?: unknown[]; categorias?: string[] };
 
 /** A página com o deck de exemplo (ou o que o teste pedir). */
-export async function page({ deck = DECK, maybe = MAYBE, categorias = CATEGORIAS }: Setup = {}) {
+export async function page({ deck = DECK, maybe = MAYBE, categorias = AUTO_CATEGORIES }: Setup = {}) {
   const p = await freshPage();
-  p.estado.comandantes = clone([ATRAXA]);
-  p.estado.cartas = clone(deck);
-  p.estado.maybe = clone(maybe);
-  p.estado.categorias = clone(categorias);
+  p.state.comandantes = clone([ATRAXA]);
+  p.state.cartas = clone(deck);
+  p.state.maybe = clone(maybe);
+  p.state.categorias = clone(categorias);
   return p;
 }
 

@@ -19,9 +19,8 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {cotar} from "./cotacao.js";
-import {estado} from "./estado.js";
-import {CARO_BRL, CARO_USD, moeda, notaDoCambio, reais,
-        taxa} from "./preco.js";
+import {exchangeNote, exchangeRate, formatBRL, money, PRICEY_BRL, PRICEY_USD} from "./price";
+import {state} from "./state";
 
 export function precoDaEntrada(entrada){
   return (entrada.carta?.preco_usd || 0) * entrada.quantidade;
@@ -46,12 +45,12 @@ function chaveDeNome(nome){
 /* Refeito só quando a cotação troca de objeto, e não a cada linha desenhada:
    `desenharDeck` chama isto uma vez por carta, e um deck tem 100. */
 function indiceDaCotacao(){
-  if (cotacaoIndiceDe === estado.cotacao) return cotacaoIndice;
-  cotacaoIndiceDe = estado.cotacao;
+  if (cotacaoIndiceDe === state.cotacao) return cotacaoIndice;
+  cotacaoIndiceDe = state.cotacao;
   cotacaoIndice = new Map();
-  const fonte = (estado.cotacao?.fontes || [])[0];
+  const fonte = (state.cotacao?.fontes || [])[0];
   if (fonte){
-    for (const linha of estado.cotacao.linhas || []){
+    for (const linha of state.cotacao.linhas || []){
       const p = (linha.precos || {})[fonte.id];
       if (!p || p.erro || !p.preco_unitario) continue;
       cotacaoIndice.set(chaveDeNome(linha.nome), {
@@ -81,13 +80,13 @@ export function precoUnitario(carta){
 export function precoTexto(p, quantidade){
   if (!p) return "";
   const valor = p.valor * (quantidade || 1);
-  if (p.fonte === "base") return moeda(valor);
-  return p.moeda === "BRL" ? "R$ " + reais(valor) : "US$ " + valor.toFixed(2);
+  if (p.fonte === "base") return money(valor);
+  return p.moeda === "BRL" ? "R$ " + formatBRL(valor) : "US$ " + valor.toFixed(2);
 }
 
 function ehCaro(p){
   if (!p) return false;
-  return p.moeda === "BRL" ? p.valor >= CARO_BRL : p.valor >= CARO_USD;
+  return p.moeda === "BRL" ? p.valor >= PRICEY_BRL : p.valor >= PRICEY_USD;
 }
 
 /* O subtotal de um grupo, e o que ele é feito de.
@@ -99,7 +98,7 @@ function ehCaro(p){
    fica DE FORA da soma em vez de ser convertido de volta por uma taxa que a
    tela não tem. O que ficou de fora é contado e vai pro title. */
 export function subtotalDoGrupo(itens){
-  const emReais = !!taxa();
+  const emReais = !!exchangeRate();
   let valor = 0, medidas = 0, estimadas = 0, sem = 0, foraDaSoma = 0;
   for (const e of itens){
     const p = precoUnitario(e.carta);
@@ -108,7 +107,7 @@ export function subtotalDoGrupo(itens){
     if (!emReais && !daBase && p.moeda === "BRL"){ foraDaSoma += e.quantidade; continue; }
     // `precoTexto` converte na hora de escrever; aqui a conta precisa do
     // número, então a mesma régua é aplicada à mão, e só ao que é dólar.
-    const t = taxa();
+    const t = exchangeRate();
     const bruto = p.valor * e.quantidade;
     valor += (emReais && p.moeda === "USD") ? bruto * t : bruto;
     if (daBase) estimadas += e.quantidade; else medidas += e.quantidade;
@@ -118,7 +117,7 @@ export function subtotalDoGrupo(itens){
 
 export function subtotalTexto(s){
   if (!s.valor) return "";
-  return s.emReais ? "R$ " + reais(s.valor) : "US$ " + s.valor.toFixed(2);
+  return s.emReais ? "R$ " + formatBRL(s.valor) : "US$ " + s.valor.toFixed(2);
 }
 
 export function subtotalTitulo(s){
@@ -145,7 +144,7 @@ export function valorHTML(entrada){
     unidade,
     medido
       ? `${p.rotulo}${p.loja ? " · " + p.loja : ""} — cotado agora, sem frete.`
-      : "Preço da base local, do dia da última sincronização. " + notaDoCambio(),
+      : "Preço da base local, do dia da última sincronização. " + exchangeNote(),
   ].join("\n");
   return `<span class="valor ${ehCaro(p) ? "caro" : ""} ${medido ? "" : "estimado"}"
     title="${escapar(titulo)}">${precoTexto(p, entrada.quantidade)}</span>`;
@@ -164,7 +163,7 @@ export function valorHTML(entrada){
 export function valorComparavel(entrada){
   const p = precoUnitario(entrada.carta);
   if (!p) return null;
-  const t = taxa();
+  const t = exchangeRate();
   if (!t && p.moeda === "BRL") return null;
   const unidade = (t && p.moeda === "USD") ? p.valor * t : p.valor;
   return unidade * entrada.quantidade;
@@ -181,7 +180,7 @@ export function valorComparavel(entrada){
    cotação dão números diferentes pro mesmo deck. */
 export function orcamentoLocal(){
   let total = 0, semPreco = 0, fora = 0, cartas = 0;
-  for (const entrada of estado.cartas){
+  for (const entrada of state.cartas){
     const c = entrada.carta;
     if (!c) continue;
     if (c.basico){ fora += entrada.quantidade; continue; }
@@ -189,7 +188,7 @@ export function orcamentoLocal(){
     if (!c.preco_usd){ semPreco += entrada.quantidade; continue; }
     total += precoDaEntrada(entrada);
   }
-  fora += estado.comandantes.length;
+  fora += state.comandantes.length;
   return {total, semPreco, fora, cartas};
 }
 
@@ -207,42 +206,42 @@ export function orcamentoLocal(){
 export function desenharPreviaOrcamento(){
   const botao = $("btn-total");
   const caret = $("btn-cotacao");
-  const temDeck = estado.comandantes.length || estado.cartas.length;
+  const temDeck = state.comandantes.length || state.cartas.length;
   botao.hidden = !temDeck;
-  caret.hidden = !temDeck || !(estado.cotacao || estado.cotacaoErro);
+  caret.hidden = !temDeck || !(state.cotacao || state.cotacaoErro);
   if (!temDeck) return;
 
   const o = orcamentoLocal();
-  const talvez = estado.maybe.reduce((n, e) => n + e.quantidade, 0);
+  const talvez = state.maybe.reduce((n, e) => n + e.quantidade, 0);
   const partes = [];
   if (o.cartas) partes.push(`${o.cartas} carta(s) contadas`);
   if (o.fora) partes.push(`${o.fora} fora do total (comandante e básicos)`);
   if (o.semPreco) partes.push(`${o.semPreco} sem preço na base`);
   if (talvez) partes.push(`${talvez} no maybeboard, fora da conta`);
 
-  const fonte = (estado.cotacao?.fontes || [])[0];
+  const fonte = (state.cotacao?.fontes || [])[0];
   const cotado = fonte && fonte.cartas_cotadas;
-  // Cotado, o número já vem na moeda da fonte e NÃO passa por `moeda()`: o
+  // Cotado, o número já vem na moeda da fonte e NÃO passa por `money()`: o
   // total da LigaMagic é real de verdade, e o da Scryfall pode já ter vindo
   // convertido pelo `USD_BRL` do .env. Converter aqui converteria duas vezes.
   // Não cotado, é a base local em dólar, e aí sim a régua se aplica.
   const texto = cotado
     ? `${fonte.moeda === "BRL" ? "R$" : "US$"} `
       + Number(fonte.total).toFixed(2).replace(".", ",")
-    : moeda(o.total);
+    : money(o.total);
 
   $("total-n").textContent = texto;
   $("total-de").textContent = cotado ? fonte.rotulo : "prévia";
   // Entre mexer no deck e a cotação nova voltar existe uma janela em que o
   // número mostrado é de OUTRO deck. O giro cobre essa janela inteira — a
   // espera e a consulta — em vez de só a consulta.
-  const esperando = estado.cotacaoRodando ||
-    (estado.id && assinaturaDeCotacao() !== estado.cotacaoAssinatura && o.cartas);
+  const esperando = state.cotacaoRodando ||
+    (state.id && assinaturaDeCotacao() !== state.cotacaoAssinatura && o.cartas);
   botao.className = "medidor" + (esperando ? " cotando" : "");
   botao.title = [
     cotado ? `Preço de comprar em ${fonte.rotulo}, cotado agora.`
            : "Soma da base local — a cotação de verdade chega em alguns segundos.",
-    cotado ? "" : notaDoCambio(),
+    cotado ? "" : exchangeNote(),
     partes.join(" · "),
     "Clique pra copiar a lista do deck.",
   ].filter(Boolean).join("\n");
@@ -265,15 +264,15 @@ export function assinaturaDeCotacao(){
   // O que a cotação cobre (`decks.para_cotacao`): as 99 e o sideboard, sem
   // comandante e sem básico. O maybeboard fica fora — é a razão de ele
   // existir.
-  return JSON.stringify(estado.cartas
+  return JSON.stringify(state.cartas
     .filter(e => e.carta && !e.carta.basico)
     .map(e => [e.carta.nome, e.quantidade]).sort());
 }
 
 export function agendarCotacao(){
   clearTimeout(cotacaoTimerAgenda);
-  if (!estado.id || estado.cotacaoRodando) return;
-  if (assinaturaDeCotacao() === estado.cotacaoAssinatura) return;
+  if (!state.id || state.cotacaoRodando) return;
+  if (assinaturaDeCotacao() === state.cotacaoAssinatura) return;
   if (!orcamentoLocal().cartas) return;   // só básico e comandante: nada a cotar
   cotacaoTimerAgenda = setTimeout(cotar, ESPERA_COTACAO);
 }

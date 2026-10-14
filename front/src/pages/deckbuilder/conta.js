@@ -8,24 +8,24 @@
    `estado.usuario` é null pra anônimo. Não é erro: é quem está só olhando. */
 
 import {$} from "../../shared/dom.js";
-import {estado} from "./estado.js";
 import {api} from "./salvar.js";
+import {state} from "./state";
 import {toast} from "./utilidades.js";
 
 /* Sem conta legível (rede fora), a tela trata como anônimo: o servidor
    recusaria a gravação do mesmo jeito, e o convite ao menos diz por quê. */
 export async function lerConta(){
   try {
-    estado.usuario = (await api("/conta")).usuario || null;
+    state.usuario = (await api("/conta")).usuario || null;
   } catch (e){
-    estado.usuario = null;
+    state.usuario = null;
   }
 }
 
 /* Chamada com o deck já em mãos: o reclamar precisa saber se ele tem dono,
    e o convite muda de texto quando há um deck aberto. */
 export function receberConta(){
-  if (estado.usuario) oferecerReclamar();
+  if (state.usuario) oferecerReclamar();
   else convidarAEntrar();
 }
 
@@ -36,7 +36,7 @@ export function linkDeConta(pagina){
 }
 
 function convidarAEntrar(){
-  if (estado.id){
+  if (state.id){
     $("convite-titulo").textContent = "Você está vendo este baralho";
     $("convite-texto").textContent = "Pra editar ou montar o seu, entre " +
       "na sua conta ou crie uma.";
@@ -80,17 +80,17 @@ function dispensar(id){
    quem montou no celular precisa poder reclamar no computador, e é
    justamente esse o caso que o login existe pra resolver. */
 function oferecerReclamar(){
-  if (!estado.usuario || !estado.id) return;
-  if (estado.dono) return;                       // já é de alguém
-  if (dispensados().includes(estado.id)) return;
+  if (!state.usuario || !state.id) return;
+  if (state.dono) return;                       // já é de alguém
+  if (dispensados().includes(state.id)) return;
   $("orfao-fundo").hidden = false;
 }
 
 async function reclamarDeck(){
   $("orfao-fundo").hidden = true;
   try {
-    const r = await api(`/decks/${estado.id}/reclamar`, {method: "POST"});
-    estado.dono = r.deck.dono;
+    const r = await api(`/decks/${state.id}/reclamar`, {method: "POST"});
+    state.dono = r.deck.dono;
     toast("Pronto, o baralho é seu.");
   } catch (e){
     toast("Não consegui: " + e.message);
@@ -101,6 +101,6 @@ export function ligarOrfao(){
   $("orfao-sim").addEventListener("click", reclamarDeck);
   $("orfao-nao").addEventListener("click", () => {
     $("orfao-fundo").hidden = true;
-    dispensar(estado.id);
+    dispensar(state.id);
   });
 }

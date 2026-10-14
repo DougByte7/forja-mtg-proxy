@@ -2,12 +2,13 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
-import {adicionar, escolherComandante, ondeEsta} from "./edicao.js";
-import {algumFiltro, CATEGORIA_SIDEBOARD, estado} from "./estado.js";
-import {precoMaxEmUsd} from "./preco.js";
+import {allCategories, deckIdentity} from "./deck";
+import {addCard, chooseCommander, whereIs} from "./editing";
+import {cardPrice, maxPriceInUsd} from "./price";
 import {api} from "./salvar.js";
-import {fonteDoLink, ico, identidadeDoDeck, manaHTML, preco, seloInedita,
-        toast, todasAsCategorias} from "./utilidades.js";
+import {anyFilterOn, SIDEBOARD, state} from "./state";
+import {deckLinkSource} from "./text";
+import {ico, manaHTML, seloInedita, toast} from "./utilidades.js";
 
 let buscaTimer = null;
 
@@ -77,14 +78,14 @@ export function agendarBusca(){
   // Quem digitou uma letra ou mexeu num filtro está fazendo outra pergunta:
   // continuar na página 4 da pergunta anterior seria cair no meio de uma
   // lista que ninguém viu começar.
-  estado.buscaPagina = 0;
+  state.buscaPagina = 0;
   buscaTimer = setTimeout(buscar, 220);
 }
 
 /* A busca de novo, do começo. É o que os filtros chamam quando mudam sem
    passar pelo atraso do teclado — tirar um chip, limpar tudo. */
 export function buscarDoComeco(){
-  estado.buscaPagina = 0;
+  state.buscaPagina = 0;
   return buscar();
 }
 
@@ -103,39 +104,39 @@ export function agendarBuscaComandante(){
    Vitrine, com a caixa vazia e nenhum filtro: aí não há pergunta, e paginar
    seria folhear a base inteira de cinco em cinco. */
 export function listaPaginada(termo){
-  return termo !== "" || algumFiltro();
+  return termo !== "" || anyFilterOn();
 }
 
 export async function buscar(){
   const termo = $("busca").value.trim();
-  const identidade = estado.comandantes.length ? identidadeDoDeck() : null;
+  const identidade = state.comandantes.length ? deckIdentity() : null;
   const paginada = listaPaginada(termo);
   const params = new URLSearchParams({
     q: termo,
-    limite: paginada ? String(estado.buscaPorPagina) : "24",
+    limite: paginada ? String(state.buscaPorPagina) : "24",
   });
   if (paginada){
-    params.set("pular", String(estado.buscaPagina * estado.buscaPorPagina));
+    params.set("pular", String(state.buscaPagina * state.buscaPorPagina));
     params.set("com_total", "true");
   }
   if (identidade !== null) params.set("identidade", identidade);
-  const f = estado.filtros;
+  const f = state.filtros;
   if (f.tipo) params.set("tipo", f.tipo);
   if (f.texto) params.set("texto", f.texto);
   if (f.cores) params.set("cores", f.cores);
   if (f.cmcMin !== "") params.set("cmc_min", f.cmcMin);
   if (f.cmcMax !== "") params.set("cmc_max", f.cmcMax);
-  if (f.precoMax !== "") params.set("preco_max", precoMaxEmUsd(f.precoMax));
+  if (f.precoMax !== "") params.set("preco_max", maxPriceInUsd(f.precoMax));
   if (f.ordem && f.ordem !== "nome") params.set("ordem", f.ordem);
   if (f.ineditas) params.set("ineditas", "true");
   try {
     const r = await api("/cartas/busca?" + params);
-    estado.buscaTotal = paginada ? (r.total ?? r.cartas.length) : 0;
+    state.buscaTotal = paginada ? (r.total ?? r.cartas.length) : 0;
     // A página em que se estava pode ter deixado de existir por baixo — um
     // comandante escolhido depois encurta a lista sem ninguém tocar no
     // filtro. Voltar pro começo é mais honesto do que mostrar nada.
-    if (paginada && !r.cartas.length && estado.buscaPagina > 0){
-      estado.buscaPagina = 0;
+    if (paginada && !r.cartas.length && state.buscaPagina > 0){
+      state.buscaPagina = 0;
       return buscar();
     }
     mostrarResultados($("res"), r.cartas, adicionarPeloDestino,
@@ -149,11 +150,11 @@ export async function buscarComandante(){
   const termo = $("busca-cmd").value.trim();
   // Quem já tem o deck pronto em outro lugar chega nesta tela e vê UMA
   // caixa: é nela que o link vai ser colado, com ou sem permissão. Um link
-  // não se confunde com nome de carta (ver `fonteDoLink`), então a caixa
+  // não se confunde com nome de carta (ver `deckLinkSource`), então a caixa
   // responde às duas coisas sem adivinhar — e sem um segundo campo que 9 em
   // cada 10 pessoas nunca usariam, na tela que existe pra fazer uma
   // pergunta só.
-  const fonte = fonteDoLink(termo);
+  const fonte = deckLinkSource(termo);
   if (fonte) return oferecerImportar(fonte);
   // Link de um site que não sabemos abrir também não é nome de carta:
   // responder "nada com esse nome" mandaria a pessoa procurar um erro de
@@ -168,10 +169,10 @@ export async function buscarComandante(){
   // O mesmo interruptor da gaveta, ligado aqui pelo da abertura: quem monta o
   // deck da coleção nova começa pelo comandante dela, e é esta busca que
   // responde antes de existir deck (ver `mudarIneditas`, em `filtros.js`).
-  if (estado.filtros.ineditas) params.set("ineditas", "true");
+  if (state.filtros.ineditas) params.set("ineditas", "true");
   try {
     const r = await api("/cartas/busca?" + params);
-    mostrarResultados($("res-cmd"), r.cartas, escolherComandante,
+    mostrarResultados($("res-cmd"), r.cartas, chooseCommander,
                       {comandantes: true, termo});
   } catch (e){
     $("res-cmd").innerHTML = `<div class="vazio">Busca falhou: ${escapar(e.message)}</div>`;
@@ -238,7 +239,7 @@ export function mostrarResultados(caixa, cartas, aoClicar,
   // carta nova nem uma carta do deck, e mostrá-la como qualquer um dos dois
   // faria a pessoa adicionar de novo o que ela mesma pôs em dúvida.
   caixa.innerHTML = cartas.slice(0, teto).map((c, i) => {
-    const onde = ondeEsta(c.nome);
+    const onde = whereIs(c.nome);
     return `
     <button class="achado ${onde === "deck" ? "no-deck" : ""} ${
               onde === "talvez" ? "no-talvez" : ""}" data-i="${i}"
@@ -249,7 +250,7 @@ export function mostrarResultados(caixa, cartas, aoClicar,
       </span>
       ${seloInedita(c)}
       ${manaHTML(c.mana_cost)}
-      <span class="preco">${preco(c)}</span>
+      <span class="preco">${cardPrice(c)}</span>
     </button>`;
   }).join("") + resto;
 }
@@ -267,15 +268,15 @@ export function mostrarResultados(caixa, cartas, aoClicar,
 const POR_PAGINA = [5, 10, 15];
 
 export function paginadorDaBusca(){
-  const por = estado.buscaPorPagina;
-  const paginas = Math.max(1, Math.ceil(estado.buscaTotal / por));
-  const pagina = Math.min(estado.buscaPagina, paginas - 1);
+  const por = state.buscaPorPagina;
+  const paginas = Math.max(1, Math.ceil(state.buscaTotal / por));
+  const pagina = Math.min(state.buscaPagina, paginas - 1);
   return `<div class="paginador res-paginador">
     <label class="por-pagina" title="Quantos resultados por página">
       <select id="res-por-pagina" aria-label="Resultados por página">${
         POR_PAGINA.map(n => `<option value="${n}"${
           n === por ? " selected" : ""}>${n}</option>`).join("")}</select>
-      <span>de ${estado.buscaTotal}</span>
+      <span>de ${state.buscaTotal}</span>
     </label>
     <span class="pag-passos">
       <button class="mini" data-res-pag="-1" title="Página anterior"
@@ -291,10 +292,10 @@ export function paginadorDaBusca(){
 }
 
 export function virarPagina(passo){
-  const paginas = Math.max(1, Math.ceil(estado.buscaTotal / estado.buscaPorPagina));
-  const nova = Math.min(Math.max(estado.buscaPagina + passo, 0), paginas - 1);
-  if (nova === estado.buscaPagina) return;
-  estado.buscaPagina = nova;
+  const paginas = Math.max(1, Math.ceil(state.buscaTotal / state.buscaPorPagina));
+  const nova = Math.min(Math.max(state.buscaPagina + passo, 0), paginas - 1);
+  if (nova === state.buscaPagina) return;
+  state.buscaPagina = nova;
   buscar();
 }
 
@@ -302,8 +303,8 @@ export function virarPagina(passo){
    está em outra página agora, e fingir que a página 4 de cinco em cinco é a
    página 4 de quinze em quinze levaria pra um lugar que ninguém pediu. */
 export function escolherPorPagina(quantos){
-  estado.buscaPorPagina = quantos;
-  estado.buscaPagina = 0;
+  state.buscaPorPagina = quantos;
+  state.buscaPagina = 0;
   buscar();
 }
 
@@ -318,20 +319,20 @@ export function escolherPorPagina(quantos){
    categoria — e o seletor ao lado se desliga em vez de oferecer uma escolha
    que seria ignorada. */
 export function adicionarPeloDestino(carta){
-  const d = estado.destino;
+  const d = state.destino;
   if (d === "side"){
-    adicionar(carta, "deck", CATEGORIA_SIDEBOARD);
+    addCard(carta, "deck", SIDEBOARD);
     toast(`${carta.nome} entrou no sideboard.`);
   } else if (d === "talvez"){
-    adicionar(carta, "talvez", estado.destinoCategoria || undefined);
+    addCard(carta, "talvez", state.destinoCategoria || undefined);
     toast(`${carta.nome} foi pro maybeboard.`);
   } else {
-    adicionar(carta, "deck", estado.destinoCategoria || undefined);
+    addCard(carta, "deck", state.destinoCategoria || undefined);
   }
 }
 
 export function escolherDestino(destino){
-  estado.destino = destino;
+  state.destino = destino;
   for (const b of $("seg-destino").children){
     b.classList.toggle("ativa", b.dataset.destino === destino);
   }
@@ -345,8 +346,8 @@ export function escolherDestino(destino){
 export function atualizarCategoriasDoDestino(){
   const sel = $("sel-categoria");
   if (!sel) return;
-  const atual = estado.destinoCategoria;
-  const opcoes = todasAsCategorias().filter(c => c !== CATEGORIA_SIDEBOARD);
+  const atual = state.destinoCategoria;
+  const opcoes = allCategories().filter(c => c !== SIDEBOARD);
   sel.innerHTML =
     `<option value="">Pelo tipo da carta</option>` +
     opcoes.map(c => `<option value="${escapar(c)}"${
@@ -354,7 +355,7 @@ export function atualizarCategoriasDoDestino(){
   // A categoria escolhida pode ter sido apagada por baixo: sem isto o seletor
   // voltaria pro topo calado e as próximas cartas iriam pro lugar errado.
   if (atual && !opcoes.includes(atual)){
-    estado.destinoCategoria = "";
+    state.destinoCategoria = "";
     sel.value = "";
   } else {
     sel.value = atual || "";

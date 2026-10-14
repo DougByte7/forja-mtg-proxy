@@ -81,7 +81,7 @@ describe("nomes e chaves", () => {
 describe("a galeria", () => {
   it("um quadro por arte, só do que vai pro papel, comandante primeiro", async () => {
     const p = await page();
-    p.estado.cartas.push({ carta: DELVER, quantidade: 1, categoria: "" },
+    p.state.cartas.push({ carta: DELVER, quantidade: 1, categoria: "" },
                          { carta: ROOM, quantidade: 1, categoria: "" });
     p.arte.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
     p.desenharGaleria();
@@ -102,8 +102,8 @@ describe("a galeria", () => {
 describe('o "Gerar pedido"', () => {
   it("só com todas as artes, verso incluído, e só com deck salvo", async () => {
     const p = await page();
-    p.estado.id = "abc123";
-    p.estado.cartas = [{ carta: SOL_RING, quantidade: 4, categoria: "" },
+    p.state.id = "abc123";
+    p.state.cartas = [{ carta: SOL_RING, quantidade: 4, categoria: "" },
                        { carta: DELVER, quantidade: 1, categoria: "" }];
     expect(orderLink(p)).toEqual([false, null, "Faltam 4 arte(s) — escolha na aba Artes"]);
     p.arte.escolhas["atraxa"] = { frente: { arte_id: "a" } };
@@ -112,7 +112,7 @@ describe('o "Gerar pedido"', () => {
     expect(orderLink(p).slice(1)).toEqual([null, "Faltam 1 arte(s) — escolha na aba Artes"]);
     p.arte.escolhas["delver of secrets insectile aberration"].verso = { arte_id: "i" };
     expect(orderLink(p).slice(0, 2)).toEqual([false, "/?deck=abc123"]);
-    p.estado.id = null;
+    p.state.id = null;
     expect(orderLink(p).slice(0, 2)).toEqual([true, null]);
   });
 
@@ -123,11 +123,11 @@ describe('o "Gerar pedido"', () => {
       nome: "Wurm", tipo: "Token Artifact Creature — Wurm", texto, poder: "3", resistencia: "3",
       imagem: "http://arte/" + chave, chave_arte: chave });
     const p = await page();
-    p.estado.id = "abc123";
-    p.estado.tokens = { total: 3, grupos: [
+    p.state.id = "abc123";
+    p.state.tokens = { total: 3, grupos: [
       { carta: "Motor de Wurm", tokens: [wurm("Deathtouch", "t:Wurm aaaa1111"), wurm("Lifelink", "t:Wurm bbbb2222")] },
       { carta: "Sol Ring", tokens: [wurm("Deathtouch", "t:Wurm aaaa1111")] }] };
-    p.estado.cartas = [{ carta: SOL_RING, quantidade: 1, categoria: "" }];
+    p.state.cartas = [{ carta: SOL_RING, quantidade: 1, categoria: "" }];
     p.arte.escolhas["atraxa"] = { frente: { arte_id: "a" } };
     p.arte.escolhas["sol ring"] = { frente: { arte_id: "s" } };
     p.arte.escolhas["t wurm aaaa1111"] = { frente: { arte_id: "w" } };
@@ -152,8 +152,8 @@ describe('o "Gerar pedido"', () => {
 
   it("arte por cópia: as dez Florestas, a 2 e a 4 numa arte e o resto na de todas", async () => {
     const p = await page();
-    p.estado.id = "abc123";
-    const forest = p.estado.cartas[2].carta;
+    p.state.id = "abc123";
+    const forest = p.state.cartas[2].carta;
     p.arte.escolhas = {
       "atraxa": { frente: { arte_id: "a" } }, "sol ring": { frente: { arte_id: "s" } },
       "ashnods altar": { frente: { arte_id: "t" } }, "llanowar elves": { frente: { arte_id: "e" } },

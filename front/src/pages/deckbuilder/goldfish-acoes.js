@@ -2,7 +2,7 @@
 
    Os cliques, o menu de cada carta, o arrastar e as quatro modais (buscar
    numa zona, criar ficha, pôr o segundo deck, ver o resumo do fim). Tudo o
-   que muda a mesa passa por `guardarMesa()` antes — é o que faz o Ctrl+Z
+   que muda a mesa passa por `saveTableSnapshot()` antes — é o que faz o Ctrl+Z
    valer pra qualquer jogada, e não só pras que alguém lembrou de tratar.
 
    O menu da carta oferece TUDO de qualquer zona, de propósito, inclusive o
@@ -11,23 +11,23 @@
 import {$, escapar} from "../../shared/dom.js";
 import {temVerso} from "./artes.js";
 import {abrirCarta} from "./carta.js";
-import {estado} from "./estado.js";
-import {ajustarDanoCmd, ajustarMarca, ajustarMarcaCarta, ajustarVida,
-        alternarAtaque, alternarDeitada, alternarFace, alternarVirada, atacantes,
-        cartaPorUid, comprar, criarFicha, deckDaResposta, deckDaTela,
-        definirBloqueio, desfazerUmPasso, embaralharBaralho, encaixaNaFila,
-        gfMover, guardarMesa, lancarComandante, limparCombate, mandarPraFundo,
-        manterMao, MARCAS_DE_CARTA, MARCAS_DE_JOGADOR, montarMesa,
-        mulliganLondon, nomeDaCarta, NOME_DA_ZONA, passarTurno, porSegundoDeck,
-        reposicionar, resumoDaPartida, tirarSegundoDeck, zonaDaCarta} from "./goldfish.js";
-import {desenharMesa, esconderPainel, mostrarPainel,
-        painelFlutua, rolarPainel} from "./goldfish-desenho.js";
+import {countedCards} from "./deck";
+import {addSecondDeck, adjustCardCounter, adjustCommanderDamage, adjustLife,
+        adjustPlayerCounter, attackers, CARD_COUNTERS, cardByUid, cardName,
+        castCommander, clearCombat, createToken, deckFromResponse, draw,
+        fitsInRow, gameSummary, keepHand, londonMulligan, moveToZone,
+        passTurn, PLAYER_COUNTERS, putOnBottom, removeSecondDeck, reposition,
+        saveTableSnapshot, screenDeck, setBlock, setUpTable, shuffleLibrary,
+        toggleAttack, toggleFace, toggleFaceDown, toggleTapped,
+        undoTableStep, ZONE_NAMES, zoneOf} from "./goldfish";
+import {desenharMesa, esconderPainel, mostrarPainel, painelFlutua, rolarPainel} from "./goldfish-desenho.js";
 import {api, lidos} from "./salvar.js";
+import {state} from "./state";
 import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
-import {cartasContadas, toast} from "./utilidades.js";
+import {toast} from "./utilidades.js";
 
 export function desfazerMesa(){
-  if (desfazerUmPasso()) desenharMesa();
+  if (undoTableStep()) desenharMesa();
 }
 
 /* D compra pra quem está na vez e Espaço passa o turno. Devolve se a tecla
@@ -36,15 +36,15 @@ export function desfazerMesa(){
    chega ao botão que estiver com o foco — senão o turno passaria e o botão
    seria clicado junto. */
 export function atalhoDaMesa(e){
-  if (!estado.mesa || e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (!state.mesa || e.ctrlKey || e.metaKey || e.altKey) return false;
   const espaco = e.key === " ";
   if (!espaco && e.key.toLowerCase() !== "d") return false;
   e.preventDefault();
   if (e.repeat) return true;
   fecharMenuGf();
-  guardarMesa();
-  if (espaco) passarTurno();
-  else comprar(estado.mesa.ativo, 1);
+  saveTableSnapshot();
+  if (espaco) passTurn();
+  else draw(state.mesa.ativo, 1);
   desenharMesa();
   return true;
 }
@@ -69,8 +69,8 @@ function posicionar(el, x, y){
    "+1/+1" ser um gesto só em vez de três aberturas de menu. */
 function abrirMenuDaCarta(uid, x, y){
   fecharMenuGf();
-  const c = cartaPorUid(uid);
-  const zona = zonaDaCarta(uid);
+  const c = cardByUid(uid);
+  const zona = zoneOf(uid);
   if (!c) return;
   const acoes = [];
   const item = (rotulo, fn, extra) => {
@@ -80,27 +80,27 @@ function abrirMenuDaCarta(uid, x, y){
   let html = "";
 
   if (zona === "campo"){
-    html += item(c.deitada ? "Endireitar" : "Deitar", () => alternarDeitada(uid));
+    html += item(c.deitada ? "Endireitar" : "Deitar", () => toggleTapped(uid));
     if (temVerso(c.carta)){
       html += item(c.verso ? "Virar pra frente" : "Virar pro verso",
-                   () => alternarFace(uid));
+                   () => toggleFace(uid));
     }
-    html += item(c.atacando ? "Não atacar" : "Atacar", () => alternarAtaque(uid));
-    const inimigos = atacantes().filter(a => a.dono !== c.dono);
+    html += item(c.atacando ? "Não atacar" : "Atacar", () => toggleAttack(uid));
+    const inimigos = attackers().filter(a => a.dono !== c.dono);
     if (inimigos.length){
       html += `<div class="gf-menu-titulo">Bloquear</div>`;
       for (const a of inimigos){
-        html += item((c.bloqueando === a.uid ? "✓ " : "") + nomeDaCarta(a),
-                     () => definirBloqueio(uid, a.uid));
+        html += item((c.bloqueando === a.uid ? "✓ " : "") + cardName(a),
+                     () => setBlock(uid, a.uid));
       }
     }
     html += `<div class="gf-menu-titulo">Marcadores</div>`;
-    const nomes = MARCAS_DE_CARTA.concat(
-      Object.keys(c.marcas).filter(n => !MARCAS_DE_CARTA.includes(n)));
+    const nomes = CARD_COUNTERS.concat(
+      Object.keys(c.marcas).filter(n => !CARD_COUNTERS.includes(n)));
     for (const nome of nomes){
-      const menos = item("−", () => ajustarMarcaCarta(uid, nome, -1),
+      const menos = item("−", () => adjustCardCounter(uid, nome, -1),
                          {fica: true, gesto: `m${uid}${nome}`});
-      const mais = item("+", () => ajustarMarcaCarta(uid, nome, 1),
+      const mais = item("+", () => adjustCardCounter(uid, nome, 1),
                         {fica: true, gesto: `m${uid}${nome}`});
       html += `<div class="gf-linha"><span>${escapar(nome)}</span>
         ${menos}<b>${c.marcas[nome] || 0}</b>${mais}</div>`;
@@ -108,7 +108,7 @@ function abrirMenuDaCarta(uid, x, y){
     html += item("Outro marcador…", () => {
       const nome = (prompt("Nome do marcador (ex.: veneno, tempo, munição):") || "")
         .replace(/:/g, "").trim();
-      if (nome) ajustarMarcaCarta(uid, nome, 1);
+      if (nome) adjustCardCounter(uid, nome, 1);
     }, {fica: true});
   }
 
@@ -116,21 +116,21 @@ function abrirMenuDaCarta(uid, x, y){
   if (zona === "comando"){
     // O imposto é INFORMAÇÃO: a tela conta quantas vezes o comandante saiu da
     // zona e diz quanto custaria a próxima. Não cobra nada.
-    html += item("Campo (paga imposto)", () => lancarComandante(uid));
+    html += item("Campo (paga imposto)", () => castCommander(uid));
   } else if (zona !== "campo"){
-    html += item("Campo", () => gfMover(uid, "campo"));
+    html += item("Campo", () => moveToZone(uid, "campo"));
   }
   for (const z of ["mao", "cemiterio", "exilio", "comando"]){
     if (z === zona) continue;
     if (z === "comando" && !c.cmd) continue;   // só comandante volta pro comando
-    html += item(NOME_DA_ZONA[z], () => gfMover(uid, z));
+    html += item(ZONE_NAMES[z], () => moveToZone(uid, z));
   }
   if (zona !== "baralho"){
-    html += item("Topo do baralho", () => gfMover(uid, "baralho", true));
-    html += item("Fundo do baralho", () => gfMover(uid, "baralho", false));
+    html += item("Topo do baralho", () => moveToZone(uid, "baralho", true));
+    html += item("Fundo do baralho", () => moveToZone(uid, "baralho", false));
   }
   html += `<div class="gf-menu-titulo">Esta carta</div>`;
-  html += item(c.virada ? "Desvirar" : "Virar pra baixo", () => alternarVirada(uid));
+  html += item(c.virada ? "Desvirar" : "Virar pra baixo", () => toggleFaceDown(uid));
   if (!c.ficha) html += item("Ver a carta", () => abrirCarta(c.carta), {sem: true});
 
   const menu = document.createElement("div");
@@ -142,7 +142,7 @@ function abrirMenuDaCarta(uid, x, y){
     const b = e.target.closest("[data-gf-item]");
     if (!b) return;
     const acao = acoes[Number(b.dataset.gfItem)];
-    if (!acao.sem) guardarMesa(acao.gesto);
+    if (!acao.sem) saveTableSnapshot(acao.gesto);
     acao.fn();
     fecharMenuGf();
     desenharMesa();
@@ -156,7 +156,7 @@ function abrirMenuDeMarca(ij, x, y){
   fecharMenuGf();
   const menu = document.createElement("div");
   menu.className = "gf-menu";
-  const nomes = MARCAS_DE_JOGADOR.concat("outro…");
+  const nomes = PLAYER_COUNTERS.concat("outro…");
   menu.innerHTML = nomes.map((n, i) =>
     `<button data-gf-item="${i}">${escapar(n)}</button>`).join("");
   document.body.appendChild(menu);
@@ -170,8 +170,8 @@ function abrirMenuDeMarca(ij, x, y){
     }
     fecharMenuGf();
     if (!nome) return;
-    guardarMesa();
-    ajustarMarca(ij, nome, 1);
+    saveTableSnapshot();
+    adjustPlayerCounter(ij, nome, 1);
     desenharMesa();
   });
 }
@@ -191,8 +191,8 @@ function abrirMenuDoDeck(ij, x, y){
     if (!b) return;
     fecharMenuGf();
     if (b.dataset.gfItem === "buscar") return abrirBusca(ij, "baralho");
-    guardarMesa();
-    comprar(ij, 1);
+    saveTableSnapshot();
+    draw(ij, 1);
     desenharMesa();
   });
 }
@@ -242,8 +242,8 @@ function abrirModalGf(titulo, corpo, ligar, aoFechar){
    que estava é a única coisa que este simulador faria por você e que na mesa
    de verdade seria trapaça. */
 function abrirBusca(ij, zona){
-  const j = estado.mesa.jogadores[ij];
-  const titulo = `${NOME_DA_ZONA[zona]} de ${j.nome}`;
+  const j = state.mesa.jogadores[ij];
+  const titulo = `${ZONE_NAMES[zona]} de ${j.nome}`;
   const destinos = ["mao", "campo", "cemiterio", "exilio"].filter(z => z !== zona);
 
   const corpo = `
@@ -258,18 +258,18 @@ function abrirBusca(ij, zona){
     const lista = caixa.querySelector("#gf-busca-lista");
     const desenhar = () => {
       const termo = filtro.value.trim().toLowerCase();
-      const cartas = estado.mesa.jogadores[ij][zona]
-        .filter(c => nomeDaCarta(c).toLowerCase().includes(termo))
-        .sort((a, b) => nomeDaCarta(a).localeCompare(nomeDaCarta(b)));
+      const cartas = state.mesa.jogadores[ij][zona]
+        .filter(c => cardName(c).toLowerCase().includes(termo))
+        .sort((a, b) => cardName(a).localeCompare(cardName(b)));
       if (!cartas.length){
         lista.innerHTML = `<div class="gf-vazio">nada aqui</div>`;
         return;
       }
       lista.innerHTML = cartas.map(c => `<div class="gf-lista-linha">
         <span class="gf-lista-nome" title="${escapar((c.carta || {}).tipo || "")}"
-          >${escapar(nomeDaCarta(c))}</span>
+          >${escapar(cardName(c))}</span>
         ${destinos.map(z => `<button class="mini" data-gf-manda="${c.uid}:${z}"
-          >${escapar(NOME_DA_ZONA[z])}</button>`).join("")}
+          >${escapar(ZONE_NAMES[z])}</button>`).join("")}
       </div>`).join("");
     };
     filtro.addEventListener("input", desenhar);
@@ -277,8 +277,8 @@ function abrirBusca(ij, zona){
       const b = e.target.closest("[data-gf-manda]");
       if (!b) return;
       const [uid, z] = b.dataset.gfManda.split(":");
-      guardarMesa();
-      gfMover(Number(uid), z);
+      saveTableSnapshot();
+      moveToZone(Number(uid), z);
       desenhar();
       desenharMesa();
     });
@@ -286,8 +286,8 @@ function abrirBusca(ij, zona){
     filtro.focus();
   }, () => {
     if (zona !== "baralho") return;
-    guardarMesa();
-    embaralharBaralho(ij);
+    saveTableSnapshot();
+    shuffleLibrary(ij);
     desenharMesa();
   });
 }
@@ -361,8 +361,8 @@ function abrirCriarFicha(ij){
       if (!b) return;
       const [fonte, i] = b.dataset.gfModelo.split(":");
       const modelo = (fonte === "deck" ? doDeck : salvas)[Number(i)];
-      guardarMesa();
-      criarFicha(ij, modelo, 1);
+      saveTableSnapshot();
+      createToken(ij, modelo, 1);
       fecharModalGf();
       desenharMesa();
     });
@@ -375,8 +375,8 @@ function abrirCriarFicha(ij){
         cores: [...cores],
       };
       salvarFicha(modelo);
-      guardarMesa();
-      criarFicha(ij, modelo, caixa.querySelector("#gf-f-n").value);
+      saveTableSnapshot();
+      createToken(ij, modelo, caixa.querySelector("#gf-f-n").value);
       fecharModalGf();
       desenharMesa();
     });
@@ -391,7 +391,7 @@ function abrirCriarFicha(ij){
 async function listaDeDecks(){
   const porId = new Map();
   for (const d of lidos()) porId.set(d.id, {id: d.id, nome: d.nome, de: "neste navegador"});
-  if (estado.usuario){
+  if (state.usuario){
     try {
       const r = await api("/decks/meus");
       for (const d of r.decks || []){
@@ -429,8 +429,8 @@ async function abrirSegundoDeck(){
           // do que não entrar.
           api(`/decks/${id}/artes`).catch(() => ({})),
         ]);
-        guardarMesa();
-        porSegundoDeck(deckDaResposta(r, id, artes.escolhas));
+        saveTableSnapshot();
+        addSecondDeck(deckFromResponse(r, id, artes.escolhas));
         fecharModalGf();
         desenharMesa();
       } catch (err){
@@ -456,7 +456,7 @@ function barrasHTML(curva, teto){
 }
 
 function abrirResumo(){
-  const corpo = resumoDaPartida().map(r => {
+  const corpo = gameSummary().map(r => {
     const teto = Math.max(1, ...r.teorica, ...r.realizada);
     return `<div class="gf-resumo-bloco">
       <div class="gf-secao">${escapar(r.nome)}</div>
@@ -490,7 +490,7 @@ function abrirResumo(){
    deixar soltá-la no meu faria a mesa mentir sobre de quem é a carta.
 
    Soltar SOBRE uma carta do campo arruma a fila: a arrastada entra do lado
-   dela em que o ponteiro está (ver `reposicionar`). Vale também pra carta que
+   dela em que o ponteiro está (ver `reposition`). Vale também pra carta que
    chega da mão, que desce já no lugar escolhido. */
 let arrastandoNaMesa = null;
 
@@ -498,7 +498,7 @@ function alvoDeSolta(e){
   if (arrastandoNaMesa === null) return null;
   const alvo = e.target.closest?.("[data-gf-solta]");
   if (!alvo) return null;
-  const c = cartaPorUid(arrastandoNaMesa);
+  const c = cardByUid(arrastandoNaMesa);
   if (!c || Number(alvo.dataset.gfJ) !== c.dono) return null;
   return alvo;
 }
@@ -510,7 +510,7 @@ function encaixeDeSolta(e){
   const el = e.target.closest?.("[data-gf-uid]");
   if (!el) return null;
   const uid = Number(el.dataset.gfUid);
-  if (!encaixaNaFila(arrastandoNaMesa, uid)) return null;
+  if (!fitsInRow(arrastandoNaMesa, uid)) return null;
   const r = el.getBoundingClientRect();
   return {el, uid, depois: e.clientX > r.left + r.width / 2};
 }
@@ -556,13 +556,13 @@ function ligarArrastarMesa(mesa){
     const alvo = encaixe ? null : alvoDeSolta(e);
     if (!encaixe && !alvo) return;
     e.preventDefault();
-    guardarMesa();
+    saveTableSnapshot();
     const uid = arrastandoNaMesa;
     if (encaixe){
-      gfMover(uid, "campo");   // não faz nada se ela já está no campo
-      reposicionar(uid, encaixe.uid, encaixe.depois);
+      moveToZone(uid, "campo");   // não faz nada se ela já está no campo
+      reposition(uid, encaixe.uid, encaixe.depois);
     } else {
-      gfMover(uid, alvo.dataset.gfSolta);
+      moveToZone(uid, alvo.dataset.gfSolta);
     }
     arrastandoNaMesa = null;
     desenharMesa();
@@ -593,72 +593,72 @@ function fazerAcao(texto, ancora, vezes){
   if (nome === "ficha") return abrirCriarFicha(ij);
 
   // Depois as de clique repetido, que contam como um passo só (ver
-  // `guardarMesa`): vida, marcador e dano de comandante andam de um em um, e
+  // `saveTableSnapshot`): vida, marcador e dano de comandante andam de um em um, e
   // vida e dano de cinco em cinco com Shift — os dois passos que a mesa usa,
   // dano de criatura e dano de comandante.
   if (nome === "vida"){
-    guardarMesa("vida" + ij);
-    return ajustarVida(ij, Number(args[1]) * vezes);
+    saveTableSnapshot("vida" + ij);
+    return adjustLife(ij, Number(args[1]) * vezes);
   }
   if (nome === "marca"){
-    guardarMesa("marca" + ij + args[1]);
-    return ajustarMarca(ij, args[1], Number(args[2]));
+    saveTableSnapshot("marca" + ij + args[1]);
+    return adjustPlayerCounter(ij, args[1], Number(args[2]));
   }
   if (nome === "dano"){
-    guardarMesa("dano" + ij + args[1]);
-    return ajustarDanoCmd(ij, Number(args[1]), Number(args[2]) * vezes);
+    saveTableSnapshot("dano" + ij + args[1]);
+    return adjustCommanderDamage(ij, Number(args[1]), Number(args[2]) * vezes);
   }
 
-  guardarMesa();
-  if (nome === "manter") return manterMao(ij);
-  if (nome === "mulligan") return mulliganLondon(ij);
+  saveTableSnapshot();
+  if (nome === "manter") return keepHand(ij);
+  if (nome === "mulligan") return londonMulligan(ij);
 }
 
 export function ligarGoldfish(){
   $("gf-embaralhar").addEventListener("click", () => {
-    if (!cartasContadas().length && !estado.comandantes.length){
+    if (!countedCards().length && !state.comandantes.length){
       return toast("Monte o deck primeiro.");
     }
     esconderPainel();   // os uids recomeçam do 1 na mesa nova
-    montarMesa([deckDaTela()]);
+    setUpTable([screenDeck()]);
     desenharMesa();
   });
 
   $("gf-desfazer").addEventListener("click", desfazerMesa);
 
   $("gf-passar").addEventListener("click", () => {
-    if (!estado.mesa) return;
-    guardarMesa();
-    passarTurno();
+    if (!state.mesa) return;
+    saveTableSnapshot();
+    passTurn();
     desenharMesa();
   });
 
   $("gf-fim-combate").addEventListener("click", () => {
-    if (!estado.mesa) return;
-    guardarMesa();
-    limparCombate();
+    if (!state.mesa) return;
+    saveTableSnapshot();
+    clearCombat();
     desenharMesa();
   });
 
-  // Abrir o log não é jogada: não passa pelo `guardarMesa`.
+  // Abrir o log não é jogada: não passa pelo `saveTableSnapshot`.
   $("gf-log").addEventListener("click", (e) => {
-    if (!e.target.closest(".gf-log-cabeca") || !estado.mesa) return;
-    estado.mesa.logAberto = !estado.mesa.logAberto;
+    if (!e.target.closest(".gf-log-cabeca") || !state.mesa) return;
+    state.mesa.logAberto = !state.mesa.logAberto;
     desenharMesa();
   });
 
   $("gf-segundo").addEventListener("click", () => {
-    if (!estado.mesa) return;
-    if (estado.mesa.jogadores.length > 1){
-      guardarMesa();
-      tirarSegundoDeck();
+    if (!state.mesa) return;
+    if (state.mesa.jogadores.length > 1){
+      saveTableSnapshot();
+      removeSecondDeck();
       return desenharMesa();
     }
     abrirSegundoDeck();
   });
 
   $("gf-encerrar").addEventListener("click", () => {
-    if (estado.mesa) abrirResumo();
+    if (state.mesa) abrirResumo();
   });
 
   $("gf-tela").addEventListener("click", () => {
@@ -710,20 +710,20 @@ export function ligarGoldfish(){
     const tap = e.target.closest("[data-gf-tap]");
     if (tap){
       fecharMenuGf();
-      guardarMesa();
-      alternarDeitada(Number(tap.dataset.gfTap));
+      saveTableSnapshot();
+      toggleTapped(Number(tap.dataset.gfTap));
       return desenharMesa();
     }
 
     const carta = e.target.closest("[data-gf-uid]");
     if (!carta) return;
     const uid = Number(carta.dataset.gfUid);
-    const c = cartaPorUid(uid);
+    const c = cardByUid(uid);
     // Na fase de mandar pro fundo, clicar na mão é ESCOLHER — não abrir menu.
-    if (c && estado.mesa.jogadores[c.dono].fase === "fundo"
-        && zonaDaCarta(uid) === "mao"){
-      guardarMesa();
-      mandarPraFundo(uid);
+    if (c && state.mesa.jogadores[c.dono].fase === "fundo"
+        && zoneOf(uid) === "mao"){
+      saveTableSnapshot();
+      putOnBottom(uid);
       return desenharMesa();
     }
     const r = carta.getBoundingClientRect();

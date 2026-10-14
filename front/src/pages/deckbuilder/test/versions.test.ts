@@ -13,7 +13,7 @@ const pill = () => {
 
 it("quem pode concluir, e o que a pílula e o histórico mostram", async () => {
   const p = await page();
-  const e = p.estado;
+  const e = p.state;
   e.usuario = null;
   expect(p.bloqueioDeConcluir()).toContain("conta");
 

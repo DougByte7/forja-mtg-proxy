@@ -12,7 +12,7 @@ it("existe quando a pessoa fez uma pergunta, e não com a caixa vazia", async ()
   // ALARGAM a lista.
   const p = await page();
   const withFilters = (change: object, term = "") => {
-    p.estado.filtros = { ...EMPTY, ...change };
+    p.state.filtros = { ...EMPTY, ...change };
     return p.listaPaginada(term);
   };
   expect(withFilters({})).toBe(false);
@@ -36,11 +36,11 @@ it("sem paginador, a frase do fim diz o que fazer", async () => {
 it("o denominador vem do total do servidor, e o número não passa do fim", async () => {
   // 37 cartas de 5 em 5 são 8 páginas, e a oitava tem duas.
   const p = await page();
-  Object.assign(p.estado, { buscaTotal: 37, buscaPorPagina: 5, buscaPagina: 0 });
+  Object.assign(p.state, { buscaTotal: 37, buscaPorPagina: 5, buscaPagina: 0 });
   const first = p.paginadorDaBusca();
-  p.estado.buscaPagina = 7;
+  p.state.buscaPagina = 7;
   const last = p.paginadorDaBusca();
-  p.estado.buscaPorPagina = 15;
+  p.state.buscaPorPagina = 15;
   const fifteen = p.paginadorDaBusca();
   expect(first).toContain("1 / 8");
   expect(first).toContain('data-res-pag="-1" title="Página anterior"');
@@ -54,15 +54,15 @@ it("o denominador vem do total do servidor, e o número não passa do fim", asyn
 it("as setas param nas pontas, e trocar o tamanho volta pro começo", async () => {
   // "Página 4" de 5 em 5 não é a mesma coisa que "página 4" de 15 em 15.
   const p = await page();
-  p.estado.filtros.tipo = "creature";
-  Object.assign(p.estado, { buscaTotal: 37, buscaPorPagina: 5, buscaPagina: 0 });
+  p.state.filtros.tipo = "creature";
+  Object.assign(p.state, { buscaTotal: 37, buscaPorPagina: 5, buscaPagina: 0 });
   p.virarPagina(-1);
-  expect(p.estado.buscaPagina).toBe(0);
+  expect(p.state.buscaPagina).toBe(0);
   p.virarPagina(1);
-  expect(p.estado.buscaPagina).toBe(1);
-  p.estado.buscaPagina = 7;
+  expect(p.state.buscaPagina).toBe(1);
+  p.state.buscaPagina = 7;
   p.virarPagina(1);
-  expect(p.estado.buscaPagina).toBe(7);
+  expect(p.state.buscaPagina).toBe(7);
   p.escolherPorPagina(15);
-  expect([p.estado.buscaPorPagina, p.estado.buscaPagina]).toEqual([15, 0]);
+  expect([p.state.buscaPorPagina, p.state.buscaPagina]).toEqual([15, 0]);
 });

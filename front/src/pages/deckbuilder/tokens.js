@@ -15,26 +15,26 @@
 import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
 import {assinaturaDoDeck} from "./combos.js";
-import {estado} from "./estado.js";
 import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
 import {api, salvarAgora} from "./salvar.js";
+import {state} from "./state";
 import {toast} from "./utilidades.js";
 export async function buscarTokens(){
-  if (!estado.comandantes.length) return;
-  if (!estado.id) await salvarAgora();
-  if (!estado.id){
+  if (!state.comandantes.length) return;
+  if (!state.id) await salvarAgora();
+  if (!state.id){
     toast("Não consegui salvar o deck antes de listar as fichas.");
     return;
   }
   // Só avisa que está procurando quando ainda não há lista na tela. Nos
   // recálculos do autosave, apagar a grade faria as artes piscarem a cada
   // carta adicionada.
-  if (!estado.tokens){
+  if (!state.tokens){
     $("tokens-resultado").innerHTML = `<div class="nota">Procurando…</div>`;
   }
   try {
-    estado.tokens = await api(`/decks/${estado.id}/tokens`);
-    estado.tokensAssinatura = assinaturaDoDeck();
+    state.tokens = await api(`/decks/${state.id}/tokens`);
+    state.tokensAssinatura = assinaturaDoDeck();
   } catch (e){
     $("tokens-nota").hidden = false;
     $("tokens-resultado").innerHTML =
@@ -61,7 +61,7 @@ export async function buscarTokens(){
 const fichasMontadas = {de: null, lista: []};
 
 export function fichasDoDeck(){
-  const dados = estado.tokens;
+  const dados = state.tokens;
   if (dados && fichasMontadas.de === dados) return fichasMontadas.lista;
   const vistas = new Map();
   for (const g of (dados && dados.grupos) || []){
@@ -102,7 +102,7 @@ function fichaHTML(t){
 }
 
 function desenharTokens(){
-  const dados = estado.tokens;
+  const dados = state.tokens;
   const grupos = dados?.grupos || [];
   // Vazio, e não "0": deck que não cria ficha nenhuma não tem contagem pra
   // mostrar, do mesmo jeito que a aba de combos antes da primeira busca.

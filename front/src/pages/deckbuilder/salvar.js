@@ -6,20 +6,21 @@
    a tela lenta justamente no momento em que a informação importa. */
 
 import {$} from "../../shared/dom.js";
+import {deckIdentity, totalCards} from "./deck";
 import {desenharAnalise, desenharContador} from "./desenho.js";
-import {estado} from "./estado.js";
 import {atualizarBotaoPedido} from "./galeria.js";
 import {analisarManabase} from "./manabase.js";
 import {agendarCotacao} from "./orcamento.js";
+import {state} from "./state";
+import {brDate} from "./text";
 import {buscarTokens} from "./tokens.js";
-import {dataBR, identidadeDoDeck, totalCartas} from "./utilidades.js";
 import {buscarHistorico, desenharVersao} from "./versoes.js";
 export function validarLocal(){
-  const identidade = identidadeDoDeck();
+  const identidade = deckIdentity();
   const apontamentos = [];
-  const total = totalCartas();
+  const total = totalCards();
 
-  if (!estado.comandantes.length){
+  if (!state.comandantes.length){
     apontamentos.push({nivel:"erro", tipo:"sem-comandante",
       mensagem:"Todo deck de Commander começa por um comandante."});
   }
@@ -36,7 +37,7 @@ export function validarLocal(){
   // uma decisão que ela nem tomou. O sideboard passa — fora da CONTA não é
   // fora das REGRAS, e uma carta guardada pra trocar depois precisa caber no
   // deck em que vai entrar. Mesma divisão do `decks.validar`.
-  for (const {carta, quantidade} of estado.cartas){
+  for (const {carta, quantidade} of state.cartas){
     if (!carta) continue;
     if (quantidade > 1 && !carta.basico && !carta.ilimitada){
       apontamentos.push({nivel:"erro", tipo:"singleton", carta:carta.nome,
@@ -49,7 +50,7 @@ export function validarLocal(){
     if (carta.inedita){
       apontamentos.push({nivel:"aviso", tipo:"inedita", carta:carta.nome,
         mensagem:`${carta.nome} ainda não foi lançada — vale em mesa a partir de ${
-          dataBR(carta.sai_em)}.`});
+          brDate(carta.sai_em)}.`});
     } else if (!carta.legal){
       apontamentos.push({nivel:"erro", tipo:"banida", carta:carta.nome,
         mensagem:`${carta.nome} não é legal em Commander.`});
@@ -66,7 +67,7 @@ export function validarLocal(){
 }
 
 export function validacaoAtual(){
-  return estado.validacao || validarLocal();
+  return state.validacao || validarLocal();
 }
 
 /* ------------------------------------------------------------------ servidor */
@@ -85,13 +86,13 @@ export function corpoDoDeck(){
   const linha = (e) => ({nome: e.carta.nome, quantidade: e.quantidade,
                          categoria: e.categoria || ""});
   return {
-    nome: estado.nome,
-    comandantes: estado.comandantes.map(c => c.nome),
-    cartas: estado.cartas.map(linha),
-    maybeboard: estado.maybe.map(linha),
+    nome: state.nome,
+    comandantes: state.comandantes.map(c => c.nome),
+    cartas: state.cartas.map(linha),
+    maybeboard: state.maybe.map(linha),
     // Vão inteiras, inclusive as vazias: uma categoria recém-criada some
     // antes de receber a primeira carta se ela só existir nas entradas.
-    categorias: estado.categorias,
+    categorias: state.categorias,
   };
 }
 
@@ -120,25 +121,25 @@ export async function salvarAgora(){
   if (salvando){ salvarDeNovo = true; return; }
   // Deck sem comandante e sem carta não vira registro no servidor: senão cada
   // pessoa que só abriu a página deixaria um deck vazio pra trás.
-  if (!estado.comandantes.length && !estado.cartas.length) return;
-  if (!estado.usuario){
+  if (!state.comandantes.length && !state.cartas.length) return;
+  if (!state.usuario){
     marcarEstado("entre na sua conta pra salvar", "erro");
     return;
   }
   salvando = true;
   marcarEstado("salvando…");
   try {
-    const corpo = {method: estado.id ? "PUT" : "POST",
+    const corpo = {method: state.id ? "PUT" : "POST",
                    headers: {"Content-Type": "application/json"},
                    body: JSON.stringify(corpoDoDeck())};
-    const resposta = await api(estado.id ? `/decks/${estado.id}` : "/decks", corpo);
-    const novo = !estado.id;
-    estado.id = resposta.deck.id;
-    estado.validacao = resposta.validacao;
-    estado.versao = resposta.versao;
+    const resposta = await api(state.id ? `/decks/${state.id}` : "/decks", corpo);
+    const novo = !state.id;
+    state.id = resposta.deck.id;
+    state.validacao = resposta.validacao;
+    state.versao = resposta.versao;
     if (novo){
-      estado.dono = resposta.deck.dono || null;
-      history.replaceState(null, "", `?deck=${estado.id}`);
+      state.dono = resposta.deck.dono || null;
+      history.replaceState(null, "", `?deck=${state.id}`);
       $("btn-compartilhar").hidden = false;
       atualizarBotaoPedido();
     }
@@ -153,14 +154,14 @@ export async function salvarAgora(){
     // A pílula da versão ganha o ponto de "a lista mudou" quando o servidor
     // confirma a mudança, e o histórico aberto acompanha a lista gravada.
     desenharVersao();
-    if (estado.aba === "historico") buscarHistorico();
+    if (state.aba === "historico") buscarHistorico();
     // O primeiro salvamento é o instante em que o deck ganha id — e é só com
     // id que dá pra cotar. Sem esta chamada, um deck de uma carta só nunca
     // seria cotado: a cotação esperaria uma segunda mudança que não vem.
     agendarCotacao();
     // A mana base é conta local, sem custo de fora: depois de aberta uma
     // vez, acompanha cada autosave em vez de envelhecer com aviso.
-    if (estado.manabase) analisarManabase();
+    if (state.manabase) analisarManabase();
     // Fichas sempre, aberta a aba ou não: elas vão pro papel, e a aba Artes
     // e o "Gerar pedido" contam as artes delas. A resposta sai da base
     // local, sem rede de fora.
@@ -198,11 +199,11 @@ export function lidos(){
 }
 
 export function lembrarDeck(){
-  if (!estado.id) return;
+  if (!state.id) return;
   try {
-    const lista = lidos().filter(d => d.id !== estado.id);
-    lista.unshift({id: estado.id, nome: estado.nome, quando: Date.now(),
-                   comandante: estado.comandantes[0]?.nome || ""});
+    const lista = lidos().filter(d => d.id !== state.id);
+    lista.unshift({id: state.id, nome: state.nome, quando: Date.now(),
+                   comandante: state.comandantes[0]?.nome || ""});
     localStorage.setItem(CHAVE, JSON.stringify(lista.slice(0, 20)));
   } catch(e){ /* cota cheia ou navegador privado: a lista é conveniência */ }
   atualizarBotaoMeus();

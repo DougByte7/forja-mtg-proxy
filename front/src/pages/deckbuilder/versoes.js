@@ -12,24 +12,23 @@
 
 import {$, escapar} from "../../shared/dom.js";
 import {ganchosDaPrevia} from "./carta.js";
-import {estado} from "./estado.js";
 import {abrirMenu} from "./menus.js";
 import {trocarAba} from "./paineis.js";
-import {api, salvando, salvarJa, salvarTimer,
-        validacaoAtual} from "./salvar.js";
+import {api, salvando, salvarJa, salvarTimer, validacaoAtual} from "./salvar.js";
+import {state} from "./state";
 import {ico, toast} from "./utilidades.js";
 
 function ehWip(){
-  return estado.versao?.atual == null;
+  return state.versao?.atual == null;
 }
 
 /* Concluir versão é alterar o deck, então vale a regra do autosave: pede
    conta, e deck com dono só o dono e o admin alteram. */
 function podeConcluir(){
-  const u = estado.usuario;
+  const u = state.usuario;
   if (!u) return false;
-  if (!estado.dono) return true;
-  return u.id === estado.dono || u.perfil === "admin";
+  if (!state.dono) return true;
+  return u.id === state.dono || u.perfil === "admin";
 }
 
 function dataCurta(ts){
@@ -44,7 +43,7 @@ function dataCurta(ts){
    servidor: o `mudou` que ele contou pode estar velho, então o clique fica
    liberado e quem responde é o servidor, depois de gravar. */
 export function bloqueioDeConcluir(){
-  if (!estado.usuario) return "Entre na sua conta pra concluir versões.";
+  if (!state.usuario) return "Entre na sua conta pra concluir versões.";
   if (!podeConcluir()) return "Só quem é dono do deck conclui versões.";
   if (ehWip()){
     const v = validacaoAtual();
@@ -54,14 +53,14 @@ export function bloqueioDeConcluir(){
     if (graves.length) return `${graves.length} problema(s) na lista — veja a aba Análise.`;
     return tamanho ? tamanho.mensagem : "A lista ainda não é válida.";
   }
-  if (!estado.versao.mudou && !salvarTimer && !salvando){
-    return `A lista está igual à v${estado.versao.atual}.`;
+  if (!state.versao.mudou && !salvarTimer && !salvando){
+    return `A lista está igual à v${state.versao.atual}.`;
   }
   return "";
 }
 
 export function desenharVersao(){
-  const v = estado.versao;
+  const v = state.versao;
   const wip = ehWip();
   const mudou = !wip && v.mudou;
   const pilula = $("btn-versao");
@@ -75,11 +74,11 @@ export function desenharVersao(){
   // A partir da v1: com uma versão só não há duas listas pra comparar.
   const temHistorico = !wip && v.atual >= 1;
   $("aba-historico").hidden = !temHistorico;
-  if (!temHistorico && estado.aba === "historico") trocarAba("deck");
+  if (!temHistorico && state.aba === "historico") trocarAba("deck");
 }
 
 export function menuDaVersao(){
-  const v = estado.versao;
+  const v = state.versao;
   const wip = ehWip();
   const bloqueio = bloqueioDeConcluir();
   const itens = [];
@@ -111,13 +110,13 @@ export async function concluirVersao(){
     toast("Não consegui salvar o deck — a versão fica pra depois.");
     return;
   }
-  if (!estado.id) return;
+  if (!state.id) return;
   try {
-    const r = await api(`/decks/${estado.id}/versoes`, {method: "POST"});
-    estado.versao = r.versao;
-    estado.historico = r.historico;
+    const r = await api(`/decks/${state.id}/versoes`, {method: "POST"});
+    state.versao = r.versao;
+    state.historico = r.historico;
     desenharVersao();
-    if (estado.aba === "historico") desenharHistorico();
+    if (state.aba === "historico") desenharHistorico();
     toast(`v${r.versao.atual} concluída.`);
   } catch (e){
     toast(e.message);
@@ -130,13 +129,13 @@ export async function concluirVersao(){
 let pedidoDeHistorico = 0;
 
 export async function buscarHistorico(){
-  if (!estado.id) return;
+  if (!state.id) return;
   const pedido = ++pedidoDeHistorico;
-  if (!estado.historico) desenharHistorico();
+  if (!state.historico) desenharHistorico();
   try {
-    const r = await api(`/decks/${estado.id}/versoes`);
+    const r = await api(`/decks/${state.id}/versoes`);
     if (pedido !== pedidoDeHistorico) return;
-    estado.historico = r;
+    state.historico = r;
     desenharHistorico();
   } catch (e){
     if (pedido !== pedidoDeHistorico) return;
@@ -146,7 +145,7 @@ export async function buscarHistorico(){
 }
 
 export function desenharHistorico(){
-  const h = estado.historico;
+  const h = state.historico;
   const caixa = $("historico-resultado");
   if (!h){
     caixa.innerHTML = `<div class="vazio">Carregando…</div>`;
