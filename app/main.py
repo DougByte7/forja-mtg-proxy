@@ -189,7 +189,7 @@ async def registrar_visita(request: Request, call_next):
     """Anota quem está no sistema e quanto cada requisição demorou.
 
     Fica em volta de TODAS as rotas, inclusive dos arquivos estáticos, porque
-    é justamente o pedido do `index.html` que revela que alguém abriu a
+    é justamente o pedido da página inicial que revela que alguém abriu a
     página — as rotas da API só contam quem já resolveu usar.
 
     Nada aqui pode derrubar uma resposta: se o registro falhar, a requisição
@@ -2211,9 +2211,6 @@ def run_cleanup(x_admin_token: str | None = Header(default=None),
     return cleanup.run_once()
 
 
-# Serve o front-end (app/static/index.html) na raiz. Fica depois das rotas
-# da API de propósito — assim /orders, /admin/... continuam resolvendo
-# certo, e qualquer outro caminho cai no arquivo estático.
 # --- Worker da impressora (`worker/`, roda no homelab) ----------------------
 #
 # A conversa é sempre de lá pra cá: o worker pergunta a fila, reserva o que
@@ -2335,4 +2332,14 @@ def worker_batida(corpo: dict = Body(default={})):
     return {"ok": True}
 
 
+@app.get("/")
+def pagina_inicial():
+    """A Forja de Proxies: orçamento, revisão da folha e cobrança Pix
+    (`front/src/pages/home`)."""
+    return frontend.page("home")
+
+
+# O resto de `app/static/` (os assets do build, em `/dist/`) sai pelo mount.
+# Fica depois de todas as rotas de propósito — assim /orders, /admin/...
+# continuam resolvendo certo, e qualquer outro caminho cai no arquivo.
 app.mount("/", StaticFiles(directory="app/static", html=True), name="static")

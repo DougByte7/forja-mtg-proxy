@@ -5,7 +5,7 @@ própria chave, recebe o aviso de pagamento do próprio cliente por e-mail e,
 com um clique seu no link **Imprimir** desse e-mail, gera o PDF A4 buscando
 as imagens no Google Drive e manda direto pra fila da impressora na rede.
 
-O front-end (`app/static/index.html`) é servido pelo próprio backend —
+O front-end (`front/`, em Preact) é servido pelo próprio backend —
 não precisa de outro container nem configurar URL nenhuma. Ao abrir
 `http://IP-DO-SERVIDOR:8000/` (ou o domínio do seu Cloudflare Tunnel) já
 cai direto na "Forja de Proxies" chamando a API na mesma origem.
@@ -115,8 +115,9 @@ front basta recarregar o navegador.
 
 O front está migrando, uma tela por vez, de HTML com JavaScript solto em
 `app/static/` pra Preact + TypeScript em `front/`, com build no Vite. Até agora
-migraram o login (`/entrar`), o cadastro (`/cadastro`), a lista de
-decks (`/meus-decks`) e o admin (`/admin`). Essas telas saem do build, em `app/static/dist/`
+migraram a página inicial (`/`), o login (`/entrar`), o cadastro
+(`/cadastro`), a lista de decks (`/meus-decks`) e o admin (`/admin`); falta
+o deckbuilder. Essas telas saem do build, em `app/static/dist/`
 (fora do git), e sem ele a rota responde 503 dizendo o comando que falta.
 Precisa de Node 22 ou mais novo e do pnpm (a versão está no `packageManager`
 do `front/package.json`):
@@ -425,11 +426,13 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   por tela em `front/pages/`, o código em `front/src/pages/<tela>/` e o que
   é comum em `front/src/shared/`). O build vai pra `app/static/dist/`, e
   `app/frontend.py` serve o HTML de cada tela com `no-cache`; os assets têm
-  hash no nome e vão pelo mount estático. Hoje: login (`/entrar`), cadastro
-  (`/cadastro`), a lista de decks (`/meus-decks`) e o admin (`/admin`). Ver
+  hash no nome e vão pelo mount estático. Hoje: a página inicial (`/`),
+  login (`/entrar`), cadastro (`/cadastro`), a lista de decks
+  (`/meus-decks`) e o admin (`/admin`). Ver
   *As telas em Preact*.
-- `app/static/index.html` — o front-end (a Forja de Proxies), servido pelo
-  próprio FastAPI.
+- `front/src/pages/home/` — a Forja de Proxies em `/`: orçamento, revisão da
+  folha, cotação e cobrança Pix. A lógica pura (XML, folha, totais, cotação,
+  "Meus Pedidos") mora em módulos `.ts` com testes ao lado.
 - `front/src/pages/admin/` — a tela de pedidos do operador, em `/admin`. Ver
   *Tela de pedidos (admin)*.
 - `app/static/deckbuilder.html` — a tela de montar deck de Commander, em

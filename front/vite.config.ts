@@ -10,7 +10,7 @@ import { defineConfig } from "vite";
 import preact from "@preact/preset-vite";
 import { resolve } from "node:path";
 
-const PAGES = ["login", "signup", "decks", "admin"];
+const PAGES = ["login", "signup", "decks", "admin", "home"];
 
 export default defineConfig({
   plugins: [preact()],

@@ -431,7 +431,8 @@ def miniatura(drive_id: str, largura: int = 300) -> str:
 
     Aponta direto pro Google Drive: o navegador carrega sem passar por aqui,
     que é o que torna uma grade de 24 imagens barata pra este servidor. É a
-    MESMA forma que o `index.html` já usa pra prévia da folha — inclusive o
-    fallback `lh3.googleusercontent.com`, que mora lá.
+    MESMA forma que a página do pedido usa pra prévia da folha
+    (`front/src/pages/home/art.ts`) — inclusive o fallback
+    `lh3.googleusercontent.com`, que mora lá.
     """
     return (f"https://drive.google.com/thumbnail?id={drive_id}&sz=w{int(largura)}")

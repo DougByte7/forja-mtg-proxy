@@ -7,7 +7,9 @@
    frase das rotas que respondem texto puro). */
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  /** `detail` é a frase do servidor (vazia quando ele não explicou nada):
+      algumas telas mudam o texto conforme houve explicação ou não. */
+  constructor(message: string, readonly status: number, readonly detail = "") {
     super(message);
   }
 }
@@ -45,7 +47,7 @@ async function request(url: string, opts: ApiOptions): Promise<Response> {
       if (typeof data?.detail === "string") detail = data.detail;
     } catch { /* não era JSON */ }
     throw new ApiError(
-      detail || (opts.errorText && text) || `Erro ${r.status}`, r.status);
+      detail || (opts.errorText && text) || `Erro ${r.status}`, r.status, detail.trim());
   }
   return r;
 }
