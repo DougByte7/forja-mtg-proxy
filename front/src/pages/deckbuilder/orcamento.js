@@ -17,10 +17,10 @@
    Por isso cada linha diz, no tracejado e no title, qual das duas está
    mostrando — um número que esconde de onde veio é pior que número nenhum. */
 
-import {$, escapar} from "../../shared/dom.js";
+import {escapar} from "../../shared/dom.js";
 import {cotar} from "./cotacao.js";
 import {exchangeNote, exchangeRate, formatBRL, money, PRICEY_BRL, PRICEY_USD} from "./price";
-import {state} from "./state";
+import {state, touch} from "./state";
 
 export function precoDaEntrada(entrada){
   return (entrada.carta?.preco_usd || 0) * entrada.quantidade;
@@ -203,48 +203,10 @@ export function orcamentoLocal(){
    O detalhamento (quantas cartas contam, quantas ficam de fora, quantas não
    têm preço) fica no título: é conferência de uma vez na vida, e não vale uma
    linha permanente do cabeçalho. */
+/* A prévia do cabeçalho virou componente (`ui/Meters.tsx`); quem ainda chama
+   isto quer só o redesenho. */
 export function desenharPreviaOrcamento(){
-  const botao = $("btn-total");
-  const caret = $("btn-cotacao");
-  const temDeck = state.comandantes.length || state.cartas.length;
-  botao.hidden = !temDeck;
-  caret.hidden = !temDeck || !(state.cotacao || state.cotacaoErro);
-  if (!temDeck) return;
-
-  const o = orcamentoLocal();
-  const talvez = state.maybe.reduce((n, e) => n + e.quantidade, 0);
-  const partes = [];
-  if (o.cartas) partes.push(`${o.cartas} carta(s) contadas`);
-  if (o.fora) partes.push(`${o.fora} fora do total (comandante e básicos)`);
-  if (o.semPreco) partes.push(`${o.semPreco} sem preço na base`);
-  if (talvez) partes.push(`${talvez} no maybeboard, fora da conta`);
-
-  const fonte = (state.cotacao?.fontes || [])[0];
-  const cotado = fonte && fonte.cartas_cotadas;
-  // Cotado, o número já vem na moeda da fonte e NÃO passa por `money()`: o
-  // total da LigaMagic é real de verdade, e o da Scryfall pode já ter vindo
-  // convertido pelo `USD_BRL` do .env. Converter aqui converteria duas vezes.
-  // Não cotado, é a base local em dólar, e aí sim a régua se aplica.
-  const texto = cotado
-    ? `${fonte.moeda === "BRL" ? "R$" : "US$"} `
-      + Number(fonte.total).toFixed(2).replace(".", ",")
-    : money(o.total);
-
-  $("total-n").textContent = texto;
-  $("total-de").textContent = cotado ? fonte.rotulo : "prévia";
-  // Entre mexer no deck e a cotação nova voltar existe uma janela em que o
-  // número mostrado é de OUTRO deck. O giro cobre essa janela inteira — a
-  // espera e a consulta — em vez de só a consulta.
-  const esperando = state.cotacaoRodando ||
-    (state.id && assinaturaDeCotacao() !== state.cotacaoAssinatura && o.cartas);
-  botao.className = "medidor" + (esperando ? " cotando" : "");
-  botao.title = [
-    cotado ? `Preço de comprar em ${fonte.rotulo}, cotado agora.`
-           : "Soma da base local — a cotação de verdade chega em alguns segundos.",
-    cotado ? "" : exchangeNote(),
-    partes.join(" · "),
-    "Clique pra copiar a lista do deck.",
-  ].filter(Boolean).join("\n");
+  touch();
 }
 
 /* ------------------------------------------------------- cotação automática

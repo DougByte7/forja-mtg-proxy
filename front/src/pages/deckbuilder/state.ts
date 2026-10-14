@@ -8,6 +8,7 @@
    autosave — quando essa resposta chega, ela substitui a validação local,
    que é só a versão instantânea da mesma regra.
    ========================================================================= */
+import { signal } from "@preact/signals";
 import type { Combo, Table } from "./goldfish";
 import type { Card, Color, Entry } from "./types";
 
@@ -205,3 +206,16 @@ export const state: DeckState = {
   // aberto de um lado e recolhido do outro.
   gruposFechados: new Set(),
 };
+
+/* ------------------------------------------------- a ponte com os componentes
+
+   O estado acima é um objeto comum, mudado no lugar (`entry.quantidade += 1`),
+   e signal não enxerga mudança dentro de objeto. Enquanto a tela é metade
+   componente e metade HTML em string, a ponte é esta: toda mudança termina
+   num redesenho (`desenharTudo`), e o redesenho sobe a revisão. Componente
+   que lê `deckRevision.value` se redesenha junto com o resto da página. */
+export const deckRevision = signal(0);
+
+export function touch() {
+  deckRevision.value++;
+}

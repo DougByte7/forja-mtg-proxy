@@ -14,12 +14,13 @@ import {agendarCotacao, desenharPreviaOrcamento, subtotalDoGrupo,
 import {desenharPoder} from "./poder.js";
 import {screenCurrency} from "./price";
 import {validacaoAtual} from "./salvar.js";
-import {COLOR_NAMES, COLORS, OUT_OF_COUNT, state} from "./state";
+import {COLOR_NAMES, COLORS, OUT_OF_COUNT, state, touch} from "./state";
 import {foldAccents} from "./text";
 import {ico, manaHTML, seloInedita} from "./utilidades.js";
 import {desenharVersao} from "./versoes.js";
 
 export function desenharTudo(){
+  touch();
   desenharDeck();
   desenharMaybe();
   desenharGaleria();
@@ -40,29 +41,10 @@ export function desenharTudo(){
   agendarCotacao();
 }
 
-/* Os dois medidores do cabeçalho. O ponto colorido carrega a validação
-   inteira num pixel: verde é deck legal, vermelho é erro de verdade (carta
-   fora da identidade, singleton quebrado, banida), cinza é "ainda montando" —
-   que não é erro nenhum e por isso não é vermelho. O título diz o que o ponto
-   resume, pra quem quiser a frase. */
+/* O contador do cabeçalho virou componente (`ui/Meters.tsx`); quem ainda
+   chama isto quer só o redesenho. */
 export function desenharContador(){
-  const total = totalCards();
-  const v = validacaoAtual();
-  const graves = (v.apontamentos || []).filter(
-    a => a.nivel === "erro" && a.tipo !== "faltam" && a.tipo !== "sobram");
-
-  $("contador-n").textContent = total;
-  const el = $("contador");
-  el.className = "medidor" +
-    (graves.length ? " erro" : total === 100 && v.ok ? " completo"
-                             : total > 100 ? " passou" : "");
-  el.title = graves.length
-    ? `${graves.length} problema(s) — veja a aba Análise`
-    : total === 100 && v.ok
-      ? "Deck legal: 100 cartas, singleton respeitado e tudo na identidade"
-      : total > 100
-        ? `${total - 100} carta(s) além das 100`
-        : `Faltam ${100 - total} carta(s) pras 100`;
+  touch();
 }
 
 export function desenharDeck(){

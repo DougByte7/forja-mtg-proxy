@@ -5,17 +5,11 @@
    texto em `text.ts` e o preço em `price.ts`; isto aqui vira componente
    quando a tela virar Preact. */
 
-import {$, escapar} from "../../shared/dom.js";
+import {escapar} from "../../shared/dom.js";
 import {COLOR_NAMES, COLORS} from "./state";
 import {brDate} from "./text";
 
-export function toast(msg){
-  const t = $("toast");
-  t.textContent = msg;
-  t.classList.add("mostra");
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove("mostra"), 2200);
-}
+export {toast} from "./ui/toast";
 
 /* Símbolos de mana: "{2}{G}{W}" vira bolinhas. Híbrido ("{G/W}") sai com as
    duas cores em gradiente, que é como o jogo desenha. */

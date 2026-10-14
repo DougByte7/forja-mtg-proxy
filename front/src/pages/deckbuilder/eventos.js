@@ -9,7 +9,7 @@ import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
 import {adicionarPeca} from "./combos.js";
 import {linkDeConta} from "./conta.js";
-import {alternarCotacao, fecharCotacao} from "./cotacao.js";
+import {fecharCotacao} from "./cotacao.js";
 import {alternarGrupo, ordenarLista, procurarNaLista} from "./desenho.js";
 import {addCard, commanderPick, createCategory, findEntry, removeCard,
         removeCommander, setQuantity, undo} from "./editing";
@@ -389,8 +389,6 @@ export function ligarEventos(){
 
   // Copiar a lista é a ação que se faz olhando pro total, então ela mora no
   // próprio número em vez de num botão separado.
-  $("btn-total").addEventListener("click", exportar);
-  $("btn-cotacao").addEventListener("click", alternarCotacao);
   $("btn-fechar-cotacao").addEventListener("click", fecharCotacao);
 
   $("btn-nova-categoria").addEventListener("click", () => {

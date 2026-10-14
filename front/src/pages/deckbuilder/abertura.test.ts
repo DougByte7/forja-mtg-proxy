@@ -2,8 +2,8 @@
    a entrada roda sem exceção nenhuma — síncrona ou na volta da rede. É o
    teste que pega módulo que o build não achou, nome que um import esqueceu
    ou elemento que a marcação perdeu. */
-import { readdirSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 const HTML = readFileSync(resolve(import.meta.dirname, "../../../pages/deckbuilder.html"), "utf-8");
 
@@ -35,6 +35,9 @@ describe("deckbuilder", () => {
     window.removeEventListener("error", onError);
     expect(errors).toEqual([]);
     expect((document.getElementById("nome-deck") as HTMLInputElement).value).toBe("Deck sem nome");
+    // As ilhas montaram: o contador é componente (`ui/Meters.tsx`).
+    expect(document.getElementById("contador-n")?.textContent).toBe("0");
+    expect(document.getElementById("btn-total")?.hidden).toBe(true);
     expect(calls.some((u) => u.startsWith("/cartas/estado"))).toBe(true);
     vi.unstubAllGlobals();
   });
@@ -45,17 +48,26 @@ describe("deckbuilder", () => {
 it("todo módulo da pasta é alcançado pela entrada", () => {
   const dir = resolve(import.meta.dirname);
   const seen = new Set<string>();
+  const exists = (f: string) => { try { return statSync(f).isFile(); } catch { return false; } };
+  /* "./state" é "./state.ts", "./ui/Meters" é ".tsx": o Vite resolve sem
+     extensão, e este teste tem de resolver igual. */
+  const resolveImport = (from: string, spec: string) => {
+    const base = resolve(dirname(from), spec);
+    return [base, base + ".ts", base + ".tsx", base + ".js"].find(exists);
+  };
   const visit = (file: string) => {
     if (seen.has(file)) return;
     seen.add(file);
-    const text = readFileSync(resolve(dir, file), "utf-8");
-    for (const m of text.matchAll(/^import\s*(?:type\s*)?\{[^}]*\}\s*from\s*"\.\/([^"]+)";/gm)) {
-      // "./state" é "./state.ts": o Vite resolve sem extensão.
-      visit(/\.(js|ts)$/.test(m[1]) ? m[1] : m[1] + ".ts");
+    const text = readFileSync(file, "utf-8");
+    for (const m of text.matchAll(/^import\s*(?:type\s*)?\{[^}]*\}\s*from\s*"(\.\.?\/[^"]+)";/gm)) {
+      const target = resolveImport(file, m[1]);
+      if (target && target.startsWith(dir)) visit(target);
     }
   };
-  visit("abertura.js");
-  const all = readdirSync(dir).filter((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".test.ts"));
-  expect(all.filter((f) => !seen.has(f))).toEqual([]);
+  visit(resolve(dir, "abertura.js"));
+  const all = (readdirSync(dir, { recursive: true }) as string[])
+    .filter((f) => /\.(js|ts|tsx)$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.startsWith("test"))
+    .map((f) => resolve(dir, f));
+  expect(all.filter((f) => !seen.has(f)).map((f) => f.slice(dir.length + 1))).toEqual([]);
   expect(seen.size).toBeGreaterThan(20);
 });

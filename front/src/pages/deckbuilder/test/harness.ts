@@ -13,7 +13,7 @@ const HTML = readFileSync(resolve(import.meta.dirname, "../../../../pages/deckbu
 const BODY = HTML.slice(HTML.indexOf("<body>") + 6, HTML.indexOf("</body>"))
   .replace(/<script[\s\S]*?<\/script>/g, "");
 
-const MODULES = import.meta.glob(["../*.{js,ts}", "!../abertura.js", "!../*.test.ts", "!../types.ts"]);
+const MODULES = import.meta.glob(["../**/*.{js,ts,tsx}", "!../abertura.js", "!../**/*.test.ts", "!../types.ts", "!../test/**"]);
 
 export type Page = Record<string, any>;
 

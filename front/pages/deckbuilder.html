@@ -61,23 +61,8 @@
     <!-- O traço separa a identidade do deck (nome, estado do autosave) do
          estado dele (quantas cartas, quanto custa). -->
     <div class="divisor"></div>
-    <div class="medidores">
-      <span class="medidor" id="contador"
-            title="Cartas no deck, comandante incluído">
-        <span class="ponto" id="contador-ponto"></span>
-        <b id="contador-n">0</b><span class="de">/100</span>
-      </span>
-      <!-- Clicar no total copia a lista do deck: a ação mora no número que
-           ela exporta. O ⌄ ao lado abre o detalhe da cotação, que é alto
-           demais pra caber num tooltip. -->
-      <button class="medidor" id="btn-total" type="button" hidden
-              title="Clique pra copiar a lista do deck">
-        <b id="total-n">—</b><span class="de" id="total-de">USD</span>
-      </button>
-      <button class="btn redondo" id="btn-cotacao" type="button" hidden
-              aria-expanded="false" aria-controls="cotacao-caixa"
-              title="Detalhe da cotação" aria-label="Detalhe da cotação"><svg class="ico" aria-hidden="true"><use href="#i-caret-down"/></svg></button>
-    </div>
+    <!-- O contador e o total: componente (`ui/Meters.tsx`). -->
+    <div class="medidores" id="medidores"></div>
 
     <!-- O vão que empurra as ações pro canto direito. Sem ele, o traço e os
          medidores seriam afastados do nome do deck pelo crescimento do
@@ -761,7 +746,7 @@
   <img id="previa-frente" alt="" referrerpolicy="no-referrer">
   <img id="previa-verso" alt="" referrerpolicy="no-referrer">
 </div>
-<div class="toast" id="toast"></div>
+<div id="ilha-toast"></div>
 
 <!-- O JavaScript é um grafo de módulos ES: a página carrega só a entrada, e
      cada arquivo importa o que usa. O importmap vazio é onde a rota

@@ -6,6 +6,7 @@ import {buscar, buscarComandante, escolherDestino} from "./busca.js";
 import {lerConta, ligarConvite, ligarOrfao, receberConta} from "./conta.js";
 import {desenharTudo} from "./desenho.js";
 import {ligarEventos} from "./eventos.js";
+import {mountIslands} from "./islands";
 import {ligarGoldfish} from "./goldfish-acoes.js";
 import {CHAVE_TALVEZ, recolherTalvez, trocarAba, trocarRail} from "./paineis.js";
 import {loadExchangeRate} from "./price";
@@ -33,6 +34,9 @@ async function conferirBase(){
 }
 
 async function abrir(){
+  // As ilhas antes dos eventos: o que ainda se liga por id precisa achar os
+  // elementos que elas desenham.
+  mountIslands();
   ligarEventos();
   ligarOrfao();
   ligarConvite();

@@ -52,10 +52,8 @@ async function quoted(cambio: unknown = fixed()) {
   return p;
 }
 
-const headerTotal = (p: Page) => {
-  p.desenharPreviaOrcamento();
-  return document.getElementById("total-n")!.textContent;
-};
+/** O total que o cabeçalho mostra (ver `ui/Meters.tsx`). */
+const headerTotal = (p: Page) => p.totalView().text;
 
 afterEach(cleanup);
 
