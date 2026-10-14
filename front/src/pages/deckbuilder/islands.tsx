@@ -14,6 +14,7 @@ import { FilterFields, FiltersButton, FilterTape, HeroUnreleasedSwitch } from ".
 import { ManabasePanel } from "./ui/Manabase";
 import { Meters } from "./ui/Meters";
 import { DestinationCategory, DestinationSegment, SearchResults } from "./ui/Search";
+import { SuggestionsPanel } from "./ui/Suggestions";
 import { TokensPanel, TokensTabCount } from "./ui/Tokens";
 import { History, VersionPill } from "./ui/Versions";
 import { Toast } from "./ui/toast";
@@ -51,4 +52,5 @@ export function mountIslands() {
   render(<FilterTape />, $("ligados")!);
   render(<FilterFields />, $("campos-filtros")!);
   render(<HeroUnreleasedSwitch />, $("ilha-cmd-ineditas")!);
+  render(<SuggestionsPanel />, $("sug-resultado")!);
 }

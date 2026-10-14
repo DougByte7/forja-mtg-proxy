@@ -12,7 +12,7 @@ import {desenharMesa} from "./goldfish-desenho.js";
 import {analyzeManabase} from "./manabase";
 import {estimatePower} from "./power";
 import {state} from "./state";
-import {buscarSugestoes} from "./sugestoes.js";
+import {loadSuggestions} from "./suggestions";
 import {loadTokens} from "./tokens";
 import {ico} from "./utilidades.js";
 import {loadHistory} from "./versions";
@@ -30,7 +30,7 @@ function rodarAoAbrir(nome){
   // carta adicionada seria uma consulta por clique pra receber quase a mesma
   // resposta. Busca uma vez; o botão do painel refaz quando a pessoa quiser.
   if (nome === "sugestoes" && !state.sugestoes && !state.sugestoesRodando){
-    return buscarSugestoes({tema: state.sugestoesTema});
+    return loadSuggestions({theme: state.sugestoesTema});
   }
   const assinatura = deckSignature();
   if (nome === "analise" && state.poderAssinatura !== assinatura){

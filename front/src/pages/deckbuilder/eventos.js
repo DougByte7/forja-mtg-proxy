@@ -3,8 +3,8 @@
 import {$} from "../../shared/dom.js";
 import {ligarArrastar} from "./arrastar.js";
 import {abrirEscolhaDeArte, fecharArte} from "./artes.js";
-import {addByDestination, bindSearchKeys, clearCommanderResults,
-        scheduleCommanderSearch, scheduleSearch, searchCommander} from "./search";
+import {bindSearchKeys, clearCommanderResults, scheduleCommanderSearch,
+        scheduleSearch, searchCommander} from "./search";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
 import {linkDeConta} from "./conta.js";
 import {fecharCotacao} from "./cotacao.js";
@@ -21,8 +21,7 @@ import {abrirFolha, fecharFolha, folhaAberta, recolherTalvez, trocarAba,
         trocarRail} from "./paineis.js";
 import {agendarSalvar, lidos, salvando, salvarJa, salvarTimer} from "./salvar.js";
 import {state, touch} from "./state";
-import {buscarSugestoes, desenharSugestoes, importarDeckMedio,
-        sugerirPelaCarta, sugestoesPlanas} from "./sugestoes.js";
+import {importAverageDeck, suggestFromCard} from "./suggestions";
 import {deckLinkSource} from "./text";
 import {toast} from "./utilidades.js";
 
@@ -144,31 +143,6 @@ export function ligarEventos(){
     if (!caixaCot.hidden && !caixaCot.contains(e.target) &&
         !e.target.closest("#btn-cotacao")) fecharCotacao();
     if (e.target.closest("[data-fecha-gaveta]")) return closeDrawer();
-    // Sugestão do EDHREC: a carta completa já veio junto, então adicionar é
-    // o mesmo clique da busca — sem consulta nenhuma.
-    const sugerida = e.target.closest("[data-sug]");
-    if (sugerida){
-      const carta = sugestoesPlanas[Number(sugerida.dataset.sug)];
-      if (carta){
-        // Mesmo destino da busca: as duas abas do painel respondem a mesma
-        // pergunta, e obedecer o segmentado só numa delas seria armadilha.
-        addByDestination(carta);
-        // Sai da lista: já está no deck, e continuar sugerindo o que a pessoa
-        // acabou de adicionar é o jeito mais rápido de a lista parecer burra.
-        for (const lista of (state.sugestoes?.listas || [])){
-          lista.cartas = lista.cartas.filter(c => c.carta.nome !== carta.nome);
-        }
-        desenharSugestoes();
-      }
-      return;
-    }
-    const tema = e.target.closest("[data-tema]");
-    if (tema) return buscarSugestoes({tema: tema.dataset.tema});
-    // Voltar ao comandante é refazer a pergunta padrão, não desfazer a lista
-    // atual: sem tema, porque o tema que existia antes da carta é escolha de
-    // outro momento (ver `buscarSugestoes`).
-    if (e.target.closest("[data-sug-comandante]")) return buscarSugestoes();
-
     // Os botões da linha herdam o tabuleiro dela: o mesmo ✕ serve o deck e
     // o maybeboard, e sem isto o ✕ de uma carta em dúvida tiraria a cópia
     // do deck — na lista errada, calado.
@@ -179,7 +153,7 @@ export function ligarEventos(){
     const sai = e.target.closest("[data-tirar]");
     if (sai) return removeCard(sai.dataset.tirar, doTabuleiro(sai));
     const sugCarta = e.target.closest("[data-sug-carta]");
-    if (sugCarta) return sugerirPelaCarta(sugCarta.dataset.sugCarta);
+    if (sugCarta) return suggestFromCard(sugCarta.dataset.sugCarta);
     // O quadro de verso da galeria abre a modal já no verso, e o de uma
     // cópia já nela; o botão da linha não diz lado nenhum e abre na frente.
     const arteCarta = e.target.closest("[data-arte-carta]");
@@ -344,7 +318,7 @@ export function ligarEventos(){
       irmao.classList.toggle("ativa", irmao === b);
     }
   });
-  $("btn-deck-medio").addEventListener("click", importarDeckMedio);
+  $("btn-deck-medio").addEventListener("click", importAverageDeck);
 
   // ---- a folha de baixo do celular ----
   $("btn-abrir-busca").addEventListener("click", abrirFolha);
