@@ -10,7 +10,7 @@
    botão de importar seria o pior estrago que esta tela sabe fazer. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {buscar} from "./busca.js";
+import {search} from "./search";
 import {desenharTudo} from "./desenho.js";
 import {pushUndo} from "./editing";
 import {agendarSalvar, api} from "./salvar.js";
@@ -108,7 +108,7 @@ export function aplicarImportado(trazido, {mesmoDeck = false} = {}){
     $("btn-compartilhar").hidden = true;
   }
   desenharTudo();
-  buscar();
+  search();
   agendarSalvar();
 }
 

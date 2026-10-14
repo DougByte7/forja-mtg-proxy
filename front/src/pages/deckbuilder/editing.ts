@@ -4,7 +4,7 @@
    apaga a validação velha (a do servidor volta com o autosave), redesenha e
    agenda o salvamento. */
 import { $ } from "../../shared/dom.js";
-import { buscar } from "./busca.js";
+import { search } from "./search";
 import { allCategories, boardList, isCustomCategory } from "./deck";
 import { desenharTudo } from "./desenho.js";
 import { agendarSalvar } from "./salvar.js";
@@ -200,6 +200,7 @@ export function renameCategory(previous: string, next: string) {
   }
   pushUndo();
   state.categorias = state.categorias.map((c) => c === previous ? next : c);
+  if (state.destinoCategoria === previous) state.destinoCategoria = next;
   // As duas listas: o maybeboard herda as categorias do deck, então
   // renomear no deck e não renomear lá deixaria um grupo órfão do outro
   // lado, com o nome velho e sem dono.
@@ -215,6 +216,9 @@ export function renameCategory(previous: string, next: string) {
 export function deleteCategory(category: string) {
   pushUndo();
   state.categorias = state.categorias.filter((c) => c !== category);
+  // A busca que mandava cartas pra cá volta pro tipo da carta: senão as
+  // próximas iriam pra uma categoria que não existe mais.
+  if (state.destinoCategoria === category) state.destinoCategoria = "";
   let released = 0;
   for (const e of state.cartas.concat(state.maybe)) {
     if (e.categoria === category) { e.categoria = ""; released++; }
@@ -251,7 +255,7 @@ export function chooseCommander(card: Card) {
   }
   state.validacao = null;
   desenharTudo();
-  buscar();          // a lista da lateral agora tem identidade pra filtrar
+  search();          // a lista da lateral agora tem identidade pra filtrar
   agendarSalvar();
 }
 
@@ -260,6 +264,6 @@ export function removeCommander(index: number) {
   state.comandantes.splice(index, 1);
   state.validacao = null;
   desenharTudo();
-  buscar();
+  search();
   agendarSalvar();
 }

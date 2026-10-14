@@ -3,9 +3,8 @@
 import {$} from "../../shared/dom.js";
 import {ligarArrastar} from "./arrastar.js";
 import {abrirEscolhaDeArte, fecharArte} from "./artes.js";
-import {adicionarPeloDestino, agendarBusca, agendarBuscaComandante,
-        atualizarCategoriasDoDestino, buscarComandante, escolherDestino,
-        escolherPorPagina, ligarTecladoDaBusca, ultimosResultados, virarPagina} from "./busca.js";
+import {addByDestination, bindSearchKeys, clearCommanderResults,
+        scheduleCommanderSearch, scheduleSearch, searchCommander} from "./search";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
 import {linkDeConta} from "./conta.js";
 import {fecharCotacao} from "./cotacao.js";
@@ -22,15 +21,15 @@ import {abrirMenu, fecharMenu, menuAberto, menuDaCarta, menuDoGrupo} from "./men
 import {abrirFolha, fecharFolha, folhaAberta, recolherTalvez, trocarAba,
         trocarRail} from "./paineis.js";
 import {agendarSalvar, lidos, salvando, salvarJa, salvarTimer} from "./salvar.js";
-import {state} from "./state";
+import {state, touch} from "./state";
 import {buscarSugestoes, desenharSugestoes, importarDeckMedio,
         sugerirPelaCarta, sugestoesPlanas} from "./sugestoes.js";
 import {deckLinkSource} from "./text";
 import {toast} from "./utilidades.js";
 
 export function ligarEventos(){
-  $("busca").addEventListener("input", agendarBusca);
-  $("busca-cmd").addEventListener("input", agendarBuscaComandante);
+  $("busca").addEventListener("input", scheduleSearch);
+  $("busca-cmd").addEventListener("input", scheduleCommanderSearch);
   // O interruptor da abertura escreve no mesmo filtro da gaveta — por isso
   // ele não tem tratador próprio aqui, e sim o de lá (ver `mudarIneditas`).
   $("cmd-ineditas").addEventListener("change",
@@ -56,8 +55,8 @@ export function ligarEventos(){
     });
   }
 
-  ligarTecladoDaBusca($("busca"), $("res"));
-  ligarTecladoDaBusca($("busca-cmd"), $("res-cmd"));
+  bindSearchKeys($("busca"), "main");
+  bindSearchKeys($("busca-cmd"), "cmd");
 
   // Enter sobre um link vale o mesmo que o botão: quem colou e apertou Enter
   // pediu a mesma coisa que quem colou e clicou. Registrado depois do teclado
@@ -137,9 +136,6 @@ export function ligarEventos(){
     abrirGaveta("gaveta-filtros");
   });
   $("btn-fazer-importar").addEventListener("click", fazerImportar);
-  $("res-cmd").addEventListener("click", (e) => {
-    if (e.target.closest("#btn-importar-colado")) importarLinkColado();
-  });
   $("btn-limpar-filtros").addEventListener("click", limparFiltros);
   $("gaveta-fundo").addEventListener("click", fecharGaveta);
   $("btn-fechar-carta").addEventListener("click", fecharCarta);
@@ -184,7 +180,7 @@ export function ligarEventos(){
       if (carta){
         // Mesmo destino da busca: as duas abas do painel respondem a mesma
         // pergunta, e obedecer o segmentado só numa delas seria armadilha.
-        adicionarPeloDestino(carta);
+        addByDestination(carta);
         // Sai da lista: já está no deck, e continuar sugerindo o que a pessoa
         // acabou de adicionar é o jeito mais rápido de a lista parecer burra.
         for (const lista of (state.sugestoes?.listas || [])){
@@ -201,17 +197,6 @@ export function ligarEventos(){
     // outro momento (ver `buscarSugestoes`).
     if (e.target.closest("[data-sug-comandante]")) return buscarSugestoes();
 
-    // As setas do paginador da busca, que só existe com filtro ligado.
-    const resPag = e.target.closest("[data-res-pag]");
-    if (resPag) return virarPagina(Number(resPag.dataset.resPag));
-
-    const achado = e.target.closest(".achado");
-    if (achado){
-      const caixa = achado.closest(".resultados");
-      const carta = ultimosResultados[Number(achado.dataset.i)];
-      if (carta && caixa.aoClicar) caixa.aoClicar(carta);
-      return;
-    }
     // Os botões da linha herdam o tabuleiro dela: o mesmo ✕ serve o deck e
     // o maybeboard, e sem isto o ✕ de uma carta em dúvida tiraria a cópia
     // do deck — na lista errada, calado.
@@ -265,7 +250,7 @@ export function ligarEventos(){
       $("heroi").hidden = false;
       $("busca-cmd").value = "";
       $("busca-cmd").focus();
-      buscarComandante();
+      searchCommander();
     }
   });
 
@@ -314,12 +299,6 @@ export function ligarEventos(){
     novo?.focus();
   });
 
-  // Quantos resultados por página. Delegado no `#res` porque o seletor é
-  // redesenhado a cada busca — um listener no próprio `<select>` morreria
-  // junto com ele na primeira troca de página.
-  $("res").addEventListener("change", (e) => {
-    if (e.target.id === "res-por-pagina") escolherPorPagina(Number(e.target.value));
-  });
 
   $("nome-deck").addEventListener("input", () => {
     state.nome = $("nome-deck").value.trim() || "Deck sem nome";
@@ -373,13 +352,6 @@ export function ligarEventos(){
   });
 
   // ---- destino da carta que entra ----
-  $("seg-destino").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-destino]");
-    if (b) escolherDestino(b.dataset.destino);
-  });
-  $("sel-categoria").addEventListener("change", (e) => {
-    state.destinoCategoria = e.target.value;
-  });
   // Criar daqui não mexe em carta nenhuma: cria a categoria vazia e já a deixa
   // escolhida, pra que as próximas cartas da busca caiam nela.
   $("btn-nova-cat").addEventListener("click", () => {
@@ -387,7 +359,7 @@ export function ligarEventos(){
       "Ex.: Combo principal, Sac outlet, Proteção do comandante");
     if (!nome) return;
     state.destinoCategoria = createCategory(nome) || "";
-    atualizarCategoriasDoDestino();
+    touch();
   });
 
   // ---- deck médio do EDHREC ----
@@ -418,7 +390,7 @@ export function ligarEventos(){
    do que veio — o que foi pro maybeboard, as cartas que a base local não
    conhece — precisa de uma superfície que continue na tela, e a tela do
    comandante desaparece no instante em que o deck importado traz um. */
-function importarLinkColado(){
+export function importarLinkColado(){
   const url = $("busca-cmd").value.trim();
   if (!deckLinkSource(url)) return;
   $("i-url").value = url;
@@ -426,7 +398,7 @@ function importarLinkColado(){
   // aqui: quem colou um link pediu o link.
   $("i-texto").value = "";
   $("busca-cmd").value = "";
-  $("res-cmd").innerHTML = "";
+  clearCommanderResults();
   abrirGaveta("gaveta-importar");
   fazerImportar();
 }

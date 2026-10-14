@@ -9,8 +9,10 @@ import {
 } from "./ui/Analysis";
 import { CombosTabCount, DeckCombos, NearCombos } from "./ui/Combos";
 import { BoardList, CommanderBox, DeckTabCount, MaybeCount } from "./ui/DeckList";
+import { importarLinkColado } from "./eventos.js";
 import { ManabasePanel } from "./ui/Manabase";
 import { Meters } from "./ui/Meters";
+import { DestinationCategory, DestinationSegment, SearchResults } from "./ui/Search";
 import { TokensPanel, TokensTabCount } from "./ui/Tokens";
 import { History, VersionPill } from "./ui/Versions";
 import { Toast } from "./ui/toast";
@@ -40,4 +42,8 @@ export function mountIslands() {
   render(<BoardList board="talvez" />, $("talvez-lista")!);
   render(<DeckTabCount />, $("aba-deck-n")!);
   render(<MaybeCount />, $("ilha-talvez-n")!);
+  render(<SearchResults box="main" />, $("res")!);
+  render(<SearchResults box="cmd" onImportLink={importarLinkColado} />, $("res-cmd")!);
+  render(<DestinationSegment />, $("ilha-destino")!);
+  render(<DestinationCategory />, $("ilha-categoria-destino")!);
 }

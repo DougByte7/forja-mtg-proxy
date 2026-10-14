@@ -2,7 +2,7 @@
 
 import {$} from "../../shared/dom.js";
 import {carregarArtes, ligarArte} from "./artes.js";
-import {buscar, buscarComandante, escolherDestino} from "./busca.js";
+import {search, searchCommander, chooseDestination} from "./search";
 import {lerConta, ligarConvite, ligarOrfao, receberConta} from "./conta.js";
 import {desenharTudo} from "./desenho.js";
 import {ligarEventos} from "./eventos.js";
@@ -49,7 +49,7 @@ async function abrir(){
   loadExchangeRate();
   trocarAba("deck");
   trocarRail("buscar");
-  escolherDestino("deck");
+  chooseDestination("deck");
   try {
     if (localStorage.getItem(CHAVE_TALVEZ) === "0") recolherTalvez(true);
   } catch(e){ /* navegador privado: a coluna abre, que é o padrão */ }
@@ -95,8 +95,8 @@ async function abrir(){
   // As fichas vão pro papel com o deck: sem elas, a aba Artes e o "Gerar
   // pedido" contariam só as cartas até a aba Tokens ser aberta.
   if (state.id) loadTokens();
-  if (state.comandantes.length){ buscar(); }
-  else { buscarComandante(); $("busca-cmd").focus(); }
+  if (state.comandantes.length){ search(); }
+  else { searchCommander(); $("busca-cmd").focus(); }
   // O foco na busca só faz sentido onde ela está sempre à vista: no celular
   // ela é uma folha fechada, e focar dentro dela abriria o teclado sobre uma
   // superfície invisível.

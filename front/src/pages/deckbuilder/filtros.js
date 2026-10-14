@@ -5,7 +5,7 @@
    armadilha em tela de toque, onde o ✕ fica longe do polegar. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {agendarBusca, buscarComandante, buscarDoComeco} from "./busca.js";
+import {scheduleSearch, searchCommander, searchFromStart} from "./search";
 import {screenCurrency} from "./price";
 import {EMPTY_FILTERS, state, TYPE_LABELS, TYPE_OPTIONS} from "./state";
 import {ico} from "./utilidades.js";
@@ -131,7 +131,7 @@ export function preencherGavetaFiltros(){
 }
 
 /* Lê os controles de volta pro estado e rebusca. Passa pela busca com atraso
-   (`agendarBusca`) porque o campo de efeito dispara a cada tecla. */
+   (`scheduleSearch`) porque o campo de efeito dispara a cada tecla. */
 export function lerGavetaFiltros(){
   const numero = (id) => {
     const v = $(id).value.trim();
@@ -152,7 +152,7 @@ export function lerGavetaFiltros(){
     ineditas: $("f-ineditas").checked,
   };
   desenharBarraFiltros();
-  agendarBusca();
+  scheduleSearch();
 }
 
 /* O interruptor da tela de abertura. O da gaveta não passa por aqui — lá o
@@ -166,7 +166,7 @@ export function mudarIneditas(ligado){
   // Só refaz a busca se houver o que buscar: com a caixa vazia a lista está
   // vazia de propósito, e enchê-la de vinte e cinco lendários porque alguém
   // mexeu num interruptor seria responder uma pergunta que ninguém fez.
-  if ($("busca-cmd").value.trim()) buscarComandante();
+  if ($("busca-cmd").value.trim()) searchCommander();
 }
 
 export function tirarFiltro(chave){
@@ -183,12 +183,12 @@ export function tirarFiltro(chave){
   }
   preencherGavetaFiltros();
   desenharBarraFiltros();
-  buscarDoComeco();
+  searchFromStart();
 }
 
 export function limparFiltros(){
   state.filtros = {...EMPTY_FILTERS};
   preencherGavetaFiltros();
   desenharBarraFiltros();
-  buscarDoComeco();
+  searchFromStart();
 }

@@ -359,16 +359,11 @@
         <div class="destino">
           <div class="destino-linha">
             <span class="destino-rot">Vai para</span>
-            <div class="segmento" id="seg-destino">
-              <button type="button" data-destino="deck" class="ativa">Deck</button>
-              <button type="button" data-destino="side">Sideboard</button>
-              <button type="button" data-destino="talvez">Maybe</button>
-            </div>
+            <span id="ilha-destino"></span>
           </div>
           <div class="destino-linha">
             <span class="destino-rot">Categoria</span>
-            <select class="campo" id="sel-categoria"
-                    aria-label="Categoria da carta que entra"></select>
+            <span id="ilha-categoria-destino"></span>
             <button type="button" class="btn-nova-cat" id="btn-nova-cat"
                     title="Criar uma categoria sua — &quot;combo principal&quot;, &quot;sac outlet&quot; — e já mandar as próximas cartas pra ela"
                     aria-label="Criar nova categoria"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>

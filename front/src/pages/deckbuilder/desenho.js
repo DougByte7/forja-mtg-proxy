@@ -1,7 +1,6 @@
 /* ------------------------------------------------------------------- desenhar */
 
 import {$} from "../../shared/dom.js";
-import {atualizarCategoriasDoDestino} from "./busca.js";
 import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
 import {agendarCotacao, desenharPreviaOrcamento} from "./orcamento.js";
 import {screenCurrency} from "./price";
@@ -19,7 +18,6 @@ export function desenharTudo(){
   syncVersion();
   desenharPreviaOrcamento();
   $("rot-preco-moeda").textContent = screenCurrency();
-  atualizarCategoriasDoDestino();
   // A cotação persegue o deck: cada mudança marca uma nova, que só sai depois
   // de o deck ficar quieto.
   agendarCotacao();
