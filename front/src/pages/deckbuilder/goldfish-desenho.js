@@ -18,7 +18,7 @@
    carta, e é repintado junto com a mesa. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {imagemDaFace} from "./artes.js";
+import {faceImage} from "./artes.js";
 import {detalheDaCarta} from "./carta.js";
 import {deckSignature} from "./combos";
 import {attackers, bottomCountOnKeep, cardByUid, cardName, comboCount,
@@ -32,7 +32,7 @@ import {manaEmTexto, manaHTML} from "./utilidades.js";
    (ver `toggleFace`). */
 function arteNaMesa(c){
   const face = c.verso ? "verso" : "frente";
-  return imagemDaFace(c.carta || {}, face, 0, playerArts(c.dono));
+  return faceImage(c.carta || {}, face, 0, playerArts(c.dono));
 }
 
 /* Cada selo diz a quantidade e o nome ("5: +1/+1"): marcador de Magic é

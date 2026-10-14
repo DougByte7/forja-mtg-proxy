@@ -167,7 +167,7 @@ function makeCopy(card: Card, owner: number, extra?: Partial<TableCard>): TableC
    na hora do desenho, e uma arte trocada no meio da partida aparece na mesa. */
 const artsByDeck = new Map<string, Record<string, unknown>>();
 
-/** `null` é "use as do deck da tela" (ver `imagemDaFace`). */
+/** `null` é "use as do deck da tela" (ver `faceImage`). */
 export function playerArts(playerIndex: number) {
   const player = state.mesa?.jogadores[playerIndex];
   return player && player.deck ? (artsByDeck.get(player.deck) || {}) : null;
@@ -624,7 +624,7 @@ export function createToken(playerIndex: number, model: TokenModel, howMany: num
     poder: model.poder || "", resistencia: model.resistencia || "",
     imagem: model.imagem || "", ficha: true,
     // A ficha do deck traz a chave dela, que é por onde a arte escolhida é
-    // achada (ver `nomeDaArte`).
+    // achada (ver `artName`).
     chaveArte: model.chaveArte || "",
   };
   const n = Math.max(1, Math.min(20, Number(howMany) || 1));

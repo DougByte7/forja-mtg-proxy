@@ -2,7 +2,7 @@
 
 import {$} from "../../shared/dom.js";
 import {ligarArrastar} from "./arrastar.js";
-import {abrirEscolhaDeArte, fecharArte} from "./artes.js";
+import {openArtPicker, closeArtPicker} from "./artes.js";
 import {bindSearchKeys, clearCommanderResults, scheduleCommanderSearch,
         scheduleSearch, searchCommander} from "./search";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
@@ -111,7 +111,7 @@ export function ligarEventos(){
       else undo();
     }
     if (e.key === "Escape" && !$("arte-fundo").hidden){
-      fecharArte();
+      closeArtPicker();
       return;   // fecha uma coisa por Esc: a modal, não a tela cheia atrás dela
     }
     // Sair da tela cheia pelo Esc, que é onde a mão vai primeiro.
@@ -157,7 +157,7 @@ export function ligarEventos(){
     // O quadro de verso da galeria abre a modal já no verso, e o de uma
     // cópia já nela; o botão da linha não diz lado nenhum e abre na frente.
     const arteCarta = e.target.closest("[data-arte-carta]");
-    if (arteCarta) return abrirEscolhaDeArte(arteCarta.dataset.arteCarta,
+    if (arteCarta) return openArtPicker(arteCarta.dataset.arteCarta,
                                              arteCarta.dataset.arteFace,
                                              arteCarta.dataset.arteCopia);
     // O ⋯ da linha, que só aparece no celular: é lá que o menu da carta não

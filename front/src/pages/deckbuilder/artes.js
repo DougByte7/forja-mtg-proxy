@@ -33,13 +33,13 @@
 
    FICHA SE ESCOLHE AQUI TAMBÉM. As fichas que o deck cria vão pro pedido
    junto com as cartas e passam pela mesma modal, com duas diferenças: a
-   busca vai como "t:Nome" (`nomeDaBusca`), e a escolha é guardada pela chave
-   da ficha, não pelo nome (`nomeDaArte`).
+   busca vai como "t:Nome" (`searchNameFor`), e a escolha é guardada pela chave
+   da ficha, não pelo nome (`artName`).
    ========================================================================= */
 
 import {$, escapar} from "../../shared/dom.js";
 import {desenharDeck, desenharMaybe} from "./desenho.js";
-import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
+import {updateOrderLink, drawGallery} from "./galeria.js";
 import {api} from "./salvar.js";
 import {state} from "./state";
 import {foldAccents} from "./text";
@@ -58,7 +58,7 @@ const DPI_SCRYFALL = 300;
 const STATUS_SEM_IMAGEM = ["missing", "placeholder"];
 const AVISO_BAIXA = "em baixa resolução: pode sair borrada no papel";
 
-export const arte = {
+export const artState = {
   carta: null,        // a carta aberta agora
   face: "frente",     // "frente" | "verso": o lado que a grade está escolhendo
   // O segmento aberto. Fica de uma carta pra outra: quem escolhe pela
@@ -99,7 +99,7 @@ export const arte = {
 const LIGATURAS_ARTE = {"æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe",
                         "ø": "o", "Ø": "o", "ß": "ss", "đ": "d"};
 
-export function chaveDaArte(nome){
+export function artKey(nome){
   return String(nome || "")
     .replace(/[æÆœŒøØßđ]/g, (c) => LIGATURAS_ARTE[c])
     .normalize("NFKD").replace(/[̀-ͯ]/g, "")
@@ -110,20 +110,20 @@ export function chaveDaArte(nome){
 /* O nome sob o qual a arte é guardada no servidor. A carta é o próprio nome;
    a ficha é a `chave_arte` que o servidor devolve com ela, porque nome não
    identifica ficha (ver `artes.chave_da_ficha`). */
-export function nomeDaArte(carta){
+export function artName(carta){
   return carta.chaveArte || carta.nome;
 }
 
 /* `escolhas` é o mapa de outro deck — o segundo deck do goldfish, que tem as
    artes dele. Sem ela, valem as do deck aberto. */
 function escolhasDaCarta(carta, escolhas){
-  return (escolhas || arte.escolhas)[chaveDaArte(nomeDaArte(carta))] || {};
+  return (escolhas || artState.escolhas)[artKey(artName(carta))] || {};
 }
 
 /* Com `copia`, a arte daquela cópia: a dela, ou a de todas. Sem `copia`, a
    de todas — ou, na carta que só tem escolha por cópia, a da primeira cópia
    que tem, que é o que a linha do deck e a prévia do hover mostram. */
-export function arteEscolhida(carta, face, escolhas, copia){
+export function chosenArt(carta, face, escolhas, copia){
   if (!carta) return null;
   const daCarta = escolhasDaCarta(carta, escolhas);
   const lado = face || "frente";
@@ -137,14 +137,14 @@ export function arteEscolhida(carta, face, escolhas, copia){
 
 /* Se a carta tem escolha por cópia: é o que liga o "Uma arte por cópia" ao
    abrir a modal, e o que faz a galeria separar as cópias. */
-export function temArtePorCopia(carta){
+export function hasPerCopyArt(carta){
   return Object.keys(escolhasDaCarta(carta).copias || {}).length > 0;
 }
 
 /* Se toda cópia de um lado tem arte pra imprimir — a conta do `artes.pedido`. */
-export function ladoPronto(carta, face, quantidade){
+export function sideReady(carta, face, quantidade){
   for (let n = 1; n <= (quantidade || 1); n++){
-    if (!arteEscolhida(carta, face, null, n)) return false;
+    if (!chosenArt(carta, face, null, n)) return false;
   }
   return true;
 }
@@ -159,7 +159,7 @@ function quantidadeNoPapel(carta){
 /* Duas faces DE PAPEL, e não de texto: carta partida e aventura têm duas
    metades numa imagem só, e a base local já devolve o verso vazio pra elas
    (ver `cartas._imagem_verso`). */
-export function temVerso(carta){
+export function hasBack(carta){
   return !!(carta && carta.imagem_verso);
 }
 
@@ -177,7 +177,7 @@ function nomeDoLado(carta, face){
    inteiro, que o servidor corta no " // " (ver `mpcfill._consulta`); o verso
    vai só com o nome dele, porque a biblioteca deles indexa cada face pelo
    próprio nome. Ficha vai com o prefixo de ficha. */
-export function nomeDaBusca(carta, face){
+export function searchNameFor(carta, face){
   const nome = face !== "verso" ? carta.nome : nomeDoLado(carta, face);
   return carta.ficha ? PREFIXO_FICHA + nome : nome;
 }
@@ -191,7 +191,7 @@ const URL_SCRYFALL = /\/(front|back)\/[0-9a-f]\/[0-9a-f]\/([0-9a-f]{8}-[0-9a-f-]
 /* A miniatura de uma arte guardada, de onde o id disser. A da Scryfall vem
    no tamanho mais próximo do pedido: `small`, `normal` e `large` têm 146, 488
    e 672 px de largura. */
-export function miniaturaDaArte(id, largura){
+export function artThumbnail(id, largura){
   const scryfall = ID_SCRYFALL.exec(id || "");
   if (scryfall){
     const impressao = scryfall[1];
@@ -206,7 +206,7 @@ export function miniaturaDaArte(id, largura){
 
 /* O id da Scryfall tirado de uma URL de imagem dela. É assim que a ficha,
    que não tem lista de impressões, oferece a própria imagem. */
-export function idDaImagemDaScryfall(url){
+export function scryfallIdFromImage(url){
   const achado = URL_SCRYFALL.exec(url || "");
   return achado ? `scryfall:${achado[2]}:${achado[1]}` : "";
 }
@@ -219,9 +219,9 @@ function rotuloDaEscolha(escolha){
    a arte padrão da Scryfall quando não. É o que a prévia do hover e a
    galeria mostram — ver a arte oficial no lugar da que se escolheu faria a
    escolha parecer não ter pegado. */
-export function imagemDaFace(carta, face, largura, escolhas, copia){
-  const escolha = arteEscolhida(carta, face, escolhas, copia);
-  if (escolha) return miniaturaDaArte(escolha.arte_id, largura || 500);
+export function faceImage(carta, face, largura, escolhas, copia){
+  const escolha = chosenArt(carta, face, escolhas, copia);
+  if (escolha) return artThumbnail(escolha.arte_id, largura || 500);
   return (face === "verso" ? carta.imagem_verso : carta.imagem) || "";
 }
 
@@ -232,10 +232,10 @@ export function imagemDaFace(carta, face, largura, escolhas, copia){
 /* O que o botão mostra, como dados: a mesma conta serve o HTML em string
    (abaixo) e o componente (`ui/ArtButton.tsx`). */
 export function artButtonView(carta){
-  const escolha = arteEscolhida(carta);
+  const escolha = chosenArt(carta);
   return {
     escolhida: !!escolha,
-    miniatura: escolha ? miniaturaDaArte(escolha.arte_id, 40) : "",
+    miniatura: escolha ? artThumbnail(escolha.arte_id, 40) : "",
     titulo: escolha ? "Arte escolhida: " + rotuloDaEscolha(escolha)
                     : "Escolher a arte de " + carta.nome,
   };
@@ -258,17 +258,17 @@ export function botaoDeArte(carta){
 function redesenharArtes(){
   desenharDeck();
   desenharMaybe();
-  desenharGaleria();
-  atualizarBotaoPedido();
+  drawGallery();
+  updateOrderLink();
 }
 
 /* As escolhas do deck inteiro, uma vez, ao abrir. Sem rede por linha: a lista
    desenha 100 botões e uma consulta por botão seria 100 requisições. */
-export async function carregarArtes(){
+export async function loadArts(){
   if (!state.id) return;
   try {
     const r = await api(`/decks/${state.id}/artes`);
-    arte.escolhas = r.escolhas || {};
+    artState.escolhas = r.escolhas || {};
   } catch (e){
     return;   // sem isto a lista mostra todos no padrão, que é o que eles são
   }
@@ -276,8 +276,8 @@ export async function carregarArtes(){
 }
 
 /* `nome` é o que o quadro carrega em `data-arte-carta`: o nome da carta, ou a
-   chave da ficha (ver `nomeDaArte`). */
-export function acharCartaDaArte(nome){
+   chave da ficha (ver `artName`). */
+export function findArtCard(nome){
   const noDeck = state.cartas.find(e => e.carta && e.carta.nome === nome);
   if (noDeck) return noDeck.carta;
   return state.comandantes.find(c => c.nome === nome) ||
@@ -286,23 +286,23 @@ export function acharCartaDaArte(nome){
 
 /* `copia` vem do quadro de uma cópia na galeria; sem ela, a modal abre na
    arte de todas — ou na primeira cópia, se a carta já tem arte por cópia. */
-export async function abrirEscolhaDeArte(nome, face, copia){
-  const carta = acharCartaDaArte(nome);
+export async function openArtPicker(nome, face, copia){
+  const carta = findArtCard(nome);
   if (!carta) return;
   if (!state.id) return toast("Salve o deck antes de escolher artes.");
 
-  arte.carta = carta;
-  arte.meta = {};
-  arte.filtro = {texto: "", fonte: "", dpi: 0, impressao: null};
+  artState.carta = carta;
+  artState.meta = {};
+  artState.filtro = {texto: "", fonte: "", dpi: 0, impressao: null};
   // Ficha não tem impressões: a Scryfall responde pelo nome, e "Soldier"
   // seria a tira de todos os Soldier já impressos, de toda cor e corpo. O
   // que ajuda é ver a ficha que o deck cria (`desenharVitrine`), e é ela que
   // o segmento Scryfall oferece (`opcoesDaScryfall`).
-  arte.impressoes = carta.ficha ? [] : null;
+  artState.impressoes = carta.ficha ? [] : null;
   const quantidade = quantidadeNoPapel(carta);
-  arte.copia = Math.min(Number(copia) || 0, quantidade);
-  arte.porCopia = quantidade > 1 && (arte.copia > 0 || temArtePorCopia(carta));
-  arte.copia = arte.porCopia ? arte.copia || 1 : 0;
+  artState.copia = Math.min(Number(copia) || 0, quantidade);
+  artState.porCopia = quantidade > 1 && (artState.copia > 0 || hasPerCopyArt(carta));
+  artState.copia = artState.porCopia ? artState.copia || 1 : 0;
   $("arte-titulo").textContent = carta.ficha ? tokenLabel(carta) : carta.nome;
   $("arte-busca").value = "";
   $("arte-fonte").value = "";
@@ -317,21 +317,21 @@ export async function abrirEscolhaDeArte(nome, face, copia){
   // As duas viajam juntas: as impressões são da Scryfall e a grade é do MPC
   // Fill, e nenhuma das duas precisa esperar a outra.
   if (!carta.ficha) buscarImpressoes(carta.nome);
-  mostrarFace(face === "verso" && temVerso(carta) ? "verso" : "frente");
+  mostrarFace(face === "verso" && hasBack(carta) ? "verso" : "frente");
 }
 
 /* Troca o lado que a grade escolhe. O filtro de impressão FICA: quem achou a
    frente "de Kaladesh" quer o verso da mesma impressão, e é exatamente o que
    o filtro já está dizendo. */
 function mostrarFace(face){
-  arte.face = face;
-  arte.busca = nomeDaBusca(arte.carta, face);
-  arte.ids = [];
-  arte.carregandoIds = true;
-  arte.erroIds = "";
-  arte.pagina = 0;
+  artState.face = face;
+  artState.busca = searchNameFor(artState.carta, face);
+  artState.ids = [];
+  artState.carregandoIds = true;
+  artState.erroIds = "";
+  artState.pagina = 0;
   desenharLado();
-  buscarArtesDaCarta(arte.busca);
+  buscarArtesDaCarta(artState.busca);
 }
 
 /* O que depende do lado e da cópia abertos: os dois seletores e o segmento.
@@ -348,14 +348,14 @@ function desenharLado(){
    padrão sem nada na tela contando. */
 function desenharFaces(){
   const seg = $("arte-faces");
-  seg.hidden = !temVerso(arte.carta);
+  seg.hidden = !hasBack(artState.carta);
   if (seg.hidden) return;
   for (const b of seg.querySelectorAll("[data-face]")){
     const f = b.dataset.face;
-    const ativa = f === arte.face;
+    const ativa = f === artState.face;
     b.classList.toggle("ativa", ativa);
     b.setAttribute("aria-pressed", String(ativa));
-    const feita = !!arteEscolhida(arte.carta, f, null, arte.copia);
+    const feita = !!chosenArt(artState.carta, f, null, artState.copia);
     b.title = feita ? "Arte escolhida pra este lado" : "Este lado está na arte padrão";
     b.innerHTML = (f === "verso" ? "Verso" : "Frente") + (feita ? " " + ico("check") : "");
   }
@@ -365,28 +365,28 @@ function desenharFaces(){
    deck. O ✓ no seletor marca a cópia com arte própria neste lado; a sem ✓
    sai com a arte das outras. */
 function desenharCopias(){
-  const quantidade = arte.carta ? quantidadeNoPapel(arte.carta) : 1;
+  const quantidade = artState.carta ? quantidadeNoPapel(artState.carta) : 1;
   const caixa = $("arte-copias");
   caixa.hidden = quantidade <= 1;
-  $("arte-padrao").textContent = arte.copia ? "Igual às outras cópias" : "Voltar ao padrão";
+  $("arte-padrao").textContent = artState.copia ? "Igual às outras cópias" : "Voltar ao padrão";
   if (caixa.hidden) return;
-  $("arte-por-copia").checked = arte.porCopia;
+  $("arte-por-copia").checked = artState.porCopia;
   const seletor = $("arte-copia");
-  seletor.hidden = !arte.porCopia;
-  if (!arte.porCopia) return;
-  const copias = escolhasDaCarta(arte.carta).copias || {};
+  seletor.hidden = !artState.porCopia;
+  if (!artState.porCopia) return;
+  const copias = escolhasDaCarta(artState.carta).copias || {};
   seletor.innerHTML = Array.from({length: quantidade}, (_, i) => {
-    const propria = (copias[i + 1] || {})[arte.face];
+    const propria = (copias[i + 1] || {})[artState.face];
     return `<option value="${i + 1}">Cópia ${i + 1}${propria ? " ✓" : ""}</option>`;
   }).join("");
-  seletor.value = String(arte.copia);
+  seletor.value = String(artState.copia);
 }
 
 /* O segmento aberto. As três origens dividem a contagem, a grade e o
    paginador; a tira de impressões e os filtros são só do MPC Fill, e o envio
    tem só a caixa dele. */
 function desenharOrigem(){
-  const origem = arte.origem;
+  const origem = artState.origem;
   for (const b of $("arte-origens").querySelectorAll("[data-origem]")){
     const ativa = b.dataset.origem === origem;
     b.classList.toggle("ativa", ativa);
@@ -394,7 +394,7 @@ function desenharOrigem(){
   }
   const envio = origem === "enviar";
   $("arte-vitrine").hidden = origem !== "mpcfill";
-  $("arte-filtros").hidden = origem !== "mpcfill" || !arte.ids.length;
+  $("arte-filtros").hidden = origem !== "mpcfill" || !artState.ids.length;
   $("arte-envio").hidden = !envio;
   $("arte-conta").hidden = envio;
   $("arte-grade").hidden = envio;
@@ -412,15 +412,15 @@ function desenharOrigem(){
 async function buscarImpressoes(nome){
   try {
     const r = await api(`/cartas/impressoes?nome=${encodeURIComponent(nome)}`);
-    if (!arte.carta || arte.carta.ficha || arte.carta.nome !== nome) return;   // trocou de carta
-    arte.impressoes = r.impressoes || [];
+    if (!artState.carta || artState.carta.ficha || artState.carta.nome !== nome) return;   // trocou de carta
+    artState.impressoes = r.impressoes || [];
   } catch (e){
     // `false` e não `[]`: "não consegui perguntar" e "essa carta só saiu uma
     // vez" são coisas diferentes, e a tela diz as duas de formas diferentes.
-    arte.impressoes = false;
+    artState.impressoes = false;
   }
-  if (arte.origem === "mpcfill") desenharVitrine();
-  if (arte.origem === "scryfall") desenharGradeScryfall();
+  if (artState.origem === "mpcfill") desenharVitrine();
+  if (artState.origem === "scryfall") desenharGradeScryfall();
 }
 
 /* A busca cobre o DECK INTEIRO na primeira vez, não a carta aberta.
@@ -442,28 +442,28 @@ async function buscarImpressoes(nome){
    segmento do MPC Fill fica pronto pra quando a pessoa passar por ele. */
 async function buscarArtesDaCarta(busca){
   try {
-    if (!arte.porNome){
-      arte.buscandoDeck = arte.buscandoDeck || pedirArtes(null);
-      try { await arte.buscandoDeck; } finally { arte.buscandoDeck = null; }
+    if (!artState.porNome){
+      artState.buscandoDeck = artState.buscandoDeck || pedirArtes(null);
+      try { await artState.buscandoDeck; } finally { artState.buscandoDeck = null; }
     }
-    if (!(busca in arte.porNome)){
+    if (!(busca in artState.porNome)){
       const pedir = [busca];
       // Duas fichas de mesmo nome (as Wurm do Wurmcoil) são a mesma busca.
-      for (const f of arte.carta && arte.carta.ficha ? deckTokens() : []){
-        const b = nomeDaBusca(f, "frente");
-        if (!(b in arte.porNome) && !pedir.includes(b)) pedir.push(b);
+      for (const f of artState.carta && artState.carta.ficha ? deckTokens() : []){
+        const b = searchNameFor(f, "frente");
+        if (!(b in artState.porNome) && !pedir.includes(b)) pedir.push(b);
       }
       await pedirArtes(pedir);
     }
   } catch (e){
-    if (arte.busca !== busca) return;
-    arte.carregandoIds = false;
-    arte.erroIds = e.message;
-    if (arte.origem === "mpcfill") desenharGrade();
+    if (artState.busca !== busca) return;
+    artState.carregandoIds = false;
+    artState.erroIds = e.message;
+    if (artState.origem === "mpcfill") desenharGrade();
     return;
   }
-  if (arte.busca !== busca) return;   // trocou de carta ou de lado
-  aplicarIds(busca, arte.porNome[busca] || []);
+  if (artState.busca !== busca) return;   // trocou de carta ou de lado
+  aplicarIds(busca, artState.porNome[busca] || []);
 }
 
 /* `nomes` null = o deck inteiro, que é o que o servidor busca sem lista. */
@@ -473,15 +473,15 @@ async function pedirArtes(nomes){
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(nomes ? {nomes} : {}),
   });
-  arte.porNome = Object.assign(arte.porNome || {}, r.por_nome || {});
-  arte.fontes = r.fontes || arte.fontes;
+  artState.porNome = Object.assign(artState.porNome || {}, r.por_nome || {});
+  artState.fontes = r.fontes || artState.fontes;
 }
 
 function aplicarIds(busca, ids){
-  arte.ids = ids;
-  arte.carregandoIds = false;
+  artState.ids = ids;
+  artState.carregandoIds = false;
   montarFiltroDeFonte();
-  if (arte.origem === "mpcfill"){
+  if (artState.origem === "mpcfill"){
     $("arte-filtros").hidden = !ids.length;
     desenharGrade();
   }
@@ -497,7 +497,7 @@ function aplicarIds(busca, ids){
    É uma requisição por carta ABERTA, não por deck, e o servidor guarda o
    resultado por uma semana. */
 async function carregarMetadados(busca, ids){
-  const faltando = ids.filter(id => !arte.meta[id]);
+  const faltando = ids.filter(id => !artState.meta[id]);
   if (!faltando.length) return;
   try {
     const r = await api("/artes/metadados", {
@@ -505,14 +505,14 @@ async function carregarMetadados(busca, ids){
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ids: faltando}),
     });
-    if (arte.busca !== busca) return;   // trocou de carta ou de lado
-    Object.assign(arte.meta, r.artes || {});
-    if (arte.origem === "mpcfill") desenharGrade();
+    if (artState.busca !== busca) return;   // trocou de carta ou de lado
+    Object.assign(artState.meta, r.artes || {});
+    if (artState.origem === "mpcfill") desenharGrade();
   } catch (e){
     // A grade já está desenhada com as miniaturas: sem metadados ela perde o
     // nome do arquivo e o DPI, e continua servindo pra escolher pela ARTE,
     // que é o que a pessoa veio fazer. O filtro é que fica sem serventia.
-    if (arte.origem === "mpcfill"){
+    if (artState.origem === "mpcfill"){
       $("arte-conta").textContent += " — sem os detalhes (nome do arquivo e DPI)";
     }
   }
@@ -521,16 +521,16 @@ async function carregarMetadados(busca, ids){
 function montarFiltroDeFonte(){
   const sel = $("arte-fonte");
   sel.innerHTML = `<option value="">todas as fontes</option>` +
-    arte.fontes.map(f =>
+    artState.fontes.map(f =>
       `<option value="${escapar(f.nome)}">${escapar(f.nome)}</option>`).join("");
-  sel.value = arte.filtro.fonte;
+  sel.value = artState.filtro.fonte;
 }
 
 /* A imagem dentro de uma moldura que sabe deitar. Carta partida (os Rooms,
    Fire // Ice) é impressa de lado e a imagem vem em pé, com o texto de lado:
    a moldura toma a proporção da carta DEITADA e a imagem gira dentro dela —
    o mesmo giro da prévia e da modal da carta. */
-export function quadroHTML(src, deitada, extra){
+export function frameHTML(src, deitada, extra){
   return `<span class="quadro ${deitada ? "deitada" : ""}">${src
     ? `<img src="${escapar(src)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
     : ""}${extra || ""}</span>`;
@@ -541,9 +541,9 @@ export function quadroHTML(src, deitada, extra){
    "Wurm" tem "Wurm (Deathtouch)" e "Wurm (Lifelink)", e só o texto diz qual
    das duas esta é. */
 function vitrineDaFicha(f){
-  const verso = arte.face === "verso";
+  const verso = artState.face === "verso";
   const corpo = f.poder && f.resistencia ? ` · ${f.poder}/${f.resistencia}` : "";
-  return `<span class="arte-ficha">${quadroHTML(
+  return `<span class="arte-ficha">${frameHTML(
       (verso && f.imagem_verso) || f.imagem, false)}</span>
     <span class="arte-nota" style="max-width:260px">É esta a ficha que o deck
       cria: <b>${escapar(f.tipo || f.nome)}${escapar(corpo)}</b>${f.texto
@@ -553,31 +553,31 @@ function vitrineDaFicha(f){
 
 function desenharVitrine(){
   const caixa = $("arte-vitrine");
-  if (arte.carta && arte.carta.ficha){
-    caixa.innerHTML = vitrineDaFicha(arte.carta);
+  if (artState.carta && artState.carta.ficha){
+    caixa.innerHTML = vitrineDaFicha(artState.carta);
     return;
   }
-  if (arte.impressoes === null){
+  if (artState.impressoes === null){
     caixa.innerHTML = `<span class="arte-nota">Carregando as impressões oficiais…</span>`;
     return;
   }
-  if (arte.impressoes === false){
+  if (artState.impressoes === false){
     caixa.innerHTML = `<span class="arte-nota">Não consegui falar com a
       Scryfall — a grade abaixo continua funcionando.</span>`;
     return;
   }
-  if (!arte.impressoes.length){ caixa.innerHTML = ""; return; }
+  if (!artState.impressoes.length){ caixa.innerHTML = ""; return; }
 
-  const verso = arte.face === "verso";
-  const deitada = !!(arte.carta && arte.carta.deitada);
-  const acesa = arte.filtro.impressao ? arte.filtro.impressao.k : -1;
+  const verso = artState.face === "verso";
+  const deitada = !!(artState.carta && artState.carta.deitada);
+  const acesa = artState.filtro.impressao ? artState.filtro.impressao.k : -1;
   caixa.innerHTML = `<span class="arte-nota" style="max-width:120px">Estas são
     as artes oficiais. Clique numa pra ver só os arquivos dela.</span>`
-    + arte.impressoes.slice(0, 24).map((i, k) => `
+    + artState.impressoes.slice(0, 24).map((i, k) => `
       <button class="arte-impressao ${deitada ? "deitada" : ""} ${k === acesa ? "ativa" : ""}"
         data-impressao="${k}"
         title="${escapar(i.edicao)}${i.artista ? " · " + escapar(i.artista) : ""}">
-        ${quadroHTML((verso && i.imagem_verso) || i.imagem, deitada)}
+        ${frameHTML((verso && i.imagem_verso) || i.imagem, deitada)}
         <small>${escapar(i.sigla)}${i.lancamento
           ? " · " + escapar(i.lancamento.slice(0, 4)) : ""}</small>
       </button>`).join("");
@@ -587,10 +587,10 @@ function desenharVitrine(){
    `carregarMetadados` traz de todas as artes do lado aberto de uma vez —
    então o filtro vê o conjunto inteiro, não só a página à vista. */
 function idsFiltrados(){
-  const f = arte.filtro;
-  if (!f.texto && !f.fonte && !f.dpi && !f.impressao) return arte.ids;
-  return arte.ids.filter(id => {
-    const m = arte.meta[id];
+  const f = artState.filtro;
+  if (!f.texto && !f.fonte && !f.dpi && !f.impressao) return artState.ids;
+  return artState.ids.filter(id => {
+    const m = artState.meta[id];
     // Sem metadado ainda (a requisição está em voo): não esconde o que não
     // conhece — a alternativa seria a grade encolher e voltar a crescer
     // sozinha enquanto a pessoa olha.
@@ -628,7 +628,7 @@ function casaImpressao(arquivo, imp){
    inclusive perto das pontas: com a janela encolhendo ali, os números
    trocariam de lugar debaixo do mouse a cada clique. Até sete páginas cabem
    todas e não há vão nenhum. Recebe e devolve páginas contadas do zero. */
-export function paginasVisiveis(atual, total){
+export function visiblePages(atual, total){
   if (total <= 7) return Array.from({length: total}, (_, i) => i);
   const ini = Math.min(Math.max(1, atual - 2), total - 6);
   const fim = ini + 4;
@@ -643,12 +643,12 @@ export function paginasVisiveis(atual, total){
 function desenharPaginas(paginas){
   const nav = $("arte-paginas");
   if (paginas <= 1){ nav.innerHTML = ""; return; }
-  const atual = arte.pagina;
+  const atual = artState.pagina;
   const seta = (alvo, desligada, rotulo, icone) =>
     `<button class="pag" data-pagina="${alvo}" ${desligada ? "disabled" : ""}
        title="${rotulo}" aria-label="${rotulo}">${ico(icone)}</button>`;
   nav.innerHTML = seta(atual - 1, atual === 0, "Página anterior", "caret-left") +
-    paginasVisiveis(atual, paginas).map(p => p === "…"
+    visiblePages(atual, paginas).map(p => p === "…"
       ? `<span class="pag-vao" aria-hidden="true">…</span>`
       : `<button class="pag ${p === atual ? "ativa" : ""}" data-pagina="${p}"
            ${p === atual ? 'aria-current="page"' : ""}
@@ -659,8 +659,8 @@ function desenharPaginas(paginas){
 /* A página à vista de uma lista, e a contagem que diz qual pedaço é. */
 function paginar(lista, rotulo){
   const paginas = Math.ceil(lista.length / ARTES_POR_PAGINA);
-  if (arte.pagina >= paginas) arte.pagina = 0;
-  const inicio = arte.pagina * ARTES_POR_PAGINA;
+  if (artState.pagina >= paginas) artState.pagina = 0;
+  const inicio = artState.pagina * ARTES_POR_PAGINA;
   const daPagina = lista.slice(inicio, inicio + ARTES_POR_PAGINA);
   $("arte-conta").textContent =
     `${lista.length} ${rotulo} — mostrando ${inicio + 1}–${inicio + daPagina.length}`;
@@ -670,19 +670,19 @@ function paginar(lista, rotulo){
 
 function desenharGrade(){
   const grade = $("arte-grade");
-  grade.classList.toggle("deitada", !!(arte.carta && arte.carta.deitada));
-  if (arte.carregandoIds || arte.erroIds){
-    $("arte-conta").textContent = arte.erroIds || "Procurando as artes…";
+  grade.classList.toggle("deitada", !!(artState.carta && artState.carta.deitada));
+  if (artState.carregandoIds || artState.erroIds){
+    $("arte-conta").textContent = artState.erroIds || "Procurando as artes…";
     grade.innerHTML = "";
     desenharPaginas(0);
     return;
   }
   const ids = idsFiltrados();
   if (!ids.length){
-    const imp = arte.filtro.impressao;
-    $("arte-conta").textContent = !arte.ids.length
-      ? `O MPC Fill não tem arte pra ${arte.face === "verso" ? "o verso desta" : "esta"} ${
-          arte.carta.ficha ? "ficha" : "carta"}.`
+    const imp = artState.filtro.impressao;
+    $("arte-conta").textContent = !artState.ids.length
+      ? `O MPC Fill não tem arte pra ${artState.face === "verso" ? "o verso desta" : "esta"} ${
+          artState.carta.ficha ? "ficha" : "carta"}.`
       : imp
         ? `Nenhum arquivo do MPC Fill identificado como ${imp.sigla}${
             imp.artista ? " ou de " + imp.artista : ""} — clique de novo na ` +
@@ -693,13 +693,13 @@ function desenharGrade(){
     return;
   }
   const {daPagina} = paginar(ids, "arte(s)");
-  const escolhida = arteEscolhida(arte.carta, arte.face, null, arte.copia);
+  const escolhida = chosenArt(artState.carta, artState.face, null, artState.copia);
   const marcado = escolhida ? escolhida.arte_id : "";
-  const deitada = !!arte.carta.deitada;
+  const deitada = !!artState.carta.deitada;
   grade.innerHTML = daPagina.map(id => {
-    const m = arte.meta[id] || {};
+    const m = artState.meta[id] || {};
     return `<button class="arte-op ${id === marcado ? "ativa" : ""}" data-arte-id="${escapar(id)}">
-      ${quadroHTML(m.miniatura || miniaturaDaArte(id, 400), deitada)}
+      ${frameHTML(m.miniatura || artThumbnail(id, 400), deitada)}
       <small>${escapar(m.arquivo || "…")}${m.dpi ? ` · ${m.dpi} DPI` : ""}</small>
     </button>`;
   }).join("");
@@ -707,16 +707,16 @@ function desenharGrade(){
 
 /* O que o segmento Scryfall oferece pro lado aberto: cada impressão oficial
    com imagem desse lado. A ficha oferece a imagem dela mesma, a que o deck
-   cria (ver `abrirEscolhaDeArte`). */
+   cria (ver `openArtPicker`). */
 function opcoesDaScryfall(){
-  const carta = arte.carta, verso = arte.face === "verso";
+  const carta = artState.carta, verso = artState.face === "verso";
   if (carta.ficha){
     const imagem = verso ? carta.imagem_verso : carta.imagem;
-    const id = idDaImagemDaScryfall(imagem);
+    const id = scryfallIdFromImage(imagem);
     return id ? [{id, imagem, status: "", legenda: "A ficha que o deck cria",
                   arquivo: tokenLabel(carta)}] : [];
   }
-  return (Array.isArray(arte.impressoes) ? arte.impressoes : []).map(i => {
+  return (Array.isArray(artState.impressoes) ? artState.impressoes : []).map(i => {
     const imagem = verso ? i.imagem_verso : i.imagem;
     if (!i.id || !imagem) return null;
     return {
@@ -726,20 +726,20 @@ function opcoesDaScryfall(){
         .filter(Boolean).join(" · "),
       // Do jeito que os arquivos do MPC Fill costumam vir nomeados, "Sol Ring
       // [MSC] {214}": é o nome que aparece no pedido e na revisão da folha.
-      arquivo: `${nomeDoLado(carta, arte.face)} [${i.sigla}] {${i.numero}}`,
+      arquivo: `${nomeDoLado(carta, artState.face)} [${i.sigla}] {${i.numero}}`,
     };
   }).filter(Boolean);
 }
 
 function desenharGradeScryfall(){
   const grade = $("arte-grade");
-  const carta = arte.carta;
+  const carta = artState.carta;
   grade.classList.toggle("deitada", !!carta.deitada);
-  arte.opcoesScryfall = opcoesDaScryfall();
-  const vazio = arte.impressoes === null ? "Carregando as impressões oficiais…"
-    : arte.impressoes === false ? "Não consegui falar com a Scryfall agora."
-    : !arte.opcoesScryfall.length
-      ? `A Scryfall não tem imagem pra ${arte.face === "verso" ? "o verso desta" : "esta"} ${
+  artState.opcoesScryfall = opcoesDaScryfall();
+  const vazio = artState.impressoes === null ? "Carregando as impressões oficiais…"
+    : artState.impressoes === false ? "Não consegui falar com a Scryfall agora."
+    : !artState.opcoesScryfall.length
+      ? `A Scryfall não tem imagem pra ${artState.face === "verso" ? "o verso desta" : "esta"} ${
           carta.ficha ? "ficha" : "carta"}.`
       : "";
   if (vazio){
@@ -748,8 +748,8 @@ function desenharGradeScryfall(){
     desenharPaginas(0);
     return;
   }
-  const {inicio, daPagina} = paginar(arte.opcoesScryfall, "impressão(ões) oficial(is)");
-  const escolhida = arteEscolhida(carta, arte.face, null, arte.copia);
+  const {inicio, daPagina} = paginar(artState.opcoesScryfall, "impressão(ões) oficial(is)");
+  const escolhida = chosenArt(carta, artState.face, null, artState.copia);
   const marcado = escolhida ? escolhida.arte_id : "";
   grade.innerHTML = daPagina.map((o, k) => {
     const semImagem = STATUS_SEM_IMAGEM.includes(o.status);
@@ -758,7 +758,7 @@ function desenharGradeScryfall(){
     return `<button class="arte-op ${o.id === marcado ? "ativa" : ""}"
       data-scryfall="${inicio + k}" ${semImagem ? "disabled" : ""}
       title="${escapar(o.titulo || o.legenda)}">
-      ${quadroHTML(o.imagem, !!carta.deitada, selo)}
+      ${frameHTML(o.imagem, !!carta.deitada, selo)}
       <small>${escapar(o.legenda)}${semImagem ? " · sem imagem" : ""}</small>
     </button>`;
   }).join("");
@@ -767,14 +767,14 @@ function desenharGradeScryfall(){
 /* O segmento de envio: a arte enviada que este lado já usa, quando é o caso,
    e a caixa pra mandar outra. */
 function desenharEnvio(){
-  const escolha = arteEscolhida(arte.carta, arte.face, null, arte.copia);
+  const escolha = chosenArt(artState.carta, artState.face, null, artState.copia);
   const atual = $("arte-envio-atual");
   if (!escolha || !ID_ENVIADA.test(escolha.arte_id)){
     atual.innerHTML = "";
     return;
   }
-  atual.innerHTML = `<span class="arte-envio-quadro">${quadroHTML(
-      miniaturaDaArte(escolha.arte_id, 500), !!arte.carta.deitada)}</span>
+  atual.innerHTML = `<span class="arte-envio-quadro">${frameHTML(
+      artThumbnail(escolha.arte_id, 500), !!artState.carta.deitada)}</span>
     <span class="arte-nota">Em uso: <b>${escapar(escolha.arquivo || "arquivo enviado")}</b>${
       escolha.dpi ? ` · ${escolha.dpi} DPI` : ""}${escolha.baixa_resolucao
       ? `<br><span class="arte-alerta">Baixa resolução: pode sair borrada no papel.</span>`
@@ -782,8 +782,8 @@ function desenharEnvio(){
 }
 
 function irParaPagina(p){
-  arte.pagina = p;
-  if (arte.origem === "scryfall") desenharGradeScryfall();
+  artState.pagina = p;
+  if (artState.origem === "scryfall") desenharGradeScryfall();
   else desenharGrade();
   // A página nova começa do começo: trocar de página com a grade rolada até o
   // fim mostraria o fim da página seguinte.
@@ -792,8 +792,8 @@ function irParaPagina(p){
 
 /* A escolha na memória da tela, do jeito que o `artes.do_deck` a devolveria. */
 function gravarLocal(carta, face, copia, escolha){
-  const chave = chaveDaArte(nomeDaArte(carta));
-  const daCarta = Object.assign({}, arte.escolhas[chave]);
+  const chave = artKey(artName(carta));
+  const daCarta = Object.assign({}, artState.escolhas[chave]);
   if (copia){
     const copias = Object.assign({}, daCarta.copias);
     copias[copia] = Object.assign({}, copias[copia], {[face]: escolha});
@@ -801,13 +801,13 @@ function gravarLocal(carta, face, copia, escolha){
   } else {
     daCarta[face] = escolha;
   }
-  arte.escolhas[chave] = daCarta;
+  artState.escolhas[chave] = daCarta;
 }
 
 /* `face` null tira todas as escolhas por cópia da carta, dos dois lados. */
 function apagarLocal(carta, face, copia){
-  const chave = chaveDaArte(nomeDaArte(carta));
-  const daCarta = Object.assign({}, arte.escolhas[chave]);
+  const chave = artKey(artName(carta));
+  const daCarta = Object.assign({}, artState.escolhas[chave]);
   if (face === null){
     delete daCarta.copias;
   } else if (copia){
@@ -821,21 +821,21 @@ function apagarLocal(carta, face, copia){
   } else {
     delete daCarta[face];
   }
-  if (Object.keys(daCarta).length) arte.escolhas[chave] = daCarta;
-  else delete arte.escolhas[chave];
+  if (Object.keys(daCarta).length) artState.escolhas[chave] = daCarta;
+  else delete artState.escolhas[chave];
 }
 
 /* Grava no servidor o que um clique na grade escolheu. */
 async function guardarEscolha(escolha){
   // Guardados antes da rede: a modal pode fechar ou trocar de lado enquanto
   // o servidor responde, e a escolha é da carta e do lado que foram clicados.
-  const carta = arte.carta, face = arte.face, copia = arte.copia;
+  const carta = artState.carta, face = artState.face, copia = artState.copia;
   let r;
   try {
     r = await api(`/decks/${state.id}/artes`, {
       method: "PUT",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(Object.assign({nome: nomeDaArte(carta), face, copia}, escolha)),
+      body: JSON.stringify(Object.assign({nome: artName(carta), face, copia}, escolha)),
     });
   } catch (e){
     return toast("Não consegui guardar: " + e.message);
@@ -849,19 +849,19 @@ function concluirEscolha(carta, face, copia, escolha, verbo){
   const qual = copia ? `da cópia ${copia}` : face === "verso" ? "do verso" : "";
   toast(["Arte", qual, verbo].filter(Boolean).join(" ") +
         (escolha.baixa_resolucao ? `, ${AVISO_BAIXA}.` : "."));
-  if ($("arte-fecha").checked) return fecharArte();
-  if (arte.carta !== carta || arte.face !== face || arte.copia !== copia) return;
+  if ($("arte-fecha").checked) return closeArtPicker();
+  if (artState.carta !== carta || artState.face !== face || artState.copia !== copia) return;
   desenharLado();
 }
 
 function usarArte(id){
-  const m = arte.meta[id] || {};
+  const m = artState.meta[id] || {};
   guardarEscolha({arte_id: id, arquivo: m.arquivo || "", fonte: m.fonte || "",
                   dpi: m.dpi || 0});
 }
 
 function usarScryfall(k){
-  const o = arte.opcoesScryfall[k];
+  const o = artState.opcoesScryfall[k];
   if (!o || STATUS_SEM_IMAGEM.includes(o.status)) return;
   const baixa = o.status === "lowres";
   guardarEscolha({arte_id: o.id, arquivo: o.arquivo, fonte: "Scryfall",
@@ -897,9 +897,9 @@ async function subirProBlob(arquivo, envio){
 }
 
 async function enviarArquivo(arquivo){
-  if (!arquivo || !arte.carta || arte.enviando) return;
-  const carta = arte.carta, face = arte.face, copia = arte.copia;
-  arte.enviando = true;
+  if (!arquivo || !artState.carta || artState.enviando) return;
+  const carta = artState.carta, face = artState.face, copia = artState.copia;
+  artState.enviando = true;
   $("arte-envio-estado").textContent = "Enviando…";
   let r;
   try {
@@ -914,33 +914,33 @@ async function enviarArquivo(arquivo){
       r = await api(`/decks/${state.id}/artes/enviar/blob`, {
         method: "POST",
         headers: {"content-type": "application/json"},
-        body: JSON.stringify({url, nome: nomeDaArte(carta), face, copia,
+        body: JSON.stringify({url, nome: artName(carta), face, copia,
                               arquivo: arquivo.name || ""}),
       });
     } else {
       const corpo = new FormData();
       corpo.append("arquivo", arquivo);
-      corpo.append("nome", nomeDaArte(carta));
+      corpo.append("nome", artName(carta));
       corpo.append("face", face);
       corpo.append("copia", String(copia));
       r = await api(`/decks/${state.id}/artes/enviar`, {method: "POST", body: corpo});
     }
   } catch (e){
-    if (arte.carta === carta) $("arte-envio-estado").textContent = e.message;
+    if (artState.carta === carta) $("arte-envio-estado").textContent = e.message;
     return;
   } finally {
-    arte.enviando = false;
+    artState.enviando = false;
   }
   $("arte-envio-estado").textContent = "";
   concluirEscolha(carta, face, copia, r.escolha, "enviada");
 }
 
 async function voltarAoPadrao(){
-  if (!arte.carta) return;
-  const carta = arte.carta, face = arte.face, copia = arte.copia;
+  if (!artState.carta) return;
+  const carta = artState.carta, face = artState.face, copia = artState.copia;
   try {
     await api(`/decks/${state.id}/artes?nome=${
-      encodeURIComponent(nomeDaArte(carta))}&face=${face}&copia=${copia}`, {method: "DELETE"});
+      encodeURIComponent(artName(carta))}&face=${face}&copia=${copia}`, {method: "DELETE"});
   } catch (e){
     return toast("Não consegui: " + e.message);
   }
@@ -948,21 +948,21 @@ async function voltarAoPadrao(){
   redesenharArtes();
   toast(copia ? `A cópia ${copia} voltou pra arte das outras.`
     : face === "verso" ? "O verso voltou pra arte padrão." : "Voltou pra arte padrão.");
-  if (arte.carta !== carta || arte.face !== face || arte.copia !== copia) return;
+  if (artState.carta !== carta || artState.face !== face || artState.copia !== copia) return;
   desenharLado();
 }
 
 /* Desligar com cópias já escolhidas descarta essas escolhas — pergunta antes,
    porque é trabalho que não volta. */
 async function mudarPorCopia(interruptor){
-  const carta = arte.carta;
+  const carta = artState.carta;
   if (!carta) return;
   if (interruptor.checked){
-    arte.porCopia = true;
-    arte.copia = 1;
+    artState.porCopia = true;
+    artState.copia = 1;
     return desenharLado();
   }
-  if (temArtePorCopia(carta)){
+  if (hasPerCopyArt(carta)){
     if (!confirm("As artes escolhidas pra cada cópia vão ser descartadas, e " +
                  "todas as cópias passam a usar a mesma arte. Continuar?")){
       interruptor.checked = true;
@@ -970,17 +970,17 @@ async function mudarPorCopia(interruptor){
     }
     try {
       await api(`/decks/${state.id}/artes/copias?nome=${
-        encodeURIComponent(nomeDaArte(carta))}`, {method: "DELETE"});
+        encodeURIComponent(artName(carta))}`, {method: "DELETE"});
     } catch (e){
       interruptor.checked = true;
       return toast("Não consegui: " + e.message);
     }
     apagarLocal(carta, null, 0);
     redesenharArtes();
-    if (arte.carta !== carta) return;
+    if (artState.carta !== carta) return;
   }
-  arte.porCopia = false;
-  arte.copia = 0;
+  artState.porCopia = false;
+  artState.copia = 0;
   desenharLado();
 }
 
@@ -998,7 +998,7 @@ async function aplicarPadraoNasQueFaltam(){
   } finally {
     botao.disabled = false;
   }
-  arte.escolhas = r.escolhas || arte.escolhas;
+  artState.escolhas = r.escolhas || artState.escolhas;
   redesenharArtes();
   const partes = [r.aplicadas ? `${r.aplicadas} arte(s) padrão aplicada(s).`
                               : "Nenhuma arte padrão aplicada."];
@@ -1022,17 +1022,17 @@ function travarRolagem(ligar){
   raiz.classList.toggle("sem-rolar", ligar);
 }
 
-export function fecharArte(){
+export function closeArtPicker(){
   $("arte-fundo").hidden = true;
-  arte.carta = null;
-  arte.busca = "";
+  artState.carta = null;
+  artState.busca = "";
   travarRolagem(false);
 }
 
-export function ligarArte(){
-  $("arte-fechar").addEventListener("click", fecharArte);
+export function bindArtPicker(){
+  $("arte-fechar").addEventListener("click", closeArtPicker);
   $("arte-fundo").addEventListener("click", (e) => {
-    if (e.target.id === "arte-fundo") fecharArte();
+    if (e.target.id === "arte-fundo") closeArtPicker();
   });
 
   try { $("arte-fecha").checked = localStorage.getItem(CHAVE_FECHA_ARTE) === "1"; }
@@ -1044,20 +1044,20 @@ export function ligarArte(){
 
   $("arte-faces").addEventListener("click", (e) => {
     const b = e.target.closest("[data-face]");
-    if (b && arte.carta && b.dataset.face !== arte.face) mostrarFace(b.dataset.face);
+    if (b && artState.carta && b.dataset.face !== artState.face) mostrarFace(b.dataset.face);
   });
 
   $("arte-origens").addEventListener("click", (e) => {
     const b = e.target.closest("[data-origem]");
-    if (!b || !arte.carta || b.dataset.origem === arte.origem) return;
-    arte.origem = b.dataset.origem;
-    arte.pagina = 0;
+    if (!b || !artState.carta || b.dataset.origem === artState.origem) return;
+    artState.origem = b.dataset.origem;
+    artState.pagina = 0;
     desenharOrigem();
   });
 
   $("arte-por-copia").addEventListener("change", (e) => mudarPorCopia(e.target));
   $("arte-copia").addEventListener("change", (e) => {
-    arte.copia = Number(e.target.value) || 1;
+    artState.copia = Number(e.target.value) || 1;
     desenharLado();
   });
 
@@ -1069,11 +1069,11 @@ export function ligarArte(){
     // arquivos daquela impressão (ver `casaImpressao`) — é assim que se acha
     // "a de Kaladesh" entre setecentas. Clicar de novo na mesma tira o filtro.
     const k = Number(b.dataset.impressao);
-    const i = arte.impressoes[k];
+    const i = artState.impressoes[k];
     if (!i) return;
     const ligar = !b.classList.contains("ativa");
-    arte.filtro.impressao = ligar ? {k, sigla: i.sigla || "", artista: i.artista || ""} : null;
-    arte.pagina = 0;
+    artState.filtro.impressao = ligar ? {k, sigla: i.sigla || "", artista: i.artista || ""} : null;
+    artState.pagina = 0;
     for (const outro of $("arte-vitrine").querySelectorAll("[data-impressao]")){
       outro.classList.toggle("ativa", ligar && outro === b);
     }
@@ -1115,13 +1115,13 @@ export function ligarArte(){
     clearTimeout(atraso);
     const v = e.target.value.trim().toLowerCase();
     atraso = setTimeout(() => {
-      arte.filtro.texto = v; arte.pagina = 0; desenharGrade();
+      artState.filtro.texto = v; artState.pagina = 0; desenharGrade();
     }, 250);
   });
   $("arte-fonte").addEventListener("change", (e) => {
-    arte.filtro.fonte = e.target.value; arte.pagina = 0; desenharGrade();
+    artState.filtro.fonte = e.target.value; artState.pagina = 0; desenharGrade();
   });
   $("arte-dpi").addEventListener("change", (e) => {
-    arte.filtro.dpi = Number(e.target.value) || 0; arte.pagina = 0; desenharGrade();
+    artState.filtro.dpi = Number(e.target.value) || 0; artState.pagina = 0; desenharGrade();
   });
 }

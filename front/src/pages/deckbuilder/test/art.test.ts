@@ -11,7 +11,7 @@ const frames = (html: string) =>
 
 /** O link do "Gerar pedido": escondido?, destino e o porquê. */
 function orderLink(p: Page) {
-  p.atualizarBotaoPedido();
+  p.updateOrderLink();
   const l = document.getElementById("btn-pedido") as HTMLAnchorElement;
   return [l.hidden, l.getAttribute("href") || null, l.title];
 }
@@ -21,12 +21,12 @@ describe("paginador da galeria", () => {
     const p = await page();
     // Cinco no meio sempre, inclusive nas pontas — senão os números trocam
     // de lugar debaixo do mouse a cada clique.
-    expect(p.paginasVisiveis(4, 10)).toEqual([0, "…", 2, 3, 4, 5, 6, "…", 9]);
-    expect(p.paginasVisiveis(0, 10)).toEqual([0, 1, 2, 3, 4, 5, "…", 9]);
-    expect(p.paginasVisiveis(9, 10)).toEqual([0, "…", 4, 5, 6, 7, 8, 9]);
-    expect(p.paginasVisiveis(2, 5)).toEqual([0, 1, 2, 3, 4]);
+    expect(p.visiblePages(4, 10)).toEqual([0, "…", 2, 3, 4, 5, 6, "…", 9]);
+    expect(p.visiblePages(0, 10)).toEqual([0, 1, 2, 3, 4, 5, "…", 9]);
+    expect(p.visiblePages(9, 10)).toEqual([0, "…", 4, 5, 6, 7, 8, 9]);
+    expect(p.visiblePages(2, 5)).toEqual([0, 1, 2, 3, 4]);
     for (let i = 0; i < 30; i++) {
-      expect(p.paginasVisiveis(i, 30).filter((x: unknown) => x !== "…")).toHaveLength(7);
+      expect(p.visiblePages(i, 30).filter((x: unknown) => x !== "…")).toHaveLength(7);
     }
   });
 });
@@ -35,7 +35,7 @@ describe("nomes e chaves", () => {
   it("o verso se busca pelo nome dele; a frente vai inteira", async () => {
     // O MPC Fill indexa cada face pelo próprio nome.
     const p = await page();
-    expect([p.nomeDaBusca(DELVER, "verso"), p.nomeDaBusca(DELVER, "frente")])
+    expect([p.searchNameFor(DELVER, "verso"), p.searchNameFor(DELVER, "frente")])
       .toEqual(["Insectile Aberration", "Delver of Secrets // Insectile Aberration"]);
   });
 
@@ -43,15 +43,15 @@ describe("nomes e chaves", () => {
     const p = await page();
     expect(["Atraxa, Praetors' Voice", "Delver of Secrets // Insectile Aberration",
             "Lim-Dûl's Vault", "Ærathi Berserker", "  Jötun   Grunt ", "t:Wurm e76e0314"]
-      .map(p.chaveDaArte))
+      .map(p.artKey))
       .toEqual(["atraxa praetors voice", "delver of secrets insectile aberration",
                 "lim duls vault", "aerathi berserker", "jotun grunt", "t wurm e76e0314"]);
   });
 
   it("a prévia do hover mostra o arquivo escolhido, cada face pela sua", async () => {
     const p = await page();
-    p.arte.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
-    p.arte.escolhas["delver of secrets insectile aberration"] = { verso: { arte_id: "id-inseto" } };
+    p.artState.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
+    p.artState.escolhas["delver of secrets insectile aberration"] = { verso: { arte_id: "id-inseto" } };
     expect(p.ganchosDaPrevia(SOL_RING)).toContain("thumbnail?id=id-sol");
     expect(p.ganchosDaPrevia(ELVES)).toContain('data-arte="http://arte/Llanowar Elves"');
     const delver = p.ganchosDaPrevia(DELVER);
@@ -63,11 +63,11 @@ describe("nomes e chaves", () => {
     const p = await page();
     const imp = "6904ea20-e504-47da-95a0-08739fdde260";
     expect([
-      p.miniaturaDaArte("1AbC", 400),
-      p.miniaturaDaArte(`scryfall:${imp}:back`, 400),
-      p.miniaturaDaArte(`scryfall:${imp}:front`, 40),
-      p.miniaturaDaArte("enviada:" + "a".repeat(64), 400),
-      p.idDaImagemDaScryfall(`https://cards.scryfall.io/normal/front/6/9/${imp}.jpg?1`),
+      p.artThumbnail("1AbC", 400),
+      p.artThumbnail(`scryfall:${imp}:back`, 400),
+      p.artThumbnail(`scryfall:${imp}:front`, 40),
+      p.artThumbnail("enviada:" + "a".repeat(64), 400),
+      p.scryfallIdFromImage(`https://cards.scryfall.io/normal/front/6/9/${imp}.jpg?1`),
     ]).toEqual([
       "https://drive.google.com/thumbnail?id=1AbC&sz=w400",
       `https://cards.scryfall.io/normal/back/6/9/${imp}.jpg`,
@@ -83,8 +83,8 @@ describe("a galeria", () => {
     const p = await page();
     p.state.cartas.push({ carta: DELVER, quantidade: 1, categoria: "" },
                          { carta: ROOM, quantidade: 1, categoria: "" });
-    p.arte.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
-    p.desenharGaleria();
+    p.artState.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
+    p.drawGallery();
     const html = galleryHtml();
     const q = frames(html);
     expect(q.filter(([n]) => n.startsWith("Delver")).map(([, f]) => f)).toEqual(["frente", "verso"]);
@@ -106,11 +106,11 @@ describe('o "Gerar pedido"', () => {
     p.state.cartas = [{ carta: SOL_RING, quantidade: 4, categoria: "" },
                        { carta: DELVER, quantidade: 1, categoria: "" }];
     expect(orderLink(p)).toEqual([false, null, "Faltam 4 arte(s) — escolha na aba Artes"]);
-    p.arte.escolhas["atraxa"] = { frente: { arte_id: "a" } };
-    p.arte.escolhas["sol ring"] = { frente: { arte_id: "s" } };
-    p.arte.escolhas["delver of secrets insectile aberration"] = { frente: { arte_id: "d" } };
+    p.artState.escolhas["atraxa"] = { frente: { arte_id: "a" } };
+    p.artState.escolhas["sol ring"] = { frente: { arte_id: "s" } };
+    p.artState.escolhas["delver of secrets insectile aberration"] = { frente: { arte_id: "d" } };
     expect(orderLink(p).slice(1)).toEqual([null, "Faltam 1 arte(s) — escolha na aba Artes"]);
-    p.arte.escolhas["delver of secrets insectile aberration"].verso = { arte_id: "i" };
+    p.artState.escolhas["delver of secrets insectile aberration"].verso = { arte_id: "i" };
     expect(orderLink(p).slice(0, 2)).toEqual([false, "/?deck=abc123"]);
     p.state.id = null;
     expect(orderLink(p).slice(0, 2)).toEqual([true, null]);
@@ -128,18 +128,18 @@ describe('o "Gerar pedido"', () => {
       { carta: "Motor de Wurm", tokens: [wurm("Deathtouch", "t:Wurm aaaa1111"), wurm("Lifelink", "t:Wurm bbbb2222")] },
       { carta: "Sol Ring", tokens: [wurm("Deathtouch", "t:Wurm aaaa1111")] }] };
     p.state.cartas = [{ carta: SOL_RING, quantidade: 1, categoria: "" }];
-    p.arte.escolhas["atraxa"] = { frente: { arte_id: "a" } };
-    p.arte.escolhas["sol ring"] = { frente: { arte_id: "s" } };
-    p.arte.escolhas["t wurm aaaa1111"] = { frente: { arte_id: "w" } };
+    p.artState.escolhas["atraxa"] = { frente: { arte_id: "a" } };
+    p.artState.escolhas["sol ring"] = { frente: { arte_id: "s" } };
+    p.artState.escolhas["t wurm aaaa1111"] = { frente: { arte_id: "w" } };
     const f = p.deckTokens();
-    p.desenharGaleria();
+    p.drawGallery();
     const before = orderLink(p)[2];
-    p.arte.escolhas["t wurm bbbb2222"] = { frente: { arte_id: "v" } };
+    p.artState.escolhas["t wurm bbbb2222"] = { frente: { arte_id: "v" } };
     const after = orderLink(p)[1];
 
     expect(f).toHaveLength(2);
-    expect(p.nomeDaBusca(f[0], "frente")).toBe("t:Wurm");
-    expect(p.acharCartaDaArte("t:Wurm bbbb2222").texto).toBe("Lifelink");
+    expect(p.searchNameFor(f[0], "frente")).toBe("t:Wurm");
+    expect(p.findArtCard("t:Wurm bbbb2222").texto).toBe("Lifelink");
     const html = galleryHtml();
     expect([...html.matchAll(/data-arte-carta="([^"]+)"/g)].map((m) => m[1]).slice(-2))
       .toEqual(["t:Wurm aaaa1111", "t:Wurm bbbb2222"]);
@@ -154,14 +154,14 @@ describe('o "Gerar pedido"', () => {
     const p = await page();
     p.state.id = "abc123";
     const forest = p.state.cartas[2].carta;
-    p.arte.escolhas = {
+    p.artState.escolhas = {
       "atraxa": { frente: { arte_id: "a" } }, "sol ring": { frente: { arte_id: "s" } },
       "ashnods altar": { frente: { arte_id: "t" } }, "llanowar elves": { frente: { arte_id: "e" } },
       "swords to plowshares": { frente: { arte_id: "p" } },
       "forest": { frente: { arte_id: "todas" },
                   copias: { 2: { frente: { arte_id: "outra" } }, 4: { frente: { arte_id: "outra" } } } },
     };
-    p.desenharGaleria();
+    p.drawGallery();
     const html = galleryHtml();
     const order = orderLink(p)[1];
     const shortcutHidden = (document.getElementById("btn-artes-padrao") as HTMLElement).hidden;
@@ -171,15 +171,15 @@ describe('o "Gerar pedido"', () => {
     expect(html).toContain("cópias 1, 3, 5–10");
     expect(html).toContain("2×");
     expect(html).toContain("cópias 2, 4");
-    expect([p.arteEscolhida(forest, "frente", null, 2).arte_id,
-            p.arteEscolhida(forest, "frente", null, 3).arte_id]).toEqual(["outra", "todas"]);
+    expect([p.chosenArt(forest, "frente", null, 2).arte_id,
+            p.chosenArt(forest, "frente", null, 3).arte_id]).toEqual(["outra", "todas"]);
     expect([order, shortcutHidden]).toEqual(["/?deck=abc123", true]);
 
-    delete p.arte.escolhas.forest.frente;
-    p.desenharGaleria();
+    delete p.artState.escolhas.forest.frente;
+    p.drawGallery();
     expect([orderLink(p)[2], (document.getElementById("btn-artes-padrao") as HTMLElement).hidden])
       .toEqual(["Faltam 1 arte(s) — escolha na aba Artes", false]);
     // A linha do deck mostra a arte da primeira cópia que tem.
-    expect(p.arteEscolhida(forest).arte_id).toBe("outra");
+    expect(p.chosenArt(forest).arte_id).toBe("outra");
   });
 });

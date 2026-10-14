@@ -20,8 +20,8 @@
    junto com o deck, e são a parte que se esquece de escolher. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {arteEscolhida, imagemDaFace, ladoPronto, nomeDaArte, quadroHTML,
-        temArtePorCopia, temVerso} from "./artes.js";
+import {chosenArt, faceImage, sideReady, artName, frameHTML,
+        hasPerCopyArt, hasBack} from "./artes.js";
 import {categoryOf, categoryOrder} from "./deck";
 import {state} from "./state";
 import {deckTokens, tokenLabel} from "./tokens";
@@ -46,14 +46,14 @@ function copiasEmTexto(copias){
    por cópia; sem ela, o quadro é o da arte de todas. */
 function quadroDaGaleria(carta, face, quantidade, copias){
   const copia = copias ? copias[0] : 0;
-  const escolha = arteEscolhida(carta, face, null, copia);
+  const escolha = chosenArt(carta, face, null, copia);
   // Ficha leva o corpo e o texto: as duas Wurm do Wurmcoil são dois quadros
   // de mesmo nome, e o texto é o que diz qual é qual.
   const nome = escapar(carta.ficha
     ? tokenLabel(carta) + (carta.texto ? ` (${carta.texto})` : "")
     : carta.nome);
   const verso = face === "verso";
-  const src = imagemDaFace(carta, face, 400, null, copia);
+  const src = faceImage(carta, face, 400, null, copia);
   const quais = copias
     ? ` · ${copias.length > 1 ? "cópias" : "cópia"} ${copiasEmTexto(copias)}` : "";
   const situacao = escolha
@@ -61,19 +61,19 @@ function quadroDaGaleria(carta, face, quantidade, copias){
     : "arte padrão — clique pra escolher";
   // A prévia do hover mostra ESTE lado, e não a carta inteira como na lista:
   // cada quadro já é um lado, e o outro está no quadro ao lado.
-  const previa = src ? ` data-arte="${escapar(imagemDaFace(carta, face, 500, null, copia))}"${
+  const previa = src ? ` data-arte="${escapar(faceImage(carta, face, 500, null, copia))}"${
     carta.deitada ? ' data-deitada="1"' : ""}` : "";
   return `<button class="galeria-carta ${escolha ? "tem-arte" : ""} ${
       carta.deitada ? "deitada" : ""}"
-    data-arte-carta="${escapar(nomeDaArte(carta))}" data-arte-face="${face}"${
+    data-arte-carta="${escapar(artName(carta))}" data-arte-face="${face}"${
       copia ? ` data-arte-copia="${copia}"` : ""}${previa}
     title="${verso ? "Verso de " : ""}${nome}${escapar(quais)} — ${escapar(situacao)}"
     aria-label="${verso ? "Verso de " : ""}${nome}${escapar(quais)}: ${escapar(situacao)}">
-    ${quadroHTML(src, carta.deitada,
+    ${frameHTML(src, carta.deitada,
       (escolha ? `<span class="galeria-marca">${ico("check")}</span>` : "") +
       (quantidade > 1 ? `<span class="galeria-qtd">${quantidade}×</span>` : ""))}
     <span class="galeria-selo">${escolha ? "Escolhida" : "Padrão"}${
-      verso ? " · verso" : temVerso(carta) ? " · frente" : ""}${escapar(quais)}</span>
+      verso ? " · verso" : hasBack(carta) ? " · frente" : ""}${escapar(quais)}</span>
   </button>`;
 }
 
@@ -84,7 +84,7 @@ function gruposDeCopias(carta, quantidade, faces){
   const grupos = new Map();
   for (let n = 1; n <= quantidade; n++){
     const chave = faces.map(f =>
-      (arteEscolhida(carta, f, null, n) || {}).arte_id || "").join("|");
+      (chosenArt(carta, f, null, n) || {}).arte_id || "").join("|");
     if (!grupos.has(chave)) grupos.set(chave, []);
     grupos.get(chave).push(n);
   }
@@ -92,8 +92,8 @@ function gruposDeCopias(carta, quantidade, faces){
 }
 
 function quadrosDaCarta(carta, quantidade){
-  const faces = temVerso(carta) ? ["frente", "verso"] : ["frente"];
-  if (quantidade > 1 && temArtePorCopia(carta)){
+  const faces = hasBack(carta) ? ["frente", "verso"] : ["frente"];
+  if (quantidade > 1 && hasPerCopyArt(carta)){
     return gruposDeCopias(carta, quantidade, faces).map(copias =>
       faces.map(f => quadroDaGaleria(carta, f, copias.length, copias)).join("")
     ).join("");
@@ -110,9 +110,9 @@ function contaDaGaleria(){
     deckTokens().map(f => [f, 1]));
   let total = 0, escolhidas = 0;
   for (const [c, quantidade] of entradas){
-    for (const face of temVerso(c) ? ["frente", "verso"] : ["frente"]){
+    for (const face of hasBack(c) ? ["frente", "verso"] : ["frente"]){
       total++;
-      if (ladoPronto(c, face, quantidade)) escolhidas++;
+      if (sideReady(c, face, quantidade)) escolhidas++;
     }
   }
   return {total, escolhidas};
@@ -124,7 +124,7 @@ function contaDaGaleria(){
    a arte padrão da tela é só a miniatura da base, e o PDF imprime o que foi
    escolhido. Sem id não há deck no servidor pra levar, e ele some junto com
    o Compartilhar. */
-export function atualizarBotaoPedido(){
+export function updateOrderLink(){
   const link = $("btn-pedido");
   link.hidden = !state.id;
   const {total, escolhidas} = contaDaGaleria();
@@ -137,7 +137,7 @@ export function atualizarBotaoPedido(){
     : "O deck ainda não tem carta";
 }
 
-export function desenharGaleria(){
+export function drawGallery(){
   const caixa = $("galeria-resultado");
   if (!state.comandantes.length){
     $("btn-artes-padrao").hidden = true;

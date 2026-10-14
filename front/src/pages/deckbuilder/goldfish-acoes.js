@@ -9,7 +9,7 @@
    que numa partida de verdade seria absurdo: aqui não tem juiz. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {temVerso} from "./artes.js";
+import {hasBack} from "./artes.js";
 import {abrirCarta} from "./carta.js";
 import {countedCards} from "./deck";
 import {addSecondDeck, adjustCardCounter, adjustCommanderDamage, adjustLife,
@@ -81,7 +81,7 @@ function abrirMenuDaCarta(uid, x, y){
 
   if (zona === "campo"){
     html += item(c.deitada ? "Endireitar" : "Deitar", () => toggleTapped(uid));
-    if (temVerso(c.carta)){
+    if (hasBack(c.carta)){
       html += item(c.verso ? "Virar pra frente" : "Virar pro verso",
                    () => toggleFace(uid));
     }

@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------- abertura */
 
 import {$} from "../../shared/dom.js";
-import {carregarArtes, ligarArte} from "./artes.js";
+import {loadArts, bindArtPicker} from "./artes.js";
 import {search, searchCommander, chooseDestination} from "./search";
 import {lerConta, ligarConvite, ligarOrfao, receberConta} from "./conta.js";
 import {desenharTudo} from "./desenho.js";
@@ -41,7 +41,7 @@ async function abrir(){
   ligarOrfao();
   ligarConvite();
   ligarGoldfish();
-  ligarArte();
+  bindArtPicker();
   atualizarBotaoMeus();
   conferirBase();
   // Sem `await`: a taxa é a régua do preço, não o deck. Ela redesenha sozinha
@@ -91,7 +91,7 @@ async function abrir(){
   lendoConta.then(receberConta);
   // As artes escolhidas, uma vez: a lista desenha 100 botões e uma consulta
   // por botão seria 100 requisições.
-  carregarArtes();
+  loadArts();
   // As fichas vão pro papel com o deck: sem elas, a aba Artes e o "Gerar
   // pedido" contariam só as cartas até a aba Tokens ser aberta.
   if (state.id) loadTokens();

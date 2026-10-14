@@ -10,7 +10,7 @@
    o clique parecer travado por causa da metade menos urgente da informação. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {imagemDaFace} from "./artes.js";
+import {faceImage} from "./artes.js";
 import {api} from "./salvar.js";
 import {ico, manaEmTexto, manaHTML} from "./utilidades.js";
 
@@ -245,14 +245,14 @@ const PREVIA_VAO = 8;        // o `gap` do CSS entre frente e verso
    de só a URL é o que faz a carta de duas faces aparecer inteira: sem o
    verso, hover num transform mostra metade da carta e cala sobre a outra.
 
-   Cada lado sai pela `imagemDaFace`: com arte escolhida no deck, a prévia
+   Cada lado sai pela `faceImage`: com arte escolhida no deck, a prévia
    mostra o arquivo que vai pro papel, e não a arte oficial. `escolhas` é o
-   mapa de outro deck (ver `arteEscolhida`). */
+   mapa de outro deck (ver `chosenArt`). */
 export function ganchosDaPrevia(c, escolhas){
   if (!c || !c.imagem) return "";
-  let attrs = ` data-arte="${escapar(imagemDaFace(c, "frente", 0, escolhas))}"`;
+  let attrs = ` data-arte="${escapar(faceImage(c, "frente", 0, escolhas))}"`;
   if (c.imagem_verso){
-    attrs += ` data-arte-verso="${escapar(imagemDaFace(c, "verso", 0, escolhas))}"`;
+    attrs += ` data-arte-verso="${escapar(faceImage(c, "verso", 0, escolhas))}"`;
   }
   if (c.deitada) attrs += ' data-deitada="1"';
   return attrs;

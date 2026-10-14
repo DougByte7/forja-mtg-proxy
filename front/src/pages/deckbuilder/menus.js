@@ -10,7 +10,7 @@
    sincronizado — que é o mesmo trabalho, feito duas vezes. */
 
 import {escapar} from "../../shared/dom.js";
-import {abrirEscolhaDeArte} from "./artes.js";
+import {openArtPicker} from "./artes.js";
 import {abrirCarta} from "./carta.js";
 import {autoCategory} from "./deck";
 import {createCategory, deleteCategory, findEntry, moveCard, moveCategory,
@@ -102,7 +102,7 @@ export function menuDaCarta(ancora, nome, tabuleiro){
                  // a porta de teclado, a do maybeboard — e a de quem procura
                  // no menu em vez de caçar o ícone.
                  {rotulo: "Escolher a arte", marca: ico("image"),
-                  aoClicar: () => abrirEscolhaDeArte(nome)},
+                  aoClicar: () => openArtPicker(nome)},
                  "risco",
                  {titulo: `Categoria de ${nome}`}];
 

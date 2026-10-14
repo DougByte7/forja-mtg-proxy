@@ -52,7 +52,7 @@ export async function loadTokens() {
 
    Cada uma vira um objeto com a forma de carta que a modal de arte e a
    galeria já sabem desenhar — `ficha` e `chaveArte` são o que as separa de
-   uma carta (ver `nomeDaArte` e `nomeDaBusca`). Montado uma vez por
+   uma carta (ver `artName` e `searchNameFor`). Montado uma vez por
    resposta do servidor: a galeria e a conta do "Gerar pedido" pedem a lista
    a cada desenho, e o autosave redesenha a cada carta. */
 const built: { from: TokensResponse | null; list: Card[] } = { from: null, list: [] };

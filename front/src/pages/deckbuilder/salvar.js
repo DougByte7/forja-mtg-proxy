@@ -8,7 +8,7 @@
 import {$} from "../../shared/dom.js";
 import {deckIdentity, totalCards} from "./deck";
 import {desenharAnalise, desenharContador} from "./desenho.js";
-import {atualizarBotaoPedido} from "./galeria.js";
+import {updateOrderLink} from "./galeria.js";
 import {analyzeManabase} from "./manabase";
 import {agendarCotacao} from "./orcamento.js";
 import {state} from "./state";
@@ -141,7 +141,7 @@ export async function salvarAgora(){
       state.dono = resposta.deck.dono || null;
       history.replaceState(null, "", `?deck=${state.id}`);
       $("btn-compartilhar").hidden = false;
-      atualizarBotaoPedido();
+      updateOrderLink();
     }
     lembrarDeck();
     marcarEstado("salvo " + new Date().toLocaleTimeString("pt-BR",
