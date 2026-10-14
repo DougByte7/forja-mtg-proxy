@@ -29,7 +29,6 @@ import {buscarSugestoes, desenharSugestoes, importarDeckMedio,
         sugerirPelaCarta, sugestoesPlanas} from "./sugestoes.js";
 import {deckLinkSource} from "./text";
 import {toast} from "./utilidades.js";
-import {concluirVersao, menuDaVersao} from "./versoes.js";
 
 export function ligarEventos(){
   $("busca").addEventListener("input", agendarBusca);
@@ -294,8 +293,6 @@ export function ligarEventos(){
       return abrirMenu($("btn-mais"), menuDoCabecalho());
     }
     // A pílula da versão abre daqui pelo mesmo motivo do "···".
-    if (e.target.closest("#btn-versao")) return menuDaVersao();
-    if (e.target.closest("[data-concluir-versao]")) return concluirVersao();
     if (e.target.closest("[data-abrir-manabase]")) return chamarManabase();
     const verCmd = e.target.closest("[data-ver-cmd]");
     if (verCmd) return abrirCarta(state.comandantes[Number(verCmd.dataset.verCmd)]);

@@ -12,7 +12,7 @@ import {CHAVE_TALVEZ, recolherTalvez, trocarAba, trocarRail} from "./paineis.js"
 import {loadExchangeRate} from "./price";
 import {api, atualizarBotaoMeus, lembrarDeck, marcarEstado} from "./salvar.js";
 import {state} from "./state";
-import {buscarTokens} from "./tokens.js";
+import {loadTokens} from "./tokens";
 import {toast} from "./utilidades.js";
 
 async function conferirBase(){
@@ -94,7 +94,7 @@ async function abrir(){
   carregarArtes();
   // As fichas vão pro papel com o deck: sem elas, a aba Artes e o "Gerar
   // pedido" contariam só as cartas até a aba Tokens ser aberta.
-  if (state.id) buscarTokens();
+  if (state.id) loadTokens();
   if (state.comandantes.length){ buscar(); }
   else { buscarComandante(); $("busca-cmd").focus(); }
   // O foco na busca só faz sentido onde ela está sempre à vista: no celular

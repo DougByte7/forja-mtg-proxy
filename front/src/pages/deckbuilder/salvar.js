@@ -13,8 +13,8 @@ import {analisarManabase} from "./manabase.js";
 import {agendarCotacao} from "./orcamento.js";
 import {state} from "./state";
 import {brDate} from "./text";
-import {buscarTokens} from "./tokens.js";
-import {buscarHistorico, desenharVersao} from "./versoes.js";
+import {loadTokens} from "./tokens";
+import {loadHistory, syncVersion} from "./versions";
 export function validarLocal(){
   const identidade = deckIdentity();
   const apontamentos = [];
@@ -153,8 +153,8 @@ export async function salvarAgora(){
     desenharContador();
     // A pílula da versão ganha o ponto de "a lista mudou" quando o servidor
     // confirma a mudança, e o histórico aberto acompanha a lista gravada.
-    desenharVersao();
-    if (state.aba === "historico") buscarHistorico();
+    syncVersion();
+    if (state.aba === "historico") loadHistory();
     // O primeiro salvamento é o instante em que o deck ganha id — e é só com
     // id que dá pra cotar. Sem esta chamada, um deck de uma carta só nunca
     // seria cotado: a cotação esperaria uma segunda mudança que não vem.
@@ -165,7 +165,7 @@ export async function salvarAgora(){
     // Fichas sempre, aberta a aba ou não: elas vão pro papel, e a aba Artes
     // e o "Gerar pedido" contam as artes delas. A resposta sai da base
     // local, sem rede de fora.
-    buscarTokens();
+    loadTokens();
   } catch (e){
     marcarEstado("não consegui salvar: " + e.message, "erro");
   } finally {

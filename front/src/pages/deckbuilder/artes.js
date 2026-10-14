@@ -43,7 +43,7 @@ import {atualizarBotaoPedido, desenharGaleria} from "./galeria.js";
 import {api} from "./salvar.js";
 import {state} from "./state";
 import {foldAccents} from "./text";
-import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
+import {deckTokens, tokenLabel} from "./tokens";
 import {ico, toast} from "./utilidades.js";
 
 const ARTES_POR_PAGINA = 24;
@@ -270,7 +270,7 @@ export function acharCartaDaArte(nome){
   const noDeck = state.cartas.find(e => e.carta && e.carta.nome === nome);
   if (noDeck) return noDeck.carta;
   return state.comandantes.find(c => c.nome === nome) ||
-    fichasDoDeck().find(f => f.chaveArte === nome) || null;
+    deckTokens().find(f => f.chaveArte === nome) || null;
 }
 
 /* `copia` vem do quadro de uma cópia na galeria; sem ela, a modal abre na
@@ -292,7 +292,7 @@ export async function abrirEscolhaDeArte(nome, face, copia){
   arte.copia = Math.min(Number(copia) || 0, quantidade);
   arte.porCopia = quantidade > 1 && (arte.copia > 0 || temArtePorCopia(carta));
   arte.copia = arte.porCopia ? arte.copia || 1 : 0;
-  $("arte-titulo").textContent = carta.ficha ? rotuloDaFicha(carta) : carta.nome;
+  $("arte-titulo").textContent = carta.ficha ? tokenLabel(carta) : carta.nome;
   $("arte-busca").value = "";
   $("arte-fonte").value = "";
   $("arte-dpi").value = "0";
@@ -438,7 +438,7 @@ async function buscarArtesDaCarta(busca){
     if (!(busca in arte.porNome)){
       const pedir = [busca];
       // Duas fichas de mesmo nome (as Wurm do Wurmcoil) são a mesma busca.
-      for (const f of arte.carta && arte.carta.ficha ? fichasDoDeck() : []){
+      for (const f of arte.carta && arte.carta.ficha ? deckTokens() : []){
         const b = nomeDaBusca(f, "frente");
         if (!(b in arte.porNome) && !pedir.includes(b)) pedir.push(b);
       }
@@ -703,7 +703,7 @@ function opcoesDaScryfall(){
     const imagem = verso ? carta.imagem_verso : carta.imagem;
     const id = idDaImagemDaScryfall(imagem);
     return id ? [{id, imagem, status: "", legenda: "A ficha que o deck cria",
-                  arquivo: rotuloDaFicha(carta)}] : [];
+                  arquivo: tokenLabel(carta)}] : [];
   }
   return (Array.isArray(arte.impressoes) ? arte.impressoes : []).map(i => {
     const imagem = verso ? i.imagem_verso : i.imagem;

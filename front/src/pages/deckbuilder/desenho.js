@@ -13,7 +13,7 @@ import {screenCurrency} from "./price";
 import {OUT_OF_COUNT, state, touch} from "./state";
 import {foldAccents} from "./text";
 import {ico, manaHTML, seloInedita} from "./utilidades.js";
-import {desenharVersao} from "./versoes.js";
+import {syncVersion} from "./versions";
 
 export function desenharTudo(){
   touch();
@@ -22,7 +22,7 @@ export function desenharTudo(){
   desenharGaleria();
   atualizarBotaoPedido();
   desenharContador();
-  desenharVersao();
+  syncVersion();
   desenharPreviaOrcamento();
   $("rot-preco-moeda").textContent = screenCurrency();
   atualizarCategoriasDoDestino();

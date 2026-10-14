@@ -51,9 +51,7 @@
       <div class="titulo-linha">
         <input id="nome-deck" value="Deck sem nome" maxlength="80"
                aria-label="Nome do deck" spellcheck="false">
-        <button class="versao-pilula wip" id="btn-versao" type="button"
-                aria-haspopup="menu" title="Trabalho em progresso"
-                aria-label="Trabalho em progresso">WIP</button>
+        <span id="ilha-versao"></span>
       </div>
       <div class="estado-salvo" id="estado-salvo"></div>
     </div>
@@ -255,9 +253,7 @@
            montagem, e até lá não deve ocupar espaço nenhum. -->
       <div class="painel" id="painel-tokens" data-painel="tokens" hidden>
         <h2 class="secao">Tokens do deck</h2>
-        <p class="nota" id="tokens-nota">As fichas que as cartas do deck criam,
-          agrupadas por quem as cria.</p>
-        <div id="tokens-resultado" style="margin-top:12px;"></div>
+        <div id="ilha-tokens"></div>
       </div>
 
       <!-- ================= goldfish =================

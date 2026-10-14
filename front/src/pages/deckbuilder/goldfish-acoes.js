@@ -23,7 +23,7 @@ import {addSecondDeck, adjustCardCounter, adjustCommanderDamage, adjustLife,
 import {desenharMesa, esconderPainel, mostrarPainel, painelFlutua, rolarPainel} from "./goldfish-desenho.js";
 import {api, lidos} from "./salvar.js";
 import {state} from "./state";
-import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
+import {deckTokens, tokenLabel} from "./tokens";
 import {toast} from "./utilidades.js";
 
 export function desfazerMesa(){
@@ -319,9 +319,9 @@ function salvarFicha(modelo){
 function abrirCriarFicha(ij){
   // As fichas que o DECK cria já foram lidas da base pela aba Tokens: são elas
   // que a partida vai precisar, e vêm com arte.
-  const doDeck = fichasDoDeck().map(f => ({
+  const doDeck = deckTokens().map(f => ({
     nome: f.nome, tipo: f.tipo, poder: f.poder, resistencia: f.resistencia,
-    imagem: f.imagem, chaveArte: f.chaveArte, rotulo: rotuloDaFicha(f),
+    imagem: f.imagem, chaveArte: f.chaveArte, rotulo: tokenLabel(f),
   }));
   const salvas = fichasSalvas().map(m => ({...m, rotulo:
     m.nome + (m.poder ? ` ${m.poder}/${m.resistencia}` : "")}));

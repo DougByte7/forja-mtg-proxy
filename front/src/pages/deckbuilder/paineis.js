@@ -13,9 +13,9 @@ import {analisarManabase} from "./manabase.js";
 import {estimatePower} from "./power";
 import {state} from "./state";
 import {buscarSugestoes} from "./sugestoes.js";
-import {buscarTokens} from "./tokens.js";
+import {loadTokens} from "./tokens";
 import {ico} from "./utilidades.js";
-import {buscarHistorico} from "./versoes.js";
+import {loadHistory} from "./versions";
 /* Abrir a aba é o pedido: quem clica em "Análise" quer a análise inteira,
    nível de poder incluído, não um botão que promete o nível. A conta só sai se
    ainda não houver resposta ou se o deck tiver mudado desde a última — trocar
@@ -25,7 +25,7 @@ function rodarAoAbrir(nome){
   if (nome === "manabase" && !state.manabase) return analisarManabase();
   // Sempre, e não só na primeira vez: o bloco do que mudou desde a última
   // versão acompanha a lista gravada.
-  if (nome === "historico") return buscarHistorico();
+  if (nome === "historico") return loadHistory();
   // As sugestões dependem do comandante, não da lista: refazê-las a cada
   // carta adicionada seria uma consulta por clique pra receber quase a mesma
   // resposta. Busca uma vez; o botão do painel refaz quando a pessoa quiser.
@@ -40,7 +40,7 @@ function rodarAoAbrir(nome){
     return procurarCombos();
   }
   if (nome === "tokens" && state.tokensAssinatura !== assinatura){
-    return buscarTokens();
+    return loadTokens();
   }
   // O goldfish NÃO embaralha sozinho ao abrir a aba, ao contrário das outras:
   // as demais recalculam algo sobre o deck, e recalcular é de graça; aqui

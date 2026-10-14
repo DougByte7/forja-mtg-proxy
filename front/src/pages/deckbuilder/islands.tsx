@@ -8,6 +8,8 @@ import {
   ColorDistribution, Curve, DeckAlerts, IdentityNote, Issues, Odds, Power, TypeDistribution,
 } from "./ui/Analysis";
 import { Meters } from "./ui/Meters";
+import { TokensPanel, TokensTabCount } from "./ui/Tokens";
+import { History, VersionPill } from "./ui/Versions";
 import { Toast } from "./ui/toast";
 
 export function mountIslands() {
@@ -21,4 +23,8 @@ export function mountIslands() {
   render(<Odds />, $("chances")!);
   render(<Curve />, $("curva")!);
   render(<IdentityNote />, $("ilha-nota-identidade")!);
+  render(<VersionPill />, $("ilha-versao")!);
+  render(<History />, $("historico-resultado")!);
+  render(<TokensPanel />, $("ilha-tokens")!);
+  render(<TokensTabCount />, $("aba-tokens-n")!);
 }

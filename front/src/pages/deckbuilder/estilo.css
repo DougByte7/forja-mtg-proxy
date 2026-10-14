@@ -2585,3 +2585,8 @@ button.mb-base-grupo:hover{border-color:var(--gold);color:var(--gold-light);}
   .mini{width:28px;height:28px;font-size:15px;}
   .gf-lista-linha .mini{min-height:30px;font-size:12.5px;}
 }
+
+/* Os contêineres das ilhas Preact (ver `islands.tsx`) não têm caixa própria:
+   o componente dentro deles ocupa o lugar que o HTML antigo ocupava, sem um
+   nível a mais no flex ou no grid. */
+[id^="ilha-"]{display:contents;}

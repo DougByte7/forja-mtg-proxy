@@ -131,7 +131,7 @@ describe('o "Gerar pedido"', () => {
     p.arte.escolhas["atraxa"] = { frente: { arte_id: "a" } };
     p.arte.escolhas["sol ring"] = { frente: { arte_id: "s" } };
     p.arte.escolhas["t wurm aaaa1111"] = { frente: { arte_id: "w" } };
-    const f = p.fichasDoDeck();
+    const f = p.deckTokens();
     p.desenharGaleria();
     const before = orderLink(p)[2];
     p.arte.escolhas["t wurm bbbb2222"] = { frente: { arte_id: "v" } };

@@ -16,7 +16,7 @@
    O maybeboard fica de fora — não vai pro papel. O sideboard entra: é carta
    que a pessoa quer ter, e entra na lista de impressão.
 
-   As fichas entram no fim, uma de cada (ver `fichasDoDeck`): vão pro papel
+   As fichas entram no fim, uma de cada (ver `deckTokens`): vão pro papel
    junto com o deck, e são a parte que se esquece de escolher. */
 
 import {$, escapar} from "../../shared/dom.js";
@@ -24,7 +24,7 @@ import {arteEscolhida, imagemDaFace, ladoPronto, nomeDaArte, quadroHTML,
         temArtePorCopia, temVerso} from "./artes.js";
 import {categoryOf, categoryOrder} from "./deck";
 import {state} from "./state";
-import {fichasDoDeck, rotuloDaFicha} from "./tokens.js";
+import {deckTokens, tokenLabel} from "./tokens";
 import {ico} from "./utilidades.js";
 
 // O HTML da última pintura. O autosave redesenha a tela a cada carta, e
@@ -50,7 +50,7 @@ function quadroDaGaleria(carta, face, quantidade, copias){
   // Ficha leva o corpo e o texto: as duas Wurm do Wurmcoil são dois quadros
   // de mesmo nome, e o texto é o que diz qual é qual.
   const nome = escapar(carta.ficha
-    ? rotuloDaFicha(carta) + (carta.texto ? ` (${carta.texto})` : "")
+    ? tokenLabel(carta) + (carta.texto ? ` (${carta.texto})` : "")
     : carta.nome);
   const verso = face === "verso";
   const src = imagemDaFace(carta, face, 400, null, copia);
@@ -107,7 +107,7 @@ function quadrosDaCarta(carta, quantidade){
 function contaDaGaleria(){
   const entradas = state.comandantes.map(c => [c, 1]).concat(
     state.cartas.map(e => [e.carta, e.quantidade]),
-    fichasDoDeck().map(f => [f, 1]));
+    deckTokens().map(f => [f, 1]));
   let total = 0, escolhidas = 0;
   for (const [c, quantidade] of entradas){
     for (const face of temVerso(c) ? ["frente", "verso"] : ["frente"]){
@@ -177,7 +177,7 @@ export function desenharGaleria(){
         quadrosDaCarta(e.carta, e.quantidade)).join("")}</div></div>`;
   }
 
-  const fichas = fichasDoDeck();
+  const fichas = deckTokens();
   if (fichas.length){
     html += `<div class="galeria-grupo"><h3>Tokens</h3>
       <div class="galeria-grade">${fichas.map(f =>
