@@ -10,7 +10,7 @@
    o clique parecer travado por causa da metade menos urgente da informação. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {faceImage} from "./artes.js";
+import {faceImage} from "./art";
 import {api} from "./salvar.js";
 import {ico, manaEmTexto, manaHTML} from "./utilidades.js";
 

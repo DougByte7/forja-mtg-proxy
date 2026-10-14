@@ -18,7 +18,7 @@
    carta, e é repintado junto com a mesa. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {faceImage} from "./artes.js";
+import {faceImage} from "./art";
 import {detalheDaCarta} from "./carta.js";
 import {deckSignature} from "./combos";
 import {attackers, bottomCountOnKeep, cardByUid, cardName, comboCount,

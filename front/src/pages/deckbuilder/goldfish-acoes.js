@@ -9,7 +9,7 @@
    que numa partida de verdade seria absurdo: aqui não tem juiz. */
 
 import {$, escapar} from "../../shared/dom.js";
-import {hasBack} from "./artes.js";
+import {hasBack} from "./art";
 import {abrirCarta} from "./carta.js";
 import {countedCards} from "./deck";
 import {addSecondDeck, adjustCardCounter, adjustCommanderDamage, adjustLife,

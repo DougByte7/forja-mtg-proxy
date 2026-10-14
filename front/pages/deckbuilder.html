@@ -70,8 +70,8 @@
     <div class="acoes">
       <!-- Link, e não botão: leva o deck pra tela de orçamento. Nasce sem
            `href` e só ganha um com todas as artes escolhidas (ver
-           `atualizarBotaoPedido`). -->
-      <a class="btn" id="btn-pedido" hidden aria-disabled="true">Gerar pedido</a>
+           `orderLinkView`, em `gallery.ts`). -->
+      <span id="ilha-pedido"></span>
       <button class="btn ouro" id="btn-compartilhar" hidden>Compartilhar</button>
       <button class="btn redondo" id="btn-mais" type="button"
               aria-haspopup="menu" aria-expanded="false"
@@ -188,8 +188,7 @@
           imprime; as de contorno dourado já têm arte escolhida, as outras
           saem com a arte padrão.</p>
         <div class="galeria-acoes">
-          <button class="btn" id="btn-artes-padrao" type="button" hidden>Usar a
-            arte padrão nas que faltam</button>
+          <span id="ilha-artes-padrao"></span>
         </div>
         <div id="galeria-resultado" style="margin-top:12px;"></div>
       </div>
@@ -566,81 +565,8 @@
 </div>
 
 <!-- ================= escolher a arte =================
-     Um segmento por origem da arte (ver `artes.js`). No do MPC Fill há duas
-     listas, e a diferença entre elas é a coisa mais importante dele: em cima,
-     as impressões OFICIAIS da Scryfall — servem pra achar, e clicar nelas
-     não escolhe nada. Embaixo, os arquivos do MPC Fill. -->
-<div class="arte-fundo" id="arte-fundo" hidden>
-  <div class="arte-caixa" role="dialog" aria-modal="true" aria-labelledby="arte-titulo">
-    <div class="arte-topo">
-      <h3 id="arte-titulo">Escolher arte</h3>
-      <!-- Só em carta de duas faces: cada lado é um arquivo no papel. -->
-      <div class="segmento arte-faces" id="arte-faces" hidden
-           role="group" aria-label="Lado da carta">
-        <button type="button" data-face="frente">Frente</button>
-        <button type="button" data-face="verso">Verso</button>
-      </div>
-      <!-- Só com mais de uma cópia da carta no deck. -->
-      <div class="arte-copias" id="arte-copias" hidden>
-        <label class="interruptor">
-          <input type="checkbox" id="arte-por-copia">
-          <span class="trilho-int" aria-hidden="true"></span>
-          Uma arte por cópia
-        </label>
-        <select class="campo" id="arte-copia" aria-label="Cópia" hidden></select>
-      </div>
-      <span class="gf-espaco"></span>
-      <button class="mini sai" id="arte-fechar" title="Fechar"
-        aria-label="Fechar">✕</button>
-    </div>
-
-    <div class="segmento arte-origens" id="arte-origens" role="group"
-         aria-label="De onde vem a arte">
-      <button type="button" data-origem="mpcfill">MPC Fill</button>
-      <button type="button" data-origem="scryfall">Scryfall</button>
-      <button type="button" data-origem="enviar">Enviar arquivo</button>
-    </div>
-
-    <div class="arte-vitrine" id="arte-vitrine"></div>
-
-    <div class="arte-filtros" id="arte-filtros" hidden>
-      <input class="campo" id="arte-busca" placeholder="filtrar pelo nome do arquivo"
-        autocomplete="off" spellcheck="false">
-      <select class="campo" id="arte-fonte"></select>
-      <select class="campo" id="arte-dpi">
-        <option value="0">qualquer DPI</option>
-        <option value="600">600+</option>
-        <option value="800">800+</option>
-        <option value="1200">1200+</option>
-      </select>
-    </div>
-
-    <div class="arte-conta" id="arte-conta"></div>
-    <div class="arte-grade" id="arte-grade"></div>
-
-    <div class="arte-envio" id="arte-envio" hidden>
-      <div class="arte-envio-atual" id="arte-envio-atual"></div>
-      <label class="arte-soltar" id="arte-soltar">
-        <input type="file" id="arte-arquivo" accept="image/png,image/jpeg,image/webp">
-        <span class="btn ouro">Escolher arquivo</span>
-        <span>ou arraste a imagem pra cá</span>
-        <span class="arte-nota">PNG, JPG ou WebP no formato da carta
-          (63 × 88 mm), com ou sem sangria.</span>
-      </label>
-      <div class="arte-conta" id="arte-envio-estado" role="status"></div>
-    </div>
-
-    <div class="arte-rodape">
-      <label class="interruptor" title="Lembrado neste navegador">
-        <input type="checkbox" id="arte-fecha">
-        <span class="trilho-int" aria-hidden="true"></span>
-        Fechar ao escolher
-      </label>
-      <nav class="arte-paginas" id="arte-paginas" aria-label="Páginas de artes"></nav>
-      <button class="btn" id="arte-padrao">Voltar ao padrão</button>
-    </div>
-  </div>
-</div>
+     A modal é um componente (`ui/ArtPicker.tsx`); fechada, ela não existe. -->
+<div id="ilha-arte"></div>
 
 <div class="carta-fundo" id="carta-fundo" hidden>
   <div class="carta-modal" role="dialog" aria-modal="true"

@@ -2,7 +2,7 @@
 
 import {$} from "../../shared/dom.js";
 import {ligarArrastar} from "./arrastar.js";
-import {openArtPicker, closeArtPicker} from "./artes.js";
+import {artState, openArtPicker, closeArtPicker} from "./art";
 import {bindSearchKeys, clearCommanderResults, scheduleCommanderSearch,
         scheduleSearch, searchCommander} from "./search";
 import {abrirCarta, cartaAberta, fecharCarta, ligarPrevia} from "./carta.js";
@@ -19,7 +19,7 @@ import {callManabase} from "./manabase";
 import {abrirMenu, fecharMenu, menuAberto, menuDaCarta, menuDoGrupo} from "./menus.js";
 import {abrirFolha, fecharFolha, folhaAberta, recolherTalvez, trocarAba,
         trocarRail} from "./paineis.js";
-import {agendarSalvar, lidos, salvando, salvarJa, salvarTimer} from "./salvar.js";
+import {agendarSalvar, lidos} from "./salvar.js";
 import {state, touch} from "./state";
 import {importAverageDeck, suggestFromCard} from "./suggestions";
 import {deckLinkSource} from "./text";
@@ -110,7 +110,7 @@ export function ligarEventos(){
       if (state.aba === "goldfish" && state.mesa) desfazerMesa();
       else undo();
     }
-    if (e.key === "Escape" && !$("arte-fundo").hidden){
+    if (e.key === "Escape" && artState.carta){
       closeArtPicker();
       return;   // fecha uma coisa por Esc: a modal, não a tela cheia atrás dela
     }
@@ -257,16 +257,6 @@ export function ligarEventos(){
       await navigator.clipboard.writeText(url);
       toast("Link copiado. Quem abrir vê e edita este mesmo deck.");
     } catch(e){ prompt("Link do deck:", url); }
-  });
-
-  // O link segue sozinho quando o servidor já tem o deck da tela. Com uma
-  // gravação pendente, grava antes: senão o pedido sairia sem a última carta.
-  $("btn-pedido").addEventListener("click", async (e) => {
-    const link = e.currentTarget;
-    if (!link.hasAttribute("href") || (!salvarTimer && !salvando)) return;
-    e.preventDefault();
-    if (await salvarJa()) location.href = link.href;
-    else toast("Não consegui salvar o deck — o pedido fica pra depois.");
   });
 
   // Copiar a lista é a ação que se faz olhando pro total, então ela mora no

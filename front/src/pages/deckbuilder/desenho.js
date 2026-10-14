@@ -1,7 +1,6 @@
 /* ------------------------------------------------------------------- desenhar */
 
 import {$} from "../../shared/dom.js";
-import {updateOrderLink, drawGallery} from "./galeria.js";
 import {agendarCotacao, desenharPreviaOrcamento} from "./orcamento.js";
 import {state, touch} from "./state";
 import {LIST_ORDERS, MIN_FOR_TOOLS} from "./lists";
@@ -11,8 +10,6 @@ export function desenharTudo(){
   touch();
   desenharDeck();
   desenharMaybe();
-  drawGallery();
-  updateOrderLink();
   desenharContador();
   syncVersion();
   desenharPreviaOrcamento();

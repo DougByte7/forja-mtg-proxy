@@ -10,7 +10,7 @@
    sincronizado — que é o mesmo trabalho, feito duas vezes. */
 
 import {escapar} from "../../shared/dom.js";
-import {openArtPicker} from "./artes.js";
+import {openArtPicker} from "./art";
 import {abrirCarta} from "./carta.js";
 import {autoCategory} from "./deck";
 import {createCategory, deleteCategory, findEntry, moveCard, moveCategory,

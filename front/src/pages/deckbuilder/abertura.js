@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------- abertura */
 
 import {$} from "../../shared/dom.js";
-import {loadArts, bindArtPicker} from "./artes.js";
+import {loadArts} from "./art";
 import {search, searchCommander, chooseDestination} from "./search";
 import {lerConta, ligarConvite, ligarOrfao, receberConta} from "./conta.js";
 import {desenharTudo} from "./desenho.js";
@@ -41,7 +41,6 @@ async function abrir(){
   ligarOrfao();
   ligarConvite();
   ligarGoldfish();
-  bindArtPicker();
   atualizarBotaoMeus();
   conferirBase();
   // Sem `await`: a taxa é a régua do preço, não o deck. Ela redesenha sozinha

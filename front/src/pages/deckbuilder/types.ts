@@ -21,6 +21,11 @@ export interface Card {
   inedita?: boolean;
   sai_em?: string;
   ficha?: boolean;
+  /** Carta partida (os Rooms, Fire // Ice): impressa de lado. */
+  deitada?: boolean;
+  texto?: string;
+  /** Só na ficha: a chave sob a qual a arte dela é guardada (ver `artName`). */
+  chaveArte?: string;
   [field: string]: unknown;
 }
 

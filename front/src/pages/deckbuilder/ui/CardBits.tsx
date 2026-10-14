@@ -1,6 +1,6 @@
 /* Os pedaços de uma linha de carta que aparecem em mais de um lugar: o botão
    de arte, o preço e a etiqueta de inédita. */
-import { artButtonView } from "../artes.js";
+import { artButtonView } from "../art";
 import { valorView } from "../orcamento.js";
 import { brDate } from "../text";
 import type { Card, Entry } from "../types";

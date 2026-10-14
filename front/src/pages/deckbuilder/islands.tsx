@@ -7,9 +7,11 @@ import { $ } from "../../shared/dom.js";
 import {
   ColorDistribution, Curve, DeckAlerts, IdentityNote, Issues, Odds, Power, TypeDistribution,
 } from "./ui/Analysis";
+import { ArtPicker } from "./ui/ArtPicker";
 import { CombosTabCount, DeckCombos, NearCombos } from "./ui/Combos";
 import { BoardList, CommanderBox, DeckTabCount, MaybeCount } from "./ui/DeckList";
 import { importarLinkColado } from "./eventos.js";
+import { DefaultArtsButton, Gallery, OrderLink } from "./ui/Gallery";
 import { FilterFields, FiltersButton, FilterTape, HeroUnreleasedSwitch } from "./ui/Filters";
 import { ManabasePanel } from "./ui/Manabase";
 import { Meters } from "./ui/Meters";
@@ -53,4 +55,8 @@ export function mountIslands() {
   render(<FilterFields />, $("campos-filtros")!);
   render(<HeroUnreleasedSwitch />, $("ilha-cmd-ineditas")!);
   render(<SuggestionsPanel />, $("sug-resultado")!);
+  render(<Gallery />, $("galeria-resultado")!);
+  render(<DefaultArtsButton />, $("ilha-artes-padrao")!);
+  render(<OrderLink />, $("ilha-pedido")!);
+  render(<ArtPicker />, $("ilha-arte")!);
 }

@@ -1,18 +1,27 @@
 /* A aba Artes: a galeria, a escolha por cópia e o "Gerar pedido", que só
    leva à tela de orçamento com TODAS as artes escolhidas. */
+import { render, type ComponentType } from "preact";
+import { act } from "preact/test-utils";
 import { cleanup, type Page } from "./harness";
 import { DELVER, ELVES, page, ROOM, SOL_RING } from "./sampleDeck";
 
 afterEach(cleanup);
 
-const galleryHtml = () => document.getElementById("galeria-resultado")!.innerHTML;
+/** O componente desenhado num contêiner solto, do jeito que está agora. */
+function drawn(Component: ComponentType) {
+  const host = document.createElement("div");
+  act(() => render(<Component />, host));
+  return host;
+}
+
+const galleryHtml = (p: Page) => drawn(p.Gallery).innerHTML;
 const frames = (html: string) =>
   [...html.matchAll(/data-arte-carta="([^"]+)" data-arte-face="(\w+)"/g)].map((m) => [m[1], m[2]]);
+const shortcutHidden = (p: Page) => drawn(p.DefaultArtsButton).querySelector("button")!.hidden;
 
 /** O link do "Gerar pedido": escondido?, destino e o porquê. */
 function orderLink(p: Page) {
-  p.updateOrderLink();
-  const l = document.getElementById("btn-pedido") as HTMLAnchorElement;
+  const l = drawn(p.OrderLink).querySelector("a")!;
   return [l.hidden, l.getAttribute("href") || null, l.title];
 }
 
@@ -84,8 +93,7 @@ describe("a galeria", () => {
     p.state.cartas.push({ carta: DELVER, quantidade: 1, categoria: "" },
                          { carta: ROOM, quantidade: 1, categoria: "" });
     p.artState.escolhas["sol ring"] = { frente: { arte_id: "id-sol" } };
-    p.drawGallery();
-    const html = galleryHtml();
+    const html = galleryHtml(p);
     const q = frames(html);
     expect(q.filter(([n]) => n.startsWith("Delver")).map(([, f]) => f)).toEqual(["frente", "verso"]);
     // O maybeboard não vai pro papel; o sideboard vai.
@@ -132,7 +140,6 @@ describe('o "Gerar pedido"', () => {
     p.artState.escolhas["sol ring"] = { frente: { arte_id: "s" } };
     p.artState.escolhas["t wurm aaaa1111"] = { frente: { arte_id: "w" } };
     const f = p.deckTokens();
-    p.drawGallery();
     const before = orderLink(p)[2];
     p.artState.escolhas["t wurm bbbb2222"] = { frente: { arte_id: "v" } };
     const after = orderLink(p)[1];
@@ -140,7 +147,7 @@ describe('o "Gerar pedido"', () => {
     expect(f).toHaveLength(2);
     expect(p.searchNameFor(f[0], "frente")).toBe("t:Wurm");
     expect(p.findArtCard("t:Wurm bbbb2222").texto).toBe("Lifelink");
-    const html = galleryHtml();
+    const html = galleryHtml(p);
     expect([...html.matchAll(/data-arte-carta="([^"]+)"/g)].map((m) => m[1]).slice(-2))
       .toEqual(["t:Wurm aaaa1111", "t:Wurm bbbb2222"]);
     expect(html).toContain("<h3>Tokens</h3>");
@@ -161,10 +168,9 @@ describe('o "Gerar pedido"', () => {
       "forest": { frente: { arte_id: "todas" },
                   copias: { 2: { frente: { arte_id: "outra" } }, 4: { frente: { arte_id: "outra" } } } },
     };
-    p.drawGallery();
-    const html = galleryHtml();
+    const html = galleryHtml(p);
     const order = orderLink(p)[1];
-    const shortcutHidden = (document.getElementById("btn-artes-padrao") as HTMLElement).hidden;
+    const shortcut = shortcutHidden(p);
     expect([...html.matchAll(/data-arte-carta="Forest" data-arte-face="frente" data-arte-copia="(\d+)"/g)]
       .map((m) => m[1])).toEqual(["1", "2"]);
     expect(html).toContain("8×");
@@ -173,13 +179,56 @@ describe('o "Gerar pedido"', () => {
     expect(html).toContain("cópias 2, 4");
     expect([p.chosenArt(forest, "frente", null, 2).arte_id,
             p.chosenArt(forest, "frente", null, 3).arte_id]).toEqual(["outra", "todas"]);
-    expect([order, shortcutHidden]).toEqual(["/?deck=abc123", true]);
+    expect([order, shortcut]).toEqual(["/?deck=abc123", true]);
 
     delete p.artState.escolhas.forest.frente;
-    p.drawGallery();
-    expect([orderLink(p)[2], (document.getElementById("btn-artes-padrao") as HTMLElement).hidden])
+    expect([orderLink(p)[2], shortcutHidden(p)])
       .toEqual(["Faltam 1 arte(s) — escolha na aba Artes", false]);
     // A linha do deck mostra a arte da primeira cópia que tem.
     expect(p.chosenArt(forest).arte_id).toBe("outra");
+  });
+});
+
+describe("a modal de escolher a arte", () => {
+  it("abre na carta, troca de origem e some ao fechar", async () => {
+    const p = await page();
+    p.state.id = "abc123";
+    const host = drawn(p.ArtPicker);
+    expect(host.innerHTML).toBe("");
+
+    await act(() => p.openArtPicker("Sol Ring"));
+    expect(host.querySelector("#arte-titulo")!.textContent).toBe("Sol Ring");
+    expect((host.querySelector("#arte-faces") as HTMLElement).hidden).toBe(true);
+    expect(host.querySelector("#arte-conta")!.textContent).toBe("Procurando as artes…");
+    expect(document.documentElement.classList.contains("sem-rolar")).toBe(true);
+
+    act(() => p.setOrigin("enviar"));
+    expect([(host.querySelector("#arte-grade") as HTMLElement).hidden,
+            (host.querySelector("#arte-envio") as HTMLElement).hidden]).toEqual([true, false]);
+
+    act(() => (host.querySelector("#arte-fechar") as HTMLElement).click());
+    expect([host.innerHTML, document.documentElement.classList.contains("sem-rolar")]).toEqual(["", false]);
+  });
+
+  it("carta de duas faces: o seletor de lado marca o que já tem arte", async () => {
+    const p = await page();
+    p.state.id = "abc123";
+    p.state.cartas.push({ carta: DELVER, quantidade: 1, categoria: "" });
+    p.artState.escolhas["delver of secrets insectile aberration"] = { verso: { arte_id: "i" } };
+    const host = drawn(p.ArtPicker);
+    await act(() => p.openArtPicker(DELVER.nome, "verso"));
+    const sides = [...host.querySelectorAll<HTMLElement>("#arte-faces [data-face]")]
+      .map((b) => [b.dataset.face, b.classList.contains("ativa"), b.title]);
+    expect(sides).toEqual([
+      ["frente", false, "Este lado está na arte padrão"],
+      ["verso", true, "Arte escolhida pra este lado"],
+    ]);
+  });
+
+  it("sem deck salvo não abre", async () => {
+    const p = await page();
+    const host = drawn(p.ArtPicker);
+    await act(() => p.openArtPicker("Sol Ring"));
+    expect(host.innerHTML).toBe("");
   });
 });
