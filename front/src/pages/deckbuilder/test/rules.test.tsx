@@ -16,11 +16,20 @@
       não desenha continua no deck, no contador e na cotação — invisível e
       paga.
    ------------------------------------------------------------------------- */
+import { render } from "preact";
+import { act } from "preact/test-utils";
 import { entrada } from "./fixtures";
 import { cleanup, type Page } from "./harness";
 import {
   BOLT, AUTO_CATEGORIES, DECK, ELVES, INEDITA, LOTUS, MAYBE, page, SOL_RING, type Setup,
 } from "./sampleDeck";
+
+/** A lista como o componente a desenha (`ui/DeckList.tsx`). */
+function drawn(p: Page, board: "deck" | "talvez") {
+  const host = document.createElement("div");
+  act(() => render(<p.BoardList board={board} />, host));
+  return host.innerHTML;
+}
 
 /** O que a tela ficou pensando. */
 function seen(p: Page) {
@@ -37,8 +46,8 @@ function seen(p: Page) {
     ordem: p.categoryOrder(e.cartas),
     apontamentos: p.validarLocal().apontamentos.map((a: any) => a.tipo),
     corpo: p.corpoDoDeck(),
-    htmlDeck: p.gruposHTML(e.cartas, p.deckIdentity(), "deck") as string,
-    htmlTalvez: p.gruposHTML(e.maybe, p.deckIdentity(), "talvez") as string,
+    htmlDeck: drawn(p, "deck"),
+    htmlTalvez: drawn(p, "talvez"),
     lista: p.listaTexto() as string,
   };
 }

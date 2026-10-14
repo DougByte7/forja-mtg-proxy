@@ -52,3 +52,24 @@ describe("toast", () => {
     expect([el.textContent, el.className]).toEqual(["Deck salvo.", "toast"]);
   });
 });
+
+describe("lista do deck", () => {
+  it("o número de quantidade não é reescrito enquanto a pessoa digita", async () => {
+    const p = await page();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    act(() => render(<p.BoardList board="deck" />, host));
+    const input = host.querySelector('[data-qtd="Sol Ring"]') as HTMLInputElement;
+    expect(input.value).toBe("1");
+
+    input.focus();
+    input.value = "3";                      // digitando, ainda sem o change
+    act(() => p.touch());                   // a página redesenha por outro motivo
+    expect(input.value).toBe("3");
+
+    input.blur();
+    act(() => { p.state.cartas[0].quantidade = 2; p.touch(); });
+    expect(input.value).toBe("2");
+    host.remove();
+  });
+});

@@ -8,6 +8,7 @@ import {
   ColorDistribution, Curve, DeckAlerts, IdentityNote, Issues, Odds, Power, TypeDistribution,
 } from "./ui/Analysis";
 import { CombosTabCount, DeckCombos, NearCombos } from "./ui/Combos";
+import { BoardList, CommanderBox, DeckTabCount, MaybeCount } from "./ui/DeckList";
 import { ManabasePanel } from "./ui/Manabase";
 import { Meters } from "./ui/Meters";
 import { TokensPanel, TokensTabCount } from "./ui/Tokens";
@@ -34,4 +35,9 @@ export function mountIslands() {
   render(<CombosTabCount list="no_deck" />, $("aba-combos-n")!);
   render(<CombosTabCount list="faltando_uma" />, $("rail-combos-n")!);
   render(<ManabasePanel />, $("ilha-manabase")!);
+  render(<CommanderBox />, $("cmd-box")!);
+  render(<BoardList board="deck" />, $("lista-deck")!);
+  render(<BoardList board="talvez" />, $("talvez-lista")!);
+  render(<DeckTabCount />, $("aba-deck-n")!);
+  render(<MaybeCount />, $("ilha-talvez-n")!);
 }

@@ -229,16 +229,27 @@ export function imagemDaFace(carta, face, largura, escolhas, copia){
    ícone quando está no padrão: ver de relance o que já foi customizado é
    metade do valor. É o botão da FRENTE; o verso se escolhe dentro da modal,
    ou pelo quadro dele na aba Artes. */
-export function botaoDeArte(carta){
+/* O que o botão mostra, como dados: a mesma conta serve o HTML em string
+   (abaixo) e o componente (`ui/ArtButton.tsx`). */
+export function artButtonView(carta){
   const escolha = arteEscolhida(carta);
+  return {
+    escolhida: !!escolha,
+    miniatura: escolha ? miniaturaDaArte(escolha.arte_id, 40) : "",
+    titulo: escolha ? "Arte escolhida: " + rotuloDaEscolha(escolha)
+                    : "Escolher a arte de " + carta.nome,
+  };
+}
+
+export function botaoDeArte(carta){
+  const v = artButtonView(carta);
   const nome = escapar(carta.nome);
-  const fundo = escolha
-    ? ` style="background-image:url('${escapar(miniaturaDaArte(escolha.arte_id, 40))}')"` : "";
-  return `<button class="mini ${escolha ? "tem-arte" : ""}"
+  const fundo = v.escolhida
+    ? ` style="background-image:url('${escapar(v.miniatura)}')"` : "";
+  return `<button class="mini ${v.escolhida ? "tem-arte" : ""}"
     data-arte-carta="${nome}"${fundo}
-    title="${escolha ? "Arte escolhida: " + escapar(rotuloDaEscolha(escolha))
-                     : "Escolher a arte de " + nome}"
-    aria-label="Escolher arte de ${nome}">${escolha ? "" : ico("image")}</button>`;
+    title="${escapar(v.titulo)}"
+    aria-label="Escolher arte de ${nome}">${v.escolhida ? "" : ico("image")}</button>`;
 }
 
 /* Tudo o que mostra arte escolhida, de uma vez: a linha do deck (o botão), o

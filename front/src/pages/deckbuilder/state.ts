@@ -201,7 +201,7 @@ export const state: DeckState = {
   // maybeboard junto), mas a ordem é uma só pras duas: são a mesma lista
   // lida em dois lugares, e ordená-las diferente seria ler duas listas.
   listaBusca: {deck: "", talvez: ""},
-  listaOrdem: "cmc",        // ver `ORDENS_DA_LISTA` em desenho.js
+  listaOrdem: "cmc",        // ver `LIST_ORDERS` em lists.ts
   // Chaves "<tabuleiro>:<categoria>" — o mesmo nome de categoria pode estar
   // aberto de um lado e recolhido do outro.
   gruposFechados: new Set(),

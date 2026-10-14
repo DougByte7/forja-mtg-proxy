@@ -129,25 +129,34 @@ export function subtotalTitulo(s){
   return partes.join(" · ");
 }
 
-export function valorHTML(entrada){
+/* O preço de uma linha, como dados: a mesma conta serve o HTML em string
+   (abaixo) e o componente (`ui/PriceCell.tsx`). */
+export function valorView(entrada){
   const p = precoUnitario(entrada.carta);
   // Carta que ninguém sabe quanto custa não vira "R$ 0,00": zero é um preço,
   // e este é o caso de não saber. O travessão diz isso em um caractere.
   if (!p){
-    return `<span class="valor desconhecido"
-      title="Nem a loja nem a base local têm preço desta carta.">—</span>`;
+    return {classe: "valor desconhecido", texto: "—",
+            titulo: "Nem a loja nem a base local têm preço desta carta."};
   }
   const medido = p.fonte === "cotacao";
   const unidade = entrada.quantidade > 1
     ? `${entrada.quantidade} × ${precoTexto(p)}` : precoTexto(p);
-  const titulo = [
-    unidade,
-    medido
-      ? `${p.rotulo}${p.loja ? " · " + p.loja : ""} — cotado agora, sem frete.`
-      : "Preço da base local, do dia da última sincronização. " + exchangeNote(),
-  ].join("\n");
-  return `<span class="valor ${ehCaro(p) ? "caro" : ""} ${medido ? "" : "estimado"}"
-    title="${escapar(titulo)}">${precoTexto(p, entrada.quantidade)}</span>`;
+  return {
+    classe: `valor ${ehCaro(p) ? "caro" : ""} ${medido ? "" : "estimado"}`,
+    texto: precoTexto(p, entrada.quantidade),
+    titulo: [
+      unidade,
+      medido
+        ? `${p.rotulo}${p.loja ? " · " + p.loja : ""} — cotado agora, sem frete.`
+        : "Preço da base local, do dia da última sincronização. " + exchangeNote(),
+    ].join("\n"),
+  };
+}
+
+export function valorHTML(entrada){
+  const v = valorView(entrada);
+  return `<span class="${v.classe}" title="${escapar(v.titulo)}">${v.texto}</span>`;
 }
 
 /* O preço de uma linha como NÚMERO, pra ordenar a lista por ele.
