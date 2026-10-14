@@ -8,7 +8,7 @@
    por carta, quais fichas ela cria, então a resposta não custa rede e pode
    acompanhar o deck como a mana base acompanha. O desenho é `ui/Tokens.tsx`. */
 import { deckSignature } from "./combos";
-import { api, salvarAgora } from "./salvar.js";
+import { api, saveNow } from "./save";
 import { state, touch } from "./state";
 import type { Card } from "./types";
 import { toast } from "./ui/toast";
@@ -22,7 +22,7 @@ export type TokensResponse = { total: number; grupos: TokenGroup[] };
 
 export async function loadTokens() {
   if (!state.comandantes.length) return;
-  if (!state.id) await salvarAgora();
+  if (!state.id) await saveNow();
   if (!state.id) {
     toast("Não consegui salvar o deck antes de listar as fichas.");
     return;

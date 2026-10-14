@@ -2586,11 +2586,6 @@ button.mb-base-grupo:hover{border-color:var(--gold);color:var(--gold-light);}
   .gf-lista-linha .mini{min-height:30px;font-size:12.5px;}
 }
 
-/* Os contêineres das ilhas Preact (ver `islands.tsx`) não têm caixa própria:
-   o componente dentro deles ocupa o lugar que o HTML antigo ocupava, sem um
-   nível a mais no flex ou no grid. */
-[id^="ilha-"]{display:contents;}
-
 /* O pip híbrido ("{G/W}"): as duas cores em diagonal. Elas chegam como
    variáveis no próprio elemento (ver `ui/Mana.tsx`), e o degradê mora aqui. */
 .pip.hibrido{background:linear-gradient(135deg,var(--pip-a) 50%,var(--pip-b) 50%);}

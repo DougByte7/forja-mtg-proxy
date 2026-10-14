@@ -13,10 +13,10 @@
    nenhuma carta listada denuncia de qual das duas veio — por isso a resposta
    traz `alvo` e o cabeçalho o diz por extenso. */
 
-import { $, escapar } from "../../shared/dom.js";
-import { aplicarImportado, mostrarResultadoImportacao } from "./importar-exportar.js";
-import { abrirFolha, folhaAberta, trocarRail } from "./paineis.js";
-import { api, salvarAgora, salvarJa } from "./salvar.js";
+import { signal } from "@preact/signals";
+import { applyImported, type Imported, type ImportNotice } from "./importExport";
+import { openSheet, sheetOpen, switchRail } from "./layout";
+import { api, saveNow, flushSave } from "./save";
 import { addByDestination } from "./search";
 import { state, touch } from "./state";
 import type { Card } from "./types";
@@ -45,7 +45,7 @@ export async function loadSuggestions({ theme = null, card = null }: { theme?: s
   state.sugestoesErro = null;
   touch();
   try {
-    if (!state.id) await salvarAgora();
+    if (!state.id) await saveNow();
     if (!state.id) {
       state.sugestoesErro = "Não consegui salvar o deck antes de sugerir.";
       return;
@@ -68,13 +68,13 @@ export async function loadSuggestions({ theme = null, card = null }: { theme?: s
 }
 
 /* A estrela de uma linha do deck. Pede a lista ANTES de trocar de aba, e não
-   depois, porque `trocarRail` também busca sugestão quando a aba chega vazia:
+   depois, porque `switchRail` também busca sugestão quando a aba chega vazia:
    com o pedido já em voo ele vê a bandeira e não pergunta a mesma coisa duas
    vezes pra dois alvos diferentes. */
 export function suggestFromCard(name: string) {
   loadSuggestions({ card: name });
-  trocarRail("sugestoes");
-  if (window.innerWidth <= 900 && !folhaAberta()) abrirFolha();
+  switchRail("sugestoes");
+  if (window.innerWidth <= 900 && !sheetOpen.value) openSheet();
 }
 
 /* Sugestão do EDHREC: a carta completa já veio junto, então adicionar é o
@@ -96,60 +96,49 @@ export function addSuggestion(card: Card) {
    agora?", e sim "por onde eu começo?". O deck médio é a lista das cartas
    mais jogadas nos decks registrados com o comandante, estreitada por
    bracket e orçamento. Vem do servidor no formato do importar e entra pelo
-   mesmo `aplicarImportado`.
+   mesmo `applyImported`.
 
    Deck só com o comandante recebe a lista nele mesmo: não há carta pra
    perder. Com carta no deck, vale a regra do importar — pergunta antes, e o
    resultado vira um deck novo, com o de agora intacto em Meus decks. */
-export async function importAverageDeck(){
-  if (!state.comandantes.length){
+export const averageDeck = signal({ bracket: "", budget: "", running: false, notice: null as ImportNotice });
+
+export function setAverageDeck(change: Partial<typeof averageDeck.value>) {
+  averageDeck.value = { ...averageDeck.value, ...change };
+}
+
+export async function importAverageDeck() {
+  if (!state.comandantes.length) {
     toast("Escolha o comandante primeiro: o deck médio é dele.");
     return;
   }
-  const caixa = $("dm-resultado") as HTMLElement;
-  const botao = $("btn-deck-medio") as HTMLButtonElement;
-  botao.disabled = true;
-  caixa.innerHTML = `<div class="nota">Pedindo o deck médio ao EDHREC…</div>`;
-  let trazido: any;
+  setAverageDeck({ running: true, notice: { note: "Pedindo o deck médio ao EDHREC…" } });
+  let imported: Imported;
   try {
-    trazido = await api("/decks/deck-medio", {
+    imported = await api("/decks/deck-medio", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        comandantes: state.comandantes.map(c => c.nome),
-        bracket: ($("dm-bracket") as HTMLSelectElement).value,
-        orcamento: $("seg-orcamento-medio")!.querySelector<HTMLElement>(".ativa")
-                     ?.dataset.orcamento || "",
+        comandantes: state.comandantes.map((c) => c.nome),
+        bracket: averageDeck.value.bracket,
+        orcamento: averageDeck.value.budget,
       }),
     });
-  } catch (e){
-    caixa.innerHTML =
-      `<div class="aponta erro"><span>${escapar((e as Error).message)}</span></div>`;
-    return;
-  } finally {
-    botao.disabled = false;
+  } catch (e) {
+    return setAverageDeck({ running: false, notice: { error: (e as Error).message } });
   }
+  setAverageDeck({ running: false });
 
-  const temCarta = state.cartas.length || state.maybe.length;
-  if (temCarta && !confirm(`Trocar as cartas do deck pelo deck médio do ` +
-      `EDHREC?\n\nO deck de agora continua salvo e na lista de Meus decks — ` +
-      `mas esta janela passa a mostrar o deck médio.`)){
-    caixa.innerHTML = `<div class="nota">Importação cancelada.</div>`;
-    return;
+  const hasCards = state.cartas.length || state.maybe.length;
+  if (hasCards && !confirm("Trocar as cartas do deck pelo deck médio do EDHREC?\n\n" +
+      "O deck de agora continua salvo e na lista de Meus decks — mas esta janela passa a mostrar o deck médio.")) {
+    return setAverageDeck({ notice: { note: "Importação cancelada." } });
   }
-
-  aplicarImportado(trazido, {mesmoDeck: !temCarta});
-  mostrarResultadoImportacao(trazido, caixa);
-  // Quantos decks entraram na média muda como ler a lista: a de doze decks
-  // é o gosto de doze pessoas, a de quarenta mil é o formato falando.
-  caixa.insertAdjacentHTML("beforeend", `<div class="fonte-edhrec">Média de
-    ${trazido.decks ? `<b>${trazido.decks.toLocaleString("pt-BR")}</b>`
-                    : "todos os"} decks registrados na
-    <a href="${escapar(trazido.link)}" target="_blank" rel="noopener">página
-    do deck médio no EDHREC</a>.</div>`);
+  applyImported(imported, { sameDeck: !hasCards });
+  setAverageDeck({ notice: { imported } });
 
   // As sugestões foram zeradas junto com o deck antigo, e esta é a aba que
   // está à vista: pede de novo, contra o deck que acabou de entrar. Grava
   // antes, porque é o deck do SERVIDOR que filtra o que já está nele.
-  if (await salvarJa()) loadSuggestions({ theme: state.sugestoesTema });
+  if (await flushSave()) loadSuggestions({ theme: state.sugestoesTema });
 }

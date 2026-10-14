@@ -3,22 +3,21 @@
    Toda mudança no deck passa por aqui: guarda o desfazer, muda o estado,
    apaga a validação velha (a do servidor volta com o autosave), redesenha e
    agenda o salvamento. */
-import { $ } from "../../shared/dom.js";
-import { search } from "./search";
+import { search, searchCommander, searchText } from "./search";
 import { allCategories, boardList, isCustomCategory } from "./deck";
-import { desenharTudo } from "./desenho.js";
-import { agendarSalvar } from "./salvar.js";
+import { redrawAll } from "./redraw";
+import { scheduleSave } from "./save";
 import { OUT_OF_COUNT, state } from "./state";
 import type { Board, Card, Entry } from "./types";
-import { toast } from "./utilidades.js";
+import { toast } from "./ui/toast";
 
 const UNDO_LIMIT = 40;
 
 /** Depois de toda mudança: a validação local vale até a do servidor voltar. */
 function changed({ invalidate = true } = {}) {
   if (invalidate) state.validacao = null;
-  desenharTudo();
-  agendarSalvar();
+  redrawAll();
+  scheduleSave();
 }
 
 export function findEntry(name: string, board?: Board | string): Entry | undefined {
@@ -251,19 +250,27 @@ export function chooseCommander(card: Card) {
   commanderPick.partner = false;
   if (!state.nome || state.nome === "Deck sem nome") {
     state.nome = card.nome.split(",")[0];
-    ($("nome-deck") as HTMLInputElement).value = state.nome;
   }
   state.validacao = null;
-  desenharTudo();
+  redrawAll();
   search();          // a lista da lateral agora tem identidade pra filtrar
-  agendarSalvar();
+  scheduleSave();
+}
+
+/* O "Adicionar parceiro": a pergunta do comandante volta à tela, e o
+   próximo escolhido entra junto do primeiro em vez de no lugar dele. */
+export function startPartnerPick() {
+  commanderPick.partner = true;
+  searchText.cmd.value = "";
+  redrawAll();
+  searchCommander();
 }
 
 export function removeCommander(index: number) {
   pushUndo();
   state.comandantes.splice(index, 1);
   state.validacao = null;
-  desenharTudo();
+  redrawAll();
   search();
-  agendarSalvar();
+  scheduleSave();
 }

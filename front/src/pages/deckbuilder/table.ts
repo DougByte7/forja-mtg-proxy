@@ -14,7 +14,6 @@
    A mesa tem a revisão dela (`tableRevision`): uma jogada redesenha só a
    mesa, e não a lista, a análise e as chances do deck inteiro. */
 import { signal } from "@preact/signals";
-import { $ } from "../../shared/dom.js";
 import { fetchCardInfo } from "./cardDetail";
 import { countedCards } from "./deck";
 import {
@@ -23,7 +22,8 @@ import {
   putOnBottom, removeSecondDeck, reposition, saveTableSnapshot, screenDeck, setUpTable,
   shuffleLibrary, toggleTapped, undoTableStep, fitsInRow, type TokenModel, type Zone,
 } from "./goldfish";
-import { api, lidos } from "./salvar.js";
+import { readLocalDecks } from "../../shared/localDecks";
+import { api } from "./save";
 import { state } from "./state";
 import { toast } from "./ui/toast";
 
@@ -239,7 +239,7 @@ export type DeckOption = { id: string; nome: string; de: string };
    qualquer aparelho. A união dos dois é a lista que a pessoa reconhece. */
 export async function listDecks(): Promise<DeckOption[]> {
   const byId = new Map<string, DeckOption>();
-  for (const d of lidos()) byId.set(d.id, { id: d.id, nome: d.nome, de: "neste navegador" });
+  for (const d of readLocalDecks()) byId.set(d.id, { id: d.id, nome: d.nome, de: "neste navegador" });
   if (state.usuario) {
     try {
       const r = await api("/decks/meus");
@@ -282,7 +282,7 @@ const PANEL_GAP = 16;
    lugar da carta, e fica com a última carta olhada até o próximo hover.
    Quem decide o modo é o CSS (`body.gf-cheia .gf-coluna`); o script só lê. */
 export function panelFloats() {
-  const panel = $("gf-detalhe");
+  const panel = document.getElementById("gf-detalhe");
   return !!panel && getComputedStyle(panel).position === "fixed";
 }
 
@@ -301,7 +301,7 @@ export async function showDetail(uid: number) {
   const c = cardByUid(uid);
   if (!c) return hideDetail();
   const floats = panelFloats();
-  const table = $("gf-mesa");
+  const table = document.getElementById("gf-mesa");
   const left = floats && table
     ? Math.max(8, table.getBoundingClientRect().left - PANEL_WIDTH - PANEL_GAP) + "px" : "";
   detail.value = { uid, data: null, floats, left };
@@ -329,7 +329,7 @@ export async function showDetail(uid: number) {
    mora numa coluna, pega o ponteiro e rola pela barra como qualquer texto. */
 export function scrollDetail(amount: number) {
   if (!detail.value || !panelFloats()) return false;
-  const body = $("gf-detalhe-corpo");
+  const body = document.getElementById("gf-detalhe-corpo");
   if (!body) return false;
   const end = body.scrollHeight - body.clientHeight;
   if (end <= 0) return false;

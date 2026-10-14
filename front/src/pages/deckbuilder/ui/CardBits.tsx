@@ -1,6 +1,7 @@
 /* Os pedaços de uma linha de carta que aparecem em mais de um lugar: o botão
    de arte, o preço e a etiqueta de inédita. */
 import { artButtonView } from "../art";
+import { openArtPicker } from "../art";
 import { priceView } from "../budget";
 import { brDate } from "../text";
 import type { Card, Entry } from "../types";
@@ -12,7 +13,8 @@ import { SpriteIcon } from "./SpriteIcon";
 export function ArtButton({ card }: { card: Card }) {
   const v = artButtonView(card);
   return (
-    <button class={"mini" + (v.escolhida ? " tem-arte" : "")} data-arte-carta={card.nome}
+    <button class={"mini" + (v.escolhida ? " tem-arte" : "")}
+            onClick={(e) => { e.stopPropagation(); openArtPicker(card.nome); }}
             style={v.escolhida ? { backgroundImage: `url('${v.miniatura}')` } : undefined}
             title={v.titulo} aria-label={`Escolher arte de ${card.nome}`}>
       {!v.escolhida && <SpriteIcon name="image" />}

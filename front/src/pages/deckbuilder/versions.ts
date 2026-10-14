@@ -9,13 +9,11 @@
    Quem decide é o servidor — WIP inválido e lista igual voltam 409 com o
    motivo. A tela só deixa de oferecer o clique que ele recusaria, usando a
    mesma validação instantânea do contador. O desenho é `ui/Versions.tsx`. */
-import { $ } from "../../shared/dom.js";
-import { abrirMenu } from "./menus.js";
-import { trocarAba } from "./paineis.js";
-import { api, salvando, salvarJa, salvarTimer, validacaoAtual } from "./salvar.js";
+import { switchTab } from "./layout";
+import { openMenu, type MenuItem } from "./popupMenu";
+import { api, currentValidation, flushSave, isSavePending } from "./save";
 import { state, touch } from "./state";
 import { toast } from "./ui/toast";
-import { ico } from "./utilidades.js";
 
 export const isWip = () => state.versao?.atual == null;
 
@@ -42,14 +40,14 @@ export function completionBlocker() {
   if (!state.usuario) return "Entre na sua conta pra concluir versões.";
   if (!canComplete()) return "Só quem é dono do deck conclui versões.";
   if (isWip()) {
-    const v = validacaoAtual();
+    const v = currentValidation();
     if (v.ok) return "";
     const size = v.apontamentos.find((a: any) => a.tipo === "faltam" || a.tipo === "sobram");
     const serious = v.apontamentos.filter((a: any) => a.nivel === "erro" && a !== size);
     if (serious.length) return `${serious.length} problema(s) na lista — veja a aba Análise.`;
     return size ? size.mensagem : "A lista ainda não é válida.";
   }
-  if (!state.versao.mudou && !salvarTimer && !salvando) return `A lista está igual à v${state.versao.atual}.`;
+  if (!state.versao.mudou && !isSavePending()) return `A lista está igual à v${state.versao.atual}.`;
   return "";
 }
 
@@ -68,43 +66,41 @@ export function versionPillView() {
   };
 }
 
-/* A aba de histórico só existe com o que comparar. Enquanto as abas forem
-   HTML em string, a pílula (componente) avisa por aqui. */
+/* A aba de histórico só existe com o que comparar: sem ela, quem estava
+   nela volta pro deck. */
 export function syncVersion() {
-  const { hasHistory } = versionPillView();
-  ($("aba-historico") as HTMLElement).hidden = !hasHistory;
-  if (!hasHistory && state.aba === "historico") trocarAba("deck");
+  if (!versionPillView().hasHistory && state.aba === "historico") switchTab("deck");
   touch();
 }
 
-export function openVersionMenu() {
+export function openVersionMenu(anchor: Element) {
   const v = state.versao;
   const wip = isWip();
   const blocker = completionBlocker();
-  const items: unknown[] = [];
+  const items: MenuItem[] = [];
   if (wip) {
-    items.push({ titulo: "Trabalho em progresso" });
-    items.push({ nota: blocker || "A lista está pronta pra virar a v0." });
+    items.push({ title: "Trabalho em progresso" });
+    items.push({ note: blocker || "A lista está pronta pra virar a v0." });
   } else {
     // Por extenso: o título do menu é em caixa alta, e "V1" não é a pílula.
-    items.push({ titulo: `Versão ${v.atual} · ${shortDate(v.concluida_em)}` });
+    items.push({ title: `Versão ${v.atual} · ${shortDate(v.concluida_em)}` });
     const note = blocker || (v.mudou ? `Desde a v${v.atual}: ${v.entraram} entraram, ${v.sairam} saíram.` : "");
-    if (note) items.push({ nota: note });
+    if (note) items.push({ note });
   }
-  items.push({ rotulo: `Concluir v${wip ? 0 : v.atual + 1}`, marca: ico("check"),
-               desabilitado: !!blocker, aoClicar: completeVersion });
+  items.push({ label: `Concluir v${wip ? 0 : v.atual + 1}`, icon: "check",
+               disabled: !!blocker, onClick: completeVersion });
   if (!wip && v.atual >= 1) {
-    items.push("risco");
-    items.push({ rotulo: "Ver histórico", marca: ico("arrow-counter-clockwise"), aoClicar: () => trocarAba("historico") });
+    items.push("sep");
+    items.push({ label: "Ver histórico", icon: "arrow-counter-clockwise", onClick: () => switchTab("historico") });
   }
-  abrirMenu($("btn-versao"), items);
+  openMenu(anchor, items);
 }
 
 /* A fotografia é do que o servidor tem gravado, então o que estiver
    esperando o autosave vai antes — senão a versão sairia sem a última
    carta. */
 export async function completeVersion() {
-  if (!(await salvarJa())) {
+  if (!(await flushSave())) {
     toast("Não consegui salvar o deck — a versão fica pra depois.");
     return;
   }

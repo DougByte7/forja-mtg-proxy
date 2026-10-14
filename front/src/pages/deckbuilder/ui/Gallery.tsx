@@ -1,10 +1,9 @@
 /* A aba Artes (a galeria e o atalho das artes padrão) e o "Gerar pedido" do
-   cabeçalho. As contas são de `gallery.ts`; clicar num quadro abre a modal
-   pela delegação do `eventos.js` (`data-arte-carta`). */
+   cabeçalho. As contas são de `gallery.ts`. */
 import type { ComponentChildren } from "preact";
-import { applyDefaultsToMissing, artState } from "../art";
+import { applyDefaultsToMissing, artState, openArtPicker } from "../art";
 import { defaultsShortcutHidden, galleryCount, galleryGroups, orderLinkView, type GalleryFrame } from "../gallery";
-import { salvando, salvarJa, salvarTimer } from "../salvar.js";
+import { flushSave, isSavePending } from "../save";
 import { toast } from "./toast";
 import { SpriteIcon } from "./SpriteIcon";
 import { useDeck } from "./useDeck";
@@ -27,7 +26,8 @@ function GalleryCard({ frame: f }: { frame: GalleryFrame }) {
     <button class={"galeria-carta" + (f.chosen ? " tem-arte" : "") + (f.lying ? " deitada" : "")}
             data-arte-carta={f.artCard} data-arte-face={f.face} data-arte-copia={f.copy || undefined}
             data-arte={f.preview || undefined} data-deitada={f.preview && f.lying ? "1" : undefined}
-            title={`${f.label} — ${f.situation}`} aria-label={`${f.label}: ${f.situation}`}>
+            title={`${f.label} — ${f.situation}`} aria-label={`${f.label}: ${f.situation}`}
+            onClick={() => openArtPicker(f.artCard, f.face, f.copy)}>
       <Frame src={f.src} lying={f.lying}>
         {f.chosen && <span class="galeria-marca"><SpriteIcon name="check" /></span>}
         {f.quantity > 1 && <span class="galeria-qtd">{f.quantity}×</span>}
@@ -74,9 +74,9 @@ export function DefaultArtsButton() {
    gravação pendente, grava antes: senão o pedido sairia sem a última carta. */
 async function followOrderLink(e: MouseEvent) {
   const link = e.currentTarget as HTMLAnchorElement;
-  if (!link.hasAttribute("href") || (!salvarTimer && !salvando)) return;
+  if (!link.hasAttribute("href") || !isSavePending()) return;
   e.preventDefault();
-  if (await salvarJa()) location.href = link.href;
+  if (await flushSave()) location.href = link.href;
   else toast("Não consegui salvar o deck — o pedido fica pra depois.");
 }
 

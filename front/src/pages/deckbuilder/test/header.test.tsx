@@ -1,4 +1,4 @@
-/* As ilhas: o que o componente desenha a partir do estado. */
+/* O que os componentes do topo desenham a partir do estado. */
 import { act } from "preact/test-utils";
 import { render } from "preact";
 import { entrada } from "./fixtures";
@@ -34,7 +34,7 @@ describe("Meters", () => {
     expect((host.querySelector("#btn-total") as HTMLElement).hidden).toBe(true);
 
     p.state.comandantes = clone([ATRAXA]);
-    act(() => p.desenharTudo());
+    act(() => p.redrawAll());
     expect(host.querySelector("#contador-n")!.textContent).toBe("1");
     expect((host.querySelector("#btn-total") as HTMLElement).hidden).toBe(false);
   });

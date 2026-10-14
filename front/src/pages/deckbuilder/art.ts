@@ -39,8 +39,7 @@
    Aqui fica o estado da modal e a conversa com o servidor; o desenho é
    `ui/ArtPicker.tsx` (a modal) e `ui/Gallery.tsx` (a aba Artes).
    ========================================================================= */
-import { $ } from "../../shared/dom.js";
-import { api } from "./salvar.js";
+import { api } from "./save";
 import { state, touch } from "./state";
 import { foldAccents } from "./text";
 import { deckTokens, tokenLabel } from "./tokens";
@@ -320,7 +319,7 @@ export async function openArtPicker(name: string, face?: string, copy?: string |
   artState.copia = artState.porCopia ? artState.copia || 1 : 0;
   // A prévia do hover fica presa embaixo da modal se não for dispensada: o
   // clique não move o mouse, e é movimento que a apaga.
-  $("previa")?.classList.remove("mostra");
+  document.getElementById("previa")?.classList.remove("mostra");
   lockScroll(true);
 
   // As duas viajam juntas: as impressões são da Scryfall e a grade é do MPC

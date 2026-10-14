@@ -2,11 +2,10 @@
 
    A análise vem de `app/manabase.py`. Aqui fica o pedido, o ciclo aberto e
    as ações de pôr terreno no deck; o desenho é `ui/Manabase.tsx`. */
-import { $ } from "../../shared/dom.js";
-import { desenharTudo } from "./desenho.js";
+import { manabaseCall, switchTab } from "./layout";
+import { redrawAll } from "./redraw";
 import { addCard, findEntry, pushUndo } from "./editing";
-import { trocarAba } from "./paineis.js";
-import { agendarSalvar, api, salvarAgora } from "./salvar.js";
+import { scheduleSave, api, saveNow } from "./save";
 import { state, touch } from "./state";
 import type { Card } from "./types";
 import { toast } from "./ui/toast";
@@ -40,7 +39,7 @@ export async function analyzeManabase() {
     toast("Escolha o comandante primeiro: é a identidade dele que define as cores.");
     return;
   }
-  if (!state.id) await salvarAgora();
+  if (!state.id) await saveNow();
   if (!state.id) { toast("Não consegui salvar o deck antes de analisar."); return; }
   // Só avisa que está calculando quando ainda não há resposta na tela. Nos
   // recálculos do autosave, apagar a conta anterior faria o painel piscar a
@@ -101,8 +100,8 @@ export function addBatch(batch: { carta: Card; quantidade: number }[]) {
     else state.cartas.push({ carta, quantidade, categoria: "" });
   }
   state.validacao = null;
-  desenharTudo();
-  agendarSalvar();
+  redrawAll();
+  scheduleSave();
 }
 
 /** Um básico ("3× Forest") ou, com `all`, o lote inteiro ("Todos"). */
@@ -125,11 +124,7 @@ export function addFixingLand(land: FixingLand) {
    que já existe embaixo do deck e o faz piscar, porque duas mana bases na
    mesma tela seriam duas respostas pra mesma pergunta. */
 export function callManabase() {
-  trocarAba("manabase");
-  const panel = $("painel-manabase") as HTMLElement;
-  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  panel.classList.remove("chamado");
-  void panel.offsetWidth;          // reinicia a animação se já tiver rodado
-  panel.classList.add("chamado");
+  switchTab("manabase");
+  manabaseCall.value++;
   if (!state.manabase) analyzeManabase();
 }

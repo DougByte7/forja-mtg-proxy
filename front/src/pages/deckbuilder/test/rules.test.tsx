@@ -44,11 +44,11 @@ function seen(p: Page) {
     contadas: p.countedCards().map((x: any) => x.carta.nome),
     orcamento: p.localBudget(),
     ordem: p.categoryOrder(e.cartas),
-    apontamentos: p.validarLocal().apontamentos.map((a: any) => a.tipo),
-    corpo: p.corpoDoDeck(),
+    apontamentos: p.validateLocally().apontamentos.map((a: any) => a.tipo),
+    corpo: p.deckBody(),
     htmlDeck: drawn(p, "deck"),
     htmlTalvez: drawn(p, "talvez"),
-    lista: p.listaTexto() as string,
+    lista: p.listText() as string,
   };
 }
 
@@ -72,7 +72,7 @@ describe("a lista, agrupada", () => {
     expect(r.ordem.slice(0, 3)).toEqual(["Combo principal", "Sac outlet", "Ainda vazia"]);
     expect(r.ordem.at(-1)).toBe("Sideboard");
     expect(groups(r.htmlDeck)).toContain("Ainda vazia");
-    expect(r.htmlDeck).toContain("data-abrir-manabase");
+    expect(r.htmlDeck).toContain("</svg> Mana base</button>");   // o atalho no grupo Terrenos
     expect(r.htmlDeck).toContain("fora das 100");
     // Toda carta do estado tem que aparecer na tela.
     expect(sorted(names(r.htmlDeck))).toEqual(sorted(DECK.map((e) => e.carta!.nome)));

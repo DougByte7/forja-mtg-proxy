@@ -18,7 +18,7 @@
    mostrando — um número que esconde de onde veio é pior que número nenhum. */
 import { signal } from "@preact/signals";
 import { exchangeNote, exchangeRate, formatBRL, money, PRICEY_BRL, PRICEY_USD } from "./price";
-import { api, salvarAgora } from "./salvar.js";
+import { api, saveNow } from "./save";
 import { state, touch } from "./state";
 import type { Card, Entry } from "./types";
 
@@ -227,7 +227,7 @@ export function scheduleQuote() {
 
 export async function runQuote() {
   if (state.cotacaoRodando) return;
-  if (!state.id) await salvarAgora();
+  if (!state.id) await saveNow();
   if (!state.id) return;
   // A assinatura é gravada ANTES da resposta: se o deck mudar durante a
   // cotação, `scheduleQuote` vê a diferença e marca outra pra depois desta.

@@ -12,8 +12,7 @@
    Aqui ficam o estado da modal e a conversa com o servidor; o desenho é
    `ui/CardModal.tsx`. */
 import { signal } from "@preact/signals";
-import { $ } from "../../shared/dom.js";
-import { api } from "./salvar.js";
+import { api } from "./save";
 import type { Card } from "./types";
 
 export type CardFace = {
@@ -41,8 +40,13 @@ export const cardModalOpen = signal(false);
 const seen = new Map<string, CardInfo>();
 const inFlight = new Map<string, Promise<CardInfo>>();
 
+let opening = 0;
+let isOpen = false;
+
+/* Aberta desde o clique, e não só depois do quadro da animação: o Esc logo
+   em seguida tem que fechar. */
 export function isCardOpen() {
-  return cardModalOpen.value;
+  return isOpen;
 }
 
 /* Recebe a CARTA, não o nome: quem abre a modal são vários lugares que
@@ -53,16 +57,21 @@ export function openCard(card: Card | null | undefined) {
   if (!card) return;
   // A prévia do hover fica presa embaixo da modal se ela não for dispensada
   // aqui: o clique não move o mouse, e é movimento que a apaga.
-  $("previa")?.classList.remove("mostra");
+  document.getElementById("previa")?.classList.remove("mostra");
   cardModal.value = { card, info: seen.get(card.nome) ?? null };
   // A classe que anima entra um quadro depois de a modal existir, senão a
-  // transição não teria de onde partir.
-  requestAnimationFrame(() => { if (cardModal.value?.card === card) cardModalOpen.value = true; });
+  // transição não teria de onde partir — e só se nada a fechou nesse meio
+  // tempo (`opening` muda a cada abrir e fechar).
+  const mine = ++opening;
+  isOpen = true;
+  requestAnimationFrame(() => { if (opening === mine) cardModalOpen.value = true; });
   if (!seen.has(card.nome)) loadInfo(card);
 }
 
 export function closeCard() {
   if (!cardModal.value) return;
+  opening++;
+  isOpen = false;
   cardModalOpen.value = false;
   // A carta sai só depois da transição, como nas gavetas: na hora, a modal
   // sumiria sem o desvanecer.

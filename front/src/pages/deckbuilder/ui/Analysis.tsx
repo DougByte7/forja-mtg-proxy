@@ -5,7 +5,7 @@ import { deckSignature } from "../combos";
 import { deckIdentity, totalCards } from "../deck";
 import { oddsView, percent, SEEN_BY_T4 } from "../odds";
 import { BRACKETS, estimatePower, type PowerResult } from "../power";
-import { validacaoAtual } from "../salvar.js";
+import { currentValidation } from "../save";
 import { COLOR_NAMES } from "../state";
 import { SpriteIcon } from "./SpriteIcon";
 import { useDeck } from "./useDeck";
@@ -35,14 +35,14 @@ function IssueLine({ issue, cls, style }: { issue: ReturnType<typeof groupIssues
    estado normal de quem está montando, e mora na aba. */
 export function DeckAlerts() {
   useDeck();
-  const issues: Issue[] = validacaoAtual().apontamentos || [];
+  const issues: Issue[] = currentValidation().apontamentos || [];
   const serious = issues.filter((a) => a.nivel === "erro" && !isCountIssue(a));
   return <>{groupIssues(serious).map((g) => <IssueLine issue={g} cls="erro" style="margin-bottom:8px" />)}</>;
 }
 
 export function Issues() {
   const state = useDeck();
-  const v = validacaoAtual();
+  const v = currentValidation();
   if (!state.comandantes.length) return <Empty>Escolha o comandante pra análise começar.</Empty>;
   if (v.ok) {
     return (

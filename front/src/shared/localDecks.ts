@@ -1,7 +1,7 @@
 /* A lista de decks que este navegador conhece (`forja.decks`).
 
    É a mesma chave e o mesmo formato que o deckbuilder escreve
-   (`lidos`/`lembrarDeck` em `app/static/deckbuilder/`), e as duas telas
+   (`rememberDeck`, em `pages/deckbuilder/save.ts`), e as duas telas
    precisam continuar concordando: um formato que divergisse faria um deck
    salvo numa sumir da outra. Quem mexer no formato de um lado mexe no outro. */
 

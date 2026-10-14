@@ -555,7 +555,7 @@ it("a mesa não vaza pro deck salvo", () => {
   // Uma mão de goldfish gravada no deck voltaria três semanas depois, em
   // outra máquina, no meio de uma edição.
   table(); p.keepHand(0); p.passTurn();
-  expect(Object.keys(p.corpoDoDeck()).sort()).toEqual(["cartas", "categorias", "comandantes", "maybeboard", "nome"]);
+  expect(Object.keys(p.deckBody()).sort()).toEqual(["cartas", "categorias", "comandantes", "maybeboard", "nome"]);
 });
 
 describe("deck vazio não quebra", () => {

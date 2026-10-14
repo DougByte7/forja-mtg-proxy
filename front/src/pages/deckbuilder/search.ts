@@ -4,11 +4,11 @@
    e a do painel de adicionar. As duas falam com a base local (`cartas.py`),
    e o que voltou mora no estado — `state.resultados.main` e `.cmd` —, de onde
    `ui/Search.tsx` desenha. */
-import { $ } from "../../shared/dom.js";
+import { signal } from "@preact/signals";
 import { deckIdentity } from "./deck";
 import { addCard, chooseCommander } from "./editing";
 import { maxPriceInUsd } from "./price";
-import { api } from "./salvar.js";
+import { api } from "./save";
 import { anyFilterOn, SIDEBOARD, state, touch } from "./state";
 import { deckLinkSource } from "./text";
 import type { Card } from "./types";
@@ -39,6 +39,16 @@ function setResult(box: SearchBox, next: Partial<SearchResult>) {
   // A lista trocou: o índice destacado apontava pra outra carta.
   state.resultados[box] = { ...emptyResult(), done: true, ...next };
   touch();
+}
+
+/** O que está escrito em cada caixa. */
+export const searchText = { main: signal(""), cmd: signal("") };
+
+/* Digitar na caixa: guarda o texto e busca depois de a pessoa parar. */
+export function typeSearch(box: SearchBox, text: string) {
+  searchText[box].value = text;
+  if (box === "main") scheduleSearch();
+  else scheduleCommanderSearch();
 }
 
 /** O que acontece com a carta escolhida em cada caixa. */
@@ -81,7 +91,7 @@ export function isPaged(term: string) {
 }
 
 export async function search(): Promise<void> {
-  const term = ($("busca") as HTMLInputElement).value.trim();
+  const term = searchText.main.value.trim();
   const identity = state.comandantes.length ? deckIdentity() : null;
   const paged = isPaged(term);
   const params = new URLSearchParams({ q: term, limite: paged ? String(state.buscaPorPagina) : "24" });
@@ -116,7 +126,7 @@ export async function search(): Promise<void> {
 }
 
 export async function searchCommander() {
-  const term = ($("busca-cmd") as HTMLInputElement).value.trim();
+  const term = searchText.cmd.value.trim();
   // Quem já tem o deck pronto em outro lugar chega nesta tela e vê UMA
   // caixa: é nela que o link vai ser colado. Um link não se confunde com
   // nome de carta (ver `deckLinkSource`), então a caixa responde às duas
@@ -198,32 +208,31 @@ function moveHighlight(box: SearchBox, step: number) {
   touch();
 }
 
-export function bindSearchKeys(input: HTMLInputElement, box: SearchBox) {
-  input.addEventListener("keydown", (e) => {
-    const r = result(box);
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      if (!visibleCount(r)) return;
-      e.preventDefault();
-      return moveHighlight(box, e.key === "ArrowDown" ? 1 : -1);
-    }
-    if (e.key === "Escape" && r.highlight >= 0) {
-      e.preventDefault();
-      r.highlight = -1;
-      touch();
-      return;
-    }
-    if (e.key === "Enter") {
-      if (!r.cards.length) return;
-      e.preventDefault();
-      const card = r.cards[r.highlight >= 0 ? r.highlight : 0];
-      r.highlight = -1;
-      if (card) pickHandler(box)(card);
-      // A caixa do comandante sai da tela assim que um é escolhido: só
-      // devolve o foco quem continua visível.
-      if (input.offsetParent) { input.focus(); input.select(); }
-      touch();
-    }
-  });
+export function onSearchKey(e: KeyboardEvent, box: SearchBox) {
+  const input = e.currentTarget as HTMLInputElement;
+  const r = result(box);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (!visibleCount(r)) return;
+    e.preventDefault();
+    return moveHighlight(box, e.key === "ArrowDown" ? 1 : -1);
+  }
+  if (e.key === "Escape" && r.highlight >= 0) {
+    e.preventDefault();
+    r.highlight = -1;
+    touch();
+    return;
+  }
+  if (e.key === "Enter") {
+    if (!r.cards.length) return;
+    e.preventDefault();
+    const card = r.cards[r.highlight >= 0 ? r.highlight : 0];
+    r.highlight = -1;
+    if (card) pickHandler(box)(card);
+    // A caixa do comandante sai da tela assim que um é escolhido: só
+    // devolve o foco quem continua visível.
+    if (input.offsetParent) { input.focus(); input.select(); }
+    touch();
+  }
 }
 
 /* ------------------------------------------------------- destino da carta

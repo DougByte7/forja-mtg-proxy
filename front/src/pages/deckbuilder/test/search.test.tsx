@@ -73,7 +73,7 @@ it("o teclado anda pela lista e o Enter manda a destacada pro destino", async ()
   const cards = ["Alfa", "Beta", "Gama"].map((nome) => ({ nome, tipo: "Instant", identidade: "", legal: true }));
   const input = document.createElement("input");
   document.body.appendChild(input);
-  p.bindSearchKeys(input, "main");
+  input.addEventListener("keydown", (e) => p.onSearchKey(e, "main"));
   const host = mount(<p.SearchResults box="main" />);
   act(() => { p.state.resultados.main = { ...p.state.resultados.main, cards, term: "a", done: true }; p.touch(); });
 

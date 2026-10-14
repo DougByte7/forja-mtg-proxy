@@ -20,8 +20,8 @@
    e a tela diz isso: todo valor convertido carrega `exchangeNote()` no title,
    com o valor da taxa e se ela veio do câmbio do dia ou do padrão fixo. */
 
-import { desenharTudo } from "./desenho.js";
-import { api } from "./salvar.js";
+import { redrawAll } from "./redraw";
+import { api } from "./save";
 import { state } from "./state";
 import type { Card } from "./types";
 
@@ -102,7 +102,7 @@ export async function loadExchangeRate() {
   } catch {
     return;   // silêncio de propósito: isto é a régua, não o serviço
   }
-  desenharTudo();
+  redrawAll();
 }
 
 /* O preço de uma carta na moeda da tela, ou nada quando a base não tem. */

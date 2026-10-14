@@ -6,7 +6,6 @@
    atributos que `previewProps` (em `ui/preview.ts`) escreve. É DOM direto, e
    não componente, de propósito: ela anda a cada movimento do mouse, e um
    redesenho por quadro seria trabalho jogado fora. */
-import { $ } from "../../shared/dom.js";
 
 const PREVIEW_WIDTH = 250;    // largura da carta em pé
 const PREVIEW_HEIGHT = 349;   // altura dela, na proporção 488x680 da Scryfall
@@ -14,9 +13,9 @@ const PREVIEW_LYING = 487;    // largura da carta girada (a altura vira largura)
 const PREVIEW_GAP = 8;        // o `gap` do CSS entre frente e verso
 
 export function bindHoverPreview() {
-  const preview = $("previa")!;
-  const front = $("previa-frente") as HTMLImageElement;
-  const back = $("previa-verso") as HTMLImageElement;
+  const preview = document.getElementById("previa")!;
+  const front = document.getElementById("previa-frente") as HTMLImageElement;
+  const back = document.getElementById("previa-verso") as HTMLImageElement;
   // Arte que não carrega deixaria uma caixa vazia com borda seguindo o mouse,
   // que parece defeito da página e não carta sem imagem. Se só o verso falha,
   // a frente continua valendo.

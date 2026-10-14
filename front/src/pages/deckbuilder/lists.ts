@@ -3,7 +3,7 @@
    linha de vermelho. O desenho é `ui/DeckList.tsx`. */
 import { categoryOf, categoryOrder, isCustomCategory } from "./deck";
 import { groupSubtotal, sortablePrice } from "./budget";
-import { OUT_OF_COUNT, state } from "./state";
+import { OUT_OF_COUNT, state, touch } from "./state";
 import { foldAccents } from "./text";
 import type { Board, Entry } from "./types";
 
@@ -123,4 +123,28 @@ export function rowProblem(entry: Entry, identity: string, board: Board) {
     : repeated ? "singleton: só uma cópia"
     : illegal ? "não é legal em Commander" : "";
   return { problem: !!why, why };
+}
+
+/* Recolher e abrir um grupo. Fica na memória da sessão e não no deck: é como
+   a lista está sendo olhada agora, não o que ela é — recarregar a página
+   devolve tudo aberto, de propósito. */
+export function toggleGroup(cat: string, board: Board) {
+  const key = `${board}:${cat}`;
+  if (state.gruposFechados.has(key)) state.gruposFechados.delete(key);
+  else state.gruposFechados.add(key);
+  touch();
+}
+
+/* O que se digitou pra achar uma carta já adicionada. Sem atraso, ao
+   contrário da busca da esquerda: aqui não há rede nenhuma — é filtrar uma
+   lista de 100 que já está na memória. E a cotação, a curva e o resto não
+   têm por que recalcular por causa de uma letra digitada: só redesenha. */
+export function filterList(board: Board, text: string) {
+  state.listaBusca[board] = text;
+  touch();
+}
+
+export function sortLists(order: string) {
+  state.listaOrdem = LIST_ORDERS[order as keyof typeof LIST_ORDERS] ? order : "cmc";
+  touch();
 }

@@ -2,11 +2,11 @@
 
    O que vai na tela sai de `counterView` e `totalView`, funções puras (os
    testes as conferem); o componente só desenha. */
-import { exportar } from "../importar-exportar.js";
+import { exportList } from "../importExport";
 import { totalCards } from "../deck";
 import { localBudget, quoteBox, quoteSignature, toggleQuote } from "../budget";
 import { exchangeNote, money } from "../price";
-import { validacaoAtual } from "../salvar.js";
+import { currentValidation } from "../save";
 import { state } from "../state";
 import { SpriteIcon } from "./SpriteIcon";
 import { useDeck } from "./useDeck";
@@ -18,7 +18,7 @@ import { useDeck } from "./useDeck";
    frase. */
 export function counterView() {
   const total = totalCards();
-  const v = validacaoAtual();
+  const v = currentValidation();
   const serious = (v.apontamentos || []).filter(
     (a: any) => a.nivel === "erro" && a.tipo !== "faltam" && a.tipo !== "sobram");
   const status = serious.length ? "erro" : total === 100 && v.ok ? "completo" : total > 100 ? "passou" : "";
@@ -87,7 +87,7 @@ export function Meters() {
           ela exporta. O ⌄ ao lado abre o detalhe da cotação, que é alto
           demais pra caber num tooltip. */}
       <button class={"medidor" + (t.waiting ? " cotando" : "")} id="btn-total" type="button"
-              hidden={!t.hasDeck} title={t.title} onClick={() => exportar()}>
+              hidden={!t.hasDeck} title={t.title} onClick={() => exportList()}>
         <b id="total-n">{t.text}</b><span class="de" id="total-de">{t.label}</span>
       </button>
       <button class="btn redondo" id="btn-cotacao" type="button" hidden={!t.showQuoteToggle}

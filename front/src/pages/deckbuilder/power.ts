@@ -4,7 +4,7 @@
    `app/poder.py`). Aqui fica a busca e o estado dela; o desenho é
    `ui/Power.tsx`. */
 import { deckSignature } from "./combos";
-import { api, salvarAgora } from "./salvar.js";
+import { api, saveNow } from "./save";
 import { state, touch } from "./state";
 import { toast } from "./ui/toast";
 
@@ -27,7 +27,7 @@ export async function estimatePower() {
     toast("Monte alguma coisa antes de estimar o nível.");
     return;
   }
-  if (!state.id) await salvarAgora();
+  if (!state.id) await saveNow();
   if (!state.id) { toast("Não consegui salvar o deck antes de estimar."); return; }
 
   state.poderRodando = true;

@@ -2,34 +2,36 @@
    pras duas. Fechar por Esc e por clique no fundo existe porque uma gaveta
    modal que só fecha no ✕ é uma armadilha em tela de toque, onde o ✕ fica
    longe do polegar. */
-import { $ } from "../../shared/dom.js";
+import { signal } from "@preact/signals";
 
-/** O id da gaveta aberta, ou null. */
-export let openDrawerId: string | null = null;
+export type DrawerId = "gaveta-filtros" | "gaveta-importar";
 
-export function openDrawer(id: string) {
-  closeDrawer();
-  const drawer = $(id) as HTMLElement;
-  drawer.hidden = false;
-  // Um quadro de espera antes da classe: `hidden` some e a transição de
-  // `transform` precisa de um estado inicial pintado pra ter de onde sair —
-  // sem isso a gaveta aparece pronta, sem deslizar.
-  requestAnimationFrame(() => {
-    drawer.classList.add("aberta");
-    $("gaveta-fundo")!.classList.add("aberta");
-  });
-  openDrawerId = id;
-  const first = drawer.querySelector<HTMLElement>("input,textarea,select");
-  if (first) setTimeout(() => first.focus(), 180);
+/** A gaveta à vista (inclusive enquanto desliza pra fora), e se ela está
+    aberta — a classe que a faz deslizar. */
+export const drawer = signal<{ id: DrawerId; open: boolean } | null>(null);
+
+/* Aberta desde o clique, e não só depois do quadro da animação. */
+let active: DrawerId | null = null;
+
+export function isDrawerOpen() {
+  return active !== null;
+}
+
+export function openDrawer(id: DrawerId) {
+  active = id;
+  drawer.value = { id, open: false };
+  // Um quadro de espera antes da classe: a transição de `transform` precisa
+  // de um estado inicial pintado pra ter de onde sair — sem isso a gaveta
+  // aparece pronta, sem deslizar.
+  requestAnimationFrame(() => { if (active === id) drawer.value = { id, open: true }; });
 }
 
 export function closeDrawer() {
-  $("gaveta-fundo")!.classList.remove("aberta");
-  if (!openDrawerId) return;
-  const drawer = $(openDrawerId) as HTMLElement;
-  drawer.classList.remove("aberta");
-  // `hidden` só depois da animação: pôr na hora tiraria a gaveta da tela
-  // antes de ela ter deslizado pra fora.
-  setTimeout(() => { if (!drawer.classList.contains("aberta")) drawer.hidden = true; }, 220);
-  openDrawerId = null;
+  const current = drawer.value;
+  active = null;
+  if (!current) return;
+  drawer.value = { ...current, open: false };
+  // Some só depois da animação: tirar na hora tiraria a gaveta da tela antes
+  // de ela ter deslizado pra fora.
+  setTimeout(() => { if (active === null && drawer.value?.id === current.id) drawer.value = null; }, 220);
 }

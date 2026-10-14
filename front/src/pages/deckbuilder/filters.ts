@@ -2,9 +2,8 @@
 
    O estado dos filtros é `state.filtros`; a gaveta, a fita de etiquetas e o
    botão com a contagem são `ui/Filters.tsx` e desenham dele. */
-import { $ } from "../../shared/dom.js";
 import { screenCurrency } from "./price";
-import { scheduleSearch, searchCommander, searchFromStart } from "./search";
+import { scheduleSearch, searchCommander, searchFromStart, searchText } from "./search";
 import { EMPTY_FILTERS, state, touch, TYPE_LABELS, type Filters } from "./state";
 
 /* A cor no filtro é a cor DA CARTA, não a identidade dela: um Ancestral
@@ -73,7 +72,7 @@ export function toggleColor(color: string) {
 export function setUnreleasedFromHero(on: boolean) {
   state.filtros = { ...state.filtros, ineditas: on };
   touch();
-  if (($("busca-cmd") as HTMLInputElement).value.trim()) searchCommander();
+  if (searchText.cmd.value.trim()) searchCommander();
 }
 
 export function removeFilter(key: ActiveFilter["key"]) {

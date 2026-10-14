@@ -1,10 +1,14 @@
 /* As duas listas (o deck e o maybeboard) e a caixa do comandante.
 
-   A marcação é a mesma que o HTML em string tinha — mesmas classes, mesmos
-   `data-*` —, porque os cliques, o menu de clique direito e o arrastar ainda
-   são ligados por delegação (`eventos.js`, `menus.js`, `arrastar.js`). */
+   Os `data-*` da linha e do grupo são do arrastar (`deckDrag.ts`), que lê
+   de onde a carta saiu e onde ela caiu. */
+import { openCard } from "../cardDetail";
 import { deckIdentity, totalCards } from "../deck";
-import { boardView, rowProblem, type GroupView } from "../lists";
+import { findEntry, removeCard, removeCommander, setQuantity, startPartnerPick } from "../editing";
+import { callManabase } from "../manabase";
+import { openCardMenu, openGroupMenu } from "../menus";
+import { suggestFromCard } from "../suggestions";
+import { boardView, rowProblem, toggleGroup, type GroupView } from "../lists";
 import { subtotalText, subtotalTitle } from "../budget";
 import type { Board, Entry } from "../types";
 import { ArtButton, PriceCell, UnreleasedTag } from "./CardBits";
@@ -14,17 +18,51 @@ import { previewProps } from "./preview";
 import { SpriteIcon } from "./SpriteIcon";
 import { useDeck } from "./useDeck";
 
-/* A quantidade se digita no próprio número (quem grava é o `change`, ligado
-   por delegação em `eventos.js`). O campo NÃO é reescrito enquanto tem o
-   foco: a lista se redesenha por motivos que não são ela (a cotação que
-   chega, o autosave), e reescrever o valor no meio da digitação apagaria o
-   que a pessoa acabou de digitar. */
-function QuantityInput({ name, quantity }: { name: string; quantity: number }) {
+/* A quantidade vale no Enter, nas setas e ao sair do campo. Vazio ou lixo
+   volta pro número de antes em vez de virar zero — zero tira a carta, e
+   apagar o campo pra digitar outro número não é pedir isso. */
+function changeQuantity(input: HTMLInputElement, name: string, board: Board) {
+  const n = Math.floor(Number(input.value));
+  if (input.value.trim() === "" || !Number.isFinite(n)) {
+    input.value = String(findEntry(name, board)?.quantidade ?? "");
+    return;
+  }
+  // Escrito de volta porque, quando a conta não muda (150 num deck que já
+  // tem 99, 2,5 onde já há 2), nada se redesenha e o campo ficaria mentindo.
+  input.value = String(Math.min(99, n));
+  setQuantity(name, Math.min(99, n), board);
+}
+
+/* A quantidade se digita no próprio número. O campo NÃO é reescrito
+   enquanto tem o foco: a lista se redesenha por motivos que não são ela (a
+   cotação que chega, o autosave), e reescrever o valor no meio da digitação
+   apagaria o que a pessoa acabou de digitar. Clicar nele é ir editá-lo, não
+   abrir a carta. */
+function QuantityInput({ name, quantity, board }: { name: string; quantity: number; board: Board }) {
   return (
     <GuardedInput class="qtd" type="number" min="0" max="99" step="1" inputMode="numeric"
                   value={String(quantity)} data-qtd={name} aria-label={`Quantidade de ${name}`}
-                  title="Quantidade — zero tira a carta. Clique direito na linha pro menu." />
+                  title="Quantidade — zero tira a carta. Clique direito na linha pro menu."
+                  onClick={(e: MouseEvent) => e.stopPropagation()}
+                  onChange={(e: Event) => changeQuantity(e.currentTarget as HTMLInputElement, name, board)} />
   );
+}
+
+/* Os botões da linha não abrem a carta: o clique pára neles. */
+const only = (fn: (e: MouseEvent) => unknown) => (e: MouseEvent) => { e.stopPropagation(); fn(e); };
+
+/* O menu da carta abre no clique direito da linha (no celular, pelo ⋯
+   dela). Pelo teclado, a tecla de menu (ou Shift+F10) com o número da
+   quantidade em foco chega aqui do mesmo jeito — o número é a parte da linha
+   que recebe foco. Vindo do teclado não há ponteiro, e o evento chega em
+   (0, 0): aí o menu ancora na própria linha. */
+function rowMenu(e: MouseEvent, name: string, board: Board) {
+  e.preventDefault();
+  // A prévia da arte segue o mouse, que está parado em cima do nome: sem
+  // isto ela ficaria aberta por baixo do menu.
+  document.getElementById("previa")?.classList.remove("mostra");
+  const row = e.currentTarget as Element;
+  openCardMenu(e.clientX || e.clientY ? new DOMRect(e.clientX, e.clientY, 0, 0) : row, name, board);
 }
 
 /* A coluna do maybeboard tem 288px, e a linha do deck não cabe nela inteira:
@@ -41,8 +79,12 @@ function CardRow({ entry, identity, board }: { entry: Entry; identity: string; b
   const narrow = board === "talvez";
   const where = narrow ? "maybeboard" : "deck";
   return (
-    <div class={"linha" + (problem ? " problema" : "")} data-nome={c.nome} data-tabuleiro={board} draggable>
-      <QuantityInput name={c.nome} quantity={entry.quantidade} />
+    // A linha inteira abre a carta — clicar no nome é o gesto óbvio pra "me
+    // conta mais sobre esta carta", e o "Ver a carta" do menu é o caminho do
+    // teclado.
+    <div class={"linha" + (problem ? " problema" : "")} data-nome={c.nome} data-tabuleiro={board} draggable
+         onClick={() => openCard(c)} onContextMenu={(e) => rowMenu(e, c.nome, board)}>
+      <QuantityInput name={c.nome} quantity={entry.quantidade} board={board} />
       <span class="nome" {...previewProps(c)}>{c.nome}
         {why && <span class="porque">· {why}</span>}</span>
       <UnreleasedTag card={c} />
@@ -51,14 +93,15 @@ function CardRow({ entry, identity, board }: { entry: Entry; identity: string; b
       <span class="ctrl">
         {!narrow && (
           <>
-            <button class="mini" data-sug-carta={c.nome} title={`O que o EDHREC vê jogando junto de ${c.nome}`}
+            <button class="mini" title={`O que o EDHREC vê jogando junto de ${c.nome}`}
+                    onClick={only(() => suggestFromCard(c.nome))}
                     aria-label={`Sugestões a partir de ${c.nome}`}><SpriteIcon name="sparkle" /></button>
             <ArtButton card={c} />
           </>
         )}
-        <button class="mini sai" data-tirar={c.nome} title={`Tirar do ${where}`}
+        <button class="mini sai" title={`Tirar do ${where}`} onClick={only(() => removeCard(c.nome, board))}
                 aria-label={`Tirar ${c.nome} do ${where}`}><SpriteIcon name="x" /></button>
-        <button class="mini so-celular" data-menu-carta={c.nome}
+        <button class="mini so-celular" onClick={only((e) => openCardMenu(e.currentTarget as Element, c.nome, board))}
                 title={narrow ? "Categoria, voltar pro deck e mais" : "Categoria, maybeboard e mais"}
                 aria-label={`Opções de ${c.nome}`}><SpriteIcon name="dots-three" /></button>
       </span>
@@ -71,7 +114,9 @@ function CardGroup({ group: g, identity, board }: { group: GroupView; identity: 
   return (
     <div class={cls} data-categoria={g.category} data-tabuleiro={board}>
       <h3>
-        <button class="grupo-titulo" data-recolher-grupo={g.category} aria-expanded={g.collapsed ? "false" : "true"}
+        {/* O título do grupo é o botão de recolher: é o alvo grande, e
+            recolher é o que se faz num cabeçalho de lista. */}
+        <button class="grupo-titulo" aria-expanded={g.collapsed ? "false" : "true"} onClick={() => toggleGroup(g.category, board)}
                 title={`${g.collapsed ? "Abrir" : "Recolher"} ${g.category}`}>
           <SpriteIcon name={g.collapsed ? "caret-right" : "caret-down"} />
           <span>{g.category}</span>
@@ -85,12 +130,12 @@ function CardGroup({ group: g, identity, board }: { group: GroupView; identity: 
         )}
         <span class="traco" />
         {g.category === "Terrenos" && board === "deck" && (
-          <button class="btn-atalho" data-abrir-manabase title="A conta de terrenos deste deck, no painel de baixo">
+          <button class="btn-atalho" onClick={callManabase} title="A conta de terrenos deste deck, no painel de baixo">
             <SpriteIcon name="dice-five" /> Mana base</button>
         )}
         <span class="acoes-grupo">
           {g.custom && (
-            <button class="mini" data-menu-grupo={g.category} title="Renomear, mover ou apagar a categoria"
+            <button class="mini" onClick={(e) => openGroupMenu(e.currentTarget, g.category)} title="Renomear, mover ou apagar a categoria"
                     aria-label={`Ações da categoria ${g.category}`}><SpriteIcon name="dots-three" /></button>
           )}
         </span>
@@ -126,18 +171,21 @@ export function CommanderBox() {
       {commanders.map((c, i) => (
         <>
           {i > 0 && <div style={{ width: "100%", height: "1px", background: "var(--border)" }} />}
-          <button class="ver" data-ver-cmd={i} {...previewProps(c)} title={`Ver ${c.nome} inteira`}>
+          <button class="ver" {...previewProps(c)} title={`Ver ${c.nome} inteira`} onClick={() => openCard(c)}>
             <img src={c.imagem} alt="" loading="lazy" />
             <span class="dados"><b>{c.nome}</b><small>{c.tipo}</small></span>
             <UnreleasedTag card={c} />
           </button>
           <div class="mana"><ManaCost cost={c.mana_cost} /></div>
           <ArtButton card={c} />
-          <button class="mini sai" data-tirar-cmd={i} title="Trocar comandante"><SpriteIcon name="x" /></button>
+          <button class="mini sai" title="Trocar comandante" onClick={() => removeCommander(i)}><SpriteIcon name="x" /></button>
         </>
       ))}
       {commanders.length === 1 && commanders[0].parceiro && (
-        <button class="btn" id="btn-parceiro" style={{ width: "100%", marginTop: "8px" }}>
+        <button class="btn" id="btn-parceiro" style={{ width: "100%", marginTop: "8px" }} onClick={() => {
+          startPartnerPick();
+          document.getElementById("busca-cmd")?.focus();
+        }}>
           <SpriteIcon name="plus" /> Adicionar parceiro</button>
       )}
     </>

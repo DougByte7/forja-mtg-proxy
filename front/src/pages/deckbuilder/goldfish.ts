@@ -42,7 +42,7 @@
    ela pro cemitério DELE, que é o que acontece na mesa — e é o que faz a lista
    de zonas continuar fechando por jogador.
 
-   NADA DISSO É SALVO. `corpoDoDeck` não sabe que `state.mesa` existe: uma mão
+   NADA DISSO É SALVO. `deckBody` não sabe que `state.mesa` existe: uma mão
    de goldfish gravada no deck é uma mão que volta três semanas depois, em outra
    máquina, no meio de uma edição.
 

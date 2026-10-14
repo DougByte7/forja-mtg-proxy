@@ -144,7 +144,7 @@ export const state: DeckState = {
   historico: null,   // a última resposta de `GET /decks/{id}/versoes`
   // A mesa do goldfish: uma lista de jogadores (um, ou dois com o segundo
   // deck), o turno e o log. `null` = nunca embaralhou nesta sessão. NÃO entra
-  // no `corpoDoDeck`: mão de goldfish gravada no deck é mão que volta três
+  // no `deckBody`: mão de goldfish gravada no deck é mão que volta três
   // semanas depois, em outra máquina.
   mesa: null,
   mesaDesfazer: [],  // pilha de fotografias do JSON da mesa
@@ -192,7 +192,7 @@ export const state: DeckState = {
   //
   // Como o deck e o maybeboard estão sendo OLHADOS agora: um texto que
   // esconde o que não casa, a ordem das cartas dentro de cada grupo e os
-  // grupos recolhidos. Nada disto é o deck — não entra no `corpoDoDeck`, não
+  // grupos recolhidos. Nada disto é o deck — não entra no `deckBody`, não
   // é salvo e o Ctrl+Z não mexe nisso. É por isso que vive aqui e não na
   // entrada de cada carta: mudar de ordem não pode marcar o deck como
   // alterado.
@@ -210,10 +210,10 @@ export const state: DeckState = {
 /* ------------------------------------------------- a ponte com os componentes
 
    O estado acima é um objeto comum, mudado no lugar (`entry.quantidade += 1`),
-   e signal não enxerga mudança dentro de objeto. Enquanto a tela é metade
-   componente e metade HTML em string, a ponte é esta: toda mudança termina
-   num redesenho (`desenharTudo`), e o redesenho sobe a revisão. Componente
-   que lê `deckRevision.value` se redesenha junto com o resto da página. */
+   e signal não enxerga mudança dentro de objeto. A ponte é esta: toda
+   mudança termina num `touch()` (direto, ou pelo `redrawAll` das edições), e
+   ele sobe a revisão. Componente que lê `deckRevision.value` (ver
+   `ui/useDeck.ts`) se redesenha junto com o resto da página. */
 export const deckRevision = signal(0);
 
 export function touch() {

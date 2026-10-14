@@ -9,7 +9,7 @@ export function VersionPill() {
   const v = versionPillView();
   return (
     <button class={v.className} id="btn-versao" type="button" aria-haspopup="menu"
-            title={v.title} aria-label={v.title} onClick={() => openVersionMenu()}>{v.text}</button>
+            title={v.title} aria-label={v.title} onClick={(e) => openVersionMenu(e.currentTarget)}>{v.text}</button>
   );
 }
 

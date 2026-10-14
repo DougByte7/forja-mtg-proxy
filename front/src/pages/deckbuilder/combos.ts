@@ -7,7 +7,7 @@
    desenho é `ui/Combos.tsx`. */
 import { countedCards } from "./deck";
 import { addCard } from "./editing";
-import { api, salvarAgora } from "./salvar.js";
+import { api, saveNow } from "./save";
 import { state, touch } from "./state";
 import type { Card } from "./types";
 import { toast } from "./ui/toast";
@@ -42,7 +42,7 @@ export async function searchCombos() {
     toast("Monte alguma coisa antes de procurar combos.");
     return;
   }
-  if (!state.id) await salvarAgora();
+  if (!state.id) await saveNow();
   if (!state.id) { toast("Não consegui salvar o deck antes de buscar."); return; }
 
   // As duas abas de combo podem pedir a mesma consulta quase junto (abrir uma

@@ -1,7 +1,7 @@
 /* A página do deckbuilder sobe: a marcação de verdade, a API de mentira, e
    a entrada roda sem exceção nenhuma — síncrona ou na volta da rede. É o
-   teste que pega módulo que o build não achou, nome que um import esqueceu
-   ou elemento que a marcação perdeu. */
+   teste que pega módulo que o build não achou ou nome que um import
+   esqueceu. */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -29,14 +29,16 @@ describe("deckbuilder", () => {
     window.addEventListener("error", onError);
     process.on("unhandledRejection", (e) => errors.push(e));
 
-    await import("./abertura.js");
+    await import("./main");
     await new Promise((r) => setTimeout(r, 50));
 
     window.removeEventListener("error", onError);
     expect(errors).toEqual([]);
     expect((document.getElementById("nome-deck") as HTMLInputElement).value).toBe("Deck sem nome");
-    // As ilhas montaram: o contador é componente (`ui/Meters.tsx`).
     expect(document.getElementById("contador-n")?.textContent).toBe("0");
+    // Sem comandante, a tela é a pergunta do comandante.
+    expect(document.getElementById("heroi")).not.toBeNull();
+    expect(document.getElementById("area-deck")?.hidden).toBe(true);
     expect(document.getElementById("btn-total")?.hidden).toBe(true);
     expect(calls.some((u) => u.startsWith("/cartas/estado"))).toBe(true);
     vi.unstubAllGlobals();
@@ -64,7 +66,7 @@ it("todo módulo da pasta é alcançado pela entrada", () => {
       if (target && target.startsWith(dir)) visit(target);
     }
   };
-  visit(resolve(dir, "abertura.js"));
+  visit(resolve(dir, "main.tsx"));
   const all = (readdirSync(dir, { recursive: true }) as string[])
     .filter((f) => /\.(js|ts|tsx)$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.startsWith("test"))
     .map((f) => resolve(dir, f));

@@ -2,8 +2,9 @@
 
    Cada `freshPage()` sobe um deckbuilder novo — marcação da página, módulos
    recarregados do zero (o `state` é por módulo) e tempo de mentira, pra o
-   autosave agendado nunca disparar. Só a entrada (`abertura.js`) fica de
-   fora: ela é a única que vai à rede e liga a tela. O `fetch` devolve uma
+   autosave agendado nunca disparar. Só a entrada (`main.tsx`) fica de fora:
+   ela é a única que vai à rede e monta a tela — cada teste desenha só o
+   componente que confere. O `fetch` devolve uma
    promessa que nunca resolve, e assim nada que um teste dispare por tabela
    chega a falar com servidor nenhum. */
 import { readFileSync } from "node:fs";
@@ -13,7 +14,7 @@ const HTML = readFileSync(resolve(import.meta.dirname, "../../../../pages/deckbu
 const BODY = HTML.slice(HTML.indexOf("<body>") + 6, HTML.indexOf("</body>"))
   .replace(/<script[\s\S]*?<\/script>/g, "");
 
-const MODULES = import.meta.glob(["../**/*.{js,ts,tsx}", "!../abertura.js", "!../**/*.test.ts", "!../types.ts", "!../test/**"]);
+const MODULES = import.meta.glob(["../**/*.{js,ts,tsx}", "!../main.tsx", "!../**/*.test.ts", "!../types.ts", "!../test/**"]);
 
 export type Page = Record<string, any>;
 
