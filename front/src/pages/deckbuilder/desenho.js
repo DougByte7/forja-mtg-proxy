@@ -173,7 +173,7 @@ export function desenharMaybe(){
    é justamente nela que a próxima carta vai. No maybeboard elas não
    aparecem — dez grupos vazios numa coluna de 288px seriam a coluna
    inteira. */
-function gruposHTML(entradas, identidade, tabuleiro){
+export function gruposHTML(entradas, identidade, tabuleiro){
   const porCategoria = new Map();
   for (const entrada of entradas){
     const cat = categoriaDe(entrada);

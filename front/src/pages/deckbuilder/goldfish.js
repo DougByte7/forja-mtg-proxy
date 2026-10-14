@@ -370,7 +370,7 @@ export function zonaDaCarta(uid){
    página — o que troca carta entre deck e maybeboard. Duas declarações de
    função com o mesmo nome não dão erro: a segunda simplesmente apaga a
    primeira no hoisting, e a mesa parava de mover carta sem nada na tela
-   dizendo por quê. Foi o `tests/test_goldfish.py` que pegou. */
+   dizendo por quê. Foi o teste da mesa (hoje `test/goldfish.test.ts`) que pegou. */
 export function gfMover(uid, para, aoTopo){
   const m = estado.mesa;
   if (!m || GF_ZONAS.indexOf(para) < 0) return;

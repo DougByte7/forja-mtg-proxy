@@ -23,7 +23,7 @@ import {estado} from "./estado.js";
 import {CARO_BRL, CARO_USD, moeda, notaDoCambio, reais,
         taxa} from "./preco.js";
 
-function precoDaEntrada(entrada){
+export function precoDaEntrada(entrada){
   return (entrada.carta?.preco_usd || 0) * entrada.quantidade;
 }
 
@@ -65,7 +65,7 @@ function indiceDaCotacao(){
 
 /* O preço unitário de uma carta e de onde ele veio, ou null quando ninguém
    sabe. `fonte` é "cotacao" (medido) ou "base" (estimado). */
-function precoUnitario(carta){
+export function precoUnitario(carta){
   if (!carta) return null;
   const cotado = indiceDaCotacao().get(chaveDeNome(carta.nome));
   if (cotado) return cotado;
@@ -78,7 +78,7 @@ function precoUnitario(carta){
    O cotado passa INTACTO: ele já é real de verdade, e passá-lo pela régua do
    câmbio converteria duas vezes — é o mesmo cuidado que o total do cabeçalho
    toma em `desenharPreviaOrcamento`. Só o da base, que é dólar, é convertido. */
-function precoTexto(p, quantidade){
+export function precoTexto(p, quantidade){
   if (!p) return "";
   const valor = p.valor * (quantidade || 1);
   if (p.fonte === "base") return moeda(valor);
@@ -179,7 +179,7 @@ export function valorComparavel(entrada){
    entra — é carta que a pessoa quer ter. É a mesma divisão do servidor
    (`decks.para_cotacao`), e as duas precisam concordar, senão a prévia e a
    cotação dão números diferentes pro mesmo deck. */
-function orcamentoLocal(){
+export function orcamentoLocal(){
   let total = 0, semPreco = 0, fora = 0, cartas = 0;
   for (const entrada of estado.cartas){
     const c = entrada.carta;

@@ -54,7 +54,7 @@ export function moeda(valorUsd){
    centavo. Escrito à mão, e não com `toLocaleString("pt-BR")`, de propósito:
    aquele depende do Intl do interpretador, e onde o Intl não existe ele não
    levanta — devolve "108.6" calado, com o ponto no lugar da vírgula. Foi o
-   que o `tests/test_precos_brl.py` pegou. Formato de dinheiro é regra da
+   que o teste do câmbio (hoje `test/prices.test.ts`) pegou. Formato de dinheiro é regra da
    tela, e regra da tela tem que dar pra testar. */
 export function reais(n){
   const partes = Math.abs(n).toFixed(2).split(".");

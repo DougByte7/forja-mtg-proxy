@@ -43,7 +43,7 @@ function dataCurta(ts){
    Com uma gravação esperando o autosave, a lista da tela ainda não é a do
    servidor: o `mudou` que ele contou pode estar velho, então o clique fica
    liberado e quem responde é o servidor, depois de gravar. */
-function bloqueioDeConcluir(){
+export function bloqueioDeConcluir(){
   if (!estado.usuario) return "Entre na sua conta pra concluir versões.";
   if (!podeConcluir()) return "Só quem é dono do deck conclui versões.";
   if (ehWip()){
@@ -145,7 +145,7 @@ export async function buscarHistorico(){
   }
 }
 
-function desenharHistorico(){
+export function desenharHistorico(){
   const h = estado.historico;
   const caixa = $("historico-resultado");
   if (!h){

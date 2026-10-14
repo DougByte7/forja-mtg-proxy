@@ -2,7 +2,7 @@
    a entrada roda sem exceção nenhuma — síncrona ou na volta da rede. É o
    teste que pega módulo que o build não achou, nome que um import esqueceu
    ou elemento que a marcação perdeu. */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const HTML = readFileSync(resolve(import.meta.dirname, "../../../pages/deckbuilder.html"), "utf-8");
@@ -38,4 +38,21 @@ describe("deckbuilder", () => {
     expect(calls.some((u) => u.startsWith("/cartas/estado"))).toBe(true);
     vi.unstubAllGlobals();
   });
+});
+
+/* Um arquivo na pasta que nenhum `import` alcança é código que não roda — e
+   que nenhum teste roda, porque o build e os testes partem da entrada. */
+it("todo módulo da pasta é alcançado pela entrada", () => {
+  const dir = resolve(import.meta.dirname);
+  const seen = new Set<string>();
+  const visit = (file: string) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const text = readFileSync(resolve(dir, file), "utf-8");
+    for (const m of text.matchAll(/^import\s*\{[^}]*\}\s*from\s*"\.\/([^"]+)";/gm)) visit(m[1]);
+  };
+  visit("abertura.js");
+  const all = readdirSync(dir).filter((f) => f.endsWith(".js"));
+  expect(all.filter((f) => !seen.has(f))).toEqual([]);
+  expect(seen.size).toBeGreaterThan(20);
 });

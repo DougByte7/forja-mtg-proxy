@@ -144,7 +144,7 @@ function dadosHTML(d){
    dinheiro é), cruas da Scryfall. Passar euro e tix por uma taxa de dólar
    inventaria um real que não existe em nenhum dos dois, e o rótulo de cada
    chip já diz em que moeda o número está. */
-function precosHTML(d){
+export function precosHTML(d){
   const p = d.precos || {};
   const chips = [["usd", "US$", p.usd], ["usd_foil", "US$ foil", p.usd_foil],
                  ["eur", "€", p.eur], ["tix", "tix", p.tix]]

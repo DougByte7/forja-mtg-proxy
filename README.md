@@ -184,18 +184,16 @@ for t in tests/test_*.py; do python "$t" || echo "FALHOU: $t"; done
 bash tests/test_deploy.sh
 ```
 
-Dois deles pedem mais do que o `requirements.txt` instala, porque não são
-dependência do serviço: `test_deckbuilder.py` precisa do `dukpy` (é ele quem
-roda o JavaScript da página num interpretador) e `test_modulos.py`, do
-`tree-sitter` com o `tree-sitter-javascript`. Sem essas bibliotecas os dois
-avisam e saem **sem acusar erro** — no `for` acima eles se parecem com teste
-que passou, então vale ler a saída procurando o "não está instalado".
-
-Os testes do front (Vitest) e a checagem de tipos rodam de dentro de `front/`:
+Os testes do front (Vitest), a checagem de tipos e o lint rodam de dentro de
+`front/`:
 
 ```
-pnpm typecheck && pnpm test
+pnpm typecheck && pnpm lint && pnpm test
 ```
+
+O JavaScript da tela é testado ali, no Vitest, importando os módulos de
+verdade sobre a marcação da página — e não mais em Python, num
+interpretador.
 
 ## Como o pagamento é confirmado
 
@@ -552,30 +550,16 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   dois comandantes valem com Partner. E as duas promessas que só se quebram
   em silêncio: o maybeboard fora da cotação e da contagem, o sideboard fora
   das 100 mas dentro do preço: `python tests/test_decks.py`.
-- `tests/test_deckbuilder.py` — as mesmas regras do outro lado: as de
+- `front/src/pages/deckbuilder/test/` (Vitest) — as mesmas regras do outro lado: as de
   categoria, sideboard e maybeboard existem DUAS vezes, porque a tela responde
-  ao clique sem esperar a rede. Este teste roda o JavaScript da página (os
-  módulos, achatados num script só na ordem em que o navegador os avalia —
-  ver `tests/js_do_deckbuilder.py`) num interpretador, sobre um DOM de
-  mentira, pra que as duas implementações não divirjam calado — e confere que
-  nenhuma carta pode ficar invisível na lista por causa de uma categoria que
-  não foi desenhada. Também avalia os módulos um de cada vez, como o
-  navegador, pra pegar módulo que na carga usa um nome de outro que ainda não
-  foi avaliado; e, com o `fastapi` instalado, confere que a rota existe.
-  Precisa do `dukpy`
-  (`pip install dukpy`; ele não está no `requirements.txt` porque não é
-  dependência do serviço): `python tests/test_deckbuilder.py`.
-- `tests/test_modulos.py` — o que o navegador só confere no clique: que cada
-  módulo do deckbuilder importa o que usa, só importa o que o outro exporta e
-  não atribui a nome importado. Um `import` esquecido não impede o módulo de
-  carregar; ele vira `ReferenceError` quando a função roda, e os testes de JS
-  não o veem, porque rodam o grafo achatado. Confere também a forma estreita
-  (`import {a, b} from "./x.js";`, `export` na frente da declaração, nenhum
-  nome de topo repetido entre módulos) que deixa esse achatamento ser fiel,
-  e a sobra: import sem uso e export que ninguém importa. Lê os módulos com o
-  tree-sitter, sem executar nada (`pip install tree-sitter
-  tree-sitter-javascript`; fora do `requirements.txt` pelo mesmo motivo do
-  `dukpy`): `python tests/test_modulos.py`.
+  ao clique sem esperar a rede. `rules.test.ts` roda os módulos da página
+  sobre a marcação dela, pra que as duas implementações não divirjam calado —
+  e confere que nenhuma carta pode ficar invisível na lista por causa de uma
+  categoria que não foi desenhada. Ao lado: `goldfish.test.ts` (a mesa),
+  `prices.test.ts` (o câmbio), `art.test.ts`, `search.test.ts` e
+  `versions.test.ts`. O `pnpm lint` (ESLint) pega o import esquecido, que só
+  quebraria no clique, e o build recusa import de nome que o outro módulo não
+  exporta.
 - `tests/test_spellbook.py` — o cliente do Commander Spellbook contra uma
   resposta sintética no formato real: o `GET` com corpo, a leitura do
   camelCase dentro de `results`, a conta de qual peça está faltando e o que
@@ -1037,9 +1021,8 @@ nenhuma categoria.
 A regra do sideboard mora num lugar só de cada lado
 (`decks.CATEGORIAS_FORA_DA_CONTA` no servidor, `CATEGORIAS_FORA_DA_CONTA` na
 tela) porque ela existe duas vezes: a tela responde ao clique sem esperar a
-rede, e o servidor valida de novo ao gravar. `tests/test_deckbuilder.py` roda
-o JavaScript da página num interpretador justamente pra que as duas não
-divirjam calado.
+rede, e o servidor valida de novo ao gravar. `front/src/pages/deckbuilder/test/rules.test.ts`
+roda o JavaScript da página justamente pra que as duas não divirjam calado.
 
 ### Onde os decks ficam
 
@@ -1356,7 +1339,7 @@ conversão acontece na borda, dentro de `moeda()`.** Converter cedo — guardar
 real em `precoDaEntrada`, em `orcamentoLocal`, no `data-teto` que viaja pro
 `manabase.py` — espalharia a taxa por contas que não são dela, e faria o mesmo
 deck mudar de número conforme o dólar do dia sem ninguém ter mexido nele.
-Quatro consequências disso, todas travadas em `tests/test_precos_brl.py`:
+Quatro consequências disso, todas travadas em `front/src/pages/deckbuilder/test/prices.test.ts`:
 
 * **Sem taxa, tudo volta pra dólar.** Se a rota falhar, `0 × preço` daria
   "R$ 0,00" em toda carta — a mesma mentira que o `—` existe pra não contar.
@@ -1698,7 +1681,7 @@ lembrou de tratar. A fotografia do desfazer guarda o estado **sem as cartas**
 completas, e reescrevê-las a cada clique é alguns megabytes de JSON por
 jogada.
 
-`tests/test_goldfish.py` persegue a conservação das cartas: depois de uma
+`front/src/pages/deckbuilder/test/goldfish.test.ts` persegue a conservação das cartas: depois de uma
 sequência roteirizada **com os dois decks na mesa** (três mulligans, duas pro
 fundo, três turnos, campo, cemitério, exílio, comandante), o multiconjunto das
 zonas de todo mundo tem que ser o mesmo do começo. É a asserção que pega Fisher-Yates escrito errado — que perde ou

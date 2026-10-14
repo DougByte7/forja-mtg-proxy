@@ -14,7 +14,7 @@ import {agendarCotacao} from "./orcamento.js";
 import {buscarTokens} from "./tokens.js";
 import {dataBR, identidadeDoDeck, totalCartas} from "./utilidades.js";
 import {buscarHistorico, desenharVersao} from "./versoes.js";
-function validarLocal(){
+export function validarLocal(){
   const identidade = identidadeDoDeck();
   const apontamentos = [];
   const total = totalCartas();
@@ -81,7 +81,7 @@ export async function api(caminho, opcoes){
   return r.status === 204 ? null : r.json();
 }
 
-function corpoDoDeck(){
+export function corpoDoDeck(){
   const linha = (e) => ({nome: e.carta.nome, quantidade: e.quantidade,
                          categoria: e.categoria || ""});
   return {

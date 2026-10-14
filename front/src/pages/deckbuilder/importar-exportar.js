@@ -162,7 +162,7 @@ export function mostrarResultadoImportacao(trazido, caixa = $("i-resultado")){
 /* O sideboard entra e o maybeboard não, pelo mesmo critério da cotação: esta
    lista é o que vai pra impressão, e o que ainda está sendo decidido não vai
    pra impressão. Igual ao `decks.lista_texto` do servidor. */
-function listaTexto(){
+export function listaTexto(){
   const linhas = estado.comandantes.map(c => `1 ${c.nome}`);
   for (const e of estado.cartas) linhas.push(`${e.quantidade} ${e.carta.nome}`);
   return linhas.join("\n");

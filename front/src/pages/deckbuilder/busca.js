@@ -102,7 +102,7 @@ export function agendarBuscaComandante(){
 
    Vitrine, com a caixa vazia e nenhum filtro: aí não há pergunta, e paginar
    seria folhear a base inteira de cinco em cinco. */
-function listaPaginada(termo){
+export function listaPaginada(termo){
   return termo !== "" || algumFiltro();
 }
 
@@ -211,7 +211,7 @@ export let ultimosResultados = [];
    sobraram, pra que a lista curta não pareça acervo acabado. */
 const TETO_RESULTADOS = 5;
 
-function mostrarResultados(caixa, cartas, aoClicar,
+export function mostrarResultados(caixa, cartas, aoClicar,
                            {comandantes = false, rodape = "", termo = ""} = {}){
   ultimosResultados = cartas;
   caixa.aoClicar = aoClicar;
@@ -266,7 +266,7 @@ function mostrarResultados(caixa, cartas, aoClicar,
    vez. */
 const POR_PAGINA = [5, 10, 15];
 
-function paginadorDaBusca(){
+export function paginadorDaBusca(){
   const por = estado.buscaPorPagina;
   const paginas = Math.max(1, Math.ceil(estado.buscaTotal / por));
   const pagina = Math.min(estado.buscaPagina, paginas - 1);

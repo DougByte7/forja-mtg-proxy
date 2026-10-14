@@ -57,7 +57,7 @@ const DPI_SCRYFALL = 300;
 const STATUS_SEM_IMAGEM = ["missing", "placeholder"];
 const AVISO_BAIXA = "em baixa resolução: pode sair borrada no papel";
 
-const arte = {
+export const arte = {
   carta: null,        // a carta aberta agora
   face: "frente",     // "frente" | "verso": o lado que a grade está escolhendo
   // O segmento aberto. Fica de uma carta pra outra: quem escolhe pela
@@ -98,7 +98,7 @@ const arte = {
 const LIGATURAS_ARTE = {"æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe",
                         "ø": "o", "Ø": "o", "ß": "ss", "đ": "d"};
 
-function chaveDaArte(nome){
+export function chaveDaArte(nome){
   return String(nome || "")
     .replace(/[æÆœŒøØßđ]/g, (c) => LIGATURAS_ARTE[c])
     .normalize("NFKD").replace(/[̀-ͯ]/g, "")
@@ -176,7 +176,7 @@ function nomeDoLado(carta, face){
    inteiro, que o servidor corta no " // " (ver `mpcfill._consulta`); o verso
    vai só com o nome dele, porque a biblioteca deles indexa cada face pelo
    próprio nome. Ficha vai com o prefixo de ficha. */
-function nomeDaBusca(carta, face){
+export function nomeDaBusca(carta, face){
   const nome = face !== "verso" ? carta.nome : nomeDoLado(carta, face);
   return carta.ficha ? PREFIXO_FICHA + nome : nome;
 }
@@ -190,7 +190,7 @@ const URL_SCRYFALL = /\/(front|back)\/[0-9a-f]\/[0-9a-f]\/([0-9a-f]{8}-[0-9a-f-]
 /* A miniatura de uma arte guardada, de onde o id disser. A da Scryfall vem
    no tamanho mais próximo do pedido: `small`, `normal` e `large` têm 146, 488
    e 672 px de largura. */
-function miniaturaDaArte(id, largura){
+export function miniaturaDaArte(id, largura){
   const scryfall = ID_SCRYFALL.exec(id || "");
   if (scryfall){
     const impressao = scryfall[1];
@@ -205,7 +205,7 @@ function miniaturaDaArte(id, largura){
 
 /* O id da Scryfall tirado de uma URL de imagem dela. É assim que a ficha,
    que não tem lista de impressões, oferece a própria imagem. */
-function idDaImagemDaScryfall(url){
+export function idDaImagemDaScryfall(url){
   const achado = URL_SCRYFALL.exec(url || "");
   return achado ? `scryfall:${achado[2]}:${achado[1]}` : "";
 }
@@ -265,7 +265,7 @@ export async function carregarArtes(){
 
 /* `nome` é o que o quadro carrega em `data-arte-carta`: o nome da carta, ou a
    chave da ficha (ver `nomeDaArte`). */
-function acharCartaDaArte(nome){
+export function acharCartaDaArte(nome){
   const noDeck = estado.cartas.find(e => e.carta && e.carta.nome === nome);
   if (noDeck) return noDeck.carta;
   return estado.comandantes.find(c => c.nome === nome) ||
@@ -616,7 +616,7 @@ function casaImpressao(arquivo, imp){
    inclusive perto das pontas: com a janela encolhendo ali, os números
    trocariam de lugar debaixo do mouse a cada clique. Até sete páginas cabem
    todas e não há vão nenhum. Recebe e devolve páginas contadas do zero. */
-function paginasVisiveis(atual, total){
+export function paginasVisiveis(atual, total){
   if (total <= 7) return Array.from({length: total}, (_, i) => i);
   const ini = Math.min(Math.max(1, atual - 2), total - 6);
   const fim = ini + 4;
