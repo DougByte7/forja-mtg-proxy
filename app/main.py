@@ -15,9 +15,9 @@ from fastapi.staticfiles import StaticFiles
 
 from . import (artes, artes_enviadas, blob, calc, cambio, cartas, cleanup,
                cotacao_job, decks, detalhe_carta, diagnostico, edhrec,
-               estoque, fulfillment, importar, log, manabase, mpcfill, notify,
-               pix, plataforma, poder, spellbook, storage, tarefas, usuarios,
-               visitas)
+               estoque, frontend, fulfillment, importar, log, manabase,
+               mpcfill, notify, pix, plataforma, poder, spellbook, storage,
+               tarefas, usuarios, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -683,8 +683,9 @@ def deckbuilder_page():
 
 @app.get("/entrar")
 def pagina_de_entrar():
-    """A tela de login. Rota própria pra a URL não ter .html, como as outras."""
-    return FileResponse("app/static/entrar.html", media_type="text/html")
+    """A tela de login (`front/src/pages/login`). Rota própria pra a URL não
+    ter .html, como as outras."""
+    return frontend.page("login")
 
 
 @app.get("/conta")

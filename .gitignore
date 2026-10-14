@@ -26,3 +26,7 @@ data/
 .claude/
 *.swp
 .DS_Store
+
+# Build do front (front/ → app/static/dist), gerado no deploy
+app/static/dist/
+node_modules/

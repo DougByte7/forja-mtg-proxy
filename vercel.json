@@ -1,4 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+  "buildCommand": "cd front && npx --yes pnpm@12.8.1 install --frozen-lockfile && npx --yes pnpm@12.8.1 build"
 }

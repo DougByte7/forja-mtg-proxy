@@ -22,3 +22,6 @@ data/
 __pycache__/
 .pytest_cache/
 .venv/
+
+# O front entra pelo build (app/static/dist); as dependências dele, não
+front/node_modules/

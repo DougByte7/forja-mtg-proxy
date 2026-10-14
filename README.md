@@ -111,6 +111,33 @@ SMTP, `ADMIN_TOKEN`). O `--reload` cuida do Python; o HTML, o CSS e o
 JavaScript das telas são lidos do disco a cada pedido, então pra mexer no
 front basta recarregar o navegador.
 
+#### As telas em Preact (`front/`)
+
+O front está migrando, uma tela por vez, de HTML com JavaScript solto em
+`app/static/` pra Preact + TypeScript em `front/`, com build no Vite. Até agora
+migrou o login (`/entrar`). Essas telas saem do build, em `app/static/dist/`
+(fora do git), e sem ele a rota responde 503 dizendo o comando que falta.
+Precisa de Node 22 ou mais novo e do pnpm (a versão está no `packageManager`
+do `front/package.json`):
+
+```
+cd front
+pnpm install
+pnpm build         # gera app/static/dist; o uvicorn passa a servir as telas
+```
+
+Pra mexer numa tela, deixe o uvicorn rodando na porta 8000 e suba o servidor
+do Vite, que recarrega a tela a cada arquivo salvo e repassa a API pro
+uvicorn:
+
+```
+pnpm dev           # http://localhost:5173/pages/login.html
+```
+
+Nomes de arquivo e código em `front/` ficam em inglês; textos da tela e
+comentários, em português. A Vercel roda o build sozinha (`buildCommand` no
+`vercel.json`). O container não roda, porque o site não mora mais no homelab.
+
 ### 4. Abra a tela
 
 `http://localhost:8000/` (ou o IP/domínio de onde estiver rodando) já é a Forja
@@ -153,6 +180,12 @@ roda o JavaScript da página num interpretador) e `test_modulos.py`, do
 `tree-sitter` com o `tree-sitter-javascript`. Sem essas bibliotecas os dois
 avisam e saem **sem acusar erro** — no `for` acima eles se parecem com teste
 que passou, então vale ler a saída procurando o "não está instalado".
+
+Os testes do front (Vitest) e a checagem de tipos rodam de dentro de `front/`:
+
+```
+pnpm typecheck && pnpm test
+```
 
 ## Como o pagamento é confirmado
 
@@ -380,6 +413,12 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 - `worker/main.py` — o worker da impressora: pergunta a fila pro site, monta
   o PDF, manda pro CUPS e conta o resultado. Roda do lado da impressora, com
   `python -m worker`. Ver *A fila de impressão e o worker*.
+- `front/` — as telas em Preact + TypeScript (Vite, multi-página: um HTML
+  por tela em `front/pages/`, o código em `front/src/pages/<tela>/` e o que
+  é comum em `front/src/shared/`). O build vai pra `app/static/dist/`, e
+  `app/frontend.py` serve o HTML de cada tela com `no-cache`; os assets têm
+  hash no nome e vão pelo mount estático. Hoje: o login (`/entrar`). Ver
+  *As telas em Preact*.
 - `app/static/index.html` — o front-end (a Forja de Proxies), servido pelo
   próprio FastAPI.
 - `app/static/admin.html` — a tela de pedidos do operador, em `/admin`. Ver
