@@ -12,6 +12,7 @@ termina. Então as duas coisas viram comando:
     python -m app.tarefas cartas [--forcar]    # base de cartas, se estiver velha
     python -m app.tarefas faxina               # sessões, preços e cotações vencidos
     python -m app.tarefas artes-pro-blob PASTA # artes do disco -> Vercel Blob
+    python -m app.tarefas clerk-importar [--aplicar]  # contas -> Clerk
 
 Quem roda `cartas` e `faxina` todo dia é o GitHub Actions
 (`.github/workflows/tarefas.yml`); `migrar` roda a cada deploy que muda o
@@ -23,7 +24,7 @@ No homelab nada disto é obrigatório: `MIGRAR_NO_STARTUP` e
 """
 import sys
 
-from . import (artes, artes_enviadas, blob, cache_precos, cartas,
+from . import (artes, artes_enviadas, blob, cache_precos, cartas, clerk,
                cotacao_job, decks, log, storage, usuarios)
 
 
@@ -83,9 +84,22 @@ def artes_pro_blob(pasta: str) -> dict:
     return contagem
 
 
+def clerk_importar(aplicar: bool = False) -> dict:
+    """A virada pro Clerk: as contas da tabela `usuarios` vão pra lá (ver
+    `clerk.importar`). Sem `--aplicar` só lista o que faria. Precisa da
+    `CLERK_SECRET_KEY` e do `DB_URL` no ambiente."""
+    resultado = clerk.importar(usuarios.listar(), aplicar=aplicar)
+    for grupo, contas in resultado.items():
+        for conta in contas:
+            print(f"{grupo}: {conta}")
+    if not aplicar:
+        print("(simulação: nada foi criado — rode de novo com --aplicar)")
+    return resultado
+
+
 def main(argv: list[str]) -> int:
     if not argv or argv[0] not in ("migrar", "cartas", "faxina",
-                                   "artes-pro-blob"):
+                                   "artes-pro-blob", "clerk-importar"):
         print(__doc__.strip().split("\n\n")[2], file=sys.stderr)
         return 2
     comando = argv[0]
@@ -100,6 +114,8 @@ def main(argv: list[str]) -> int:
                       file=sys.stderr)
                 return 2
             artes_pro_blob(argv[1])
+        elif comando == "clerk-importar":
+            clerk_importar(aplicar="--aplicar" in argv[1:])
         else:
             faxina()
     except Exception as e:

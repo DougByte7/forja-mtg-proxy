@@ -17,6 +17,7 @@ dependencies = [
     "Pillow==10.4.0",
     "requests==2.32.3",
     "libsql==0.1.11",
+    "PyJWT[crypto]==2.15.1",
 ]
 
 [tool.vercel]

@@ -67,7 +67,8 @@ TAMANHO_MINIMO_SENHA = int(os.environ.get("SENHA_MINIMA", "8"))
 SESSAO_HORAS = float(os.environ.get("SESSAO_HORAS", "12"))
 SESSAO_DIAS_LEMBRAR = float(os.environ.get("SESSAO_DIAS", "60"))
 
-PERFIS = ("admin", "cliente")
+# `amigo` é quem pode fazer pedido (ver `clerk.py`); `cliente` monta deck.
+PERFIS = ("admin", "amigo", "cliente")
 
 # O convite do cadastro. Vazio = cadastro fechado, e só o admin cria conta.
 CADASTRO_TOKEN = os.environ.get("CADASTRO_TOKEN", "")

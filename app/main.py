@@ -10,8 +10,8 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from . import (artes, artes_enviadas, blob, calc, cambio, cartas, cleanup,
-               cotacao_job, decks, detalhe_carta, diagnostico, edhrec,
+from . import (artes, artes_enviadas, blob, calc, cambio, cartas, clerk,
+               cleanup, cotacao_job, decks, detalhe_carta, diagnostico, edhrec,
                estoque, frontend, fulfillment, importar, log, manabase,
                mpcfill, notify, pix, plataforma, poder, spellbook, storage,
                tarefas, usuarios, visitas)
@@ -68,14 +68,24 @@ COOKIE_SESSAO = "forja_sessao"
 SESSAO_SEGURA = os.environ.get("SESSAO_SEGURA", "1") == "1"
 
 
-def quem_e(forja_sessao: str | None = Cookie(default=None)) -> dict | None:
+def quem_e(forja_sessao: str | None = Cookie(default=None),
+           session: str | None = Cookie(default=None, alias="__session"),
+           authorization: str | None = Header(default=None)) -> dict | None:
     """Quem está pedindo, ou `None` pra anônimo — que NÃO é erro.
 
     Não fecha rota nenhuma: quem fecha é o `exige_login` e o
     `exige_login_no_deck`. Ler deck, cotar e fazer pedido seguem abertos pra
     quem não tem cookie.
+
+    Duas portas durante a troca pro Clerk: a sessão própria (`forja_sessao`)
+    e o token do Clerk (cabeçalho ou cookie `__session`, ver `clerk.py`). As
+    duas devolvem o mesmo dicionário, e quem está nas duas é o mesmo `id`.
     """
-    return usuarios.da_sessao(forja_sessao) if forja_sessao else None
+    if forja_sessao:
+        quem = usuarios.da_sessao(forja_sessao)
+        if quem:
+            return quem
+    return clerk.usuario(clerk.token_do_pedido(authorization, session))
 
 
 def exige_login(quem: dict | None = Depends(quem_e)) -> dict:
