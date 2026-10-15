@@ -12,11 +12,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@clerk/localizations": "4.21.1",
     "@preact/signals": "2.11.3",
     "@tanstack/preact-query": "5.104.2",
     "preact": "11.0.1"
   },
   "devDependencies": {
+    "@clerk/clerk-js": "6.36.0",
     "@preact/preset-vite": "2.10.6",
     "@testing-library/preact": "3.2.4",
     "@types/node": "26.6.5",

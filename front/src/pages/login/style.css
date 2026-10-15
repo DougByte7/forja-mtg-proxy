@@ -45,3 +45,8 @@ label{display:block;font-size:12px;color:var(--text-muted);margin:0 0 5px;}
 /* O Preact monta dentro de #app; sem caixa própria, a .caixa continua
    sendo o item que o grid do body centraliza. */
 #app{display:contents;}
+
+/* O formulário do Clerk traz o próprio cartão; aqui só o empilha com o
+   "Voltar" embaixo, no centro da página como a .caixa. */
+.clerk-pagina{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.clerk-pagina .erro{max-width:380px;}

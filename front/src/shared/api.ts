@@ -4,7 +4,11 @@
    pra quem usa a tela — que vira a mensagem do `Error`. Resposta sem JSON
    cai no "Erro <status>", a não ser que a tela peça `errorText`: aí o corpo
    em texto vira a mensagem (é o que a lista de decks fazia, pra mostrar a
-   frase das rotas que respondem texto puro). */
+   frase das rotas que respondem texto puro).
+
+   Toda chamada leva o token do Clerk, quando há sessão (ver `clerk.ts`): é
+   ele que diz ao servidor quem está pedindo. */
+import { clerkEnabled, sessionToken } from "./clerk";
 
 export class ApiError extends Error {
   /** `detail` é a frase do servidor (vazia quando ele não explicou nada):
@@ -29,6 +33,9 @@ async function request(url: string, opts: ApiOptions): Promise<Response> {
     method: opts.method ?? (opts.body === undefined ? "GET" : "POST"),
   };
   const headers: Record<string, string> = { ...opts.headers };
+  // Sem Clerk, nem espera: o `fetch` sai no mesmo tique, como sempre saiu.
+  const token = clerkEnabled ? await sessionToken() : null;
+  if (token) headers.Authorization = `Bearer ${token}`;
   if (opts.body instanceof FormData) {
     init.body = opts.body;   // o navegador põe o Content-Type com o boundary
   } else if (opts.body !== undefined) {

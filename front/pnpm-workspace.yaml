@@ -1,0 +1,6 @@
+# Scripts de instalação que o pnpm pergunta se pode rodar. Os dois vêm com o
+# @clerk/clerk-js e só imprimem propaganda no terminal: negados, e a
+# instalação (inclusive o --frozen-lockfile da Vercel) não para por eles.
+allowBuilds:
+  browser-tabs-lock: false
+  core-js: false

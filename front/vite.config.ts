@@ -15,6 +15,9 @@ const PAGES = ["login", "signup", "decks", "admin", "home", "deckbuilder"];
 export default defineConfig({
   plugins: [preact()],
   base: "/dist/",
+  // O .env da raiz, o mesmo do backend: só o que começa com VITE_ chega ao
+  // navegador (hoje, a chave publicável do Clerk). Na Vercel vem do ambiente.
+  envDir: resolve(import.meta.dirname, ".."),
   build: {
     outDir: resolve(import.meta.dirname, "../app/static/dist"),
     emptyOutDir: true,
@@ -33,5 +36,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // Os testes nunca falam com o Clerk, mesmo com a chave no .env.
+    env: { VITE_CLERK_PUBLISHABLE_KEY: "" },
   },
 });

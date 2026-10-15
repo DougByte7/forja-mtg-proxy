@@ -5,6 +5,7 @@
 import { queryOptions, useMutation, useQuery } from "@tanstack/preact-query";
 import { useEffect } from "preact/hooks";
 import { api } from "./api";
+import { signOutClerk } from "./clerk";
 
 export type User = { id?: number; login: string; nome: string; [k: string]: unknown };
 
@@ -19,10 +20,15 @@ export function useCurrentUser() {
   return useQuery(currentUserQuery);
 }
 
-/** Sair recarrega a página: tudo que a tela mostra muda com a conta. */
+/** Sair recarrega a página: tudo que a tela mostra muda com a conta. Sai
+    das duas — Clerk e sessão própria —, porque durante a troca a pessoa
+    pode estar nas duas e o servidor olha a própria primeiro. */
 export function useLogout() {
   return useMutation({
-    mutationFn: () => api("/conta/sair", { method: "POST" }),
+    mutationFn: async () => {
+      await signOutClerk();
+      await api("/conta/sair", { method: "POST" });
+    },
     onSettled: () => location.reload(),
   });
 }
