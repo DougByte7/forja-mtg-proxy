@@ -89,7 +89,7 @@ function startNew(e: MouseEvent) {
 export function openHeaderMenu(anchor: Element) {
   const items: MenuItem[] = [];
   const mine = readLocalDecks();
-  if (mine.length) items.push({ label: `Meus decks (${mine.length})`, href: "/meus-decks" });
+  if (mine.length) items.push({ label: `Meus decks (${mine.length})`, href: "/" });
   items.push({ label: "Importar lista", onClick: () => openDrawer("gaveta-importar") });
   items.push({ label: "Exportar lista (copiar)", onClick: exportList });
   items.push("sep");

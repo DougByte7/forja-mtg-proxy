@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/preact-query";
 import { useEffect } from "preact/hooks";
-import { useCurrentUser } from "../../shared/account";
+import { canOrder, useCurrentUser } from "../../shared/account";
 import { api } from "../../shared/api";
 import { readLocalDecks } from "../../shared/localDecks";
 import { readOrders } from "./myOrders";
@@ -52,7 +52,7 @@ export function Header() {
           {/* Só pra quem já tem deck salvo: um "Meus decks" vazio no
               cabeçalho de quem nunca montou nenhum só sabe decepcionar. */}
           {decks > 0 && (
-            <a class="sec-btn meus-btn" href="/meus-decks" style={{ textDecoration: "none" }}>
+            <a class="sec-btn meus-btn" href="/" style={{ textDecoration: "none" }}>
               Meus decks <span class="n">{decks}</span></a>
           )}
           <AccountLink />
@@ -97,7 +97,7 @@ function AccountLink() {
   const { data: user, isSuccess } = useCurrentUser();
 
   useEffect(() => {
-    if (!user) return;
+    if (!canOrder(user)) return;
     const ids = readOrders().map((p) => p.id).filter(Boolean);
     if (ids.length) api("/pedidos/reclamar", { body: { ids } }).catch(() => {});
   }, [user?.login]);
@@ -106,7 +106,7 @@ function AccountLink() {
   // carregamento é pior que um que chega pronto.
   if (!isSuccess) return null;
   return user
-    ? <a class="sec-btn meus-btn conta-btn" href="/meus-decks" title={`Entrou como ${user.login}`}
+    ? <a class="sec-btn meus-btn conta-btn" href="/" title={`Entrou como ${user.login}`}
          style={{ textDecoration: "none" }}>{user.nome}</a>
     : <a class="sec-btn meus-btn conta-btn" href={"/entrar?voltar=" + encodeURIComponent(location.pathname)}
          style={{ textDecoration: "none" }}>Entrar</a>;

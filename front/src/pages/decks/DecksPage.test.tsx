@@ -19,8 +19,26 @@ describe("DecksPage", () => {
     renderWithQuery(<DecksPage />);
 
     expect(await screen.findByText("Deck aaa111")).toBeTruthy();
-    expect(screen.getByText("Entrar").getAttribute("href")).toBe("/entrar?voltar=/meus-decks");
+    expect(screen.getByText("Entrar").getAttribute("href")).toBe("/entrar?voltar=/");
     expect(screen.getByText("100/100")).toBeTruthy();
+    // Imprimir é só de amigo: o anônimo nem vê o botão.
+    expect(screen.queryByText("Imprimir proxies")).toBeNull();
+  });
+
+  it("amigo vê o atalho pra tela de pedido; cliente, não", async () => {
+    let perfil = "amigo";
+    mockFetch((_, url) => url === "/conta"
+      ? [200, { usuario: { login: "ana", nome: "Ana", perfil } }]
+      : [200, { decks: [], desconhecidos: [] }]);
+    const { unmount } = renderWithQuery(<DecksPage />);
+    expect((await screen.findByText("Imprimir proxies")).closest("a")!.getAttribute("href"))
+      .toBe("/pedido");
+    unmount();
+
+    perfil = "cliente";
+    renderWithQuery(<DecksPage />);
+    await screen.findByText("Ana");
+    expect(screen.queryByText("Imprimir proxies")).toBeNull();
   });
 
   it("sem decks, convida a montar o primeiro", async () => {

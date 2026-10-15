@@ -2,9 +2,9 @@
 Confere o cancelamento pelo cliente (`POST /orders/{id}/cancel`), que é o que
 a tela "Meus Pedidos" usa.
 
-Essa rota não tem token — quem sabe o id do pedido é quem pode mexer nele, a
-mesma regra do notify-payment. Então o que precisa ficar travado aqui é a
-JANELA: só dá pra cancelar enquanto ninguém do outro lado ficou sabendo do
+Pede conta de amigo, e pedido com dono só o dono (e o admin) mexe — a mesma
+regra do notify-payment; a última seção confere isso. O resto do que precisa
+ficar travado aqui é a JANELA: só dá pra cancelar enquanto ninguém do outro lado ficou sabendo do
 pedido. Depois do aviso de pagamento o operador já está conferindo Pix, e
 deixar cancelar dali em diante viraria um jeito de sumir com um pedido que
 talvez já esteja pago.
@@ -33,6 +33,8 @@ os.environ["ADMIN_TOKEN"] = "token-de-teste-123"
 os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(), "orders.db")
 os.environ["LOG_DIR"] = tempfile.mkdtemp()
 os.environ["LOG_NIVEL"] = "ERROR"
+os.environ["SENHA_ITERACOES"] = "1000"
+os.environ["SESSAO_SEGURA"] = "0"
 
 try:
     from fastapi.testclient import TestClient
@@ -42,7 +44,7 @@ except ImportError:
 
 os.chdir(RAIZ)
 
-from app import storage  # noqa: E402
+from app import storage, usuarios  # noqa: E402
 from app.main import app  # noqa: E402
 
 falhas = []
@@ -55,13 +57,26 @@ def check(nome, condicao, detalhe=""):
 
 
 storage.init_db()
-cliente = TestClient(app)
+usuarios.init_db()
 
 
-def semear(nome, deck):
+def logado(login, perfil):
+    """Um TestClient com sessão de uma conta nova com esse perfil."""
+    usuarios.criar(login, "senha-de-teste-1", perfil=perfil)
+    c = TestClient(app)
+    r = c.post("/conta/entrar", json={"login": login, "senha": "senha-de-teste-1"})
+    assert r.status_code == 200, r.text
+    return c
+
+
+cliente = logado("amiga", "amigo")
+
+
+def semear(nome, deck, dono=None):
     return storage.create_order(
         "<order><details/></order>", "single", nome, deck,
         {"total": 12.5, "qty": 9, "backs_count": 0, "pages": 1, "blanks": 0},
+        dono=dono,
     )[0]
 
 
@@ -101,9 +116,32 @@ check("id desconhecido dá 404", r.status_code == 404, r.text[:120])
 # --- 4. o cliente consegue ler o próprio andamento -----------------------
 # É o que a tela "Meus Pedidos" faz a cada abertura, com o id que ela guardou.
 r = cliente.get(f"/orders/{ana}")
-check("dá pra consultar o andamento sem token",
+check("dá pra consultar o andamento",
       r.status_code == 200 and r.json()["status"] == "cancelado", r.text[:120])
 check("o XML do deck não vai junto na consulta", "xml_text" not in r.json())
+
+# --- 5. quem pode ------------------------------------------------------------
+# Pedido é só de amigo, e o de outra pessoa responde como se não existisse.
+dani = semear("Dani Souza", "jkl012")
+check("anônimo não cancela",
+      TestClient(app).post(f"/orders/{dani}/cancel").status_code == 401)
+check("anônimo não consulta", TestClient(app).get(f"/orders/{dani}").status_code == 401)
+so_cliente = logado("cliente", "cliente")
+check("conta sem perfil de amigo não cancela",
+      so_cliente.post(f"/orders/{dani}/cancel").status_code == 403)
+check("e não avisa pagamento",
+      so_cliente.post(f"/orders/{dani}/notify-payment").status_code == 403)
+
+dono_id = usuarios.listar()[0]["id"]          # a amiga do `cliente`
+dela = semear("Eva Melo", "mno345", dono=dono_id)
+outro = logado("outro-amigo", "amigo")
+check("pedido de outra pessoa dá 404 na consulta",
+      outro.get(f"/orders/{dela}").status_code == 404)
+check("e no cancelar", outro.post(f"/orders/{dela}/cancel").status_code == 404)
+check("e continua pendente", storage.get_order(dela)["status"] == "pending")
+check("a dona consulta o dela", cliente.get(f"/orders/{dela}").status_code == 200)
+check("o admin consulta qualquer um",
+      logado("chefe", "admin").get(f"/orders/{dela}").status_code == 200)
 
 print()
 if falhas:

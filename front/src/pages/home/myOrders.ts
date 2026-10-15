@@ -11,6 +11,7 @@
    chave e o formato são os da página antiga: quem já tem pedido guardado
    continua vendo.
    ------------------------------------------------------------------------- */
+import { api, ApiError } from "../../shared/api";
 import type { Lamination } from "./totals";
 
 export type SavedOrder = {
@@ -83,12 +84,14 @@ export async function refreshStatuses(ids: string[]) {
     const order = list.find((p) => p.id === id);
     if (!order) return;
     try {
-      const r = await fetch("/orders/" + encodeURIComponent(id));
-      if (r.status === 404) { order.status = "sumiu"; return; }
-      if (!r.ok) return;
-      const data = await r.json();
+      // Pelo `api`, que leva o token: o pedido só abre pra quem é dono.
+      const data = await api<{ status?: string }>("/orders/" + encodeURIComponent(id));
       if (data?.status) order.status = data.status;
-    } catch { /* sem contato */ }
+    } catch (e) {
+      // 404 é pedido limpo do servidor (ou de outra conta); o resto — sem
+      // contato, sem conta — deixa valendo o que estava guardado.
+      if (e instanceof ApiError && e.status === 404) order.status = "sumiu";
+    }
   }));
   write(list);
 }

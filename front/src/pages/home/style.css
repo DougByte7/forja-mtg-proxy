@@ -533,3 +533,11 @@ table.cot tr.grupo .qtd{color:var(--text-muted);letter-spacing:0;text-transform:
 /* O Preact monta dentro de #app; sem caixa própria, o layout continua
    sendo o de antes. */
 #app{display:contents;}
+
+/* O aviso no lugar do formulário pra quem não pode pedir (`OrderGate`). */
+.gate{text-align:center;padding:18px 8px;color:var(--text-muted);line-height:1.55;}
+.gate h2{font-family:'Cinzel',serif;color:var(--text);font-size:19px;margin:0 0 8px;}
+.gate p{max-width:440px;margin:0 auto 16px;font-size:14px;}
+.btn-gate{display:inline-block;background:linear-gradient(150deg,var(--gold-light),var(--gold));
+  color:#1A1024;border-radius:9px;padding:10px 18px;font-weight:600;
+  font-size:14px;text-decoration:none;}

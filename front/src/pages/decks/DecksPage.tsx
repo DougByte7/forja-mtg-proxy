@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/preact-query";
 import { useEffect, useState } from "preact/hooks";
-import { useCurrentUser } from "../../shared/account";
+import { canOrder, useCurrentUser } from "../../shared/account";
 import { AccountButton } from "../../shared/AccountButton";
 import { api, apiText } from "../../shared/api";
 import { Icon } from "../../shared/Icon";
@@ -131,8 +131,10 @@ export function DecksPage() {
           <div class="rune"><span>⌘</span></div>
           <span class="marca">Forja de Proxies</span>
           <span class="espaco" />
-          <a class="btn" href="/"><Icon name="printer" /> Imprimir proxies</a>
-          <AccountButton returnTo="/meus-decks" />
+          {canOrder(user) && (
+            <a class="btn" href="/pedido"><Icon name="printer" /> Imprimir proxies</a>
+          )}
+          <AccountButton returnTo="/" />
           <a class="btn ouro" href="/deckbuilder"><Icon name="plus" /> Deck novo</a>
         </div>
       </header>

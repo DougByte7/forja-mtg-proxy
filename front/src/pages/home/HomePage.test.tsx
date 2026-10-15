@@ -15,7 +15,7 @@ function backend(extra: Handler = () => undefined) {
     const r = extra(method, url, body);
     if (r) return r;
     if (url === "/precos") return [200, { single: 2, double: 4, foil: 9 }];
-    if (url === "/conta") return [200, { usuario: null }];
+    if (url === "/conta") return [200, { usuario: { login: "ana", nome: "Ana", perfil: "amigo" } }];
     if (url === "/impressora/tinta") return [200, { estado: "desconhecido" }];
     return [404, { detail: `rota de teste não prevista: ${method} ${url}` }];
   });
@@ -27,6 +27,13 @@ const formError = () => waitFor(() => {
   expect(el).toBeTruthy();
   return el!.textContent!;
 });
+
+/** A home desenhada e com o formulário à vista — ele só aparece depois de
+    `/conta` dizer que é amigo (`OrderGate`). */
+async function renderHome() {
+  renderWithQuery(<HomePage />);
+  await screen.findByLabelText("Seu nome");
+}
 
 const typeName = (name: string) =>
   fireEvent.input(screen.getByLabelText("Seu nome"), { target: { value: name } });
@@ -40,7 +47,7 @@ describe("HomePage", () => {
 
   it("lê o XML e mostra o resumo com o preço do servidor", async () => {
     backend();
-    renderWithQuery(<HomePage />);
+    await renderHome();
     expect(screen.getByText("Selecione o XML e escreva seu nome — o resumo aparece sozinho.")).toBeTruthy();
 
     const file = new File([SAMPLE], "deck.xml", { type: "text/xml" });
@@ -62,14 +69,14 @@ describe("HomePage", () => {
 
   it("XML inválido mostra o erro", async () => {
     backend();
-    renderWithQuery(<HomePage />);
+    await renderHome();
     loadXml("<order><fronts>");
     expect(await formError()).toMatch(/não é válido/);
   });
 
   it("a cobrança só sai com a declaração, guarda o pedido e vence quando o pedido muda", async () => {
     const fetch = backend((_, url) => url === "/orders" ? [200, CHARGE] : undefined);
-    renderWithQuery(<HomePage />);
+    await renderHome();
     loadXml(SAMPLE);
     typeName("Ana");
 
@@ -94,7 +101,7 @@ describe("HomePage", () => {
 
   it("falha da cobrança mostra o motivo do servidor", async () => {
     backend((_, url) => url === "/orders" ? [400, { detail: "Nome grande demais." }] : undefined);
-    renderWithQuery(<HomePage />);
+    await renderHome();
     loadXml(SAMPLE);
     typeName("Ana");
     fireEvent.click(screen.getByLabelText("Declaro que conheço o dono do sistema."));
@@ -104,7 +111,7 @@ describe("HomePage", () => {
 
   it("revisão: mexe na folha, cancela sem mudar nada, confirma e reescreve o pedido", async () => {
     backend();
-    renderWithQuery(<HomePage />);
+    await renderHome();
     loadXml(SAMPLE);
     typeName("Ana");
 
@@ -135,7 +142,7 @@ describe("HomePage", () => {
                      precos: { liga: { preco_unitario: 6, loja: "Loja X", estoque_suficiente: true } } }],
         } }]
       : undefined);
-    renderWithQuery(<HomePage />);
+    await renderHome();
     loadXml(SAMPLE);
     typeName("Ana");
 
@@ -157,11 +164,26 @@ describe("HomePage", () => {
       deck: { nome: "Atraxa", comandantes: ["Atraxa"], identidade: "WUBG", total: 99 },
       xml: null, faltando: [{ nome: "Sol Ring" }, { nome: "Delver", face: "verso" }],
     }] : undefined);
-    renderWithQuery(<HomePage />);
+    await renderHome();
 
     expect(await screen.findByText("Atraxa", { selector: "h4" })).toBeTruthy();
     expect(await formError()).toContain("faltam 2 arte(s) — Sol Ring, Delver (verso)");
     expect(screen.getByText("Escolher as artes no deckbuilder").getAttribute("href")).toBe("/deckbuilder?deck=d1");
+  });
+
+  it("anônimo vê o convite pra entrar no lugar do formulário", async () => {
+    backend((_, url) => url === "/conta" ? [200, { usuario: null }] : undefined);
+    renderWithQuery(<HomePage />);
+    expect(await screen.findByText("Entre pra fazer pedido")).toBeTruthy();
+    expect(screen.queryByLabelText("Seu nome")).toBeNull();
+  });
+
+  it("conta que não é de amigo vê o porquê", async () => {
+    backend((_, url) => url === "/conta"
+      ? [200, { usuario: { login: "beto", nome: "Beto", perfil: "cliente" } }] : undefined);
+    renderWithQuery(<HomePage />);
+    expect(await screen.findByText("Pedido é só pra amigos do grupo")).toBeTruthy();
+    expect(screen.queryByLabelText("Seu nome")).toBeNull();
   });
 
   it("Meus Pedidos: atualiza o andamento e cancela em dois cliques", async () => {
@@ -173,7 +195,7 @@ describe("HomePage", () => {
       url === "/orders/o1" ? [200, { status }]
       : url === "/orders/o1/cancel" && method === "POST" ? (status = "cancelado", [200, { message: "Pedido cancelado." }])
       : undefined);
-    renderWithQuery(<HomePage />);
+    await renderHome();
 
     fireEvent.click(screen.getByRole("button", { name: /Meus Pedidos/ }));
     const dialog = screen.getByRole("dialog", { name: /Meus Pedidos/ });

@@ -20,6 +20,7 @@
    junto com o deck, e são a parte que se esquece de escolher.
 
    Aqui ficam as contas; o desenho é `ui/Gallery.tsx`. */
+import { canOrder } from "../../shared/account";
 import { artName, chosenArt, faceImage, hasBack, hasPerCopyArt, sideReady, type Face } from "./art";
 import { categoryOf, categoryOrder } from "./deck";
 import { state } from "./state";
@@ -149,13 +150,13 @@ export function galleryGroups() {
    Só ganha `href` com TODAS as artes escolhidas, pela mesma conta desta aba:
    a arte padrão da tela é só a miniatura da base, e o PDF imprime o que foi
    escolhido. Sem id não há deck no servidor pra levar, e ele some junto com
-   o Compartilhar. */
+   o Compartilhar. Também some pra quem não pode pedir (`canOrder`). */
 export function orderLinkView() {
   const { total, chosen } = galleryCount();
   const ready = !!state.id && total > 0 && chosen === total;
   return {
-    hidden: !state.id,
-    href: ready ? `/?deck=${encodeURIComponent(state.id!)}` : undefined,
+    hidden: !state.id || !canOrder(state.user),
+    href: ready ? `/pedido?deck=${encodeURIComponent(state.id!)}` : undefined,
     title: ready ? "Levar este deck pra tela de orçamento"
       : total ? `Faltam ${total - chosen} arte(s) — escolha na aba Artes`
       : "O deck ainda não tem carta",

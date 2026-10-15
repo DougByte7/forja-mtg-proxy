@@ -2,6 +2,7 @@ import hmac
 import os
 import threading
 import time
+from urllib.parse import quote
 
 from fastapi import (Body, Cookie, Depends, FastAPI, Form, Header,
                      HTTPException, Request, Response, UploadFile)
@@ -107,6 +108,33 @@ def exige_login_no_deck(quem: dict | None = Depends(quem_e)) -> dict:
         raise HTTPException(401, "Entre na sua conta pra criar ou alterar "
                                  "baralhos.")
     return quem
+
+
+def exige_amigo(quem: dict | None = Depends(quem_e)) -> dict:
+    """Pras rotas de pedido. Imprimir proxy é favor pro grupo de jogo, não
+    loja: só `amigo` (e o admin) pedem. O perfil vem da conta — no Clerk, do
+    `public_metadata.role`, que só o painel muda (ver `clerk.py`).
+
+    401 pra quem não entrou (a tela manda entrar) e 403 pra quem entrou mas
+    não é amigo (a tela diz pra falar com o dono): são conversas diferentes.
+    """
+    if not quem:
+        raise HTTPException(401, "Entre na sua conta pra fazer pedido.")
+    if quem.get("perfil") not in ("amigo", "admin"):
+        raise HTTPException(403, "Pedido de impressão é só pra amigos do "
+                                 "grupo. Fale com o dono da Forja.")
+    return quem
+
+
+def _pedido_de(order_id: str, quem: dict) -> dict:
+    """O pedido, se `quem` pode vê-lo e mexer nele — a mesma regra do deck
+    (`_pode_mexer`): pedido sem dono (os de antes da conta) qualquer amigo
+    abre; com dono, só o dono e o admin. O de outra pessoa responde 404, como
+    o que não existe: o id não pode servir pra descobrir pedido alheio."""
+    order = storage.get_order(order_id)
+    if not order or not _pode_mexer(order.get("dono"), quem):
+        raise HTTPException(404, "Pedido não encontrado.")
+    return order
 
 
 def _pode_mexer(dono: str | None, quem: dict | None) -> bool:
@@ -285,10 +313,15 @@ def startup():
 
 @app.post("/orders")
 async def create_order(xml_file: UploadFile, lamination: str = Form(...),
-                        customer_name: str = Form(...)):
+                        customer_name: str = Form(default=""),
+                        quem: dict = Depends(exige_amigo)):
+    """Cria o pedido e a cobrança Pix. Só amigo (`exige_amigo`), e o pedido
+    já nasce dele. O nome digitado continua valendo (pode ser pra outra
+    pessoa); em branco, vai o da conta."""
     if not PIX_KEY:
         raise HTTPException(500, "PIX_KEY não configurada no backend (.env).")
-    if not customer_name.strip():
+    customer_name = customer_name.strip() or quem.get("nome", "").strip()
+    if not customer_name:
         raise HTTPException(400, "Informe o nome de quem está pedindo.")
 
     xml_text = (await xml_file.read()).decode("utf-8")
@@ -301,8 +334,8 @@ async def create_order(xml_file: UploadFile, lamination: str = Form(...),
         raise HTTPException(400, str(e))
 
     order_id, amount = storage.create_order(
-        xml_text, lamination, customer_name.strip(), deck_hash, result
-    )
+        xml_text, lamination, customer_name, deck_hash, result,
+        dono=quem["id"])
     payload = pix.build_payload(PIX_KEY, MERCHANT_NAME, MERCHANT_CITY, amount, txid=order_id)
     qr_b64 = pix.build_qr_base64(payload)
 
@@ -324,14 +357,14 @@ def _publico(pedido: dict) -> dict:
 
 
 @app.get("/pedidos/meus")
-def meus_pedidos(quem: dict = Depends(exige_login)):
+def meus_pedidos(quem: dict = Depends(exige_amigo)):
     """Os pedidos desta conta, de qualquer aparelho."""
     return {"pedidos": [_publico(p) for p in storage.list_by_dono(quem["id"])]}
 
 
 @app.post("/pedidos/reclamar")
 def reclamar_pedidos(corpo: dict = Body(default={}),
-                     quem: dict = Depends(exige_login)):
+                     quem: dict = Depends(exige_amigo)):
     """Vira dono dos pedidos que a pessoa já tinha no navegador.
 
     A home chama isto sozinha ao abrir, com a lista do `localStorage`, e em
@@ -357,15 +390,12 @@ def reclamar_pedidos(corpo: dict = Body(default={}),
 
 
 @app.get("/orders/{order_id}")
-def order_status(order_id: str):
-    order = storage.get_order(order_id)
-    if not order:
-        raise HTTPException(404, "Pedido não encontrado.")
-    return _publico(order)
+def order_status(order_id: str, quem: dict = Depends(exige_amigo)):
+    return _publico(_pedido_de(order_id, quem))
 
 
 @app.post("/orders/{order_id}/notify-payment")
-def notify_payment(order_id: str):
+def notify_payment(order_id: str, quem: dict = Depends(exige_amigo)):
     """
     O cliente clicou em "Pagamento realizado, enviar notificação".
 
@@ -376,9 +406,7 @@ def notify_payment(order_id: str):
     A folha não é montada aqui: o pedido em `notified` aparece na fila do
     worker da impressora, que adianta o PDF dele do lado de lá.
     """
-    order = storage.get_order(order_id)
-    if not order:
-        raise HTTPException(404, "Pedido não encontrado.")
+    order = _pedido_de(order_id, quem)
     if order["status"] in storage.STATUS_PAGOS:
         return {"status": "already_printed",
                 "message": "Esse pedido já foi confirmado e enviado pra impressão."}
@@ -407,7 +435,7 @@ def notify_payment(order_id: str):
 
 
 @app.post("/orders/{order_id}/cancel")
-def cancel_order(order_id: str):
+def cancel_order(order_id: str, quem: dict = Depends(exige_amigo)):
     """
     O cliente desistiu, pela tela "Meus pedidos" dele.
 
@@ -420,16 +448,11 @@ def cancel_order(order_id: str):
     Cancelar não apaga nada: o pedido sai da lista de abertos e continua no
     histórico do admin (`storage.set_status`).
 
-    Sem token: quem tem o id do pedido é quem pode mexer nele, a mesma regra
-    do notify-payment. O id são 8 dígitos hex (`storage.create_order`), então
-    dá pra chutar — o estrago possível é anular a cobrança de um pedido que
-    ninguém ainda avisou como pago, e ele continua no histórico do admin
-    marcado como cancelado. Se um dia isso incomodar, o caminho é o mesmo do
-    PDF: link assinado (`_authorize`), não token de admin.
+    Pede amigo, e pedido com dono só o dono (e o admin) cancela — a regra do
+    `_pedido_de`, a mesma do notify-payment. Pedido sem dono (de antes da
+    conta) qualquer amigo cancela: são poucos e ficam no histórico do admin.
     """
-    order = storage.get_order(order_id)
-    if not order:
-        raise HTTPException(404, "Pedido não encontrado.")
+    order = _pedido_de(order_id, quem)
     if order["status"] == "cancelado":
         return {"status": "cancelado",
                 "message": "Esse pedido já estava cancelado."}
@@ -773,18 +796,9 @@ def conta_senha(corpo: dict = Body(default={}),
 
 
 @app.get("/meus-decks")
-def pagina_de_decks():
-    """A tela que lista os decks. Serve o HTML por rota própria, e não pelo
-    mount de estáticos, pra a URL ser /meus-decks, sem o .html — igual ao
-    /deckbuilder.
-
-    Página e recurso separados, como no admin (`/admin` é a casca, os dados
-    vêm de `/admin/pedidos`): o HTML aqui não tem deck nenhum dentro. Quais
-    decks aparecem, quem decide é o navegador, com a lista que ele guarda —
-    e é por isso que servir este arquivo publicamente não é problema.
-    A tela mora em `front/src/pages/decks`.
-    """
-    return frontend.page("decks")
+def pagina_de_decks_antiga():
+    """Onde a lista de decks morava antes de virar a página inicial."""
+    return RedirectResponse("/", status_code=301)
 
 
 @app.get("/cartas/estado")
@@ -1131,7 +1145,7 @@ def artes_do_deck(deck_id: str):
     return artes.para_deck(_deck_ou_404(deck_id))
 
 
-@app.get("/decks/{deck_id}/pedido")
+@app.get("/decks/{deck_id}/pedido", dependencies=[Depends(exige_amigo)])
 def pedido_do_deck(deck_id: str):
     """O deck pronto pra virar pedido: o XML que a tela de orçamento sobe no
     `POST /orders`, e o cartão do deck pra ela mostrar no lugar do upload.
@@ -2311,9 +2325,26 @@ def worker_batida(corpo: dict = Body(default={})):
 
 
 @app.get("/")
-def pagina_inicial():
-    """A Forja de Proxies: orçamento, revisão da folha e cobrança Pix
-    (`front/src/pages/home`)."""
+def pagina_inicial(deck: str | None = None):
+    """A página inicial é a lista de decks (`front/src/pages/decks`).
+
+    O HTML não tem deck nenhum dentro: quais aparecem, quem decide é o
+    navegador, com a lista que ele guarda e a conta — por isso servi-lo
+    publicamente não é problema.
+
+    `/?deck=ID` era o "Gerar pedido" do deckbuilder quando a raiz era a tela
+    de pedido, e esse link anda por aí em conversa: vai pra onde a tela foi.
+    """
+    if deck:
+        return RedirectResponse(f"/pedido?deck={quote(deck, safe='')}", status_code=301)
+    return frontend.page("decks")
+
+
+@app.get("/pedido")
+def pagina_de_pedido():
+    """Orçamento, revisão da folha e cobrança Pix (`front/src/pages/home`).
+    A página abre pra qualquer um; quem fecha são as rotas de pedido
+    (`exige_amigo`), e a tela diz a quem não é amigo por que não dá."""
     return frontend.page("home")
 
 

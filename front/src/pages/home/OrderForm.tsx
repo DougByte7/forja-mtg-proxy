@@ -114,7 +114,7 @@ function DeckFromBuilder({ id }: { id: string }) {
   const links = (label: string) => (
     <div class="deck-links">
       <a href={`/deckbuilder?deck=${encodeURIComponent(id)}`}>{label}</a>
-      <a href="/">Enviar um XML em vez disso</a>
+      <a href="/pedido">Enviar um XML em vez disso</a>
     </div>
   );
 

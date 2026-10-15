@@ -174,10 +174,10 @@ check("apagar de novo = 404",
 # --- 4. o que já existia continua de pé ---------------------------------
 check("/admin/orders continua respondendo",
       cliente.get("/admin/orders", headers=AUTH).status_code == 200)
-check("o status público do pedido continua aberto",
-      cliente.get(f"/orders/{bruno}").status_code == 200)
-check("a tela do cliente continua na raiz",
-      "Forja de Proxies" in cliente.get("/").text)
+# O status do pedido é do amigo que pediu (ver test_cancelar_pedido); o
+# admin, que é quem este teste é, também lê — e sem conta, não.
+check("o status do pedido não abre sem conta",
+      cliente.get(f"/orders/{bruno}").status_code == 401)
 
 print()
 if falhas:

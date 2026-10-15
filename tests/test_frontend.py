@@ -71,8 +71,8 @@ check("com no-cache", r.headers.get("cache-control") == "no-cache",
 
 # Cada rota aponta pra tela certa do build: trocar o nome de um entry no
 # vite.config.ts sem trocar aqui é tela em branco (503) só naquela rota.
-TELAS = {"/entrar": "login", "/cadastro": "signup", "/meus-decks": "decks",
-         "/admin": "admin", "/": "home", "/deckbuilder": "deckbuilder"}
+TELAS = {"/entrar": "login", "/cadastro": "signup", "/": "decks",
+         "/admin": "admin", "/pedido": "home", "/deckbuilder": "deckbuilder"}
 for nome in TELAS.values():
     (frontend.DIST / "pages" / f"{nome}.html").write_text(
         f"<!DOCTYPE html><title>{nome}</title>", encoding="utf-8")
@@ -80,6 +80,17 @@ for rota, nome in TELAS.items():
     r = c.get(rota)
     check(f"{rota} serve a tela {nome}", r.status_code == 200
           and f"<title>{nome}</title>" in r.text, r.status_code)
+
+# Os endereços de antes da troca da página inicial continuam chegando.
+r = c.get("/meus-decks", follow_redirects=False)
+check("/meus-decks leva pra raiz", r.status_code == 301
+      and r.headers["location"] == "/", r.headers.get("location"))
+r = c.get("/?deck=abc123", follow_redirects=False)
+check("/?deck= do link antigo vai pra tela de pedido", r.status_code == 301
+      and r.headers["location"] == "/pedido?deck=abc123", r.headers.get("location"))
+r = c.get("/?deck=a%26b%3Dc", follow_redirects=False)
+check("e o id vai escapado", r.headers.get("location") == "/pedido?deck=a%26b%3Dc",
+      r.headers.get("location"))
 
 for antigo in ("entrar.html", "cadastro.html", "decks.html", "admin.html",
                "index.html", "deckbuilder.html", "deckbuilder/abertura.js"):

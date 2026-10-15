@@ -7,7 +7,16 @@ import { useEffect } from "preact/hooks";
 import { api } from "./api";
 import { signOutClerk } from "./clerk";
 
-export type User = { id?: number; login: string; nome: string; [k: string]: unknown };
+export type User = {
+  id?: string; login: string; nome: string; perfil?: string; [k: string]: unknown;
+};
+
+/** Quem pode fazer pedido de impressão: amigo do grupo e o admin. A mesma
+    regra do `exige_amigo` do servidor — aqui é só pra a tela não oferecer o
+    que o servidor vai recusar. */
+export function canOrder(user: User | null | undefined): boolean {
+  return user?.perfil === "amigo" || user?.perfil === "admin";
+}
 
 export const currentUserQuery = queryOptions({
   queryKey: ["conta"],

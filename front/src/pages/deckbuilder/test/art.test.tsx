@@ -19,6 +19,9 @@ const frames = (html: string) =>
   [...html.matchAll(/data-arte-carta="([^"]+)" data-arte-face="(\w+)"/g)].map((m) => [m[1], m[2]]);
 const shortcutHidden = (p: Page) => drawn(p.DefaultArtsButton).querySelector("button")!.hidden;
 
+/** Quem pode pedir (ver `canOrder`). */
+const AMIGO = { login: "ana", nome: "Ana", perfil: "amigo" };
+
 /** O link do "Gerar pedido": escondido?, destino e o porquê. */
 function orderLink(p: Page) {
   const l = drawn(p.OrderLink).querySelector("a")!;
@@ -110,6 +113,7 @@ describe("a galeria", () => {
 describe('o "Gerar pedido"', () => {
   it("só com todas as artes, verso incluído, e só com deck salvo", async () => {
     const p = await page();
+    p.state.user = AMIGO;
     p.state.id = "abc123";
     p.state.cards = [{ carta: SOL_RING, quantidade: 4, categoria: "" },
                        { carta: DELVER, quantidade: 1, categoria: "" }];
@@ -119,9 +123,20 @@ describe('o "Gerar pedido"', () => {
     p.artState.choices["delver of secrets insectile aberration"] = { frente: { arte_id: "d" } };
     expect(orderLink(p).slice(1)).toEqual([null, "Faltam 1 arte(s) — escolha na aba Artes"]);
     p.artState.choices["delver of secrets insectile aberration"].verso = { arte_id: "i" };
-    expect(orderLink(p).slice(0, 2)).toEqual([false, "/?deck=abc123"]);
+    expect(orderLink(p).slice(0, 2)).toEqual([false, "/pedido?deck=abc123"]);
     p.state.id = null;
     expect(orderLink(p).slice(0, 2)).toEqual([true, null]);
+  });
+
+  it("some pra quem não pode pedir: anônimo e conta que não é de amigo", async () => {
+    const p = await page();
+    p.state.id = "abc123";
+    p.state.user = null;
+    expect(orderLink(p)[0]).toBe(true);
+    p.state.user = { login: "beto", nome: "Beto", perfil: "cliente" };
+    expect(orderLink(p)[0]).toBe(true);
+    p.state.user = { login: "chefe", nome: "Chefe", perfil: "admin" };
+    expect(orderLink(p)[0]).toBe(false);
   });
 
   it("as fichas vão pro papel: quadro na galeria e conta no pedido", async () => {
@@ -131,6 +146,7 @@ describe('o "Gerar pedido"', () => {
       nome: "Wurm", tipo: "Token Artifact Creature — Wurm", texto, poder: "3", resistencia: "3",
       imagem: "http://arte/" + chave, chave_arte: chave });
     const p = await page();
+    p.state.user = AMIGO;
     p.state.id = "abc123";
     p.state.tokens = { total: 3, grupos: [
       { carta: "Motor de Wurm", tokens: [wurm("Deathtouch", "t:Wurm aaaa1111"), wurm("Lifelink", "t:Wurm bbbb2222")] },
@@ -154,11 +170,12 @@ describe('o "Gerar pedido"', () => {
     expect(html).toMatch(/class="galeria-carta tem-arte\s*"\s+data-arte-carta="t:Wurm aaaa1111"/);
     expect(html).toContain("Wurm 3/3 (Lifelink)");
     expect(before).toBe("Faltam 1 arte(s) — escolha na aba Artes");
-    expect(after).toBe("/?deck=abc123");
+    expect(after).toBe("/pedido?deck=abc123");
   });
 
   it("arte por cópia: as dez Florestas, a 2 e a 4 numa arte e o resto na de todas", async () => {
     const p = await page();
+    p.state.user = AMIGO;
     p.state.id = "abc123";
     const forest = p.state.cards[2].carta;
     p.artState.choices = {
@@ -179,7 +196,7 @@ describe('o "Gerar pedido"', () => {
     expect(html).toContain("cópias 2, 4");
     expect([p.chosenArt(forest, "frente", null, 2).arte_id,
             p.chosenArt(forest, "frente", null, 3).arte_id]).toEqual(["outra", "todas"]);
-    expect([order, shortcut]).toEqual(["/?deck=abc123", true]);
+    expect([order, shortcut]).toEqual(["/pedido?deck=abc123", true]);
 
     delete p.artState.choices.forest.frente;
     expect([orderLink(p)[2], shortcutHidden(p)])

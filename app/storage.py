@@ -129,15 +129,15 @@ def init_db():
 
 
 def create_order(xml_text: str, lamination: str, customer_name: str,
-                  deck_hash: str, calc_result: dict):
+                  deck_hash: str, calc_result: dict, dono: str | None = None):
     conn = _conn()
     order_id = uuid.uuid4().hex[:8]
     amount = calc_result["total"]
     conn.execute(
         """INSERT INTO orders
                (id, xml_text, lamination, customer_name, deck_hash, qty,
-                backs_count, pages, blanks, amount, status, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                backs_count, pages, blanks, amount, status, created_at, dono)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             order_id,
             xml_text,
@@ -151,6 +151,7 @@ def create_order(xml_text: str, lamination: str, customer_name: str,
             amount,
             "pending",
             time.time(),
+            dono or None,
         ),
     )
     conn.commit()

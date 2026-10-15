@@ -2,7 +2,7 @@
 Confere o que a conta abre e o que ela protege.
 
 MOTIVO DE EXISTIR, e a regra cabe numa frase: **deck se cria e se altera com
-conta; abrir deck e fazer pedido, não.** Conta é o tipo de coisa que fecha
+conta; abrir deck, não; pedido, só com conta de amigo.** Conta é o tipo de coisa que fecha
 portas sem querer — ou deixa abertas —, e o sintoma não é erro de teste: é um
 link compartilhado que parou de abrir, ou um anônimo reescrevendo o deck de
 alguém.
@@ -91,7 +91,8 @@ try:
     storage.init_db()
     usuarios.init_db()
 
-    ana = usuarios.criar("ana", "senha-da-ana-1", perfil="cliente")
+    # Ana é amiga (faz pedido); Beto é só cliente (monta deck).
+    ana = usuarios.criar("ana", "senha-da-ana-1", perfil="amigo")
     beto = usuarios.criar("beto", "senha-do-beto-1", perfil="cliente")
     chefe = usuarios.criar("chefe", "senha-do-chefe-1", perfil="admin")
 
@@ -244,11 +245,15 @@ try:
     eq("corpo sem lista é 400",
        c_ana.post("/pedidos/reclamar", json={}).status_code, 400)
 
-    # Reclamar é rotulagem ADITIVA: não fecha nada que estava aberto.
-    eq("o pedido reclamado continua consultável por quem tem o id",
-       anonimo.get(f"/orders/{p1}").status_code, 200)
-    eq("e continua cancelável por quem tem o id",
-       anonimo.post(f"/orders/{p1}/cancel").status_code, 200)
+    eq("cliente que não é amigo não reclama pedido",
+       c_beto.post("/pedidos/reclamar", json={"ids": [p1]}).status_code, 403)
+    eq("nem lista os pedidos", c_beto.get("/pedidos/meus").status_code, 403)
+
+    # Depois de reclamado, o pedido é da Ana: o id sozinho não abre mais.
+    eq("anônimo não consulta o pedido", anonimo.get(f"/orders/{p1}").status_code, 401)
+    eq("nem cancela", anonimo.post(f"/orders/{p1}/cancel").status_code, 401)
+    eq("a dona consulta", c_ana.get(f"/orders/{p1}").status_code, 200)
+    eq("e cancela", c_ana.post(f"/orders/{p1}/cancel").status_code, 200)
 
     # =====================================================================
     print("\n--- a porta do admin ---")
@@ -258,7 +263,8 @@ try:
     eq("X-Admin-Token ainda abre",
        anonimo.get("/admin/decks", headers={"X-Admin-Token": TOKEN}).status_code, 200)
     eq("sessão de admin também abre", c_chefe.get("/admin/decks").status_code, 200)
-    eq("sessão de cliente NÃO abre", c_ana.get("/admin/decks").status_code, 401)
+    eq("sessão de amigo NÃO abre", c_ana.get("/admin/decks").status_code, 401)
+    eq("nem a de cliente", c_beto.get("/admin/decks").status_code, 401)
     eq("anônimo não abre", anonimo.get("/admin/decks").status_code, 401)
 
     r = c_chefe.get("/admin/decks").json()
