@@ -1,6 +1,6 @@
 /* A pílula da versão (ao lado do nome do deck) e a aba de histórico. A
    lógica é `versions.ts`. */
-import { canComplete, completeVersion, openVersionMenu, shortDate, versionPillView } from "../versions";
+import { canComplete, completeVersion, openVersionMenu, shortDate, versionOrderHref, versionPillView } from "../versions";
 import { previewProps } from "./preview";
 import { useDeck } from "./useDeck";
 
@@ -49,6 +49,18 @@ function DiffColumns({ diff: d }: { diff: Diff }) {
   );
 }
 
+/* O pedido de uma versão leva só as cartas que entraram nela (a v0 leva a
+   lista inteira). Versão que só tirou carta não tem o que imprimir. */
+function VersionOrderLink({ numero, diff }: { numero: number; diff: Diff | null }) {
+  const href = versionOrderHref(numero);
+  if (!href || (diff && !diff.n_entraram)) return null;
+  return (
+    <a class="btn" href={href}
+       title={diff ? `Pedido só com as ${diff.n_entraram} carta(s) que entraram na v${numero}`
+         : `Pedido com a lista inteira da v${numero}`}>Gerar pedido</a>
+  );
+}
+
 export function History() {
   const state = useDeck();
   const h = state.history;
@@ -78,6 +90,8 @@ export function History() {
               <span class="hist-quando">{shortDate(v.criado_em)}</span>
               {v.diferenca ? <Balance diff={v.diferenca} />
                 : <span class="hist-saldo">primeira versão · {v.total} cartas</span>}
+              <span class="espaco" />
+              <VersionOrderLink numero={v.numero} diff={v.diferenca} />
             </div>
             {v.diferenca && <DiffColumns diff={v.diferenca} />}
           </li>

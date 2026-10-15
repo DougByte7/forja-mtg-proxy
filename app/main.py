@@ -1053,7 +1053,7 @@ def artes_do_deck(deck_id: str):
 
 
 @app.get("/decks/{deck_id}/pedido", dependencies=[Depends(exige_amigo)])
-def pedido_do_deck(deck_id: str):
+def pedido_do_deck(deck_id: str, versao: int | None = None):
     """O deck pronto pra virar pedido: o XML que a tela de orçamento sobe no
     `POST /orders`, e o cartão do deck pra ela mostrar no lugar do upload.
 
@@ -1061,11 +1061,23 @@ def pedido_do_deck(deck_id: str):
     em `faltando`: não é erro de quem chamou, é um deck que ainda não está
     pronto, e a tela precisa dos nomes pra dizer o que escolher. O deckbuilder
     já não oferece o link nesse estado; esta é a conferência do lado de cá.
+
+    Com `versao`, o pedido leva só as cartas que entraram naquela versão do
+    histórico (ver `artes.pedido_da_versao`), e o número volta em `versao`
+    pra tela dizer de qual recorte se trata.
     """
     deck = _deck_ou_404(deck_id)
-    montado = artes.pedido(deck)
+    if versao is None:
+        montado = artes.pedido(deck)
+    else:
+        listas = decks.listas_da_versao(deck["id"], versao)
+        if listas is None:
+            raise HTTPException(404, f"Este deck não tem a v{versao}.")
+        montado = {**artes.pedido_da_versao(deck, *listas), "versao": versao}
     if not montado["cartas"]:
-        raise HTTPException(400, "Este deck não tem carta nenhuma pra imprimir.")
+        raise HTTPException(400, "Nada pra imprimir: nenhuma carta entrou nesta versão."
+                            if versao is not None else
+                            "Este deck não tem carta nenhuma pra imprimir.")
     return {"deck": decks.resumo([deck["id"]])[0], **montado}
 
 

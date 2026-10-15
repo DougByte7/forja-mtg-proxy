@@ -21,6 +21,9 @@ import { buildXml, parseOrder, parseSlots, type Slot } from "./xml";
 /** O deck que o "Gerar pedido" do deckbuilder mandou (`?deck=`), ou "". Com
     ele, o XML vem do servidor em vez do upload. */
 export const deckId = signal(new URLSearchParams(location.search).get("deck") || "");
+/** A versão do histórico que o "Gerar pedido" dela mandou (`?versao=`), ou
+    "". Com ela, o pedido leva só as cartas que entraram naquela versão. */
+export const deckVersion = signal(new URLSearchParams(location.search).get("versao") || "");
 
 /* ------------------------------------------------------------------- XML */
 
@@ -221,6 +224,7 @@ export const bumpOrders = () => { ordersVersion.value++; };
 /** Volta tudo ao estado de quem acabou de abrir a página (usado nos testes). */
 export function resetHomeState() {
   deckId.value = "";
+  deckVersion.value = "";
   loadXml("");
   xmlError.value = "";
   revision.value = 0;

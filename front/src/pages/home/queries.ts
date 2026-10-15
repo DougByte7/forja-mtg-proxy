@@ -28,12 +28,15 @@ export type DeckSummary = {
 export type DeckOrder = {
   deck: DeckSummary;
   xml?: string | null;
+  cartas: number;
+  versao?: number;
   faltando: { nome: string; ficha?: boolean; face?: string }[];
 };
 
-export const deckOrderQuery = (id: string) => queryOptions({
-  queryKey: ["deck-pedido", id],
-  queryFn: () => api<DeckOrder>(`/decks/${encodeURIComponent(id)}/pedido`, { noStore: true }),
+export const deckOrderQuery = (id: string, version = "") => queryOptions({
+  queryKey: ["deck-pedido", id, version],
+  queryFn: () => api<DeckOrder>(`/decks/${encodeURIComponent(id)}/pedido`
+    + (version ? `?versao=${encodeURIComponent(version)}` : ""), { noStore: true }),
   retry: false,
   staleTime: Infinity,
 });

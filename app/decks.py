@@ -772,6 +772,23 @@ def concluir_versao(deck_id: str) -> int | None:
     return numero
 
 
+def listas_da_versao(deck_id: str, numero: int) -> tuple[dict | None, dict] | None:
+    """A fotografia da versão `numero` e a da anterior (`None` na v0), ou
+    `None` se o deck não tem essa versão. É o que o pedido de uma versão
+    subtrai pra saber o que entrou nela."""
+    conn = _conn()
+    try:
+        guardadas = _versoes_guardadas(conn, deck_id)
+    finally:
+        conn.close()
+    anterior = None
+    for v in guardadas:
+        if v["numero"] == numero:
+            return anterior, v["lista"]
+        anterior = v["lista"]
+    return None
+
+
 def historico(deck: dict) -> dict:
     """As versões do deck, da mais nova pra mais antiga, cada uma com o que
     entrou e saiu em relação à anterior — e, em `pendente`, o que a lista

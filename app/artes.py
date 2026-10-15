@@ -297,7 +297,10 @@ def fichas_do_deck(deck: dict) -> list[dict]:
     """
     nomes = list(deck.get("comandantes") or []) + \
         [c["nome"] for c in decks.cartas_contadas(deck)]
-    grupos = base_cartas.tokens_de(nomes)
+    return _com_chave(base_cartas.tokens_de(nomes))
+
+
+def _com_chave(grupos: list[dict]) -> list[dict]:
     for grupo in grupos:
         for ficha in grupo["tokens"]:
             ficha["chave_arte"] = chave_da_ficha(ficha)
@@ -341,28 +344,76 @@ def pedido(deck: dict) -> dict:
     um `<card>` só, com todos os slots — as 30 Florestas são um arquivo em 30
     lugares da folha, ou três arquivos em dez lugares cada.
     """
-    escolhas = do_deck(deck["id"])
-    linhas = [(nome, 1) for nome in deck.get("comandantes") or []] + \
-        [(c["nome"], c["quantidade"]) for c in deck.get("cartas") or []]
-    conhecidas = base_cartas.por_nomes([nome for nome, _ in linhas])
+    linhas = [(nome, 1, 1) for nome in deck.get("comandantes") or []] + \
+        [(c["nome"], c["quantidade"], 1) for c in deck.get("cartas") or []]
+    return _montar(deck["id"], linhas, _fichas_distintas(fichas_do_deck(deck)))
+
+
+def _por_nome(lista: dict, zonas=decks.ZONAS_DA_VERSAO) -> dict[str, tuple[str, int]]:
+    """`{nome achatado: (nome, cópias)}` de uma fotografia, somando as zonas."""
+    saida: dict[str, tuple[str, int]] = {}
+    for zona in zonas:
+        for c in lista.get(zona) or []:
+            nome, qtd = (c, 1) if zona == "comandantes" else (c["nome"], c["quantidade"])
+            chave = _chave(nome)
+            saida[chave] = (nome, saida.get(chave, (nome, 0))[1] + qtd)
+    return saida
+
+
+def pedido_da_versao(deck: dict, antes: dict | None, depois: dict) -> dict:
+    """O pedido só com o que ENTROU numa versão: quem já imprimiu a v2 e quer
+    a v3 não paga de novo pelas 90 cartas que continuam.
+
+    Conta por NOME, somando as zonas, e não pela `decks.diferenca`: carta que
+    passa do deck pro sideboard já está impressa, e a diferença a mostra como
+    entrada no side. 28 Forest que viram 30 são duas Forest, as cópias 29 e
+    30 — é a arte DELAS que vai pro papel, quando a carta tem arte por cópia.
+    Na v0 (`antes` nulo) entra a lista inteira daquela versão.
+
+    As fichas são as que as cartas novas criam e a versão anterior ainda não
+    criava: a Treasure que já estava na caixa não volta pro papel.
+    """
+    antes = antes or {}
+    velhas = _por_nome(antes)
+    linhas = []
+    for chave, (nome, qtd) in _por_nome(depois).items():
+        ja = velhas.get(chave, (nome, 0))[1]
+        if qtd > ja:
+            linhas.append((nome, qtd - ja, ja + 1))
+
+    def nomes_que_jogam(lista):
+        return [nome for nome, _ in _por_nome(lista, ("comandantes", "deck")).values()]
+    ja_criadas = {f["chave_arte"] for f in _fichas_distintas(
+        _com_chave(base_cartas.tokens_de(nomes_que_jogam(antes))))}
+    novas = set(nomes_que_jogam(depois)) - set(nomes_que_jogam(antes))
+    fichas = [f for f in _fichas_distintas(_com_chave(base_cartas.tokens_de(sorted(novas))))
+              if f["chave_arte"] not in ja_criadas]
+    return _montar(deck["id"], linhas, fichas)
+
+
+def _montar(deck_id: str, linhas: list[tuple[str, int, int]], fichas: list[dict]) -> dict:
+    """O XML de `linhas` — `(nome, cópias, número da primeira cópia)` — e
+    das `fichas`, uma de cada, com as artes escolhidas no deck."""
+    escolhas = do_deck(deck_id)
+    conhecidas = base_cartas.por_nomes([nome for nome, _, _ in linhas])
 
     # O que vai pra folha: (chave da escolha, nome pro `faltando`, o <query>
     # de cada face, cópias, se é ficha). O <query> é o nome, que o `calc` usa
     # pro código do pedido e a cotação usa pra saber o que cotar; o verso leva
     # só o nome dele, como o MPC Fill escreve, e a ficha vai com o `t:`.
     impressos = []
-    for nome, quantidade in linhas:
+    for nome, quantidade, primeira in linhas:
         carta = conhecidas.get(nome) or {}
         consultas = [nome]
         if carta.get("imagem_verso"):
             consultas.append((carta.get("nome") or nome).split(" // ")[-1].strip())
-        impressos.append((nome, nome, consultas, quantidade, False))
-    for ficha in _fichas_distintas(fichas_do_deck(deck)):
+        impressos.append((nome, nome, consultas, quantidade, primeira, False))
+    for ficha in fichas:
         lados = [ficha["nome"].split(" // ")[0].strip()]
         if ficha.get("imagem_verso"):
             lados.append(ficha["nome"].split(" // ")[-1].strip())
         impressos.append((ficha["chave_arte"], ficha["nome"],
-                          [calc.PREFIXO_FICHA + lado for lado in lados], 1, True))
+                          [calc.PREFIXO_FICHA + lado for lado in lados], 1, 1, True))
 
     # Agrupado por (arte, <query>), e não só pela arte: o mesmo arquivo
     # enviado pra duas cartas diferentes são dois <card>, cada um com o nome
@@ -372,14 +423,14 @@ def pedido(deck: dict) -> dict:
     faltando = []
     artes_total = 0
     proximo = 0
-    for chave, rotulo, consultas, quantidade, e_ficha in impressos:
+    for chave, rotulo, consultas, quantidade, primeira, e_ficha in impressos:
         faces = FACES[:len(consultas)]
         artes_total += len(faces)
         escolhidas = escolhas.get(_chave(chave), {})
         for face, consulta, destino in zip(faces, consultas, (frentes, versos)):
             faltou = False
             for n in range(quantidade):
-                escolha = _da_copia(escolhidas, face, n + 1)
+                escolha = _da_copia(escolhidas, face, primeira + n)
                 if not escolha:
                     faltou = True
                     continue

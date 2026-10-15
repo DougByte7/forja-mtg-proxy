@@ -9,6 +9,7 @@
    Quem decide é o servidor — WIP inválido e lista igual voltam 409 com o
    motivo. A tela só deixa de oferecer o clique que ele recusaria, usando a
    mesma validação instantânea do contador. O desenho é `ui/Versions.tsx`. */
+import { canOrder } from "../../shared/account";
 import { switchTab } from "./layout";
 import { openMenu, type MenuItem } from "./popupMenu";
 import { api, currentValidation, flushSave, isSavePending } from "./save";
@@ -24,6 +25,15 @@ export function canComplete() {
   if (!u) return false;
   if (!state.owner) return true;
   return u.id === state.owner || u.perfil === "admin";
+}
+
+/* O link do "Gerar pedido" de uma versão do histórico: a tela de orçamento
+   monta o pedido só com o que entrou nela (`?versao=`). Nulo pra quem não
+   pode pedir, e em deck sem id. As artes não são conferidas aqui — o recorte
+   é outro que o da aba Artes, e quem confere é o servidor, lá na tela. */
+export function versionOrderHref(numero: number) {
+  if (!state.id || !canOrder(state.user)) return null;
+  return `/pedido?deck=${encodeURIComponent(state.id)}&versao=${numero}`;
 }
 
 export function shortDate(ts: number | null | undefined) {

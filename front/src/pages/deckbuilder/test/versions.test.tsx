@@ -58,3 +58,29 @@ it("quem pode concluir, e o que a pílula e o histórico mostram", async () => {
   expect(hist).toContain("primeira versão · 100 cartas");
   expect([...hist.matchAll(/<span class="versao-pilula">(v\d+)<\/span>/g)].map((m) => m[1])).toEqual(["v2", "v0"]);
 });
+
+it("o pedido de cada versão: só pra quem pode pedir, e só onde entrou carta", async () => {
+  const p = await page();
+  const e = p.state;
+  e.id = "abc123";
+  e.history = {
+    atual: 2, pendente: null,
+    versoes: [
+      { numero: 2, criado_em: 1, total: 99, diferenca: {
+        entraram: [], sairam: [{ nome: "Forest", zona: "deck", quantidade: 1, carta: null }],
+        n_entraram: 0, n_sairam: 1 } },
+      { numero: 1, criado_em: 1, total: 100, diferenca: {
+        entraram: [{ nome: "Llanowar Elves", zona: "deck", quantidade: 1, carta: ELVES }],
+        sairam: [], n_entraram: 1, n_sairam: 0 } },
+      { numero: 0, criado_em: 1, total: 100, diferenca: null }],
+  };
+  const links = () => {
+    const host = document.createElement("div");
+    act(() => render(<p.History />, host));
+    return [...host.querySelectorAll("a.btn")].map((a) => a.getAttribute("href"));
+  };
+  e.user = { id: "eu", perfil: "comum" };
+  expect(links()).toEqual([]);
+  e.user = { id: "eu", perfil: "amigo" };
+  expect(links()).toEqual(["/pedido?deck=abc123&versao=1", "/pedido?deck=abc123&versao=0"]);
+});

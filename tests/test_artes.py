@@ -401,6 +401,34 @@ try:
     check("e a escolha dela continua guardada",
           "3" in artes.do_deck(copiado["id"])["forest"]["copias"])
 
+    print("\n--- o pedido de uma versão ---")
+
+    lado = {"categoria": decks.CATEGORIA_SIDEBOARD}
+    antes = decks.lista_da_versao(["Atraxa"], [
+        {"nome": "Forest", "quantidade": 1}, {"nome": "Sol Ring", "quantidade": 1, **lado}])
+    depois = decks.lista_da_versao(["Atraxa"], [
+        {"nome": "Forest", "quantidade": 3}, {"nome": "Sol Ring", "quantidade": 1}])
+    montado = artes.pedido_da_versao(copiado, antes, depois)
+    raiz = ET.fromstring(montado["xml"])
+    eq("só as cópias novas, cada uma com a arte do número dela",
+       {c.findtext("id"): c.findtext("slots") for c in raiz.findall("fronts/card")},
+       {"id-segunda": "0", "id-copia-3": "1"})
+    eq("carta que trocou de zona já está impressa", montado["cartas"], 2)
+    eq("versão sem carta nova não tem o que imprimir",
+       artes.pedido_da_versao(copiado, depois, antes)["cartas"], 0)
+    eq("a v0 leva a lista inteira",
+       artes.pedido_da_versao(copiado, None, antes)["cartas"], 3)
+
+    antes = decks.lista_da_versao(["Atraxa"], [{"nome": "Mapa do Tesouro", "quantidade": 1}])
+    depois = decks.lista_da_versao(["Atraxa"], [
+        {"nome": "Mapa do Tesouro", "quantidade": 1},
+        {"nome": "Fábrica de Tesouro", "quantidade": 1},
+        {"nome": "Motor de Wurm", "quantidade": 1}])
+    raiz = ET.fromstring(artes.pedido_da_versao(fichado, antes, depois)["xml"])
+    eq("só as fichas que a versão anterior ainda não criava",
+       [c.findtext("query") for c in raiz.findall("fronts/card")],
+       ["Fábrica de Tesouro", "Motor de Wurm", "t:Wurm", "t:Wurm"])
+
     duplicado = decks.duplicar(copiado["id"])
     eq("duplicar leva as escolhas por cópia",
        artes.do_deck(duplicado["id"])["forest"]["copias"]["2"]["frente"]["arte_id"],

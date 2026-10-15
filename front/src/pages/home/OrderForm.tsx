@@ -5,7 +5,7 @@ import { useEffect, useState } from "preact/hooks";
 import { deckOrderQuery, type DeckOrder } from "./queries";
 import { reason } from "./Summary";
 import {
-  commander, customerName, deckId, failXml, lamination, loadXml, prices, summary,
+  commander, customerName, deckId, deckVersion, failXml, lamination, loadXml, prices, summary,
 } from "./store";
 import { brl, LAMINATION_LABELS, type Lamination } from "./totals";
 
@@ -16,7 +16,7 @@ export function OrderForm() {
       <div class="step">
         <span class="step-label">Passo 1</span>
         <h3>{deckId.value ? "Seu deck" : "Selecione o XML do MPC Fill"}</h3>
-        {deckId.value ? <DeckFromBuilder id={deckId.value} /> : <XmlUpload />}
+        {deckId.value ? <DeckFromBuilder id={deckId.value} version={deckVersion.value} /> : <XmlUpload />}
       </div>
 
       <div class="step">
@@ -90,15 +90,19 @@ export function missingArts(missing: DeckOrder["faltando"]) {
 
    O deckbuilder só oferece o link com todas as artes escolhidas. A
    conferência daqui é a garantia: o deck pode ter mudado noutra aba, ou o
-   link ter sido colado à mão. Faltando arte o servidor não devolve XML. */
-function DeckFromBuilder({ id }: { id: string }) {
-  const q = useQuery(deckOrderQuery(id));
+   link ter sido colado à mão. Faltando arte o servidor não devolve XML.
+
+   Com `version` (o "Gerar pedido" de uma versão do histórico), o XML leva
+   só as cartas que entraram naquela versão — quem já imprimiu a anterior
+   não paga de novo pelo resto. */
+function DeckFromBuilder({ id, version }: { id: string; version: string }) {
+  const q = useQuery(deckOrderQuery(id, version));
 
   useEffect(() => {
     if (q.error) {
       failXml(reason(q.error) || "Não consegui abrir esse deck agora. Tente de novo em instantes.");
     } else if (q.data && !q.data.xml) {
-      failXml(`Este deck ainda não vira pedido: faltam ${q.data.faltando.length} arte(s) — `
+      failXml(`${version ? `As cartas da v${version} ainda não viram` : "Este deck ainda não vira"} pedido: faltam ${q.data.faltando.length} arte(s) — `
         + `${missingArts(q.data.faltando)}. A arte padrão não vai pro papel; escolha as que `
         + `faltam na aba Artes do deckbuilder.`);
     } else if (q.data?.xml) {
@@ -114,6 +118,7 @@ function DeckFromBuilder({ id }: { id: string }) {
   const links = (label: string) => (
     <div class="deck-links">
       <a href={`/deckbuilder?deck=${encodeURIComponent(id)}`}>{label}</a>
+      {version && <a href={`/pedido?deck=${encodeURIComponent(id)}`}>Pedir o deck inteiro</a>}
       <a href="/pedido">Enviar um XML em vez disso</a>
     </div>
   );
@@ -136,6 +141,9 @@ function DeckFromBuilder({ id }: { id: string }) {
             <span class="deck-cores">{(d.identidade || "C").split("").map((c) => <span class={`deck-pip ${c}`} />)}</span>
             <span class="n">{d.total}/100</span>
           </div>
+          {q.data!.versao != null && (
+            <p class="deck-nota">Só o que entrou na v{q.data!.versao}: {q.data!.cartas} carta(s).</p>
+          )}
         </div>
       </div>
       {links(q.data!.xml ? "Abrir no deckbuilder" : "Escolher as artes no deckbuilder")}
