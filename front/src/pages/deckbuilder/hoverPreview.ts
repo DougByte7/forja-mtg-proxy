@@ -12,6 +12,42 @@ const PREVIEW_HEIGHT = 349;   // altura dela, na proporção 488x680 da Scryfall
 const PREVIEW_LYING = 487;    // largura da carta girada (a altura vira largura)
 const PREVIEW_GAP = 8;        // o `gap` do CSS entre frente e verso
 
+/* As artes já pedidas, presas aqui pra continuarem no cache de imagens do
+   navegador: com elas vivas, trocar o `src` da prévia mostra a carta no mesmo
+   quadro, sem esperar rede nem decodificação. */
+const warmed = new Map<string, HTMLImageElement>();
+
+function warm(url: string | undefined) {
+  if (!url || warmed.has(url)) return;
+  const img = new Image();
+  img.referrerPolicy = "no-referrer";   // o mesmo das <img> da prévia
+  img.decoding = "async";
+  img.src = url;
+  warmed.set(url, img);
+}
+
+/* Baixa de antemão a arte de toda carta que está na tela, no tempo ocioso.
+   Esperar o mouse chegar na carta pra só então pedir a imagem é o atraso que
+   se vê. O observador pega o que entra depois — a busca, as sugestões, a
+   carta adicionada. */
+function preloadArts() {
+  const idle = window.requestIdleCallback || ((fn: () => void) => setTimeout(fn, 200));
+  let scheduled = false;
+  const scan = () => {
+    scheduled = false;
+    for (const el of document.querySelectorAll<HTMLElement>("[data-arte]")) {
+      warm(el.dataset.arte);
+      if (el.dataset.deitada !== "1") warm(el.dataset.arteVerso);
+    }
+  };
+  const schedule = () => { if (!scheduled) { scheduled = true; idle(scan); } };
+  new MutationObserver(schedule).observe(document.body, {
+    childList: true, subtree: true, attributes: true,
+    attributeFilter: ["data-arte", "data-arte-verso"],
+  });
+  schedule();
+}
+
 export function bindHoverPreview() {
   const preview = document.getElementById("previa")!;
   const front = document.getElementById("previa-frente") as HTMLImageElement;
@@ -21,6 +57,14 @@ export function bindHoverPreview() {
   // a frente continua valendo.
   front.addEventListener("error", () => preview.classList.remove("mostra"));
   back.addEventListener("error", () => back.classList.add("vazia"));
+  // Enquanto a arte nova não chega o <img> segue mostrando a anterior, e por
+  // um instante a prévia é de outra carta. Fica escondida até as duas faces
+  // estarem prontas.
+  const ready = () => front.complete && (back.classList.contains("vazia") || back.complete);
+  const reveal = () => { if (ready()) preview.classList.remove("carregando"); };
+  front.addEventListener("load", reveal);
+  back.addEventListener("load", reveal);
+  preloadArts();
 
   // Guardada porque o mousemove precisa dela a cada quadro e medir o elemento
   // ali dentro forçaria um reflow por movimento do mouse.
@@ -37,6 +81,8 @@ export function bindHoverPreview() {
     back.classList.toggle("vazia", !behind);
     if (behind) back.src = behind;
     preview.classList.toggle("deitada", lying);
+    warm(art); warm(behind);
+    preview.classList.toggle("carregando", !ready());
     preview.classList.add("mostra");
     width = lying ? PREVIEW_LYING : behind ? PREVIEW_WIDTH * 2 + PREVIEW_GAP : PREVIEW_WIDTH;
   });

@@ -2428,6 +2428,8 @@ button.mb-base-grupo:hover{border-color:var(--gold);color:var(--gold-light);}
   opacity:0;transition:opacity .12s;
 }
 .previa.mostra{opacity:1;}
+/* Arte nova ainda a caminho: melhor nada que a carta anterior. */
+.previa.mostra.carregando{opacity:0;transition:none;}
 .previa img{
   display:block;width:250px;border-radius:11px;border:1px solid var(--border);
   box-shadow:0 22px 44px -14px rgba(0,0,0,.85);background:var(--surface);
