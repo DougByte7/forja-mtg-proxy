@@ -3,14 +3,14 @@ O que o site fazia sozinho ao subir e em thread de fundo, como comando avulso.
 
 No homelab o processo do site vive dias: dá pra criar as tabelas no `startup`
 e deixar uma thread acordando de tempos em tempos pra sincronizar as cartas
-e podar sessões. Na Vercel cada requisição pode cair num processo novo, que
+e limpar o que venceu. Na Vercel cada requisição pode cair num processo novo, que
 morre logo depois de responder — migração no `startup` viraria meia dúzia de
 idas ao banco em toda partida a frio, e thread de fundo simplesmente não
 termina. Então as duas coisas viram comando:
 
-    python -m app.tarefas migrar               # tabelas, colunas novas, admin inicial
+    python -m app.tarefas migrar               # tabelas e colunas novas
     python -m app.tarefas cartas [--forcar]    # base de cartas, se estiver velha
-    python -m app.tarefas faxina               # sessões, preços e cotações vencidos
+    python -m app.tarefas faxina               # preços e cotações vencidos
     python -m app.tarefas artes-pro-blob PASTA # artes do disco -> Vercel Blob
     python -m app.tarefas clerk-importar [--aplicar]  # contas -> Clerk
 
@@ -25,7 +25,7 @@ No homelab nada disto é obrigatório: `MIGRAR_NO_STARTUP` e
 import sys
 
 from . import (artes, artes_enviadas, blob, cache_precos, cartas, clerk,
-               cotacao_job, decks, log, storage, usuarios)
+               cotacao_job, decks, log, storage)
 
 
 def migrar() -> None:
@@ -36,11 +36,8 @@ def migrar() -> None:
     cartas.init_db()
     cache_precos.criar_tabela()
     cotacao_job.criar_tabela()
-    usuarios.init_db()
     artes.init_db()
     artes_enviadas.criar_tabela()
-    # Só faz alguma coisa se não existir conta nenhuma — ver `semear_admin`.
-    usuarios.semear_admin()
     log.evento("tarefas", "migrou")
 
 
@@ -56,16 +53,14 @@ def sincronizar_cartas(forcar: bool = False) -> dict | None:
     return cartas.sincronizar()
 
 
-def faxina() -> int:
-    """Sessões vencidas, preços vencidos no cache e cotações velhas. Os PDFs
-    ficam de fora: o site não guarda PDF nenhum, e os do worker ele mesmo
-    apaga."""
-    sessoes = usuarios.podar_sessoes()
-    precos = cache_precos.podar()
-    cotacoes = cotacao_job.podar()
-    log.evento("tarefas", "faxina", sessoes=sessoes, precos=precos,
-               cotacoes=cotacoes)
-    return sessoes
+def faxina() -> dict:
+    """Preços vencidos no cache e cotações velhas. Os PDFs ficam de fora: o
+    site não guarda PDF nenhum, e os do worker ele mesmo apaga. Sessão não
+    há mais o que podar: quem cuida delas é o Clerk."""
+    resultado = {"precos": cache_precos.podar(),
+                 "cotacoes": cotacao_job.podar()}
+    log.evento("tarefas", "faxina", **resultado)
+    return resultado
 
 
 def artes_pro_blob(pasta: str) -> dict:
@@ -88,7 +83,7 @@ def clerk_importar(aplicar: bool = False) -> dict:
     """A virada pro Clerk: as contas da tabela `usuarios` vão pra lá (ver
     `clerk.importar`). Sem `--aplicar` só lista o que faria. Precisa da
     `CLERK_SECRET_KEY` e do `DB_URL` no ambiente."""
-    resultado = clerk.importar(usuarios.listar(), aplicar=aplicar)
+    resultado = clerk.importar(clerk.contas_antigas(), aplicar=aplicar)
     for grupo, contas in resultado.items():
         for conta in contas:
             print(f"{grupo}: {conta}")

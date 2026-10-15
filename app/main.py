@@ -5,17 +5,17 @@ import time
 from urllib.parse import quote
 
 from fastapi import (Body, Cookie, Depends, FastAPI, Form, Header,
-                     HTTPException, Request, Response, UploadFile)
+                     HTTPException, Request, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
-                               RedirectResponse, Response, StreamingResponse)
+                               RedirectResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
 from . import (artes, artes_enviadas, blob, calc, cambio, cartas, clerk,
                cleanup, cotacao_job, decks, detalhe_carta, diagnostico, edhrec,
                estoque, frontend, fulfillment, importar, log, manabase,
                mpcfill, notify, pix, plataforma, poder, spellbook, storage,
-               tarefas, usuarios, visitas)
+               tarefas, visitas)
 
 app = FastAPI(title="Forja de Proxies — backend")
 
@@ -61,31 +61,17 @@ WORKER_OFFLINE_SEGUNDOS = int(os.environ.get("WORKER_OFFLINE_SEGUNDOS", "180"))
 NOTIFY_COOLDOWN_SECONDS = 120
 
 
-COOKIE_SESSAO = "forja_sessao"
-# `secure` desligável porque a mesma página roda em http:// na rede local (é
-# pra isso que o LOCAL_BASE_URL existe). Com secure=True em http o navegador
-# simplesmente NÃO GRAVA o cookie, sem erro nenhum — e o login "não funciona"
-# sem nada na tela explicando por quê.
-SESSAO_SEGURA = os.environ.get("SESSAO_SEGURA", "1") == "1"
-
-
-def quem_e(forja_sessao: str | None = Cookie(default=None),
-           session: str | None = Cookie(default=None, alias="__session"),
+def quem_e(session: str | None = Cookie(default=None, alias="__session"),
            authorization: str | None = Header(default=None)) -> dict | None:
     """Quem está pedindo, ou `None` pra anônimo — que NÃO é erro.
 
-    Não fecha rota nenhuma: quem fecha é o `exige_login` e o
-    `exige_login_no_deck`. Ler deck, cotar e fazer pedido seguem abertos pra
-    quem não tem cookie.
+    Não fecha rota nenhuma: quem fecha é o `exige_login`, o
+    `exige_login_no_deck` e o `exige_amigo`. Ler deck e cotar seguem abertos
+    pra quem não entrou.
 
-    Duas portas durante a troca pro Clerk: a sessão própria (`forja_sessao`)
-    e o token do Clerk (cabeçalho ou cookie `__session`, ver `clerk.py`). As
-    duas devolvem o mesmo dicionário, e quem está nas duas é o mesmo `id`.
+    A conta é a do Clerk: o token vem no cabeçalho (o `api` do front manda)
+    ou no cookie `__session` (ver `clerk.py`).
     """
-    if forja_sessao:
-        quem = usuarios.da_sessao(forja_sessao)
-        if quem:
-            return quem
     return clerk.usuario(clerk.token_do_pedido(authorization, session))
 
 
@@ -700,99 +686,11 @@ def conta_atual(quem: dict | None = Depends(quem_e),
     return {"usuario": None, **({"clerk": motivo} if motivo else {})}
 
 
-@app.post("/conta/entrar")
-def conta_entrar(resposta: Response, request: Request,
-                 corpo: dict = Body(default={})):
-    """Confere a senha e abre a sessão, devolvendo o cookie.
-
-    O `login` é o que a conta tem de login: o e-mail, pra quem se cadastrou
-    em `/cadastro`; o que o admin escolheu, pra quem ele criou.
-    """
-    try:
-        aberta = usuarios.entrar(
-            corpo.get("login", ""), corpo.get("senha", ""),
-            lembrar=bool(corpo.get("lembrar")),
-            agente=request.headers.get("user-agent", ""))
-    except PermissionError as e:
-        raise HTTPException(429, str(e))
-    if aberta is None:
-        # Uma mensagem só pros dois casos (login inexistente e senha errada):
-        # respostas diferentes transformam esta tela num conferidor de quais
-        # contas existem.
-        raise HTTPException(401, "Login ou senha não conferem.")
-
-    usuario, token, duracao = aberta
-    resposta.set_cookie(
-        COOKIE_SESSAO, token, max_age=duracao, httponly=True,
-        samesite="lax", path="/", secure=SESSAO_SEGURA)
-    return {"usuario": usuario}
-
-
 @app.get("/cadastro")
 def pagina_de_cadastro():
     """A tela de criar conta (`front/src/pages/signup`). Rota própria pra a
     URL não ter .html."""
     return frontend.page("signup")
-
-
-@app.post("/conta/criar")
-def conta_criar(resposta: Response, request: Request,
-                corpo: dict = Body(default={})):
-    """Cria a conta com o token de acesso e já abre a sessão.
-
-    O token é o `CADASTRO_TOKEN` do `.env`, que o dono do sistema passa pro
-    grupo — isto não é uma loja, e um cadastro sem convite seria a primeira
-    coisa que um bot acharia (ver `usuarios.cadastrar`). Sai logado porque a
-    pessoa chegou aqui vindo de uma tela que pediu conta, e mandá-la digitar
-    de novo o que acabou de digitar seria o único passo sem motivo do fluxo.
-    """
-    try:
-        usuario = usuarios.cadastrar(
-            corpo.get("nome", ""), corpo.get("email", ""),
-            corpo.get("senha", ""), corpo.get("confirmacao", ""),
-            corpo.get("token", ""), origem=visitas.ip_do_pedido(request))
-    except usuarios.CadastroFechado as e:
-        raise HTTPException(403, str(e))
-    except PermissionError as e:
-        raise HTTPException(429, str(e))
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-    token, duracao = usuarios.abrir_sessao(
-        usuario["id"], agente=request.headers.get("user-agent", ""))
-    resposta.set_cookie(
-        COOKIE_SESSAO, token, max_age=duracao, httponly=True,
-        samesite="lax", path="/", secure=SESSAO_SEGURA)
-    log.evento("usuarios", "cadastrou", login=usuario["login"])
-    return {"usuario": usuario}
-
-
-@app.post("/conta/sair")
-def conta_sair(resposta: Response,
-               forja_sessao: str | None = Cookie(default=None)):
-    """Encerra a sessão deste aparelho. Sem token, não é erro: sair de onde já
-    se está fora é o resultado que a pessoa queria."""
-    usuarios.sair(forja_sessao)
-    resposta.delete_cookie(COOKIE_SESSAO, path="/")
-    return {"ok": True}
-
-
-@app.post("/conta/senha")
-def conta_senha(corpo: dict = Body(default={}),
-                quem: dict = Depends(exige_login)):
-    """Troca a própria senha. Pede a atual: um cookie roubado não pode virar
-    troca de senha, que é o que transformaria um acesso temporário em
-    permanente."""
-    if not usuarios.entrar(quem["login"], corpo.get("atual", "")):
-        raise HTTPException(403, "A senha atual não confere.")
-    try:
-        usuarios.trocar_senha(quem["id"], corpo.get("nova", ""))
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    # `trocar_senha` derruba TODAS as sessões, inclusive esta: é o que se
-    # espera de trocar senha, e é o que faz a troca servir pra alguma coisa
-    # quando o motivo dela foi desconfiança.
-    return {"ok": True, "saiu_de_todos": True}
 
 
 @app.get("/meus-decks")
@@ -1125,7 +1023,7 @@ def reclamar_deck(deck_id: str, quem: dict = Depends(exige_login)):
     Primeiro-a-chegar, e sem problema: reclamar um órfão não tira de ninguém
     nada que a pessoa tivesse. Antes da reclamação, qualquer um com o id já
     podia reescrever aquele deck; depois, só o dono e o admin. A reclamação
-    REDUZ o conjunto de quem edita — ver o cabeçalho do `usuarios.py`.
+    REDUZ o conjunto de quem edita — ver o cabeçalho do `clerk.py`.
 
     409 e não 403 quando o deck já é de alguém: não é "você não pode", é "essa
     ação não cabe mais neste deck", e a tela diz coisas diferentes pros dois.
@@ -1768,70 +1666,6 @@ def admin_list_orders(status: str | None = None, busca: str | None = None,
     return {"contagem": storage.count_by_status(), "pedidos": pedidos}
 
 
-@app.get("/admin/usuarios")
-def admin_list_usuarios(x_admin_token: str | None = Header(default=None),
-                        quem: dict | None = Depends(quem_e)):
-    """As contas do sistema. Nenhuma delas traz hash de senha: `usuarios`
-    tem um caminho de saída só (`_publico`), e ele não copia essa coluna."""
-    _check_admin(x_admin_token, quem)
-    return {"usuarios": usuarios.listar()}
-
-
-@app.post("/admin/usuarios")
-def admin_criar_usuario(corpo: dict = Body(default={}),
-                        x_admin_token: str | None = Header(default=None),
-                        quem: dict | None = Depends(quem_e)):
-    """Cria uma conta com login e perfil à escolha do admin.
-
-    O outro caminho é o `/cadastro`, que só cria `cliente` e pede o token de
-    acesso (ver `usuarios.cadastrar`).
-    """
-    _check_admin(x_admin_token, quem)
-    try:
-        return {"usuario": usuarios.criar(
-            corpo.get("login", ""), corpo.get("senha", ""),
-            nome=corpo.get("nome", ""), perfil=corpo.get("perfil", "cliente"))}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
-@app.post("/admin/usuarios/{usuario_id}/senha")
-def admin_trocar_senha(usuario_id: str, corpo: dict = Body(default={}),
-                       x_admin_token: str | None = Header(default=None),
-                       quem: dict | None = Depends(quem_e)):
-    """Redefine a senha de alguém — é a saída pra quem esqueceu a dela.
-
-    Derruba todas as sessões daquela conta junto (ver `usuarios.trocar_senha`),
-    o que também a torna a ferramenta certa quando o motivo foi desconfiança.
-    """
-    _check_admin(x_admin_token, quem)
-    try:
-        if not usuarios.trocar_senha(usuario_id, corpo.get("nova", "")):
-            raise HTTPException(404, "Conta não encontrada.")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return {"ok": True}
-
-
-@app.delete("/admin/usuarios/{usuario_id}")
-def admin_apagar_usuario(usuario_id: str,
-                         x_admin_token: str | None = Header(default=None),
-                         quem: dict | None = Depends(quem_e)):
-    """Apaga a conta e as sessões dela.
-
-    Os decks e pedidos daquela pessoa NÃO são apagados: eles voltam a ser
-    órfãos, e órfão é um estado que este sistema sabe tratar desde sempre.
-    Apagar o acervo junto seria transformar "tirar o acesso de alguém" em
-    "destruir o trabalho de alguém", que são coisas bem diferentes.
-    """
-    _check_admin(x_admin_token, quem)
-    if not usuarios.apagar(usuario_id):
-        raise HTTPException(404, "Conta não encontrada.")
-    soltos = decks.soltar_de(usuario_id) + storage.soltar_de(usuario_id)
-    log.evento("usuarios", "apagou", usuario=usuario_id, orfanados=soltos)
-    return {"ok": True, "orfanados": soltos}
-
-
 @app.get("/admin/decks")
 def admin_list_decks(busca: str | None = None, limite: int = 200,
                      x_admin_token: str | None = Header(default=None),
@@ -2197,8 +2031,8 @@ def admin_fontes(x_admin_token: str | None = Header(default=None),
 @app.post("/admin/cleanup")
 def run_cleanup(x_admin_token: str | None = Header(default=None),
                 quem: dict | None = Depends(quem_e)):
-    """Roda a faxina na hora (sessões vencidas e PDFs velhos que este
-    processo ainda tenha), sem esperar o ciclo diário."""
+    """Roda a faxina na hora (os PDFs velhos que este processo ainda
+    tenha), sem esperar o ciclo diário."""
     _check_admin(x_admin_token, quem)
     return cleanup.run_once()
 

@@ -3,8 +3,7 @@ Limpeza automática dos PDFs antigos em PDF_OUTPUT_DIR.
 
 Os PDFs ficam em cache no disco do worker da impressora, pra que conferir no
 painel e imprimir usem exatamente o mesmo arquivo. Como nada nunca apagava
-esses arquivos, o volume só crescia. Quem roda esta faxina é o worker; o site
-só aproveita a mesma passada pra podar sessões.
+esses arquivos, o volume só crescia. Quem roda esta faxina é o worker.
 
 A regra é por idade do arquivo, não por status do pedido, porque **apagar é
 sempre reversível**: o `xml_text` continua guardado no banco pra sempre, e
@@ -23,7 +22,7 @@ import time
 
 
 # Onde as folhas montadas ficam — a mesma variável do `pdf_generator`, lida
-# aqui direto pra quem só poda sessões (o site) não carregar o reportlab.
+# aqui direto pra quem não monta PDF (o site) não carregar o reportlab.
 OUTPUT_DIR = os.environ.get("PDF_OUTPUT_DIR", "/tmp")
 # Dias que um PDF fica no disco depois de gerado. 0 desliga a limpeza.
 PDF_KEEP_DAYS = float(os.environ.get("PDF_KEEP_DAYS", "30"))
@@ -40,37 +39,14 @@ def _is_ours(name: str) -> bool:
     return bool(_PDF_RE.match(name) or _MARKER_RE.match(name))
 
 
-def _podar_sessoes() -> int:
-    """Sessões vencidas, na carona da faxina que já existe.
-
-    Fica aqui, e não num laço próprio, porque é a mesma natureza de trabalho —
-    apagar o que venceu — e uma thread a mais pra rodar uma vez por dia seria
-    maquinário sem serventia. Nunca levanta: faxina que derruba o processo é
-    pior do que sujeira.
-    """
-    try:
-        from . import usuarios
-        return usuarios.podar_sessoes()
-    except Exception as e:
-        print(f"[cleanup] não consegui podar as sessões: {e}")
-        return 0
-
-
-def run_once(podar_sessoes: bool = True) -> dict:
-    """Apaga os PDFs mais velhos que PDF_KEEP_DAYS. Devolve um resuminho.
-
-    `podar_sessoes=False` é o worker da impressora: ele tem PDFs mas não tem
-    banco, e podar sessões lá criaria um `orders.db` vazio do nada.
-    """
-    sessoes = _podar_sessoes() if podar_sessoes else 0
+def run_once() -> dict:
+    """Apaga os PDFs mais velhos que PDF_KEEP_DAYS. Devolve um resuminho."""
     if PDF_KEEP_DAYS <= 0:
-        return {"desligado": True, "removidos": 0, "liberado_mb": 0.0,
-                "sessoes_podadas": sessoes}
+        return {"desligado": True, "removidos": 0, "liberado_mb": 0.0}
 
     directory = OUTPUT_DIR
     if not os.path.isdir(directory):
-        return {"removidos": 0, "liberado_mb": 0.0, "mantidos": 0,
-                "sessoes_podadas": sessoes}
+        return {"removidos": 0, "liberado_mb": 0.0, "mantidos": 0}
 
     cutoff = time.time() - PDF_KEEP_DAYS * 86400
     removed, freed, kept = 0, 0, 0
@@ -95,8 +71,7 @@ def run_once(podar_sessoes: bool = True) -> dict:
 
     return {"removidos": removed,
             "liberado_mb": round(freed / (1024 * 1024), 2),
-            "mantidos": kept,
-            "sessoes_podadas": sessoes}
+            "mantidos": kept}
 
 
 def _loop():

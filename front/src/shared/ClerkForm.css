@@ -1,0 +1,31 @@
+/* As telas de entrar e de cadastro: o fundo da casa e o formulário do Clerk
+   no centro (as cores dele vêm do `appearance` em `clerk.ts`). */
+:root{
+  --bg:#0F0D17; --text:#EDE6D6; --text-muted:#A79BC7;
+  --gold-light:#F5DC92; --red:#D9634A;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(circle at 12% 0%, rgba(139,107,255,0.12), transparent 42%),
+    radial-gradient(circle at 88% 100%, rgba(233,199,101,0.10), transparent 42%),
+    var(--bg);
+  color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;
+  display:grid;place-items:center;padding:20px;
+}
+
+/* O Preact monta dentro de #app; sem caixa própria, a .clerk-pagina é o
+   item que o grid do body centraliza. */
+#app{display:contents;}
+
+/* O formulário do Clerk traz o próprio cartão; aqui só o empilha com o
+   "Voltar" embaixo. */
+.clerk-pagina{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.sub{color:var(--text-muted);font-size:13px;line-height:1.5;margin:0;}
+.erro{max-width:380px;background:rgba(217,99,74,.10);border:1px solid var(--red);
+  border-radius:9px;padding:10px 12px;font-size:13px;color:#F0A899;
+  line-height:1.45;}
+.rodape{margin:12px 0 0;font-size:12px;color:var(--text-muted);
+  line-height:1.55;text-align:center;}
+.rodape a{color:var(--gold-light);}

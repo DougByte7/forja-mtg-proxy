@@ -33,8 +33,6 @@ os.environ["ADMIN_TOKEN"] = "token-de-teste-123"
 os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(), "orders.db")
 os.environ["LOG_DIR"] = tempfile.mkdtemp()
 os.environ["LOG_NIVEL"] = "ERROR"
-os.environ["SENHA_ITERACOES"] = "1000"
-os.environ["SESSAO_SEGURA"] = "0"
 
 try:
     from fastapi.testclient import TestClient
@@ -44,7 +42,8 @@ except ImportError:
 
 os.chdir(RAIZ)
 
-from app import storage, usuarios  # noqa: E402
+import conta_clerk  # noqa: E402  (antes do app: põe a chave no ambiente)
+from app import storage  # noqa: E402
 from app.main import app  # noqa: E402
 
 falhas = []
@@ -57,16 +56,11 @@ def check(nome, condicao, detalhe=""):
 
 
 storage.init_db()
-usuarios.init_db()
 
 
 def logado(login, perfil):
-    """Um TestClient com sessão de uma conta nova com esse perfil."""
-    usuarios.criar(login, "senha-de-teste-1", perfil=perfil)
-    c = TestClient(app)
-    r = c.post("/conta/entrar", json={"login": login, "senha": "senha-de-teste-1"})
-    assert r.status_code == 200, r.text
-    return c
+    """Um TestClient com o token de uma conta com esse perfil."""
+    return conta_clerk.cliente(app, login, perfil)
 
 
 cliente = logado("amiga", "amigo")
@@ -132,7 +126,7 @@ check("conta sem perfil de amigo não cancela",
 check("e não avisa pagamento",
       so_cliente.post(f"/orders/{dani}/notify-payment").status_code == 403)
 
-dono_id = usuarios.listar()[0]["id"]          # a amiga do `cliente`
+dono_id = "amiga"                             # o `sub` da dona do `cliente`
 dela = semear("Eva Melo", "mno345", dono=dono_id)
 outro = logado("outro-amigo", "amigo")
 check("pedido de outra pessoa dá 404 na consulta",

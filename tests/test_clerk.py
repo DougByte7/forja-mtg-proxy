@@ -3,13 +3,12 @@ Confere a porta do Clerk (`app/clerk.py`) e a importação das contas antigas.
 
 O que importa aqui:
 
-* token válido vira o MESMO dicionário que a sessão própria devolve, e o `id`
-  dele é o `forja_id` quando existe — é isso que mantém a pessoa dona dos
+* token válido vira a conta (id, login, nome, perfil), e o `id` dela é o
+  `forja_id` quando existe — é isso que mantém a pessoa dona dos
   decks e pedidos que já eram dela;
 * token vencido, de outra chave, de outra origem, pendente ou com algoritmo
   trocado é anônimo, nunca erro;
 * o perfil vem do token, e só os conhecidos valem — `admin` abre o painel;
-* a sessão própria continua funcionando durante a troca;
 * a importação só simula sem `--aplicar`, pula quem já foi e não leva conta
   sem e-mail.
 
@@ -61,15 +60,13 @@ os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
 os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
 os.environ["LOG_DIR"] = TMP
 os.environ["LOG_NIVEL"] = "ERROR"
-os.environ["SENHA_ITERACOES"] = "1000"
-os.environ["SESSAO_SEGURA"] = "0"
 # Como vem de um .env de uma linha só: com `\n` escrito.
 os.environ["CLERK_JWT_KEY"] = PUBLICA.replace("\n", "\\n")
 os.environ["CLERK_ORIGENS"] = ORIGEM
 
 os.chdir(RAIZ)
 
-from app import cartas, clerk, decks, storage, usuarios  # noqa: E402
+from app import cartas, clerk, decks, storage  # noqa: E402
 from app.main import app  # noqa: E402
 
 falhas = []
@@ -106,9 +103,9 @@ try:
     cartas.init_db()
     decks.init_db()
     storage.init_db()
-    usuarios.init_db()
 
-    ana = usuarios.criar("ana@exemplo.com", "senha-da-ana-1", nome="Ana")
+    # Uma conta de antes do Clerk: o id dela é o `dono` do que ela já tinha.
+    ana = {"id": "a1b2c3d4e5f6"}
 
     # =====================================================================
     print("\n--- token válido ---")
@@ -241,9 +238,9 @@ try:
         return c
 
     eq("admin pelo Clerk abre o painel",
-       com(token(role="admin")).get("/admin/usuarios").status_code, 200)
+       com(token(role="admin")).get("/admin/decks").status_code, 200)
     eq("cliente pelo Clerk não abre",
-       com(token()).get("/admin/usuarios").status_code, 401)
+       com(token()).get("/admin/decks").status_code, 401)
 
     deck_da_ana = decks.criar("Deck da Ana", dono=ana["id"])["id"]
     eq("a Ana pelo Clerk grava o deck que já era dela",
@@ -257,18 +254,6 @@ try:
     eq("conta nova do Clerk cria deck", novo.status_code, 200)
     eq("e o dono é o sub dela", decks.dono_de(novo.json()["deck"]["id"])[1],
        "user_nova")
-
-    # =====================================================================
-    print("\n--- a sessão própria continua valendo ---")
-    # =====================================================================
-
-    c_ana = TestClient(app)
-    eq("login antigo entra",
-       c_ana.post("/conta/entrar", json={"login": "ana@exemplo.com",
-                                         "senha": "senha-da-ana-1"}).status_code,
-       200)
-    eq("e /conta responde com ela", c_ana.get("/conta").json()["usuario"]["id"],
-       ana["id"])
 
     # =====================================================================
     print("\n--- importação ---")

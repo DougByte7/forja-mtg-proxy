@@ -310,7 +310,7 @@ def batida(api: Api) -> None:
 
 def faxina() -> None:
     try:
-        r = cleanup.run_once(podar_sessoes=False)
+        r = cleanup.run_once()
         if r.get("removidos"):
             log.evento("worker", "faxina", removidos=r["removidos"],
                        liberado_mb=r["liberado_mb"])

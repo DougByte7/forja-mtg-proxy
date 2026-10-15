@@ -15,7 +15,6 @@ ambiente. Sem rede: a sincronização de verdade é trocada por um dublê.
 import os
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -41,7 +40,7 @@ except ImportError:
 
 os.chdir(RAIZ)
 
-from app import cartas, storage, tarefas, usuarios  # noqa: E402
+from app import cartas, storage, tarefas  # noqa: E402
 from app.main import app  # noqa: E402
 
 falhas = []
@@ -80,23 +79,8 @@ check("falha na sincronização sai com 1",
       tarefas.main(["cartas", "--forcar"]) == 1)
 
 # --- 3. faxina ----------------------------------------------------------------
-conta = usuarios.criar("alguem", "uma-senha-bem-longa", nome="Alguém")
-conn = usuarios._conn()
-agora = time.time()
-conn.execute("INSERT INTO sessoes (token, usuario_id, criado_em, expira_em, "
-             "visto_em, agente) VALUES (?,?,?,?,?,?)",
-             ("vencida", conta["id"], agora - 10, agora - 5, agora - 10, ""))
-conn.execute("INSERT INTO sessoes (token, usuario_id, criado_em, expira_em, "
-             "visto_em, agente) VALUES (?,?,?,?,?,?)",
-             ("valendo", conta["id"], agora, agora + 3600, agora, ""))
-conn.commit()
-conn.close()
 check("faxina sai com 0", tarefas.main(["faxina"]) == 0)
-conn = usuarios._conn()
-restantes = {r[0] for r in conn.execute("SELECT token FROM sessoes")}
-conn.close()
-check("apaga a sessão vencida", "vencida" not in restantes, restantes)
-check("e deixa a que vale", "valendo" in restantes, restantes)
+check("e diz o que podou", set(tarefas.faxina()) == {"precos", "cotacoes"})
 
 # --- 4. o site sem thread de fundo --------------------------------------------
 with TestClient(app) as cliente:

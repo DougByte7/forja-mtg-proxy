@@ -41,8 +41,6 @@ jobs:
       CARTAS_DB_AUTH_TOKEN: ${{ secrets.CARTAS_DB_AUTH_TOKEN }}
       # Vai no User-Agent da Scryfall como contato (ver app/identidade.py).
       NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
-      ADMIN_LOGIN: ${{ secrets.ADMIN_LOGIN }}
-      ADMIN_SENHA: ${{ secrets.ADMIN_SENHA }}
       PYTHONUNBUFFERED: "1"
     steps:
       # Sem as URLs do banco, os comandos criariam um SQLite descartável no

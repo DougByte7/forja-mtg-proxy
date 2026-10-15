@@ -41,10 +41,9 @@ TMP = tempfile.mkdtemp(prefix="teste-decks-")
 os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
 os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
 # As rotas das versões pedem conta. O `app.main` é importado mais de uma vez
-# neste arquivo, e os dois valores são lidos no primeiro import: sem o
-# SESSAO_SEGURA desligado o cookie não é gravado em http://testserver.
-os.environ["SENHA_ITERACOES"] = "1000"
-os.environ["SESSAO_SEGURA"] = "0"
+# neste arquivo, e a chave do Clerk é lida no primeiro import: a conta de
+# teste tem que vir antes.
+import conta_clerk  # noqa: E402
 
 from app import cartas, cotacao, db, decks  # noqa: E402
 
@@ -687,16 +686,11 @@ try:
         print("PULADO: fastapi não está instalado")
     else:
         os.chdir(RAIZ)
-        from app import usuarios
         from app.main import app
 
         # Gravar deck pede conta (ver `test_login.py`); aqui a conta é só o
         # ingresso pras rotas das versões.
-        usuarios.init_db()
-        usuarios.criar("montador", "senha-do-montador")
-        cliente = TestClient(app)
-        cliente.post("/conta/entrar",
-                     json={"login": "montador", "senha": "senha-do-montador"})
+        cliente = conta_clerk.cliente(app, "montador")
         rd = decks.criar("Pela rota", ["Atraxa"], cem())
         resp = cliente.put(f"/decks/{rd['id']}", json={
             "nome": "Pela rota", "comandantes": ["Atraxa"], "cartas": cem()})

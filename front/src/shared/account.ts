@@ -29,15 +29,10 @@ export function useCurrentUser() {
   return useQuery(currentUserQuery);
 }
 
-/** Sair recarrega a página: tudo que a tela mostra muda com a conta. Sai
-    das duas — Clerk e sessão própria —, porque durante a troca a pessoa
-    pode estar nas duas e o servidor olha a própria primeiro. */
+/** Sair recarrega a página: tudo que a tela mostra muda com a conta. */
 export function useLogout() {
   return useMutation({
-    mutationFn: async () => {
-      await signOutClerk();
-      await api("/conta/sair", { method: "POST" });
-    },
+    mutationFn: signOutClerk,
     onSettled: () => location.reload(),
   });
 }

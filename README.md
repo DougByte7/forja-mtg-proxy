@@ -63,8 +63,8 @@ que não dá pra deixar como está:
   da sua impressora.
 - `ADMIN_TOKEN` — uma senha longa e aleatória só sua: ela assina os links Ver
   PDF e Imprimir e libera as rotas `/admin`. Sem ela o botão do cliente falha.
-- `ADMIN_LOGIN` e `ADMIN_SENHA` — opcionais, criam a primeira conta **e só
-  enquanto não existir conta nenhuma**; depois disso mexer nelas não cria nada.
+- `CLERK_JWT_KEY` e `VITE_CLERK_PUBLISHABLE_KEY` — a conta é do Clerk: a
+  chave pública da instância (o "JWKS Public Key") e a publicável (`pk_...`).
   Veja *Conta e cadastro*.
 - `TINTA_ESTADO` — opcional, `baixo` liga na mão o aviso de que a impressão vai
   demorar (veja *Aviso de tinta baixa*).
@@ -114,8 +114,9 @@ novo e recarregue o navegador.
 #### As telas em Preact (`front/`)
 
 Todas as telas são Preact + TypeScript em `front/`, com build no Vite: a
-página inicial (`/`), o login (`/entrar`), o cadastro (`/cadastro`), a lista
-de decks (`/meus-decks`), o admin (`/admin`) e o deckbuilder (`/deckbuilder`).
+página inicial com a lista de decks (`/`), a tela de pedido (`/pedido`), o
+login (`/entrar`), o cadastro (`/cadastro`), o admin (`/admin`) e o
+deckbuilder (`/deckbuilder`).
 Elas saem do build, em `app/static/dist/` (fora do git), e sem ele a rota
 responde 503 dizendo o comando que falta.
 Precisa de Node 22 ou mais novo e do pnpm (a versão está no `packageManager`
@@ -149,8 +150,9 @@ notas, seleção pra combinar, confirmação aberta), vai pra uma store de
 ### 4. Abra a tela
 
 `http://localhost:8000/` (ou o IP/domínio de onde estiver rodando) já é a Forja
-de Proxies completa, falando com a API na mesma origem. `/deckbuilder` é a tela
-de montar deck e `/admin`, a de pedidos.
+de Proxies completa, falando com a API na mesma origem: a página inicial é a
+lista de decks, `/deckbuilder` é a tela de montar deck, `/pedido` a de
+orçamento e cobrança (só pra perfil `amigo`) e `/admin`, a de pedidos.
 
 Na primeira subida, a base de cartas da Scryfall (uns 30 MB) se monta em
 segundo plano — veja *A base de cartas é uma cópia local da Scryfall*. Até ela
@@ -370,13 +372,15 @@ Sobre cartas dupla-face (MDFC), as regras que o editor segue:
 
 ## Meus Pedidos (do lado do cliente)
 
-O cabeçalho da página tem um botão **Meus Pedidos**, que só aparece quando
-este navegador já gerou alguma cobrança. Ele abre a lista do que foi pedido
-daqui, com o andamento de cada um.
+O cabeçalho da tela de pedido (`/pedido`) tem um botão **Meus Pedidos**, que
+só aparece quando este navegador já gerou alguma cobrança. Ele abre a lista do
+que foi pedido daqui, com o andamento de cada um.
 
-Não há login: o backend guarda os pedidos, mas não sabe de quem. Então a lista
+Pedido é só de conta com perfil `amigo` (ou `admin`), e nasce com dono: o
+servidor sabe de quem é (`GET /pedidos/meus`). A lista desta tela, porém,
 mora no **`localStorage` do navegador** — id do pedido, nome, valor, código do
-deck, o Pix copia-e-cola, o QR e o XML do deck. Ficam os 12 mais recentes;
+deck, o Pix copia-e-cola, o QR e o XML do deck —, porque é o XML guardado que
+redesenha as cartas. Ficam os 12 mais recentes;
 estourando a cota do navegador, os mais velhos vão saindo. Quem limpar o
 navegador perde **a lista**, não os pedidos: eles continuam no servidor, só
 não dá mais pra achá-los por aqui (aí é pelo `/admin`).
@@ -403,11 +407,11 @@ O que dá pra fazer:
 Cancelar chama `POST /orders/{id}/cancel`, que só aceita pedido em `pending` —
 qualquer outro estado volta 409. Não apaga nada: o pedido sai dos abertos e
 continua no histórico do `/admin` marcado como cancelado, igualzinho ao
-cancelamento que você faz por lá. A rota não tem token, pela mesma regra do
-`notify-payment`: quem tem o id do pedido é quem mexe nele. Como o id são 8
-dígitos hex, dá pra chutar — o estrago possível é anular a cobrança de um
-pedido que ninguém avisou como pago, e isso fica registrado no log
-(`pedido cancelado-pelo-cliente`) e no histórico.
+cancelamento que você faz por lá. Consultar, avisar pagamento e cancelar
+pedem a conta de amigo, e pedido com dono só o dono (e o admin) mexe — o de
+outra pessoa responde 404, como o que não existe, pra o id não servir de
+pista. Os pedidos de antes da conta, sem dono, qualquer amigo abre. O
+cancelamento fica no log (`pedido cancelado-pelo-cliente`) e no histórico.
 
 ## Estrutura
 
@@ -423,12 +427,12 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   por tela em `front/pages/`, o código em `front/src/pages/<tela>/` e o que
   é comum em `front/src/shared/`). O build vai pra `app/static/dist/`, e
   `app/frontend.py` serve o HTML de cada tela com `no-cache`; os assets têm
-  hash no nome e vão pelo mount estático. São a página inicial (`/`),
-  login (`/entrar`), cadastro (`/cadastro`), a lista de decks
-  (`/meus-decks`), o admin (`/admin`) e o deckbuilder (`/deckbuilder`). Ver
-  *As telas em Preact*.
-- `front/src/pages/home/` — a Forja de Proxies em `/`: orçamento, revisão da
-  folha, cotação e cobrança Pix. A lógica pura (XML, folha, totais, cotação,
+  hash no nome e vão pelo mount estático. São a lista de decks (`/`, a
+  página inicial), a tela de pedido (`/pedido`), login (`/entrar`),
+  cadastro (`/cadastro`), o admin (`/admin`) e o deckbuilder
+  (`/deckbuilder`). Ver *As telas em Preact*.
+- `front/src/pages/home/` — a tela de pedido, em `/pedido`: orçamento,
+  revisão da folha, cotação e cobrança Pix, só pra perfil `amigo`. A lógica pura (XML, folha, totais, cotação,
   "Meus Pedidos") mora em módulos `.ts` com testes ao lado.
 - `front/src/pages/admin/` — a tela de pedidos do operador, em `/admin`. Ver
   *Tela de pedidos (admin)*.
@@ -541,9 +545,16 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
   cancelar / reabrir / apagar fazem de fato. Precisa do fastapi instalado:
   `python tests/test_admin_pedidos.py`.
 - `tests/test_cancelar_pedido.py` — o cancelamento pelo cliente: a janela que
-  fecha depois do aviso de pagamento, o pedido que continua no histórico e o
-  andamento que a tela **Meus Pedidos** consulta. Precisa do fastapi instalado:
+  fecha depois do aviso de pagamento, o pedido que continua no histórico, o
+  andamento que a tela **Meus Pedidos** consulta e quem pode (só amigo, e o
+  pedido alheio é 404). Precisa do fastapi instalado:
   `python tests/test_cancelar_pedido.py`.
+- `tests/test_clerk.py` — a porta do Clerk: o token que vale e os que não
+  valem (vencido, outra chave, outra origem, algoritmo trocado), o motivo no
+  `GET /conta`, a chave pública colada de cada jeito, as origens da Vercel e
+  a importação das contas antigas. As contas de teste dos outros arquivos
+  vêm do `tests/conta_clerk.py`, que assina tokens com uma chave gerada na
+  hora — importe-o antes do app: `python tests/test_clerk.py`.
 - `tests/test_cartas.py` — a leitura do bulk data em pedaços (inclusive
   caractere UTF-8 cortado no meio e download incompleto, que precisa acusar) e
   o filtro de identidade de cor, que é escrito ao contrário:
@@ -611,10 +622,11 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 
 | Rota | Quem chama | O que faz |
 |---|---|---|
-| `POST /orders` | front | cria o pedido e devolve QR + copia-e-cola |
-| `GET /orders/{id}` | front | status do pedido |
-| `POST /orders/{id}/notify-payment` | botão do cliente | manda o e-mail de aviso e já começa a montar o PDF (não imprime) |
-| `POST /orders/{id}/cancel` | tela **Meus Pedidos** | o cliente desiste. Só vale em `pending`; depois do aviso volta 409. Não apaga: vira `cancelado` no histórico |
+| `GET /` · `GET /pedido` | navegador | a lista de decks (página inicial) e a tela de pedido. `/meus-decks` e o `/?deck=ID` dos links antigos redirecionam |
+| `POST /orders` | tela de pedido | **pede amigo**. Cria o pedido, já com dono, e devolve QR + copia-e-cola. Nome em branco vai o da conta |
+| `GET /orders/{id}` | tela de pedido | **pede amigo**. Status do pedido; o de outra pessoa é 404 |
+| `POST /orders/{id}/notify-payment` | botão do cliente | **pede amigo**. Manda o e-mail de aviso e já começa a montar o PDF (não imprime) |
+| `POST /orders/{id}/cancel` | tela **Meus Pedidos** | **pede amigo**. O cliente desiste. Só vale em `pending`; depois do aviso volta 409. Não apaga: vira `cancelado` no histórico |
 | `GET /orders/{id}/print?token=…` | botão **Imprimir** | confirma o Pix, põe na fila da impressora e redireciona pra página abaixo |
 | `GET /orders/{id}/impressao?token=…` | depois do **Imprimir** | onde o pedido está na fila. Só lê, e se atualiza sozinha até sair |
 | `GET /admin` | você, no navegador | a tela de pedidos (é só HTML: os dados vêm das rotas abaixo, todas com token) |
@@ -654,16 +666,13 @@ pedido que ninguém avisou como pago, e isso fica registrado no log
 | `POST /decks/{id}/artes/buscar` | escolha de arte | os ids de arte de cada carta. **Uma requisição cobre o deck inteiro**, e só no clique |
 | `POST /decks/{id}/artes/revalidar` | antes de imprimir | confere se as artes guardadas ainda existem: as do MPC Fill na biblioteca, as enviadas no disco |
 | `GET /cartas/estado` | deckbuilder | quantas cartas a base tem e quando foi montada, pra tela saber se já dá pra buscar |
-| `GET /conta` | todas as telas | quem está logado, ou `{usuario: null}`. **200 pra anônimo**, não 401 |
-| `POST /conta/entrar` | /entrar | confere a senha e devolve o cookie de sessão. O login é o e-mail, pra quem se cadastrou |
-| `GET /cadastro` · `POST /conta/criar` | /cadastro | cria conta `cliente` com nome, e-mail, senha, confirmação e o **token de acesso** (`CADASTRO_TOKEN`), e já devolve o cookie. 403 com token errado, 429 com o freio |
-| `POST /conta/sair` · `POST /conta/senha` | cabeçalho | encerra a sessão deste aparelho; troca a própria senha (pede a atual, e derruba todas as sessões) |
-| `GET /decks/meus` · `GET /pedidos/meus` | listagens | o que é da conta, de qualquer aparelho |
+| `GET /conta` | todas as telas | quem está logado, ou `{usuario: null}`. **200 pra anônimo**, não 401. Token do Clerk recusado: o campo `clerk` diz por quê |
+| `GET /entrar` · `GET /cadastro` | navegador | as telas com o formulário do Clerk (entrar, criar conta, Google, esqueci a senha) |
+| `GET /decks/meus` · `GET /pedidos/meus` | listagens | o que é da conta, de qualquer aparelho (pedidos: **pede amigo**) |
 | `POST /decks/{id}/reclamar` | deckbuilder | vira dono de um deck órfão. 409 se já tem dono |
-| `POST /pedidos/reclamar` | home | carimba os pedidos órfãos do `localStorage`. Roda sozinho ao abrir |
-| `GET/POST /admin/usuarios`, `POST /admin/usuarios/{id}/senha`, `DELETE …` | admin | as contas, com login e perfil à escolha. O outro caminho é o `/cadastro`, com token |
+| `POST /pedidos/reclamar` | tela de pedido | **pede amigo**. Carimba os pedidos órfãos do `localStorage`. Roda sozinho ao abrir |
+| `GET /decks/{id}/pedido` | tela de pedido | **pede amigo**. O deck pronto pra virar pedido: o XML com as artes escolhidas, ou o que falta |
 | `GET /admin/decks` | admin | **todos** os baralhos do banco, com o dono de cada um, mais `contagem.sem_dono`. Única leitura do projeto que enumera decks — por isso atrás do `_check_admin` |
-| `GET /meus-decks` | navegador | a tela que lista os decks deste navegador — só a casca, sem deck nenhum dentro |
 | `POST /decks/resumo` | página de decks | recebe `{ids:[…]}` e devolve os metadados de cada um (nome, comandante, arte, X/100, quando mexeu) mais os que não existem mais. Nunca lista o banco |
 | `GET /cambio` | deckbuilder | a taxa dólar→real e de onde ela veio (`awesomeapi` ou `fixa`), pra tela escrever em real o preço que a base guarda em dólar. Nunca falha: sem rede, volta a taxa fixa do `.env` |
 | `GET /cartas/detalhe?nome=…` | deckbuilder | a carta inteira pra modal: edição, raridade, artista, ambientação e as **notas de regras** (rulings). Vem da API da Scryfall, com cache de um dia |
@@ -1383,7 +1392,8 @@ Três decisões que evitam mentira barata:
 
 ### A página de decks, e por que a listagem é por ids
 
-`/meus-decks` mostra os decks em cartões — arte do comandante, X/100, quando
+A página inicial (`/`; o antigo `/meus-decks` redireciona pra cá) mostra os
+decks em cartões — arte do comandante, X/100, quando
 mexeu — com abrir, duplicar, copiar link, copiar a decklist e apagar.
 
 **Não existe `GET /decks`, e não é esquecimento.** Sem dono, "liste os decks"
@@ -1418,7 +1428,7 @@ mexendo" é o servidor.
 Página própria (`front/src/pages/decks`), e não mais uma aba do
 deckbuilder: aquele já tem 5700 linhas, e a lista é a *porta de entrada* —
 uma porta que exige carregar o editor inteiro pra mostrar seis cartões está de
-costas. Vale a mesma separação do admin: `/meus-decks` é a casca, e o dado vem
+costas. Vale a mesma separação do admin: a página é a casca, e o dado vem
 da rota. O HTML servido não tem id de deck nenhum dentro.
 
 Isto substituiu um `prompt()` numerado no menu do deckbuilder. E o campo
@@ -1458,40 +1468,82 @@ sistema — ela não é avisada, e o link que guardou simplesmente para de abrir
 
 ### Conta e cadastro
 
-A regra cabe numa frase: **deck se cria e se altera com conta; abrir deck e
-fazer pedido, não.** O link compartilhado continua abrindo pra qualquer um —
-compartilhar é a razão de o link existir —, e quem abre o deckbuilder sem
-conta recebe o convite de entrar ou criar uma. O `tests/test_login.py` abre
-justamente pelo anônimo: ele lê qualquer deck e não grava em nenhum, nem no
-órfão, senão "precisa de conta pra criar" seria contornado abrindo um link
-sem dono. Com conta vem **dono**, e com dono vêm "os meus baralhos" em
-qualquer aparelho, em vez de só no navegador onde foram montados.
+A regra cabe numa frase: **deck se cria e se altera com conta; abrir deck,
+não; pedido de impressão, só com perfil `amigo`.** O link compartilhado
+continua abrindo pra qualquer um — compartilhar é a razão de o link
+existir —, e quem abre o deckbuilder sem conta recebe o convite de entrar ou
+criar uma. O `tests/test_login.py` abre justamente pelo anônimo: ele lê
+qualquer deck e não grava em nenhum, nem no órfão, senão "precisa de conta
+pra criar" seria contornado abrindo um link sem dono. Com conta vem **dono**,
+e com dono vêm "os meus baralhos" em qualquer aparelho, em vez de só no
+navegador onde foram montados.
 
 Quem cria e altera deck passa pelo `main.exige_login_no_deck` (criar, gravar,
-duplicar, apagar, escolher arte, concluir versão). Depois dele, a regra de
-dono mora numa função só (`main._pode_mexer`) e vale para deck e pedido:
+duplicar, apagar, escolher arte, concluir versão); quem pede impressão, pelo
+`main.exige_amigo` (401 pra quem não entrou, 403 pra conta que não é de
+amigo — a tela de pedido explica cada um). Depois deles, a regra de dono
+mora numa função só (`main._pode_mexer`) e vale para deck e pedido:
 
-* **Sem dono** → qualquer um que chegou até ali mexe. No pedido, inclusive
-  anônimo; no deck, qualquer conta.
-* **Com dono** → só o dono e o admin gravam ou apagam.
+* **Sem dono** → qualquer um que passou pela porta da rota mexe.
+* **Com dono** → só o dono e o admin gravam ou apagam. No pedido, o de outra
+  pessoa responde 404, como o que não existe, pra o id não servir de pista.
 
-Ler nunca passa por lá. E `duplicar` fica livre pra qualquer conta, de
+Ler deck nunca passa por lá. E `duplicar` fica livre pra qualquer conta, de
 propósito: é a válvula de escape de quem abriu o deck de outra pessoa e quis
 mexer — não altera o original, e a cópia nasce de quem duplicou.
 
-#### Cadastro com token de acesso
+#### A conta é do Clerk
 
-A conta nasce de dois jeitos: pelo admin (`POST /admin/usuarios`, qualquer
-login e perfil) ou pela própria pessoa em **`/cadastro`** — nome, e-mail,
-senha, confirmação e o **token de acesso**, que é o `CADASTRO_TOKEN` do
-`.env` passado pelo dono do sistema ao grupo. O e-mail vira o login.
+Entrar, criar conta, confirmar o e-mail, "esqueci a senha" e o login com
+Google são do [Clerk](https://clerk.com). O cadastro é aberto (o Clerk
+confirma o e-mail e segura bot); o que separa "qualquer um" de "o grupo" é o
+perfil.
 
-Isto não é uma loja, e um cadastro aberto de verdade é a primeira coisa que um
-bot acha. Com o token, o bot precisa adivinhá-lo — e o freio por IP (cinco
-chutes, trinta segundos) tira a força bruta da mesa. O token é conferido
-**antes** de "já existe conta com esse e-mail": sem ele, a tela não conta a
-ninguém quem tem conta. `CADASTRO_TOKEN` vazio fecha o cadastro. A conta
-criada já sai logada e volta pra tela que pediu (`?voltar=`).
+**O perfil** mora no `public_metadata` da conta no painel do Clerk:
+`{"role": "amigo"}` ou `{"role": "admin"}`. Sem nada, é `cliente` — monta e
+guarda deck, não pede impressão. Só o painel e a API de backend escrevem
+`public_metadata`, então ninguém se promove pelo navegador. Pra liberar
+alguém do grupo, é lá que se muda.
+
+**No navegador** (`front/src/shared/clerk.ts`), o `clerk-js` vem da CDN do
+Clerk — o pacote do npm empacotado passaria de 500 KB em toda página — e o
+`api` manda o token de sessão no `Authorization` de toda chamada. As telas
+`/entrar` e `/cadastro` montam os formulários do Clerk dentro da nossa página
+(roteamento por `#`, em português, com as cores da casa); só elas baixam a
+interface (`@clerk/ui`, também da CDN, com o React dela por dentro — no
+nosso código não entra React).
+
+**No servidor** (`app/clerk.py`), o token é um JWT RS256 conferido com a
+chave pública da instância (`CLERK_JWT_KEY`), sem rede e sem banco. Ele é
+personalizado no painel (Sessions → Customize session token) pra trazer:
+
+```json
+{"role": "{{user.public_metadata.role}}",
+ "forja_id": "{{user.public_metadata.forja_id}}",
+ "email": "{{user.primary_email_address}}",
+ "name": "{{user.first_name}}"}
+```
+
+`forja_id` é o id da conta de antes do Clerk (ver abaixo): é ele que continua
+sendo o `dono` do que ela já tinha, e por isso nenhuma coluna mudou. Conta
+nascida no Clerk usa o `sub` (`user_...`). O `name` é só o primeiro nome:
+o nome de usuário de antes foi pro First name, e o Google acrescenta
+sobrenome.
+
+**Token recusado não some calado.** O `GET /conta` devolve, junto do
+`usuario: null`, um campo `clerk` com o motivo — chave ausente ou inválida
+(inclusive uma API key `pk_`/`sk_` colada no lugar da chave pública), token
+vencido, assinatura que não confere, origem fora das permitidas — e o mesmo
+texto vai pro log. A origem (`azp`) aceita `CLERK_ORIGENS` (ou, sem ela,
+`PUBLIC_BASE_URL` e `LOCAL_BASE_URL`) e mais as URLs que a própria Vercel
+informa do deploy, então prévia nenhuma precisa de configuração.
+
+**A virada.** As contas da conta própria de antes foram pro Clerk com
+`python -m app.tarefas clerk-importar [--aplicar]`: sem senha (cada um entra
+pelo Google com o mesmo e-mail ou pelo "esqueci a senha"), com o e-mail já
+confirmado, o id antigo em `external_id` e `forja_id`, e `cliente` virando
+`amigo`. As tabelas antigas (`usuarios`, `sessoes`, `login_freio`) ficaram no
+banco sem uso; só a importação ainda lê `usuarios`.
 
 #### Reclamar órfão não tira nada de ninguém
 
@@ -1505,46 +1557,35 @@ reclamar no computador, que é justamente o caso que o login existe pra
 resolver. Quem recusa fica registrado (`forja.orfaos.dispensados`), senão a
 pergunta voltaria a cada recarga de um deck deixado órfão de propósito.
 
-Nos pedidos isso é **automático** ao abrir a home, e em silêncio — é recado,
-não serviço. A prova de posse é ter o id, que é o nível em que este sistema já
-opera (`POST /orders/{id}/cancel` é aberta pelo mesmo motivo), e o `WHERE dono
-IS NULL` do `storage.reclamar` garante que só o que não tem dono é carimbado:
-pedido que já é de outra pessoa não é tocado nem vira erro. Dois irmãos num
-computador só é um caso real, não uma hipótese. E a reclamação é **rotulagem
-aditiva**: não fecha `notify-payment` nem `cancel`, que seguem abertas.
+Nos pedidos isso é **automático** ao abrir a tela de pedido, em silêncio — é
+recado, não serviço. A prova de posse é ter o id no `localStorage`, e o
+`WHERE dono IS NULL` do `storage.reclamar` garante que só o que não tem dono
+é carimbado: pedido que já é de outra pessoa não é tocado nem vira erro. Dois
+irmãos num computador só é um caso real, não uma hipótese. Pedido novo já
+nasce com dono; a reclamação é pros de antes da conta.
 
-#### Sem dependência nova, e duas chaves na porta do admin
+#### Duas chaves na porta do admin
 
-Senha é `hashlib.pbkdf2_hmac` da biblioteca padrão — o mesmo algoritmo do
-Django —, comparação com `hmac.compare_digest`, token de sessão com `secrets`.
-Mesma regra do `pix.py` e do `tinta.py`: dependência nova só quando não dá pra
-fazer direito sem ela. O número de iterações vai **guardado em cada senha**,
-então subir o teto amanhã não tranca ninguém do lado de fora.
+O `ADMIN_TOKEN` **continua valendo**, ao lado da conta com perfil `admin`.
+Ele é a chave da casa: funciona de `curl`, sem conta e sem banco, e é o que
+ainda abre o painel quando o Clerk está fora do ar ou ninguém tem o perfil.
+Um teste varre `app.routes`, acha toda rota `/admin/*` e exige que ela recuse
+anônimo **e** aceite a conta de admin — assim a próxima rota que alguém
+acrescentar entra na conferência no dia em que nascer, em vez de depender de
+alguém lembrar.
 
-A sessão mora em **tabela**, não em cookie assinado: cookie assinado não se
-revoga, e "sair de todos os aparelhos" é o que se pede justamente no dia em
-que se desconfia de alguma coisa. Além disso a chave de assinatura teria que
-ser o `ADMIN_TOKEN`, que também assina os links de impressão do e-mail —
-rotacioná-lo derrubaria os dois de uma vez. O token vai pro banco em SHA-256
-pelo mesmo motivo da senha: um dump do arquivo não pode ser um maço de sessões
-vivas.
+#### As armadilhas que custaram caro
 
-O `ADMIN_TOKEN` **continua valendo**, ao lado da sessão de admin. Ele é a
-chave da casa: funciona de `curl`, sem cookie e sem banco, e é o que ainda
-abre o painel quando a tabela de usuários está vazia (como todo deploy novo
-começa) ou quando alguém esquece a senha. Um teste varre `app.routes`, acha
-toda rota `/admin/*` e exige que ela recuse anônimo **e** aceite sessão de
-admin — assim a próxima rota que alguém acrescentar entra na conferência no
-dia em que nascer, em vez de depender de alguém lembrar.
+**A interface do Clerk vem à parte.** O `clerk.browser.js` da CDN não traz
+os componentes: sem o `ui.browser.js` passado no `load`, o `mountSignIn`
+falha com "Clerk was not loaded with Ui components" e a tela fica em
+"Carregando…". É o `withClerkUi()` no `main.tsx` das duas telas, antes do
+primeiro `loadClerk`.
 
-#### As duas armadilhas que custaram caro
-
-**`SESSAO_SEGURA`.** Com `secure=True`, o cookie só é gravado em https. O site
-também roda em `http://` na rede local (é pra isso que o `LOCAL_BASE_URL`
-existe), e ali o navegador **descarta o cookie em silêncio** — sem erro, sem
-console, sem nada: a pessoa entra, volta pra tela de login e não há o que
-olhar. A variável existe pra esse caso, e o `.env.example` diz isso com essas
-palavras.
+**API key no lugar da chave pública.** A `CLERK_JWT_KEY` é o "JWKS Public
+Key" (PEM), não o `pk_`/`sk_` da mesma página do painel. Com a chave errada,
+o Clerk vê a pessoa logada e o servidor a trata como anônima — o "entrei e o
+site não me reconhece". O campo `clerk` do `GET /conta` aponta isso.
 
 **`storage.py` monta dicts por lista posicional** (`get_order` tem o `SELECT`
 e as chaves escritos à mão, um do lado do outro). Acrescentar `dono` num sem
@@ -2435,7 +2476,8 @@ Variables):
 | `DB_URL`, `DB_AUTH_TOKEN` | o banco dos pedidos no Turso |
 | `CARTAS_DB_URL`, `CARTAS_DB_AUTH_TOKEN` | a base de cartas no Turso |
 | `BLOB_READ_WRITE_TOKEN` | a Vercel põe sozinha ao ligar uma loja do Blob ao projeto (Storage → Blob) |
-| `ADMIN_TOKEN`, `WORKER_TOKEN`, `CADASTRO_TOKEN` | as chaves de sempre; o `WORKER_TOKEN` tem que ser o mesmo do worker |
+| `ADMIN_TOKEN`, `WORKER_TOKEN` | as chaves de sempre; o `WORKER_TOKEN` tem que ser o mesmo do worker |
+| `CLERK_JWT_KEY`, `VITE_CLERK_PUBLISHABLE_KEY` | a conta (ver *Conta e cadastro*). A publicável é lida no **build** |
 | `PUBLIC_BASE_URL` | o domínio do site, pro link Imprimir do e-mail |
 | `PIX_KEY`, `MERCHANT_NAME`, `MERCHANT_CITY` | a cobrança |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `NOTIFY_TO` | o e-mail de aviso |
@@ -2551,8 +2593,8 @@ do GitHub — não no homelab, porque essas tarefas falam só com o Turso e com 
 Scryfall. Roda todo dia às 03:17 (cartas, se estiverem velhas, e faxina), e à
 mão pela aba Actions com três opções: `diario`, `cartas-forcar` e `migrar`.
 Precisa dos segredos `DB_URL`, `DB_AUTH_TOKEN`, `CARTAS_DB_URL` e
-`CARTAS_DB_AUTH_TOKEN` (e, opcionais, `NOTIFY_TO` pro contato no User-Agent
-da Scryfall e `ADMIN_LOGIN`/`ADMIN_SENHA` pro admin inicial do `migrar`); sem
+`CARTAS_DB_AUTH_TOKEN` (e, opcional, `NOTIFY_TO` pro contato no User-Agent
+da Scryfall); sem
 as URLs, ele para com erro em vez de rodar contra um banco descartável.
 
 **Mudou o esquema** (coluna nova, tabela nova)? Rode o `migrar` — pelo

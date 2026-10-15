@@ -12,8 +12,8 @@
    pede um fresco a cada chamada (`sessionToken`), que sai do cache dele na
    maior parte das vezes.
 
-   Sem `VITE_CLERK_PUBLISHABLE_KEY` no build o Clerk fica desligado e as
-   telas usam a conta própria de antes. */
+   Sem `VITE_CLERK_PUBLISHABLE_KEY` no build o Clerk fica desligado: todo
+   mundo é anônimo, e as telas de entrar e cadastro dizem que não abriram. */
 import type { Clerk } from "@clerk/clerk-js";
 
 const KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined) || "";
@@ -139,7 +139,7 @@ export async function sessionToken(): Promise<string | null> {
   }
 }
 
-/** Sai do Clerk (se ele estiver ligado). A sessão própria sai à parte. */
+/** Sai do Clerk (se ele estiver ligado). */
 export async function signOutClerk() {
   const clerk = await loadClerk();
   await clerk?.signOut().catch(() => {});

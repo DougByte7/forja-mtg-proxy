@@ -37,8 +37,6 @@ os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
 os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
 os.environ["LOG_DIR"] = TMP
 os.environ["LOG_NIVEL"] = "ERROR"
-os.environ["SENHA_ITERACOES"] = "1000"
-os.environ["SESSAO_SEGURA"] = "0"
 os.environ["ARTES_ENVIADAS_DIR"] = os.path.join(TMP, "enviadas")
 os.environ["PDF_OUTPUT_DIR"] = os.path.join(TMP, "pdf")
 
@@ -52,7 +50,8 @@ from PIL import Image  # noqa: E402
 
 os.chdir(RAIZ)
 
-from app import arte_id, artes, artes_enviadas, cartas, decks, storage, usuarios  # noqa: E402
+import conta_clerk  # noqa: E402  (antes do app: põe a chave no ambiente)
+from app import arte_id, artes, artes_enviadas, cartas, decks, storage  # noqa: E402
 from app import pdf_generator as pg  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -92,11 +91,8 @@ def recusa(nome, dados, trecho):
         check(nome, trecho in str(e), str(e))
 
 
-def cliente_logado(login, senha):
-    c = TestClient(app)
-    r = c.post("/conta/entrar", json={"login": login, "senha": senha})
-    assert r.status_code == 200, r.text
-    return c
+def cliente_logado(login):
+    return conta_clerk.cliente(app, login)
 
 
 try:
@@ -104,7 +100,6 @@ try:
     decks.init_db()
     artes.init_db()
     storage.init_db()
-    usuarios.init_db()
 
     print("\n--- o que entra ---")
 
@@ -184,10 +179,9 @@ try:
 
     print("\n--- as rotas ---")
 
-    ana = usuarios.criar("ana", "senha-da-ana-1", perfil="cliente")
-    usuarios.criar("beto", "senha-do-beto-1", perfil="cliente")
-    c_ana = cliente_logado("ana", "senha-da-ana-1")
-    c_beto = cliente_logado("beto", "senha-do-beto-1")
+    ana = {"id": "ana"}
+    c_ana = cliente_logado("ana")
+    c_beto = cliente_logado("beto")
     anonimo = TestClient(app)
 
     deck = decks.criar("Deck da Ana", ["Atraxa"], [{"nome": "Forest", "quantidade": 2}])

@@ -4,15 +4,26 @@ Conta pelo Clerk.
 O Clerk cuida de tudo que é tela e e-mail: cadastro, confirmação do e-mail,
 "esqueci a senha", login com Google, freio de bot. O que sobra pra cá é
 responder "quem é este token?" — e o resto do sistema (dono de deck e de
-pedido, `_pode_mexer`, `_check_admin`) continua lendo o mesmo dicionário que
-o `usuarios.da_sessao` sempre devolveu.
+pedido, `_pode_mexer`, `_check_admin`) lê o dicionário que sai daqui
+(`_do_token`): id, login, nome, perfil.
+
+É A ÚNICA CONTA. A conta própria (senha, sessão em tabela, cadastro com
+convite) saiu na virada. As tabelas dela (`usuarios`, `sessoes`,
+`login_freio`) ficaram no banco sem uso; só `usuarios` ainda é lida, pelo
+`contas_antigas`, pra importação.
+
+O QUE A CONTA DECIDE — a regra mora no `main._pode_mexer`. Deck se cria,
+grava e apaga só com conta; abrir um continua livre, porque compartilhar o
+link é a razão de o link existir. Pedido só com perfil `amigo` ou `admin`
+(`main.exige_amigo`). Deck ou pedido SEM dono: qualquer um que passou pela
+porta da rota mexe; COM dono: só o dono e o admin. Reclamar um órfão, então,
+só REDUZ quem edita — por isso pode ser primeiro-a-chegar.
 
 CONFERÊNCIA SEM REDE. O token de sessão é um JWT RS256 que o `clerk-js` do
 navegador renova a cada minuto. Conferir é matemática com a chave PÚBLICA da
 instância (`CLERK_JWT_KEY`, o "JWKS Public Key" da página de API keys do
 painel): nenhuma ida ao Clerk nem ao banco por requisição. Sem a chave, o
-Clerk fica desligado e todo token é ignorado — o sistema segue com a sessão
-própria, como antes.
+Clerk fica desligado e todo mundo é anônimo — o `GET /conta` diz por quê.
 
 O QUE O TOKEN TRAZ. Além do padrão (`sub`, `exp`, `nbf`, `azp`...), o token
 é personalizado no painel (Sessions → Customize session token) pra trazer:
@@ -42,8 +53,7 @@ import time
 
 import requests
 
-from . import log
-from .usuarios import PERFIS
+from . import db, log
 
 try:
     import jwt
@@ -52,6 +62,9 @@ except ImportError:          # homelab sem a dependência: Clerk desligado
     jwt = None
 
 API = "https://api.clerk.com/v1"
+
+# `amigo` é quem pode fazer pedido; `cliente` monta deck; `admin` faz tudo.
+PERFIS = ("admin", "amigo", "cliente")
 
 _PEM = re.compile(r"-----BEGIN ([A-Z ]+)-----(.*?)-----END \1-----", re.S)
 
@@ -147,11 +160,10 @@ def token_do_pedido(authorization: str | None, cookie: str | None) -> str:
 
 
 def usuario(token: str) -> dict | None:
-    """Quem é o dono deste token, no formato do `usuarios._publico`, ou None.
+    """Quem é o dono deste token, ou None (anônimo).
 
     Nunca levanta: token vencido, assinado por outra chave, de outra origem
-    ou malformado é anônimo — a mesma resposta do `usuarios.da_sessao` pra
-    sessão que não existe. O porquê sai no `conferir`.
+    ou malformado é anônimo. O porquê sai no `conferir`.
     """
     return conferir(token)[0]
 
@@ -208,6 +220,24 @@ def _do_token(claims: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Importação das contas antigas
 # ---------------------------------------------------------------------------
+
+def contas_antigas() -> list[dict]:
+    """As contas da tabela `usuarios` da conta própria, pra importação. Só
+    lê, e sem a coluna da senha. Tabela que não existe é lista vazia."""
+    conn = db.pedidos(os.environ.get("DB_PATH", "/app/data/orders.db"),
+                      linhas=True)
+    try:
+        linhas = conn.execute(
+            "SELECT id, login, nome, perfil, criado_em FROM usuarios "
+            "ORDER BY criado_em ASC").fetchall()
+    except Exception as e:
+        log.aviso("clerk", "sem-contas-antigas", motivo=f"{type(e).__name__}: {e}")
+        return []
+    finally:
+        conn.close()
+    return [{"id": l["id"], "login": l["login"], "nome": l["nome"] or l["login"],
+             "perfil": l["perfil"], "criado_em": l["criado_em"]} for l in linhas]
+
 
 def _papel_importado(perfil: str) -> str:
     """Admin continua admin. Todo `cliente` de antes entrou com o convite do

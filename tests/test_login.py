@@ -15,12 +15,12 @@ em nenhum, nem no órfão. As outras protegem o resto:
 * reclamar órfão nunca tira nada de ninguém: só pega o que não tem dono;
 * `GET /decks/meus` é listagem, e não "o deck de id `meus`" — a armadilha de
   ordem de rota do FastAPI, que falha em silêncio e pra sempre;
-* o cadastro só cria conta com o token de acesso, e confere o token antes de
-  dizer "já existe conta com esse e-mail" — senão a tela contaria quem tem
-  conta a quem não foi convidado;
 * o `ADMIN_TOKEN` continua abrindo o painel, porque ele é a chave da casa:
-  funciona de `curl`, sem cookie e sem banco, e é o que resta quando a tabela
-  de usuários está vazia ou alguém esqueceu a senha.
+  funciona de `curl`, sem conta e sem banco, e é o que resta quando o Clerk
+  está fora do ar ou ninguém tem o perfil `admin`.
+
+A conta é a do Clerk, com tokens de teste (`conta_clerk.py`); o que a tela do
+Clerk faz (entrar, cadastrar, senha) é dele e não se testa aqui.
 
 Não precisa de rede. Rode de dentro da raiz do projeto:
 
@@ -44,13 +44,6 @@ os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
 os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
 os.environ["LOG_DIR"] = TMP
 os.environ["LOG_NIVEL"] = "ERROR"
-os.environ["SENHA_ITERACOES"] = "1000"
-# O TestClient fala http://testserver: com secure=True o cookie não é gravado
-# e nada aqui entraria. É a MESMA pegadinha que derruba o login na rede local,
-# e é por isso que a variável existe.
-os.environ["SESSAO_SEGURA"] = "0"
-CONVITE = "convite-do-grupo"
-os.environ["CADASTRO_TOKEN"] = CONVITE
 
 try:
     from fastapi.testclient import TestClient
@@ -60,7 +53,8 @@ except ImportError:
 
 os.chdir(RAIZ)
 
-from app import cartas, decks, storage, usuarios  # noqa: E402
+import conta_clerk  # noqa: E402  (antes do app: põe a chave no ambiente)
+from app import cartas, decks, storage  # noqa: E402
 from app.main import app  # noqa: E402
 
 falhas = []
@@ -77,24 +71,19 @@ def eq(nome, obtido, esperado):
           "" if obtido == esperado else f"(obtido {obtido!r}, esperado {esperado!r})")
 
 
-def cliente_logado(login, senha):
-    """Um TestClient com sessão aberta — cada um com o seu jarro de cookies."""
-    c = TestClient(app)
-    r = c.post("/conta/entrar", json={"login": login, "senha": senha})
-    assert r.status_code == 200, r.text
-    return c
+def cliente_logado(sub, perfil):
+    """Um TestClient com o token dessa conta em toda requisição."""
+    return conta_clerk.cliente(app, sub, perfil)
 
 
 try:
     cartas.init_db()
     decks.init_db()
     storage.init_db()
-    usuarios.init_db()
 
-    # Ana é amiga (faz pedido); Beto é só cliente (monta deck).
-    ana = usuarios.criar("ana", "senha-da-ana-1", perfil="amigo")
-    beto = usuarios.criar("beto", "senha-do-beto-1", perfil="cliente")
-    chefe = usuarios.criar("chefe", "senha-do-chefe-1", perfil="admin")
+    # Ana é amiga (faz pedido); Beto é só cliente (monta deck). O id da conta
+    # é o `sub` do token.
+    ana, beto = {"id": "ana"}, {"id": "beto"}
 
     anonimo = TestClient(app)
 
@@ -131,34 +120,17 @@ try:
     eq("ela responde `usuario: null`", anonimo.get("/conta").json()["usuario"], None)
 
     # =====================================================================
-    print("\n--- entrar e sair ---")
+    print("\n--- quem é ---")
     # =====================================================================
 
-    eq("senha errada é 401",
-       anonimo.post("/conta/entrar",
-                    json={"login": "ana", "senha": "chute"}).status_code, 401)
-    # A mensagem não pode dizer qual dos dois errou, senão a tela de login
-    # vira um conferidor de quais contas existem.
-    msg_inexistente = anonimo.post(
-        "/conta/entrar", json={"login": "ninguem", "senha": "chute"}).json()["detail"]
-    msg_senha = anonimo.post(
-        "/conta/entrar", json={"login": "ana", "senha": "chute"}).json()["detail"]
-    eq("a recusa não distingue login inexistente de senha errada",
-       msg_inexistente, msg_senha)
-
-    c_ana = cliente_logado("ana", "senha-da-ana-1")
-    eq("depois de entrar, /conta diz quem é",
-       c_ana.get("/conta").json()["usuario"]["login"], "ana")
-
-    # O cookie não pode ser legível por script: um XSS não pode virar sessão.
-    bruto = c_ana.post("/conta/entrar",
-                       json={"login": "ana", "senha": "senha-da-ana-1"})
-    cabecalho = bruto.headers.get("set-cookie", "")
-    check("o cookie sai HttpOnly", "httponly" in cabecalho.lower())
-    check("e com SameSite", "samesite" in cabecalho.lower())
-    check("o corpo da resposta não traz o token de sessão",
-          "forja_sessao" not in bruto.text)
-    check("nem hash de senha", "pbkdf2" not in bruto.text)
+    c_ana = cliente_logado("ana", "amigo")
+    eq("com token, /conta diz quem é", c_ana.get("/conta").json()["usuario"]["id"], "ana")
+    # 503 é a rota certa sem o build do front (ver `test_frontend.py`).
+    check("as telas do Clerk têm rota",
+          all(anonimo.get(p).status_code in (200, 503) for p in ("/entrar", "/cadastro")))
+    for velha in ("/conta/entrar", "/conta/criar", "/conta/sair", "/conta/senha"):
+        check(f"a rota antiga {velha} saiu",
+              anonimo.post(velha, json={}).status_code in (404, 405))
 
     # =====================================================================
     print("\n--- deck com dono ---")
@@ -170,8 +142,8 @@ try:
        c_ana.put(f"/decks/{orfao}",
                  json={"nome": "Agora sim", "comandantes": [],
                        "cartas": []}).status_code, 200)
-    c_beto = cliente_logado("beto", "senha-do-beto-1")
-    c_chefe = cliente_logado("chefe", "senha-do-chefe-1")
+    c_beto = cliente_logado("beto", "cliente")
+    c_chefe = cliente_logado("chefe", "admin")
 
     corpo = {"nome": "Invadido", "comandantes": [], "cartas": []}
     # Ler continua aberto: compartilhar o link é a razão de o link existir.
@@ -293,7 +265,7 @@ try:
             # Um id de mentira basta: a checagem de admin vem antes de
             # qualquer busca no banco, então 404 aqui já seria falha.
             url = caminho.replace("{order_id}", "xxxx").replace("{combo_id}", "xxxx")
-            url = url.replace("{usuario_id}", "xxxx").replace("{deck_id}", "xxxx")
+            url = url.replace("{deck_id}", "xxxx")
             # Rota com `Form(...)` recusa o corpo vazio com 422 ANTES de
             # rodar o corpo da função — então um 422 aqui não prova nada
             # sobre a porta. Reenvia com dados plausíveis e exige o 401.
@@ -313,114 +285,6 @@ try:
           f"(abertas: {abertas})")
     check("e todas aceitam sessão de admin", not sem_sessao,
           f"(só com token: {sem_sessao})")
-
-    print("\n--- contas, pelo admin ---")
-
-    eq("admin cria conta",
-       c_chefe.post("/admin/usuarios",
-                    json={"login": "novato", "senha": "senha-do-novato"}).status_code, 200)
-    eq("senha curta é 400, com a razão",
-       c_chefe.post("/admin/usuarios",
-                    json={"login": "outro", "senha": "curta"}).status_code, 400)
-    eq("cliente não cria conta",
-       c_ana.post("/admin/usuarios",
-                  json={"login": "x", "senha": "senha-longa-aqui"}).status_code, 401)
-    check("a listagem de contas não traz hash",
-          all("senha" not in u for u in c_chefe.get("/admin/usuarios").json()["usuarios"]))
-
-    # Apagar conta não apaga o acervo: tirar o acesso e destruir o trabalho
-    # são coisas diferentes.
-    novato = next(u for u in c_chefe.get("/admin/usuarios").json()["usuarios"]
-                  if u["login"] == "novato")
-    d_novato = decks.criar("Deck do novato", dono=novato["id"])["id"]
-    c_chefe.delete(f"/admin/usuarios/{novato['id']}")
-    check("apagar a conta não apaga os decks dela",
-          decks.obter(d_novato) is not None)
-    eq("eles voltam a ser órfãos", decks.dono_de(d_novato)[1], None)
-
-    print("\n--- trocar a própria senha ---")
-
-    eq("precisa da senha atual",
-       c_ana.post("/conta/senha",
-                  json={"atual": "chute", "nova": "nova-senha-ana"}).status_code, 403)
-    eq("com a atual certa, troca",
-       c_ana.post("/conta/senha",
-                  json={"atual": "senha-da-ana-1",
-                        "nova": "nova-senha-ana"}).status_code, 200)
-    # Trocar senha derruba TODAS as sessões, inclusive esta.
-    eq("e a sessão de quem trocou cai junto",
-       c_ana.get("/decks/meus").status_code, 401)
-
-    print("\n--- cadastro com token de acesso ---")
-
-    # 503 é a rota certa sem o build do front (ver `test_frontend.py`).
-    check("a página /cadastro tem rota",
-          anonimo.get("/cadastro").status_code in (200, 503))
-    carla = TestClient(app)
-    base = {"nome": "Carla", "email": "Carla@Exemplo.com",
-            "senha": "senha-da-carla", "confirmacao": "senha-da-carla",
-            "token": CONVITE}
-
-    eq("sem token é 403",
-       carla.post("/conta/criar", json={**base, "token": ""}).status_code, 403)
-    eq("token errado é 403",
-       carla.post("/conta/criar", json={**base, "token": "chute"}).status_code, 403)
-    check("e nada foi criado",
-          all(u["login"] != "carla@exemplo.com" for u in usuarios.listar()))
-
-    # Sem CADASTRO_TOKEN no .env o cadastro fica fechado — inclusive pra
-    # quem manda o token vazio, que "bateria" com a configuração vazia.
-    guardado, usuarios.CADASTRO_TOKEN = usuarios.CADASTRO_TOKEN, ""
-    eq("sem token configurado, nem o vazio entra",
-       carla.post("/conta/criar", json={**base, "token": ""}).status_code, 403)
-    usuarios.CADASTRO_TOKEN = guardado
-
-    eq("confirmação diferente é 400",
-       carla.post("/conta/criar",
-                  json={**base, "confirmacao": "outra-senha"}).status_code, 400)
-    eq("e-mail sem forma de e-mail é 400",
-       carla.post("/conta/criar", json={**base, "email": "carla"}).status_code, 400)
-    eq("sem nome é 400",
-       carla.post("/conta/criar", json={**base, "nome": "  "}).status_code, 400)
-    eq("senha curta é 400",
-       carla.post("/conta/criar", json={**base, "senha": "curta",
-                                        "confirmacao": "curta"}).status_code, 400)
-
-    r = carla.post("/conta/criar", json=base)
-    eq("com o token certo, cria", r.status_code, 200)
-    eq("o e-mail vira o login, minúsculo", r.json()["usuario"]["login"],
-       "carla@exemplo.com")
-    eq("com o nome", r.json()["usuario"]["nome"], "Carla")
-    eq("e perfil cliente", r.json()["usuario"]["perfil"], "cliente")
-    check("a resposta não traz hash de senha", "pbkdf2" not in r.text)
-    eq("e já sai logada", (carla.get("/conta").json()["usuario"] or {}).get("login"),
-       "carla@exemplo.com")
-    eq("pronta pra criar deck",
-       carla.post("/decks", json={"nome": "Deck da Carla"}).status_code, 200)
-    eq("e entra depois com o e-mail",
-       TestClient(app).post("/conta/entrar",
-                            json={"login": "carla@exemplo.com",
-                                  "senha": "senha-da-carla"}).status_code, 200)
-
-    # O token vem antes de "já existe": sem ele, a tela não conta quem tem conta.
-    eq("e-mail repetido sem o token não diz que existe",
-       anonimo.post("/conta/criar", json={**base, "token": "chute"}).status_code, 403)
-    r = anonimo.post("/conta/criar", json=base)
-    eq("e-mail repetido com o token é 400", r.status_code, 400)
-    check("com a razão", "Já existe" in r.json()["detail"], r.json())
-
-    for _ in range(usuarios.MAX_TENTATIVAS):
-        anonimo.post("/conta/criar", json={**base, "token": "chute"})
-    eq("chutar o token várias vezes liga o freio",
-       anonimo.post("/conta/criar", json=base).status_code, 429)
-
-    print("\n--- sair ---")
-
-    eq("sair responde ok", c_beto.post("/conta/sair").status_code, 200)
-    eq("e depois disso é anônimo de novo",
-       c_beto.get("/conta").json()["usuario"], None)
-    eq("sair sem estar logado não é erro",
-       anonimo.post("/conta/sair").status_code, 200)
 
 finally:
     shutil.rmtree(TMP, ignore_errors=True)

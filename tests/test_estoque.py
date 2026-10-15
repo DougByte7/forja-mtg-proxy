@@ -36,8 +36,6 @@ os.environ["ADMIN_TOKEN"] = TOKEN
 os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(), "orders.db")
 os.environ["LOG_DIR"] = tempfile.mkdtemp()
 os.environ["LOG_NIVEL"] = "ERROR"
-os.environ["SENHA_ITERACOES"] = "1000"
-os.environ["SESSAO_SEGURA"] = "0"
 os.environ["PDF_OUTPUT_DIR"] = tempfile.mkdtemp()
 os.environ["PRINTER_QUEUE"] = ""
 os.environ["PIX_KEY"] = "teste@forja.local"
@@ -51,7 +49,8 @@ except ImportError:
 os.chdir(RAIZ)
 
 from PIL import Image                                  # noqa: E402
-from app import calc, pdf_generator, storage, usuarios  # noqa: E402
+import conta_clerk  # noqa: E402  (antes do app: põe a chave no ambiente)
+from app import calc, pdf_generator, storage  # noqa: E402
 from app.main import app                               # noqa: E402
 
 falhas = []
@@ -89,15 +88,11 @@ def semear(nome, cartas, laminacao="single"):
 
 
 storage.init_db()
-usuarios.init_db()
 cliente = TestClient(app)
 AUTH = {"X-Admin-Token": TOKEN}
 
 # Pedido pede conta de amigo (`exige_amigo`).
-usuarios.criar("amiga", "senha-de-teste-1", perfil="amigo")
-amiga = TestClient(app)
-assert amiga.post("/conta/entrar", json={"login": "amiga",
-                                         "senha": "senha-de-teste-1"}).status_code == 200
+amiga = conta_clerk.cliente(app, "amiga", "amigo")
 
 
 def resumo():
@@ -309,15 +304,14 @@ r = amiga.post("/orders", data={"lamination": "foil", "customer_name": "Rui"},
 check("pedido foil cobra 8,00 por página",
       r.status_code == 200 and r.json()["amount"] == 16.0, r.text[:120])
 check("o pedido nasce da amiga que pediu",
-      storage.get_order(r.json()["order_id"])["dono"]
-      == usuarios.listar()[0]["id"])
+      storage.get_order(r.json()["order_id"])["dono"] == "amiga")
 r = cliente.post("/orders", data={"lamination": "single", "customer_name": "Zé"},
                  files={"xml_file": ("deck.xml", xml_de("ze", 9), "text/xml")})
 check("sem conta não cria pedido", r.status_code == 401, r.text[:120])
 r = amiga.post("/orders", data={"lamination": "single"},
                files={"xml_file": ("deck.xml", xml_de("sem", 9), "text/xml")})
 check("nome em branco vai o da conta", r.status_code == 200
-      and storage.get_order(r.json()["order_id"])["customer_name"] == "amiga",
+      and storage.get_order(r.json()["order_id"])["customer_name"] == "Amiga",
       r.text[:120])
 
 for corpo in ({"preco_um_lado": "0"}, {"preco_dois_lados": "abc"},

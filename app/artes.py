@@ -484,9 +484,8 @@ def apagar_do_deck(deck_id: str) -> int:
     """Todas as escolhas de um deck. Chamado quando o deck é apagado — senão a
     tabela cresce pra sempre com linhas órfãs que ninguém consegue mais ver.
 
-    Tolera a tabela não existir, pelo mesmo motivo do `usuarios.da_sessao`:
-    isto é um efeito colateral de apagar deck, e um banco no meio da migração
-    não pode fazer APAGAR UM DECK falhar. Sem tabela não há o que apagar.
+    Tolera a tabela não existir: isto é um efeito colateral de apagar deck,
+    e um banco no meio da migração não pode fazer APAGAR UM DECK falhar. Sem tabela não há o que apagar.
 
     O arquivo enviado não sai do disco junto (ver `artes_enviadas`).
     """

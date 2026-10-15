@@ -39,8 +39,6 @@ os.environ["DB_PATH"] = os.path.join(TMP, "orders.db")
 os.environ["CARTAS_DB_PATH"] = os.path.join(TMP, "cartas.db")
 os.environ["LOG_DIR"] = TMP
 os.environ["LOG_NIVEL"] = "ERROR"
-os.environ["SENHA_ITERACOES"] = "1000"
-os.environ["SESSAO_SEGURA"] = "0"
 os.environ["ARTES_ENVIADAS_DIR"] = os.path.join(TMP, "enviadas")
 os.environ["BLOB_READ_WRITE_TOKEN"] = TOKEN_RW
 
@@ -53,8 +51,9 @@ except ImportError:
 
 os.chdir(RAIZ)
 
+import conta_clerk  # noqa: E402  (antes do app: põe a chave no ambiente)
 from app import (arte_id, artes, artes_enviadas, blob, cartas, decks,  # noqa: E402
-                 storage, usuarios)
+                 storage)
 from app.main import app  # noqa: E402
 
 falhas = []
@@ -139,14 +138,11 @@ storage.init_db()
 decks.init_db()
 cartas.init_db()
 artes.init_db()
-usuarios.init_db()
 artes_enviadas.criar_tabela()
 
-usuarios.criar("ana", "senha-da-ana-1", perfil="cliente")
-ana = TestClient(app)
-assert ana.post("/conta/entrar", json={"login": "ana", "senha": "senha-da-ana-1"}).status_code == 200
+ana = conta_clerk.cliente(app, "ana")
 deck = decks.criar("Deck da Ana", ["Atraxa"], [{"nome": "Forest", "quantidade": 2}])
-decks.reclamar(deck["id"], usuarios.da_sessao(ana.cookies.get("forja_sessao"))["id"])
+decks.reclamar(deck["id"], "ana")
 base = f"/decks/{deck['id']}"
 
 r = TestClient(app).post(f"{base}/artes/enviar/inicio")

@@ -950,7 +950,7 @@ def reclamar(deck_id: str, dono: str) -> dict | None:
     Primeiro-a-chegar, e sem problema: reclamar um órfão não tira de ninguém
     nada que a pessoa tivesse. Antes da reclamação qualquer um com o id já
     podia reescrever o deck; depois, só o dono e o admin. A reclamação REDUZ
-    o conjunto de quem edita — ver o cabeçalho do `usuarios.py`.
+    o conjunto de quem edita — ver o cabeçalho do `clerk.py`.
     """
     if not dono:
         return None

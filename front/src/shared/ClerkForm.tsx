@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { useLeaveIfLoggedIn } from "./account";
 import { loadClerk } from "./clerk";
 import { returnPath } from "./redirect";
+import "./ClerkForm.css";
 
 type Mode = "signIn" | "signUp";
 
