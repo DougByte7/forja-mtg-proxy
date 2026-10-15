@@ -438,7 +438,8 @@ def _cabe_na_identidade(carta: dict, identidade: str) -> bool:
     return all(c in identidade for c in (carta.get("identidade") or ""))
 
 
-def validar(comandantes: list[str], cartas: list[dict]) -> dict:
+def validar(comandantes: list[str], cartas: list[dict],
+            conhecidas: dict | None = None) -> dict:
     """Confere o deck contra as regras do Commander.
 
     Devolve tudo o que a tela precisa desenhar de uma vez: a identidade de
@@ -452,12 +453,17 @@ def validar(comandantes: list[str], cartas: list[dict]) -> dict:
     decisão que ela nem tomou. O sideboard passa — só não conta pras 100.
 
     Nada aqui impede de salvar: ver o cabeçalho do módulo.
+
+    `conhecidas` é o `por_nomes` já feito por quem chamou, cobrindo estes
+    nomes — evita repetir a consulta quando o mesmo deck acabou de passar
+    pelo `com_cartas`.
     """
     comandantes = limpar_comandantes(comandantes)
     cartas = limpar_cartas(cartas)
 
-    nomes = list(comandantes) + [c["nome"] for c in cartas]
-    conhecidas = base_cartas.por_nomes(nomes)
+    if conhecidas is None:
+        nomes = list(comandantes) + [c["nome"] for c in cartas]
+        conhecidas = base_cartas.por_nomes(nomes)
 
     apontamentos: list[dict] = []
     def apontar(nivel, tipo, mensagem, carta=None):
@@ -563,17 +569,24 @@ def validar(comandantes: list[str], cartas: list[dict]) -> dict:
     }
 
 
-def com_cartas(deck: dict) -> dict:
+def nomes_do_deck(deck: dict) -> list[str]:
+    """Todos os nomes que o deck cita: comandantes, lista e maybeboard."""
+    return list(deck.get("comandantes") or []) + \
+           [c["nome"] for c in deck.get("cartas") or []] + \
+           [c["nome"] for c in deck.get("maybeboard") or []]
+
+
+def com_cartas(deck: dict, conhecidas: dict | None = None) -> dict:
     """O deck com os dados completos de cada carta anexados.
 
     A tela precisa de tipo, custo, cor e imagem pra desenhar a lista, a curva
     de mana e os filtros — e o deck salvo guarda só nome e quantidade, que é
     o que não envelhece quando a base de cartas é resincronizada.
+
+    `conhecidas`: o `por_nomes` dos `nomes_do_deck`, se quem chamou já fez.
     """
-    nomes = list(deck.get("comandantes") or []) + \
-            [c["nome"] for c in deck.get("cartas") or []] + \
-            [c["nome"] for c in deck.get("maybeboard") or []]
-    conhecidas = base_cartas.por_nomes(nomes)
+    if conhecidas is None:
+        conhecidas = base_cartas.por_nomes(nomes_do_deck(deck))
     return {
         **deck,
         "cartas_completas": [

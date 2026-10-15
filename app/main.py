@@ -294,7 +294,11 @@ def startup():
     log.evento("app", "subiu", log_dir=log.DIR, nivel=log.NIVEL,
                fontes=", ".join(f["id"] for f in cotacao_job.fontes_ativas())
                       or "nenhuma",
-               cartas=cartas.estado().get("cartas", 0))
+               # Na Vercel toda partida a frio passa aqui, e contar a base no
+               # Turso é uma conexão e quatro consultas na frente da primeira
+               # resposta — só pra uma linha de log. `/cartas/estado` diz isso.
+               cartas=None if plataforma.NA_VERCEL
+                      else cartas.estado().get("cartas", 0))
 
 
 @app.post("/orders")
@@ -856,11 +860,16 @@ def cartas_sync(x_admin_token: str | None = Header(default=None),
 
 def _deck_completo(deck: dict) -> dict:
     """O deck do jeito que a tela consome: cartas resolvidas, validação e onde
-    ele está no histórico de versões."""
+    ele está no histórico de versões.
+
+    As cartas são buscadas uma vez só e servem às duas coisas: o deck gravado
+    já passou pelo `limpar_*`, então os nomes que a validação procura estão
+    entre os do `nomes_do_deck`. No Turso é uma ida ao banco a menos."""
+    conhecidas = cartas.por_nomes(decks.nomes_do_deck(deck))
     return {
-        "deck": decks.com_cartas(deck),
+        "deck": decks.com_cartas(deck, conhecidas),
         "validacao": decks.validar(deck.get("comandantes"),
-                                   deck.get("cartas")),
+                                   deck.get("cartas"), conhecidas),
         "versao": decks.situacao_da_versao(deck),
     }
 
