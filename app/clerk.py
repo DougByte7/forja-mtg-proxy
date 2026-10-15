@@ -31,7 +31,9 @@ o `sub` (`user_...`).
 a pessoa não consegue se promover pelo navegador. Valor fora dos perfis
 conhecidos vale como `cliente`.
 """
+import json
 import os
+import re
 import time
 
 import requests
@@ -41,14 +43,61 @@ from .usuarios import PERFIS
 
 try:
     import jwt
+    from cryptography.hazmat.primitives import serialization
 except ImportError:          # homelab sem a dependência: Clerk desligado
     jwt = None
 
 API = "https://api.clerk.com/v1"
 
-# A chave vem do painel em PEM. Na Vercel ela cabe com as quebras de linha;
-# em .env de uma linha só, vem com `\n` escrito — os dois servem.
-_CHAVE = os.environ.get("CLERK_JWT_KEY", "").strip().replace("\\n", "\n")
+_PEM = re.compile(r"-----BEGIN ([A-Z ]+)-----(.*?)-----END \1-----", re.S)
+
+
+def carregar_chave(bruto: str):
+    """A `CLERK_JWT_KEY` lida: `(chave, None)` ou `(None, porquê)`.
+
+    Aceita o PEM do jeito que ele costuma chegar depois de copiado e colado:
+    com quebras de linha, com `\\n` escrito (.env de uma linha), com as
+    quebras viradas espaço (campo de uma linha da Vercel), entre aspas, ou só
+    o miolo base64 sem as linhas BEGIN/END. Aceita também o JWKS em JSON (o
+    `/.well-known/jwks.json` da instância). Lida UMA vez, no import: chave
+    estragada é configuração errada, e o porquê vai pro `conferir`.
+    """
+    texto = (bruto or "").strip().strip("'\"").replace("\\n", "\n").strip()
+    if not texto:
+        return None, "sem CLERK_JWT_KEY no servidor"
+    if jwt is None:
+        return None, "PyJWT não instalado"
+    if re.match(r"^(pk|sk)_(test|live)_", texto):
+        # O engano mais fácil: as API keys moram na mesma página do painel.
+        return None, ("CLERK_JWT_KEY tem uma API key do Clerk (pk_/sk_...), não "
+                      "a chave pública JWKS: copie o \"JWKS Public Key\" (PEM, "
+                      "começa com -----BEGIN PUBLIC KEY-----) da página API keys")
+    try:
+        if texto.startswith("{"):
+            dados = json.loads(texto)
+            jwk = (jwt.PyJWKSet.from_dict(dados).keys[0] if "keys" in dados
+                   else jwt.PyJWK.from_dict(dados))
+            return jwk.key, None
+        achado = _PEM.search(texto)
+        rotulo, miolo = (achado.group(1), achado.group(2)) if achado \
+            else ("PUBLIC KEY", texto)
+        miolo = re.sub(r"\s+", "", miolo)
+        pem = (f"-----BEGIN {rotulo}-----\n"
+               + "\n".join(miolo[i:i + 64] for i in range(0, len(miolo), 64))
+               + f"\n-----END {rotulo}-----\n")
+        return serialization.load_pem_public_key(pem.encode()), None
+    except Exception as e:
+        # Sem mostrar a chave: só a forma dela, que é o que se precisa pra
+        # achar o erro de cópia.
+        forma = ("JSON" if texto.startswith("{") else
+                 "PEM com BEGIN/END" if "-----BEGIN" in texto else
+                 "sem as linhas BEGIN/END")
+        return None, (f"CLERK_JWT_KEY não é uma chave pública válida "
+                      f"({forma}, {len(texto)} caracteres): "
+                      f"{type(e).__name__}: {e}")
+
+
+_CHAVE, _ERRO_CHAVE = carregar_chave(os.environ.get("CLERK_JWT_KEY", ""))
 
 # As URLs que a própria Vercel diz que são deste deploy (variáveis de sistema,
 # sem "https://"): a do deploy, a da branch e a de produção. Entram sozinhas
@@ -81,7 +130,7 @@ FOLGA_SEGUNDOS = 5
 
 
 def ligado() -> bool:
-    return bool(_CHAVE and jwt)
+    return _CHAVE is not None
 
 
 def token_do_pedido(authorization: str | None, cookie: str | None) -> str:
@@ -115,10 +164,8 @@ def conferir(token: str) -> tuple[dict | None, str | None]:
     if not token:
         return None, None
     if not ligado():
-        motivo = ("sem CLERK_JWT_KEY no servidor" if not _CHAVE
-                  else "PyJWT não instalado")
-        log.aviso("clerk", "desligado", motivo=motivo)
-        return None, motivo
+        log.aviso("clerk", "desligado", motivo=_ERRO_CHAVE)
+        return None, _ERRO_CHAVE
     try:
         claims = jwt.decode(
             token, _CHAVE, algorithms=["RS256"], leeway=FOLGA_SEGUNDOS,

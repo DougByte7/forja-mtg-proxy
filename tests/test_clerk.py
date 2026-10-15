@@ -171,11 +171,43 @@ try:
     eq("token bom não traz motivo", "clerk" in TestClient(app).get(
         "/conta", headers={"Authorization": f"Bearer {token()}"}).json(), False)
 
-    salvo = clerk._CHAVE
-    clerk._CHAVE = ""
+    salvo = clerk._CHAVE, clerk._ERRO_CHAVE
+    clerk._CHAVE, clerk._ERRO_CHAVE = clerk.carregar_chave("")
     eq("sem CLERK_JWT_KEY o Clerk fica desligado", conta(token()), None)
     eq("e o /conta diz isso", motivo(token()), "sem CLERK_JWT_KEY no servidor")
-    clerk._CHAVE = salvo
+    clerk._CHAVE, clerk._ERRO_CHAVE = salvo
+
+    # =====================================================================
+    print("\n--- a chave do jeito que chega colada ---")
+    # =====================================================================
+
+    miolo = "".join(PUBLICA.strip().splitlines()[1:-1])
+    jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(CHAVE.public_key()))
+    formas = {
+        "PEM com quebras": PUBLICA,
+        "PEM com \\n escrito": PUBLICA.replace("\n", "\\n"),
+        "quebras viradas espaço": PUBLICA.replace("\n", " "),
+        "entre aspas": f'"{PUBLICA}"',
+        "só o miolo base64": miolo,
+        "JWKS em JSON": json.dumps({"keys": [jwk]}),
+        "uma JWK em JSON": json.dumps(jwk),
+    }
+    for nome, bruto in formas.items():
+        chave, erro = clerk.carregar_chave(bruto)
+        ok = chave is not None and jwt.decode(
+            token(), chave, algorithms=["RS256"],
+            options={"verify_aud": False})["sub"] == "user_abc"
+        check(f"lê: {nome}", ok, erro or "")
+
+    for api_key in ("pk_test_Zm9yamEuY2xlcmsuYWNjb3VudHMuZGV2JA", "sk_live_abc123"):
+        chave, erro = clerk.carregar_chave(api_key)
+        check(f"API key no lugar da JWKS é apontada ({api_key[:7]})",
+              chave is None and "JWKS Public Key" in erro and api_key not in erro, erro)
+
+    chave, erro = clerk.carregar_chave("isto não é chave nenhuma")
+    check("lixo não vira chave", chave is None)
+    check("e o porquê diz a forma, sem mostrar o valor",
+          "não é uma chave pública válida" in erro and "nenhuma" not in erro, erro)
 
     # =====================================================================
     print("\n--- origens ---")
