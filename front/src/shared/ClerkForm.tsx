@@ -25,21 +25,30 @@ export function ClerkForm({ mode }: { mode: Mode }) {
     loadClerk().then((clerk) => {
       if (cancelled || !box.current) return;
       if (!clerk) { setState("failed"); return; }
-      mounted = box.current;
+      const el = box.current;
       const back = encodeURIComponent(target);
-      if (mode === "signIn") {
-        clerk.mountSignIn(mounted, {
-          routing: "hash",
-          forceRedirectUrl: target,
-          signUpUrl: `/cadastro?voltar=${back}`,
-        });
-      } else {
-        clerk.mountSignUp(mounted, {
-          routing: "hash",
-          forceRedirectUrl: target,
-          signInUrl: `/entrar?voltar=${back}`,
-        });
+      try {
+        if (mode === "signIn") {
+          clerk.mountSignIn(el, {
+            routing: "hash",
+            forceRedirectUrl: target,
+            signUpUrl: `/cadastro?voltar=${back}`,
+          });
+        } else {
+          clerk.mountSignUp(el, {
+            routing: "hash",
+            forceRedirectUrl: target,
+            signInUrl: `/entrar?voltar=${back}`,
+          });
+        }
+      } catch (e) {
+        // Montar falhou (a interface não veio, por exemplo): a tela diz que
+        // não abriu, em vez de ficar em "Carregando…" pra sempre.
+        console.error(e);
+        setState("failed");
+        return;
       }
+      mounted = el;
       setState("ready");
     });
     return () => {

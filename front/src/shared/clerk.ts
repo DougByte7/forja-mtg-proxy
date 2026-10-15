@@ -3,8 +3,10 @@
 
    Carregado uma vez só por página, na primeira chamada à API (ou na tela de
    entrar), e da CDN do Clerk — nada dele entra no nosso bundle além da
-   tradução. A interface dos formulários o próprio `clerk-js` baixa na hora
-   de montar, com o React dela por dentro. Aqui não entra React nenhum.
+   tradução. São duas peças: o `clerk-js` (sessão e token, em toda página) e
+   a interface dos formulários (`@clerk/ui`, com o React dela por dentro),
+   que só as telas de entrar e de cadastro pedem (`withClerkUi`) — e só
+   elas baixam junto a tradução. Aqui não entra React nenhum.
 
    O token de sessão vale um minuto e o `clerk-js` o renova sozinho. O `api`
    pede um fresco a cada chamada (`sessionToken`), que sai do cache dele na
@@ -39,7 +41,11 @@ const appearance = {
 };
 
 declare global {
-  interface Window { Clerk?: Clerk }
+  interface Window {
+    Clerk?: Clerk;
+    /** O que o `ui.browser.js` do Clerk deixa na janela ao carregar. */
+    __internal_ClerkUICtor?: unknown;
+  }
 }
 
 /* O domínio da instância (a "Frontend API") vai dentro da própria chave:
@@ -56,18 +62,29 @@ export function frontendApi(key: string): string {
    página. A versão é a MAIOR, a mesma regra dos SDKs do Clerk; os tipos vêm
    do pacote do npm, na mesma maior. */
 const CLERK_JS_MAJOR = "6";
+const CLERK_UI_MAJOR = "1";
 
-function injectScript(): Promise<void> {
+function injectScript(path: string, data: Record<string, string> = {}): Promise<void> {
   return new Promise((ok, fail) => {
     const s = document.createElement("script");
-    s.src = `https://${frontendApi(KEY)}/npm/@clerk/clerk-js@${CLERK_JS_MAJOR}/dist/clerk.browser.js`;
+    s.src = `https://${frontendApi(KEY)}/npm/${path}`;
     s.async = true;
     s.crossOrigin = "anonymous";
-    s.dataset.clerkPublishableKey = KEY;
+    Object.assign(s.dataset, data);
     s.onload = () => ok();
-    s.onerror = () => fail(new Error("clerk-js não baixou"));
+    s.onerror = () => fail(new Error(`${path} não baixou`));
     document.head.appendChild(s);
   });
+}
+
+/* A interface só entra se a tela pedir ANTES do primeiro `loadClerk`: o
+   `clerk-js` recebe o construtor dela no `load`, e sem ele o `mountSignIn`
+   falha com "Clerk was not loaded with Ui components". Por isso a chamada
+   mora no `main.tsx` das duas telas, antes do `mount`. */
+let wantUi = false;
+
+export function withClerkUi() {
+  wantUi = true;
 }
 
 let loading: Promise<Clerk | null> | null = null;
@@ -77,17 +94,24 @@ let loading: Promise<Clerk | null> | null = null;
 export function loadClerk(): Promise<Clerk | null> {
   if (!clerkEnabled) return Promise.resolve(null);
   loading ??= (async () => {
-    const [, { ptBR }] = await Promise.all([
-      window.Clerk ? null : injectScript(),
-      import("@clerk/localizations/pt-BR"),
+    const [, , translation] = await Promise.all([
+      window.Clerk ? null : injectScript(
+        `@clerk/clerk-js@${CLERK_JS_MAJOR}/dist/clerk.browser.js`,
+        { clerkPublishableKey: KEY }),
+      wantUi && !window.__internal_ClerkUICtor
+        ? injectScript(`@clerk/ui@${CLERK_UI_MAJOR}/dist/ui.browser.js`) : null,
+      wantUi ? import("@clerk/localizations/pt-BR") : null,
     ]);
     const clerk = window.Clerk;
     if (!clerk) throw new Error("clerk-js baixou, mas não se apresentou");
     await clerk.load({
-      localization: ptBR,
-      appearance,
       signInUrl: "/entrar",
       signUpUrl: "/cadastro",
+      ...(wantUi && {
+        ui: { ClerkUI: window.__internal_ClerkUICtor as never },
+        localization: translation?.ptBR,
+        appearance,
+      }),
     });
     return clerk;
   })().catch((e) => {

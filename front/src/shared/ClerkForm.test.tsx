@@ -53,6 +53,15 @@ describe("ClerkForm", () => {
     expect(clerk.mountSignIn.mock.calls[0][1].forceRedirectUrl).toBe("/");
   });
 
+  it("montar falhando também diz que não abriu", async () => {
+    const clerk = fakeClerk();
+    clerk.mountSignIn.mockImplementation(() => { throw new Error("Clerk was not loaded with Ui components"); });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(loadClerk).mockResolvedValue(clerk as never);
+    renderWithQuery(<ClerkForm mode="signIn" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Não consegui abrir");
+  });
+
   it("sem Clerk, diz que não abriu em vez de ficar carregando", async () => {
     vi.mocked(loadClerk).mockResolvedValue(null);
     renderWithQuery(<ClerkForm mode="signIn" />);
