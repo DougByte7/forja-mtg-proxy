@@ -68,7 +68,7 @@ describe("a mesa na tela", () => {
     const { p, panel, overlays, click } = await table();
     click(panel.querySelector("#gf-embaralhar"));
     const uid = p.state.table.players[0].mao[0].uid;
-    act(() => { p.moveToZone(uid, "campo"); p.touchTable(); });
+    act(() => { p.act({ type: "move", uid, to: "campo" }); p.touchTable(); });
 
     click(panel.querySelector(`[data-gf-uid="${uid}"]`));
     const plus = () => overlays.querySelector(".gf-menu .gf-linha button:last-of-type");

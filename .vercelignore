@@ -4,6 +4,9 @@
 # O worker da impressora e o deploy do homelab
 worker/
 deploy/
+
+# A sala da mesa compartilhada: é um Worker da Cloudflare (ver room/README.md)
+room/
 Dockerfile
 docker-compose*.yml
 diag_rede.py

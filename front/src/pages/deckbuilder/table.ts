@@ -12,17 +12,19 @@
    juntam regra e redesenho.
 
    A mesa tem a revisão dela (`tableRevision`): uma jogada redesenha só a
-   mesa, e não a lista, a análise e as chances do deck inteiro. */
+   mesa, e não a lista, a análise e as chances do deck inteiro.
+
+   Na mesa ONLINE (ver `online.ts`) a jogada não é aplicada aqui: ela vai pra
+   sala, e a mesa nova volta de lá. O desfazer também é da sala. */
 import { signal } from "@preact/signals";
 import { fetchCardInfo } from "./cardDetail";
 import { countedCards } from "./deck";
 import {
-  addSecondDeck, adjustCommanderDamage, adjustLife, adjustPlayerCounter, cardByUid, clearCombat,
-  createToken, deckFromResponse, draw, keepHand, londonMulligan, moveToZone, passTurn,
-  putOnBottom, removeSecondDeck, reposition, saveTableSnapshot, screenDeck, setUpTable,
-  shuffleLibrary, toggleTapped, undoTableStep, fitsInRow, type TokenModel, type Zone,
+  act, cardByUid, deckFromResponse, fitsInRow, saveTableSnapshot, screenDeck, setUpTable,
+  undoTableStep, type Action, type TokenModel, type Zone,
 } from "./goldfish";
 import { readLocalDecks } from "../../shared/localDecks";
+import { isOnline, joinRoom, mySeat, newRoomId, online, onlineDeps, send, setRoomInUrl } from "./online";
 import { api } from "./save";
 import { state } from "./state";
 import { toast } from "./ui/toast";
@@ -37,15 +39,28 @@ export function touchTable() {
   tableRevision.value++;
 }
 
-/* Uma jogada: foto pro desfazer, a regra, o redesenho. */
-function play(rule: () => unknown, gesture?: string) {
+onlineDeps.changed = touchTable;
+
+/* Uma jogada: foto pro desfazer, a regra, o redesenho. Mais de uma ação é
+   um gesto só, com uma foto só (soltar a carta da mão já no lugar dela).
+   Online, as ações vão pra sala, na ordem, e o redesenho vem com a resposta. */
+function play(actions: Action | Action[], gesture?: string) {
   if (!state.table) return;
+  const list = ([] as Action[]).concat(actions);
+  if (isOnline()) {
+    for (const action of list) send({ type: "act", action });
+    return;
+  }
   saveTableSnapshot(gesture);
-  rule();
+  for (const action of list) act(action);
   touchTable();
 }
 
 export function undoTable() {
+  if (isOnline()) {
+    if (online.value!.canUndo) send({ type: "undo" });
+    return;
+  }
   if (undoTableStep()) touchTable();
 }
 
@@ -61,21 +76,40 @@ export function tableShortcut(e: KeyboardEvent) {
   e.preventDefault();
   if (e.repeat) return true;
   closeTableMenu();
-  play(() => space ? passTurn() : draw(state.table!.active, 1));
+  // Online, o D compra pra quem aperta, que é o único baralho dele.
+  const drawer = isOnline() ? mySeat() : state.table.active;
+  if (space) play({ type: "pass" });
+  else if (drawer !== null) play({ type: "draw", player: drawer, n: 1 });
   return true;
 }
 
 /* ------------------------------------------------------- os botões do topo */
 
 export function shuffleUp() {
+  // Online, embaralhar é recomeçar a partida da sala inteira, com os decks
+  // como estão salvos agora.
+  if (isOnline()) {
+    if (confirm("Recomeçar a partida pra todo mundo na mesa?")) send({ type: "restart" });
+    return;
+  }
   if (!countedCards().length && !state.commanders.length) return toast("Monte o deck primeiro.");
   hideDetail();   // os uids recomeçam do 1 na mesa nova
   setUpTable([screenDeck()]);
   touchTable();
 }
 
-export const passTheTurn = () => play(passTurn);
-export const endCombat = () => play(clearCombat);
+/* Uma mesa online nova. A sala confere a conta de quem entra, então sem
+   conta nem adianta abrir. */
+export function startOnline() {
+  if (!state.user) return toast("Entre na sua conta pra jogar online.");
+  hideDetail();
+  const roomId = newRoomId();
+  setRoomInUrl(roomId);
+  joinRoom(roomId);
+}
+
+export const passTheTurn = () => play({ type: "pass" });
+export const endCombat = () => play({ type: "endCombat" });
 
 /* Abrir o log não é jogada: não passa pelo `saveTableSnapshot`. */
 export function toggleLog() {
@@ -86,7 +120,7 @@ export function toggleLog() {
 
 export function secondDeckButton() {
   if (!state.table) return;
-  if (state.table.players.length > 1) return play(removeSecondDeck);
+  if (state.table.players.length > 1) return play({ type: "leave" });
   openTableModal({ kind: "second" });
 }
 
@@ -105,32 +139,33 @@ export function setFullscreen(on: boolean) {
    passos que a mesa usa, dano de criatura e dano de comandante. Clique
    repetido conta como um passo só (ver `saveTableSnapshot`). */
 export function changeLife(player: number, n: number) {
-  play(() => adjustLife(player, n), "vida" + player);
+  play({ type: "life", player, n }, "vida" + player);
 }
 
 export function changePlayerCounter(player: number, name: string, n: number) {
-  play(() => adjustPlayerCounter(player, name, n), "marca" + player + name);
+  play({ type: "playerCounter", player, name, n }, "marca" + player + name);
 }
 
 export function changeCommanderDamage(player: number, from: number, n: number) {
-  play(() => adjustCommanderDamage(player, from, n), "dano" + player + from);
+  play({ type: "commanderDamage", player, from, n }, "dano" + player + from);
 }
 
-export const keep = (player: number) => play(() => keepHand(player));
-export const mulligan = (player: number) => play(() => londonMulligan(player));
+export const keep = (player: number) => play({ type: "keep", player });
+export const mulligan = (player: number) => play({ type: "mulligan", player });
 
 /* O ícone de deitar age na hora, antes de a carta virar menu: ele existe
    justamente pra o gesto mais repetido da mesa não passar pelo menu. */
 export function tapFromIcon(uid: number) {
   closeTableMenu();
-  play(() => toggleTapped(uid));
+  play({ type: "tap", uid });
 }
 
 /* Na fase de mandar pro fundo, clicar na mão é ESCOLHER — não abrir menu. */
 export function clickCard(uid: number, anchor: Element) {
+  if (uid < 0) return;   // carta escondida (ver `online.ts`): não tem o que fazer com ela
   const c = cardByUid(uid);
   if (c && state.table!.players[c.owner].phase === "fundo" && zoneOfHand(uid)) {
-    return play(() => putOnBottom(uid));
+    return play({ type: "bottom", uid });
   }
   openTableMenu({ kind: "card", uid }, anchor);
 }
@@ -160,12 +195,10 @@ export function closeTableMenu() {
   tableMenu.value = null;
 }
 
-/* Um item do menu. `undo: false` é o que não é jogada ("Ver a carta"). */
-export function runMenuItem(fn: () => unknown, { stay = false, gesture = undefined as string | undefined, undo = true } = {}) {
-  if (undo) saveTableSnapshot(gesture);
-  fn();
+/* Um item do menu. O que não é jogada ("Ver a carta") não passa por aqui. */
+export function runMenuItem(action: Action, { stay = false, gesture = undefined as string | undefined } = {}) {
+  play(action, gesture);
   if (!stay) closeTableMenu();
-  touchTable();
 }
 
 /* ----------------------------------------------------------------- modais */
@@ -181,6 +214,9 @@ export const tableModal = signal<TableModal | null>(null);
 export function openTableModal(modal: TableModal) {
   closeTableModal();
   tableModal.value = modal;
+  // Online, o baralho só aparece depois que a sala sabe que a pessoa está
+  // procurando nele — e a busca termina num embaralhamento, ao fechar.
+  if (isOnline() && modal.kind === "search" && modal.zone === "baralho") send({ type: "look" });
 }
 
 export function isTableModalOpen() {
@@ -195,12 +231,12 @@ export function closeTableModal() {
   if (!modal) return;
   tableModal.value = null;
   if (modal.kind === "search" && modal.zone === "baralho") {
-    play(() => shuffleLibrary(modal.player));
+    play({ type: "shuffle", player: modal.player });
   }
 }
 
 export function sendFromSearch(uid: number, zone: Zone) {
-  play(() => moveToZone(uid, zone));
+  play({ type: "move", uid, to: zone });
 }
 
 /* Os modelos de ficha que a pessoa monta ficam no navegador: uma mesa de
@@ -229,7 +265,10 @@ function saveTokenModel(model: TokenModel) {
 export function makeToken(player: number, model: TokenModel, howMany: number | string, remember = false) {
   if (remember) saveTokenModel(model);
   tableModal.value = null;
-  play(() => createToken(player, model, howMany));
+  // A sala recusa ficha com imagem: a URL seria carregada no navegador dos
+  // outros (ver `room/src/protocol.ts`). Lá ela vai sem arte.
+  const { imagem: _, ...noImage } = model;
+  play({ type: "token", player, model: isOnline() ? noImage : model, count: Math.max(1, Math.min(20, Number(howMany) || 1)) });
 }
 
 export type DeckOption = { id: string; nome: string; de: string };
@@ -259,7 +298,7 @@ export async function putSecondDeck(id: string) {
       api(`/decks/${id}/artes`).catch(() => ({})),
     ]);
     tableModal.value = null;
-    play(() => addSecondDeck(deckFromResponse(r, id, arts.escolhas)));
+    play({ type: "join", deck: deckFromResponse(r, id, arts.escolhas) });
     return true;
   } catch (e) {
     toast("Não consegui abrir esse deck: " + (e as Error).message);
@@ -295,6 +334,7 @@ export function hideDetail() {
    cursor: as cartas são grandes, e seguindo o mouse ele cobriria as vizinhas
    que a pessoa está comparando. */
 export async function showDetail(uid: number) {
+  if (uid < 0) return hideDetail();   // carta escondida
   // O mouseover dispara de novo a cada filho da carta (o nome, um marcador):
   // repintar ali pediria o detalhe de novo à toa.
   if (detail.value?.uid === uid) return;
@@ -423,14 +463,10 @@ export function onTableDrop(e: DragEvent) {
   const uid = dragging!;
   dragging = null;
   markDrop(e.currentTarget as Element, null);
-  play(() => {
-    if (slot) {
-      moveToZone(uid, "campo");   // não faz nada se ela já está no campo
-      reposition(uid, slot.uid, slot.after);
-    } else {
-      moveToZone(uid, area!.dataset.gfSolta!);
-    }
-  });
+  play(slot
+    ? [{ type: "move", uid, to: "campo" },   // não faz nada se ela já está no campo
+       { type: "arrange", uid, target: slot.uid, after: slot.after }]
+    : { type: "move", uid, to: area!.dataset.gfSolta as Zone });
 }
 
 /* --------------------------------------------- os ouvintes do documento */

@@ -12,6 +12,11 @@
    campo de batalha —, e os dois campos de batalha se encaram no meio. Na
    horizontal nada vira: as criaturas de um ficam em cima das do outro.
 
+   Na mesa ONLINE (ver `online.ts`) quem fica embaixo é a pessoa desta tela,
+   e os outros ficam em cima, espelhados, um embaixo do outro. A mão e o
+   baralho dos outros chegam como verso, e o que só o dono decide (manter a
+   mão, comprar, buscar no deck) só aparece no lado dele.
+
    Este desenho só LÊ a mesa. Quem muda alguma coisa é `table.ts`, com as
    regras de `goldfish.ts`. */
 import type { ComponentChildren } from "preact";
@@ -22,13 +27,16 @@ import {
   attackers, bottomCountOnKeep, cardByUid, cardName, comboCount, combosOf, fieldRow, handSummary,
   isLand, playerArts, ZONE_NAMES, type Player, type Table, type TableCard, type Zone,
 } from "../goldfish";
+import type { SeatInfo } from "../../../../../room/src/protocol";
+import { isOnline, mySeat, online } from "../online";
 import { COLOR_NAMES, COLORS, deckRevision, state } from "../state";
 import {
   bindTableDocument, changeCommanderDamage, changeLife, changePlayerCounter, clickCard, detail,
   endCombat, fullscreen, keep, mulligan, onTableDragEnd, onTableDragOver, onTableDragStart,
   onTableDrop, openTableModal, openTableMenu, passTheTurn, secondDeckButton, setFullscreen,
-  shuffleUp, tableRevision, tapFromIcon, toggleLog, undoTable,
+  shuffleUp, startOnline, tableRevision, tapFromIcon, toggleLog, undoTable,
 } from "../table";
+import { OnlineStrip } from "./OnlineStrip";
 import { ManaCost, ManaText } from "./Mana";
 
 /** A mesa, de dentro de um componente: redesenha a cada jogada e a cada
@@ -36,7 +44,22 @@ import { ManaCost, ManaText } from "./Mana";
 export function useTable() {
   void tableRevision.value;
   void deckRevision.value;
+  void online.value;
   return state.table;
+}
+
+/* Quem é cada lado da mesa, visto desta tela. `own` é o lado desta pessoa:
+   na mesa local, todos (é ela dos dois lados); online, só o assento dela.
+
+   Calculado UMA vez, em cima (`TableView`), e passado pra baixo como prop: um
+   componente que lê sinal ganha do `@preact/signals` o atalho de não se
+   redesenhar quando as props não mudam — e a mesa muda NO LUGAR, então as
+   props de baixo (o jogador) chegam sempre iguais. Lendo `online` lá
+   embaixo, a mão parava de acompanhar a mesa. */
+interface Who {
+  online: boolean;
+  own: boolean;
+  seat?: SeatInfo;
 }
 
 /* A arte de uma carta da mesa: a escolhida no deck DO DONO, e a padrão quando
@@ -77,8 +100,12 @@ function TableCardButton({ c, zone }: { c: TableCard; zone: Zone }) {
   // ter o que contar. Carta virada pra baixo não ganha selo — ela está
   // escondida, e o selo a entregaria.
   const combos = c.faceDown ? 0 : comboCount(c);
+  // A carta escondida da mesa online (mão e baralho dos outros) é só o
+  // verso: não abre menu, não arrasta, não mostra painel.
+  const hidden = c.uid < 0;
   return (
-    <button class={cls.join(" ")} data-gf-uid={c.uid} draggable title={card.nome || ""}
+    <button class={cls.join(" ")} data-gf-uid={hidden ? undefined : c.uid} draggable={!hidden} disabled={hidden}
+            title={card.nome || ""}
             style={art ? { backgroundImage: `url('${art}')` } : undefined}
             onClick={(e) => clickCard(c.uid, e.currentTarget)}>
       <CardCounters c={c} />
@@ -271,10 +298,16 @@ function MulliganNote({ p, ij }: { p: Player; ij: number }) {
 /* A mão com o resumo no título: é o que se lê antes de decidir manter, e na
    linha do título ele não rouba altura da mesa. No mulligan, a escolha fica
    dentro da própria mão, em cima das cartas que ela julga. */
-function Hand({ p, ij }: { p: Player; ij: number }) {
+function Hand({ p, ij, own }: { p: Player; ij: number; own: boolean }) {
   return (
-    <Area title={<><Count name="Mão" n={p.mao.length} /><HandSummary hand={p.mao} /></>} zone="mao" player={ij} cls="gf-area-mao">
-      {p.phase !== "jogo" && (
+    <Area title={<><Count name="Mão" n={p.mao.length} />{own && <HandSummary hand={p.mao} />}</>}
+          zone="mao" player={ij} cls="gf-area-mao">
+      {p.phase !== "jogo" && !own && (
+        <div class="gf-mulligan">
+          <p class="nota">{p.phase === "fundo" ? "Escolhendo o que vai pro fundo do baralho…" : "Decidindo a mão…"}</p>
+        </div>
+      )}
+      {p.phase !== "jogo" && own && (
         <div class="gf-mulligan">
           <MulliganNote p={p} ij={ij} />
           {p.phase !== "fundo" && (
@@ -293,7 +326,7 @@ function Hand({ p, ij }: { p: Player; ij: number }) {
 /* Duas linhas numa grade de três colunas: comando, terrenos e exílio; deck,
    mão e cemitério. A grade é compartilhada pra as pilhas ficarem uma em cima
    da outra. No espelho, a linha da mão vai pra borda, como a do outro. */
-function Zones({ p, ij, m, mirrored }: { p: Player; ij: number; m: Table; mirrored: boolean }) {
+function Zones({ p, ij, m, mirrored, own }: { p: Player; ij: number; m: Table; mirrored: boolean; own: boolean }) {
   const search = (zone: Zone) => () => openTableModal({ kind: "search", player: ij, zone });
   const lands = [
     <Command key="comando" p={p} ij={ij} />,
@@ -303,10 +336,11 @@ function Zones({ p, ij, m, mirrored }: { p: Player; ij: number; m: Table; mirror
   ];
   const hand = [
     // A tecla D compra pra quem está na vez: é nesse baralho que ela aparece.
-    <Pile key="baralho" p={p} ij={ij} zone="baralho" label="Comprar ou buscar no deck" action={`deck:${ij}`}
-          title={<><Count name="Deck" n={p.baralho.length} />{m.active === ij && <> <kbd title="Comprar">D</kbd></>}</>}
-          onOpen={(anchor) => openTableMenu({ kind: "deck", player: ij }, anchor)} />,
-    <Hand key="mao" p={p} ij={ij} />,
+    <Pile key="baralho" p={p} ij={ij} zone="baralho" action={`deck:${ij}`}
+          label={own ? "Comprar ou buscar no deck" : `O deck de ${p.name}`}
+          title={<><Count name="Deck" n={p.baralho.length} />{m.active === ij && own && <> <kbd title="Comprar">D</kbd></>}</>}
+          onOpen={(anchor) => { if (own) openTableMenu({ kind: "deck", player: ij }, anchor); }} />,
+    <Hand key="mao" p={p} ij={ij} own={own} />,
     <Pile key="cemiterio" p={p} ij={ij} zone="cemiterio" title={<Count name="Cemitério" n={p.cemiterio.length} />}
           label="Ver o cemitério" action={`buscar:${ij}:cemiterio`} onOpen={search("cemiterio")} />,
   ];
@@ -355,14 +389,29 @@ function BarLands({ p }: { p: Player }) {
   );
 }
 
+/* Na mesa local o jogador é o deck. Online é a pessoa, com o deck do lado, e
+   um ponto que diz se ela está conectada agora. */
+function PlayerName({ p, seat }: { p: Player; seat?: SeatInfo }) {
+  if (!seat) return <b class="gf-nome-j" title={p.name}>{p.name}</b>;
+  return (
+    <b class="gf-nome-j" title={`${seat.name} · ${p.name}`}>
+      <span class={"gf-conexao" + (seat.connected ? " on" : "")}
+            title={seat.connected ? "Na mesa" : "Desconectado"} aria-label={seat.connected ? "na mesa" : "desconectado"} />
+      {seat.name} <span class="gf-deck-j">· {p.name}</span>
+    </b>
+  );
+}
+
 /* A barra fica na borda de fora de cada jogador: embaixo de quem está
    embaixo e em cima de quem está em cima. À esquerda quem é e como está; à
    direita o que se cria na mesa. */
-function Bar({ p, ij, m }: { p: Player; ij: number; m: Table }) {
+function Bar({ p, ij, m, who }: { p: Player; ij: number; m: Table; who: Who }) {
   return (
     <div class="gf-barra">
-      <b class="gf-nome-j" title={p.name}>{p.name}</b>
-      {m.players.length > 1 && m.active === ij && <span class="gf-vez">sua vez</span>}
+      <PlayerName p={p} seat={who.seat} />
+      {m.players.length > 1 && m.active === ij && (
+        <span class="gf-vez">{who.online && !who.own ? "na vez" : "sua vez"}</span>
+      )}
       <span class="gf-vida">Vida{" "}
         <Step label="Menos 1 de vida" text="−" onStep={(t) => changeLife(ij, -t)} />
         <b>{p.life}</b>
@@ -390,12 +439,12 @@ function Bar({ p, ij, m }: { p: Player; ij: number; m: Table }) {
 
 /* De cima pra baixo, quem está embaixo: campo de batalha, as duas linhas de
    zonas e a barra. Quem está em cima tem a mesma ordem de baixo pra cima. */
-function PlayerSection({ ij, m, mirrored }: { ij: number; m: Table; mirrored: boolean }) {
+function PlayerSection({ ij, m, mirrored, who }: { ij: number; m: Table; mirrored: boolean; who: Who }) {
   const p = m.players[ij];
   const parts = [
     <Battlefield key="campo" p={p} ij={ij} />,
-    <Zones key="zonas" p={p} ij={ij} m={m} mirrored={mirrored} />,
-    <Bar key="barra" p={p} ij={ij} m={m} />,
+    <Zones key="zonas" p={p} ij={ij} m={m} mirrored={mirrored} own={who.own} />,
+    <Bar key="barra" p={p} ij={ij} m={m} who={who} />,
   ];
   if (mirrored) parts.reverse();
   const active = m.players.length > 1 && m.active === ij;
@@ -406,19 +455,41 @@ function PlayerSection({ ij, m, mirrored }: { ij: number; m: Table; mirrored: bo
   );
 }
 
+const bottomSeat = () => (isOnline() ? mySeat() ?? 0 : 0);
+
+function whoIs(ij: number): Who {
+  const o = online.value;
+  return { online: !!o, own: !o || o.seat === ij, seat: o?.seats[ij] };
+}
+
+function seatOrder(m: Table) {
+  const bottom = bottomSeat();
+  return m.players.map((_, i) => i).filter((i) => i !== bottom).concat(bottom);
+}
+
+function emptyTableText() {
+  const o = online.value;
+  if (!o) {
+    return <>Clique em <b>Embaralhar</b> pra começar. O comandante vai pra zona de comando; o
+      sideboard e o maybeboard ficam de fora, como em toda análise desta tela.</>;
+  }
+  if (o.status !== "aberta") return <>Entrando na mesa…</>;
+  return <>Ninguém sentou ainda. Escolha um deck acima pra abrir a mesa.</>;
+}
+
 function TableView() {
   const m = useTable();
   return (
     <div id="gf-mesa" onDragStart={onTableDragStart} onDragEnd={onTableDragEnd}
          onDragOver={onTableDragOver} onDrop={onTableDrop}>
       {!m ? (
-        <div class="gf-vazio">Clique em <b>Embaralhar</b> pra começar. O comandante vai pra zona de comando; o
-          sideboard e o maybeboard ficam de fora, como em toda análise desta tela.</div>
+        <div class="gf-vazio">{emptyTableText()}</div>
       ) : (
-        // O segundo jogador vem primeiro: ele é o lado de cima da mesa espelhada.
+        // Quem fica embaixo vem por último: os outros são o lado de cima da
+        // mesa espelhada. Na mesa local, embaixo é o primeiro deck.
         <div class={"gf-jogadores" + (m.players.length > 1 ? " dois" : "")}>
-          {(m.players.length > 1 ? [1, 0] : [0]).map((ij) => (
-            <PlayerSection key={ij} ij={ij} m={m} mirrored={m.players.length > 1 && ij === 1} />
+          {seatOrder(m).map((ij) => (
+            <PlayerSection key={ij} ij={ij} m={m} mirrored={ij !== bottomSeat()} who={whoIs(ij)} />
           ))}
         </div>
       )}
@@ -574,7 +645,7 @@ function CardDetail() {
 /* Uma linha só sobre os combos, na coluna. O selo da carta é silencioso, e
    silêncio não distingue "este deck não tem combo" de "ninguém procurou" —
    são opostos que se parecem numa mesa sem marca nenhuma. */
-function CombosNote({ m }: { m: Table | null }) {
+function CombosNote({ m, online }: { m: Table | null; online: boolean }) {
   if (!m) return <div class="gf-nota-combos" id="gf-nota-combos" />;
   if (!state.combos) {
     return (
@@ -587,7 +658,7 @@ function CombosNote({ m }: { m: Table | null }) {
   // dá pra deduzir olhando a mesa.
   const caveats: string[] = [];
   if (state.combosSignature !== deckSignature()) caveats.push("o deck mudou desde a busca");
-  if (m.players.length > 1) caveats.push("o segundo deck não foi perguntado");
+  if (m.players.length > 1) caveats.push(online ? "os decks dos outros não foram perguntados" : "o segundo deck não foi perguntado");
   return (
     <div class="gf-nota-combos" id="gf-nota-combos">
       {n ? <><b>{n}</b> combo(s) do deck — as peças estão marcadas nas cartas.</>
@@ -631,6 +702,8 @@ export function GoldfishPanel() {
   const m = useTable();
   useEffect(bindTableDocument, []);
   const two = !!m && m.players.length > 1;
+  const o = online.value;
+  const canUndo = o ? o.canUndo : state.tableUndo.length > 0;
   const inCombat = !!m && (attackers().length > 0 || m.players.some((p) => p.campo.some((c) => c.blocking)));
   return (
     <>
@@ -644,26 +717,41 @@ export function GoldfishPanel() {
             zona.</span>
         </span>
         <span class="gf-turno" id="gf-turno">{m ? turnTitle(m) : ""}</span>
-        <button class="btn ouro" id="gf-passar" disabled={!m} title="Passar turno (Espaço)" onClick={passTheTurn}>Passar turno</button>
+        <button class="btn ouro" id="gf-passar" disabled={!m || (!!o && m.active !== o.seat)}
+                title="Passar turno (Espaço)" onClick={passTheTurn}>Passar turno</button>
         <button class="btn" id="gf-fim-combate" hidden={!inCombat} onClick={endCombat}>Fim do combate</button>
         <span class="gf-espaco" />
-        <button class="btn" id="gf-segundo" disabled={!m} onClick={secondDeckButton}
-                title={two ? "Tira o outro deck da mesa e volta ao goldfish solo" : "Põe um deck seu do outro lado da mesa"}>
-          {two ? "Tirar o 2º deck" : "Segundo deck"}</button>
-        <button class="btn" id="gf-encerrar" disabled={!m} onClick={() => openTableModal({ kind: "summary" })}
-                title="Resumo da partida: comandante, curva realizada e o que não foi puxado">Como foi</button>
-        <button class="btn" id="gf-desfazer" title="Desfaz a última jogada (Ctrl+Z)"
-                disabled={!state.tableUndo.length} onClick={undoTable}>Desfazer</button>
+        {/* O segundo deck e o resumo do fim são da mesa local: online, quem
+            senta é gente, e o resumo leria o baralho que ninguém vê. */}
+        {!o && (
+          <>
+            <button class="btn" id="gf-segundo" disabled={!m} onClick={secondDeckButton}
+                    title={two ? "Tira o outro deck da mesa e volta ao goldfish solo" : "Põe um deck seu do outro lado da mesa"}>
+              {two ? "Tirar o 2º deck" : "Segundo deck"}</button>
+            <button class="btn" id="gf-encerrar" disabled={!m} onClick={() => openTableModal({ kind: "summary" })}
+                    title="Resumo da partida: comandante, curva realizada e o que não foi puxado">Como foi</button>
+          </>
+        )}
+        <button class="btn" id="gf-desfazer" disabled={!canUndo} onClick={undoTable}
+                title={o ? "Desfaz a sua última jogada, se ninguém jogou depois (Ctrl+Z)" : "Desfaz a última jogada (Ctrl+Z)"}>
+          Desfazer</button>
         <button class="btn" id="gf-tela" onClick={() => setFullscreen(!fullscreen.value)}>
           {fullscreen.value ? "Sair da tela cheia" : "Tela cheia"}</button>
-        <button class="btn ouro" id="gf-embaralhar" onClick={shuffleUp}>Embaralhar</button>
+        {!o && (
+          <button class="btn" id="gf-online" onClick={startOnline}
+                  title="Abre uma mesa pra jogar com outras pessoas, cada uma no seu navegador">Jogar online</button>
+        )}
+        <button class="btn ouro" id="gf-embaralhar" onClick={shuffleUp} disabled={!!o && (o.seat === null || !m)}
+                title={o ? "Partida nova pra mesa inteira, com os decks como estão salvos" : undefined}>
+          {o ? "Recomeçar" : "Embaralhar"}</button>
       </div>
+      <OnlineStrip />
 
       <div class="gf-area">
         <TableView />
         <div class="gf-coluna">
           <CardDetail />
-          <CombosNote m={m} />
+          <CombosNote m={m} online={!!o} />
           <Log m={m} />
           <div class="gf-atalhos">
             <div class="gf-atalhos-titulo">Atalhos</div>

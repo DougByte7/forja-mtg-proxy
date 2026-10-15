@@ -1,0 +1,5 @@
+# Os dois baixam o binário da plataforma na instalação: sem o script, o
+# wrangler não empacota (esbuild) nem roda a sala local (workerd).
+allowBuilds:
+  esbuild: true
+  workerd: true

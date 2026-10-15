@@ -5,6 +5,8 @@
 import { signal } from "@preact/signals";
 import { greetAccount, loadAccount } from "./account";
 import { loadArts } from "./art";
+import { switchTab } from "./layout";
+import { joinRoom } from "./online";
 import { loadExchangeRate } from "./price";
 import { redrawAll } from "./redraw";
 import { api, rememberDeck, setSaveStatus } from "./save";
@@ -58,6 +60,13 @@ export async function boot() {
   const account = loadAccount();
   await loadDeckFromLink();
   redrawAll();
+  // A mesa online do link (`?mesa=`, ver `online.ts`): a página abre na aba
+  // do goldfish, já entrando nela.
+  const room = new URLSearchParams(location.search).get("mesa");
+  if (room && /^[A-Za-z0-9_-]{8,64}$/.test(room)) {
+    switchTab("goldfish");
+    joinRoom(room);
+  }
   // Depois do deck, de propósito: a oferta de reclamar precisa saber se este
   // deck tem dono, e o convite, se há deck aberto.
   account.then(greetAccount);

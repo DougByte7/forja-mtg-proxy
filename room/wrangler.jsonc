@@ -1,0 +1,26 @@
+// A sala da mesa compartilhada (ver room/README.md).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "forja-mesa",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "TableRoom" }]
+  },
+  // SQLite: é o armazenamento dos Durable Objects novos, e o que aguenta a
+  // mesa de quatro decks numa chave só.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TableRoom"] }],
+  // A sala mora em forja-mesa.<conta>.workers.dev. As URLs de prévia de
+  // cada versão ficam desligadas: cada uma seria mais uma porta pra mesma
+  // sala, e quem abre a mesa é sempre o site.
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    // De onde vêm os decks (`GET /decks/{id}`).
+    "SITE_URL": "https://forja.megatobas.top",
+    // As telas que podem abrir a sala, separadas por vírgula. Pra testar o
+    // front local, acrescente a origem do Vite (ex.: http://localhost:5173).
+    "CLERK_ORIGENS": "https://forja.megatobas.top"
+  }
+  // Segredo, fora daqui: `wrangler secret put CLERK_JWT_KEY`.
+}

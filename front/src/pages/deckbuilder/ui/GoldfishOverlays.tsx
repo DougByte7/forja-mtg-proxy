@@ -9,10 +9,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { hasBack } from "../art";
 import { openCard } from "../cardDetail";
 import {
-  adjustCardCounter, adjustPlayerCounter, attackers, CARD_COUNTERS, cardByUid, cardName, castCommander,
-  draw, gameSummary, moveToZone, PLAYER_COUNTERS, setBlock, toggleAttack, toggleFace, toggleFaceDown,
-  toggleTapped, ZONE_NAMES, zoneOf, type TokenModel, type Zone,
+  attackers, CARD_COUNTERS, cardByUid, cardName, gameSummary, PLAYER_COUNTERS, ZONE_NAMES, zoneOf,
+  type Action, type TokenModel, type Zone,
 } from "../goldfish";
+import { isOnline, online } from "../online";
 import { state } from "../state";
 import {
   closeTableMenu, closeTableModal, listDecks, makeToken, openTableModal, putSecondDeck, runMenuItem,
@@ -42,8 +42,8 @@ function CardMenu({ uid }: { uid: number }) {
   const c = cardByUid(uid);
   const zone = zoneOf(uid);
   if (!c) return null;
-  const item = (label: string, fn: () => unknown, opts?: Parameters<typeof runMenuItem>[1]) => (
-    <button onClick={() => runMenuItem(fn, opts)}>{label}</button>
+  const item = (label: string, action: Action, opts?: Parameters<typeof runMenuItem>[1]) => (
+    <button onClick={() => runMenuItem(action, opts)}>{label}</button>
   );
   const enemies = attackers().filter((a) => a.owner !== c.owner);
   const counters = CARD_COUNTERS.concat(Object.keys(c.counters).filter((n) => !CARD_COUNTERS.includes(n)));
@@ -54,46 +54,46 @@ function CardMenu({ uid }: { uid: number }) {
     <>
       {zone === "campo" && (
         <>
-          {item(c.tapped ? "Endireitar" : "Deitar", () => toggleTapped(uid))}
-          {hasBack(c.card) && item(c.backUp ? "Virar pra frente" : "Virar pro verso", () => toggleFace(uid))}
-          {item(c.attacking ? "Não atacar" : "Atacar", () => toggleAttack(uid))}
+          {item(c.tapped ? "Endireitar" : "Deitar", { type: "tap", uid })}
+          {hasBack(c.card) && item(c.backUp ? "Virar pra frente" : "Virar pro verso", { type: "flip", uid })}
+          {item(c.attacking ? "Não atacar" : "Atacar", { type: "attack", uid })}
           {enemies.length > 0 && (
             <>
               <div class="gf-menu-titulo">Bloquear</div>
-              {enemies.map((a) => item((c.blocking === a.uid ? "✓ " : "") + cardName(a), () => setBlock(uid, a.uid)))}
+              {enemies.map((a) => item((c.blocking === a.uid ? "✓ " : "") + cardName(a), { type: "block", uid, target: a.uid }))}
             </>
           )}
           <div class="gf-menu-titulo">Marcadores</div>
           {counters.map((name) => (
             <div class="gf-linha">
               <span>{name}</span>
-              {item("−", () => adjustCardCounter(uid, name, -1), { stay: true, gesture: `m${uid}${name}` })}
+              {item("−", { type: "cardCounter", uid, name, n: -1 }, { stay: true, gesture: `m${uid}${name}` })}
               <b>{c.counters[name] || 0}</b>
-              {item("+", () => adjustCardCounter(uid, name, 1), { stay: true, gesture: `m${uid}${name}` })}
+              {item("+", { type: "cardCounter", uid, name, n: 1 }, { stay: true, gesture: `m${uid}${name}` })}
             </div>
           ))}
-          {item("Outro marcador…", () => {
+          <button onClick={() => {
             const name = askName("Nome do marcador (ex.: veneno, tempo, munição):");
-            if (name) adjustCardCounter(uid, name, 1);
-          }, { stay: true })}
+            if (name) runMenuItem({ type: "cardCounter", uid, name, n: 1 }, { stay: true });
+          }}>Outro marcador…</button>
         </>
       )}
 
       <div class="gf-menu-titulo">Mandar pra</div>
       {/* O imposto é INFORMAÇÃO: a tela conta quantas vezes o comandante saiu
           da zona e diz quanto custaria a próxima. Não cobra nada. */}
-      {zone === "comando" ? item("Campo (paga imposto)", () => castCommander(uid))
-        : zone !== "campo" ? item("Campo", () => moveToZone(uid, "campo")) : null}
-      {destinations.map((z) => item(ZONE_NAMES[z], () => moveToZone(uid, z)))}
+      {zone === "comando" ? item("Campo (paga imposto)", { type: "cast", uid })
+        : zone !== "campo" ? item("Campo", { type: "move", uid, to: "campo" }) : null}
+      {destinations.map((z) => item(ZONE_NAMES[z], { type: "move", uid, to: z }))}
       {zone !== "baralho" && (
         <>
-          {item("Topo do baralho", () => moveToZone(uid, "baralho", true))}
-          {item("Fundo do baralho", () => moveToZone(uid, "baralho", false))}
+          {item("Topo do baralho", { type: "move", uid, to: "baralho", toTop: true })}
+          {item("Fundo do baralho", { type: "move", uid, to: "baralho", toTop: false })}
         </>
       )}
       <div class="gf-menu-titulo">Esta carta</div>
-      {item(c.faceDown ? "Desvirar" : "Virar pra baixo", () => toggleFaceDown(uid))}
-      {!c.token && item("Ver a carta", () => openCard(c.card), { undo: false })}
+      {item(c.faceDown ? "Desvirar" : "Virar pra baixo", { type: "faceDown", uid })}
+      {!c.token && <button onClick={() => { closeTableMenu(); openCard(c.card); }}>Ver a carta</button>}
     </>
   );
 }
@@ -103,7 +103,7 @@ function CardMenu({ uid }: { uid: number }) {
 function CounterMenu({ player }: { player: number }) {
   const pick = (name: string) => {
     closeTableMenu();
-    if (name) runMenuItem(() => adjustPlayerCounter(player, name, 1));
+    if (name) runMenuItem({ type: "playerCounter", player, name, n: 1 });
   };
   return (
     <>
@@ -118,7 +118,7 @@ function CounterMenu({ player }: { player: number }) {
 function DeckMenu({ player }: { player: number }) {
   return (
     <>
-      <button onClick={() => runMenuItem(() => draw(player, 1))}>Comprar 1</button>
+      <button onClick={() => runMenuItem({ type: "draw", player, n: 1 })}>Comprar 1</button>
       <button onClick={() => { closeTableMenu(); openTableModal({ kind: "search", player, zone: "baralho" }); }}>
         Buscar no deck</button>
     </>
@@ -168,14 +168,19 @@ function SearchZone({ player, zone }: { player: number; zone: Zone }) {
   const p = state.table!.players[player];
   const destinations = (["mao", "campo", "cemiterio", "exilio"] as Zone[]).filter((z) => z !== zone);
   const t = term.trim().toLowerCase();
-  const cards = p[zone].filter((c) => cardName(c).toLowerCase().includes(t))
+  // Online, a carta que este assento não vê chega sem carta (ver
+  // `online.ts`): a virada no exílio de alguém não entra na lista, e o
+  // baralho só aparece quando a sala responde que a busca começou.
+  const opening = isOnline() && zone === "baralho" && !online.value?.looking;
+  const cards = p[zone].filter((c) => c.card && cardName(c).toLowerCase().includes(t))
     .sort((a, b) => cardName(a).localeCompare(cardName(b)));
   return (
     <Modal title={`${ZONE_NAMES[zone]} de ${p.name}`}>
       <input class="campo gf-filtro" id="gf-busca-filtro" ref={input} autocomplete="off" spellcheck={false}
              placeholder="filtrar pelo nome…" onInput={(e) => setTerm(e.currentTarget.value)} />
       <div class="gf-lista" id="gf-busca-lista">
-        {!cards.length ? <div class="gf-vazio">nada aqui</div> : cards.map((c) => (
+        {opening ? <div class="gf-vazio">abrindo o baralho…</div>
+          : !cards.length ? <div class="gf-vazio">nada aqui</div> : cards.map((c) => (
           <div class="gf-lista-linha" key={c.uid}>
             <span class="gf-lista-nome" title={c.card?.tipo || ""}>{cardName(c)}</span>
             {destinations.map((z) => (

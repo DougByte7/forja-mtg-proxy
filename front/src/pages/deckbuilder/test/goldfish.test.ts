@@ -64,6 +64,30 @@ const forests = (n: number): Card[] =>
   [...j().mao, ...j().baralho].filter((c: Card) => c.card.nome === "Forest").slice(0, n);
 const fieldOrder = () => j().campo.map((c: Card) => c.uid).join(",");
 
+/* As jogadas pelos nomes de antes. A mesa joga por ação (`act`), e o teste
+   fala a língua da regra que confere: cada nome é uma ação, e o que ele
+   devolve é o que `apply` devolve. */
+const act = (action: object) => p.act(action);
+const moveToZone = (uid: number, to: string, toTop?: boolean) => act({ type: "move", uid, to, toTop });
+const reposition = (uid: number, target: number, after: boolean) => act({ type: "arrange", uid, target, after });
+const keepHand = (player: number) => act({ type: "keep", player });
+const londonMulligan = (player: number) => act({ type: "mulligan", player });
+const putOnBottom = (uid: number) => act({ type: "bottom", uid });
+const passTurn = () => act({ type: "pass" });
+const draw = (player: number, n: number) => act({ type: "draw", player, n });
+const shuffleLibrary = (player: number) => act({ type: "shuffle", player });
+const addSecondDeck = (deck: object) => act({ type: "join", deck });
+const removeSecondDeck = () => act({ type: "leave" });
+const castCommander = (uid: number) => act({ type: "cast", uid });
+const adjustLife = (player: number, n: number) => act({ type: "life", player, n });
+const adjustPlayerCounter = (player: number, name: string, n: number) => act({ type: "playerCounter", player, name, n });
+const adjustCardCounter = (uid: number, name: string, n: number) => act({ type: "cardCounter", uid, name, n });
+const adjustCommanderDamage = (player: number, from: number, n: number) => act({ type: "commanderDamage", player, from, n });
+const toggleFace = (uid: number) => act({ type: "flip", uid });
+const toggleAttack = (uid: number) => act({ type: "attack", uid });
+const setBlock = (uid: number, target: number) => act({ type: "block", uid, target });
+const createToken = (player: number, model: object, count: number) => act({ type: "token", player, model, count });
+
 beforeEach(async () => {
   p = await freshPage();
   p.state.commanders = clone([ATRAXA]);
@@ -97,7 +121,7 @@ describe("o baralho é o deck certo", () => {
     // Fisher-Yates escrito errado perde ou duplica elemento em silêncio.
     table();
     const before = all().join(",");
-    p.shuffleLibrary(0);
+    shuffleLibrary(0);
     expect(all().join(",")).toBe(before);
   });
 });
@@ -110,153 +134,153 @@ describe("mão de abertura e mulligan London (o primeiro é grátis)", () => {
   });
 
   it("manter sem mulligan: 8 na mão (a do turno 1), nada pro fundo, direto pro jogo", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     expect([j().mao.length, j().toBottom, j().phase]).toEqual([8, 0, "jogo"]);
   });
 
   it("1 mulligan não custa; 2 devolvem 1; 3 devolvem 2", () => {
-    table(); p.londonMulligan(0); p.keepHand(0);
+    table(); londonMulligan(0); keepHand(0);
     expect([j().mao.length, j().toBottom]).toEqual([8, 0]);
-    table(); p.londonMulligan(0); p.londonMulligan(0); p.keepHand(0);
+    table(); londonMulligan(0); londonMulligan(0); keepHand(0);
     expect([j().mao.length, j().toBottom, j().phase]).toEqual([7, 1, "fundo"]);
-    table(); p.londonMulligan(0); p.londonMulligan(0); p.londonMulligan(0); p.keepHand(0);
+    table(); londonMulligan(0); londonMulligan(0); londonMulligan(0); keepHand(0);
     expect(j().toBottom).toBe(2);
   });
 
   it("as escolhidas vão pro FUNDO, e a mão fica com 6 — 5 mais a do turno 1", () => {
-    table(); p.londonMulligan(0); p.londonMulligan(0); p.londonMulligan(0); p.keepHand(0);
-    p.putOnBottom(j().mao[0].uid);
+    table(); londonMulligan(0); londonMulligan(0); londonMulligan(0); keepHand(0);
+    putOnBottom(j().mao[0].uid);
     const chosen = j().mao[0].uid;
-    p.putOnBottom(chosen);
+    putOnBottom(chosen);
     expect([j().mao.length, j().phase]).toEqual([6, "jogo"]);
     expect(j().baralho.at(-1).uid).toBe(chosen);
   });
 
   it("cada mulligan reembaralha tudo, e nunca pede pro fundo mais do que a mão tem", () => {
-    table(); p.londonMulligan(0);
+    table(); londonMulligan(0);
     expect(j().baralho.length + j().mao.length).toBe(IN_LIBRARY);
     // Deck pequeno: pedir mais do que a mão tem deixaria a fase sem fim.
-    for (let i = 0; i < 12; i++) p.londonMulligan(0);
+    for (let i = 0; i < 12; i++) londonMulligan(0);
     j().mao = j().mao.slice(0, 3);
-    p.keepHand(0);
+    keepHand(0);
     expect([j().toBottom, j().mao.length]).toEqual([3, 3]);
   });
 });
 
 describe("a compra do turno 1 (regra do Commander)", () => {
   it("vem ao confirmar a mão, sai do baralho e é uma só", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     expect([j().mao.length, j().baralho.length]).toEqual([8, IN_LIBRARY - 8]);
-    p.passTurn();
+    passTurn();
     expect(j().mao.length).toBe(9);
   });
 
   it("vem DEPOIS das que voltam pro fundo", () => {
-    table(); p.londonMulligan(0); p.londonMulligan(0); p.keepHand(0);
+    table(); londonMulligan(0); londonMulligan(0); keepHand(0);
     const returned = j().mao[0].uid;
-    p.putOnBottom(returned);
+    putOnBottom(returned);
     expect([j().mao.length, j().mao.filter((c: Card) => c.uid === returned).length]).toEqual([7, 0]);
   });
 });
 
 describe("turnos", () => {
   it("passar turno compra 1, anda o turno, endireita e zera os terrenos", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const before = j().mao.length;
-    p.moveToZone(j().mao[0].uid, "campo");
+    moveToZone(j().mao[0].uid, "campo");
     j().campo[0].tapped = true;
     j().landsThisTurn = 3;
-    p.passTurn();
+    passTurn();
     expect([p.state.table.turn, j().mao.length - (before - 1)]).toEqual([2, 1]);
     expect(j().campo[0].tapped).toBe(false);
     expect(j().landsThisTurn).toBe(0);
   });
 
   it("dois terrenos no mesmo turno: conta, não impede", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const two = forests(2);
-    two.forEach((c) => p.moveToZone(c.uid, "mao"));
-    two.forEach((c) => p.moveToZone(c.uid, "campo"));
+    two.forEach((c) => moveToZone(c.uid, "mao"));
+    two.forEach((c) => moveToZone(c.uid, "campo"));
     expect([j().landsThisTurn, j().campo.length]).toEqual([2, 2]);
   });
 });
 
 describe("dois decks na mesa", () => {
   it("o segundo entra com a mão dele, sem mexer no primeiro", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const before = j(0).mao.length;
-    p.addSecondDeck(deck2());
+    addSecondDeck(deck2());
     expect([p.state.table.players.length, j(1).mao.length, j(1).phase, j(0).mao.length === before])
       .toEqual([2, 7, "mulligan", true]);
   });
 
   it("quem mantém fora da vez fica com 7 e compra quando a vez chega", () => {
     // Comprar fora da vez adiantaria a compra de um turno que não chegou.
-    table(); p.keepHand(0); p.addSecondDeck(deck2()); p.keepHand(1);
+    table(); keepHand(0); addSecondDeck(deck2()); keepHand(1);
     expect([j(1).mao.length, j(1).baralho.length, j(1).phase]).toEqual([7, IN_LIBRARY2 - 7, "jogo"]);
-    p.passTurn();
+    passTurn();
     expect(j(1).mao.length).toBe(8);
   });
 
   it("a vez que chega no meio do mulligan não compra; a compra vem ao manter", () => {
-    table(); p.keepHand(0); p.addSecondDeck(deck2());
-    p.passTurn();
+    table(); keepHand(0); addSecondDeck(deck2());
+    passTurn();
     const atMulligan = j(1).mao.length;
-    p.keepHand(1);
+    keepHand(1);
     expect([atMulligan, j(1).mao.length]).toEqual([7, 8]);
 
-    table(); p.addSecondDeck(deck2());
-    p.passTurn(); p.londonMulligan(1); p.keepHand(1);
+    table(); addSecondDeck(deck2());
+    passTurn(); londonMulligan(1); keepHand(1);
     expect(j(1).mao.length).toBe(8);
   });
 
   it("cada deck com as artes dele, e elas voltam com o desfazer, fora da foto", () => {
     table();
     const d = { ...deck2(), id: "d2", choices: { krenko: { frente: { arte_id: "abc" } } } };
-    p.addSecondDeck(d);
+    addSecondDeck(d);
     expect([p.playerArts(0) === null, p.playerArts(1).krenko.frente.arte_id]).toEqual([true, "abc"]);
     p.saveTableSnapshot();
-    p.removeSecondDeck();
+    removeSecondDeck();
     const inPhoto = p.state.tableUndo[0].indexOf("abc") >= 0;
     p.undoTableStep();
     expect([inPhoto, p.playerArts(1).krenko.frente.arte_id]).toEqual([false, "abc"]);
   });
 
   it("cada um com o seu contador de mulligan", () => {
-    table(); p.addSecondDeck(deck2());
-    p.londonMulligan(1); p.londonMulligan(1);
+    table(); addSecondDeck(deck2());
+    londonMulligan(1); londonMulligan(1);
     expect([j(0).mulligans, j(1).mulligans, p.bottomCountOnKeep(0), p.bottomCountOnKeep(1)]).toEqual([0, 2, 0, 1]);
   });
 
   it("a vez alterna, e o turno só anda quando volta pro primeiro", () => {
-    table(); p.addSecondDeck(deck2());
+    table(); addSecondDeck(deck2());
     const steps = [];
     for (let i = 0; i < 4; i++) {
-      p.passTurn();
+      passTurn();
       steps.push(`${p.state.table.turn}:${p.state.table.active}`);
     }
     expect(steps.join(" ")).toBe("1:1 2:0 2:1 3:0");
   });
 
   it("passar turno endireita só quem está jogando", () => {
-    table(); p.keepHand(0); p.addSecondDeck(deck2()); p.keepHand(1);
-    p.moveToZone(j(0).mao[0].uid, "campo"); j(0).campo[0].tapped = true;
-    p.moveToZone(j(1).mao[0].uid, "campo"); j(1).campo[0].tapped = true;
-    p.passTurn();   // vez do segundo
+    table(); keepHand(0); addSecondDeck(deck2()); keepHand(1);
+    moveToZone(j(0).mao[0].uid, "campo"); j(0).campo[0].tapped = true;
+    moveToZone(j(1).mao[0].uid, "campo"); j(1).campo[0].tapped = true;
+    passTurn();   // vez do segundo
     expect([j(0).campo[0].tapped, j(1).campo[0].tapped]).toEqual([true, false]);
   });
 
   it("a carta volta pra zona do dono, não de quem a moveu", () => {
-    table(); p.keepHand(0); p.addSecondDeck(deck2()); p.keepHand(1);
+    table(); keepHand(0); addSecondDeck(deck2()); keepHand(1);
     const theirs = j(1).mao[0].uid;
-    p.moveToZone(theirs, "campo");
-    p.moveToZone(theirs, "cemiterio");
+    moveToZone(theirs, "campo");
+    moveToZone(theirs, "cemiterio");
     expect([j(0).cemiterio.length, j(1).cemiterio.length]).toEqual([0, 1]);
   });
 
   it("tirar o segundo deck devolve a mesa pra um jogador", () => {
-    table(); p.addSecondDeck(deck2()); p.passTurn();
-    p.removeSecondDeck();
+    table(); addSecondDeck(deck2()); passTurn();
+    removeSecondDeck();
     expect([p.state.table.players.length, p.state.table.active]).toEqual([1, 0]);
   });
 
@@ -293,61 +317,61 @@ describe("o campo em três filas", () => {
 
 describe("arrumar o campo", () => {
   it("a carta entra no fim da fila, e reposicionar põe antes ou depois", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const two = forests(2);
-    p.moveToZone(two[0].uid, "campo"); p.moveToZone(two[1].uid, "campo");
+    moveToZone(two[0].uid, "campo"); moveToZone(two[1].uid, "campo");
     expect(fieldOrder()).toBe([two[0].uid, two[1].uid].join(","));
 
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     let f = forests(3);
-    f.forEach((c) => p.moveToZone(c.uid, "campo"));
-    p.reposition(f[2].uid, f[0].uid, false);
+    f.forEach((c) => moveToZone(c.uid, "campo"));
+    reposition(f[2].uid, f[0].uid, false);
     expect(fieldOrder()).toBe([f[2].uid, f[0].uid, f[1].uid].join(","));
 
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     f = forests(3);
-    f.forEach((c) => p.moveToZone(c.uid, "campo"));
-    p.reposition(f[0].uid, f[2].uid, true);
+    f.forEach((c) => moveToZone(c.uid, "campo"));
+    reposition(f[0].uid, f[2].uid, true);
     expect(fieldOrder()).toBe([f[1].uid, f[2].uid, f[0].uid].join(","));
   });
 
   it("não troca carta de fila nem de jogador", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const forest = forests(1)[0];
     const elf = find("Llanowar Elves").find((c) => !j().campo.includes(c))!;
-    p.moveToZone(forest.uid, "campo"); p.moveToZone(elf.uid, "campo");
+    moveToZone(forest.uid, "campo"); moveToZone(elf.uid, "campo");
     const before = fieldOrder();
-    expect([p.fitsInRow(forest.uid, elf.uid), p.reposition(forest.uid, elf.uid, false),
+    expect([p.fitsInRow(forest.uid, elf.uid), reposition(forest.uid, elf.uid, false),
             fieldOrder() === before]).toEqual([false, false, true]);
 
-    table(); p.keepHand(0); p.addSecondDeck(deck2()); p.keepHand(1);
+    table(); keepHand(0); addSecondDeck(deck2()); keepHand(1);
     const mine = forests(1)[0];
     const theirs = find("Mountain", 1)[0];
-    p.moveToZone(mine.uid, "campo"); p.moveToZone(theirs.uid, "campo");
-    expect([p.fitsInRow(theirs.uid, mine.uid), p.reposition(theirs.uid, mine.uid, false)]).toEqual([false, false]);
+    moveToZone(mine.uid, "campo"); moveToZone(theirs.uid, "campo");
+    expect([p.fitsInRow(theirs.uid, mine.uid), reposition(theirs.uid, mine.uid, false)]).toEqual([false, false]);
   });
 
   it("a carta da mão pode encaixar, mas só se move pro lugar depois de descer", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const f = forests(2);
-    p.moveToZone(f[0].uid, "campo");
-    p.moveToZone(f[1].uid, "mao");
+    moveToZone(f[0].uid, "campo");
+    moveToZone(f[1].uid, "mao");
     const fits = p.fitsInRow(f[1].uid, f[0].uid);
-    const beforeLanding = p.reposition(f[1].uid, f[0].uid, false);
-    p.moveToZone(f[1].uid, "campo");
-    p.reposition(f[1].uid, f[0].uid, false);
+    const beforeLanding = reposition(f[1].uid, f[0].uid, false);
+    moveToZone(f[1].uid, "campo");
+    reposition(f[1].uid, f[0].uid, false);
     expect([fits, beforeLanding, fieldOrder() === [f[1].uid, f[0].uid].join(",")]).toEqual([true, false, true]);
   });
 
   it("arrumar não perde nem duplica carta", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const before = all().join(",");
     const f = forests(4);
     expect(f).toHaveLength(4);
-    f.forEach((c) => p.moveToZone(c.uid, "campo"));
-    p.reposition(f[3].uid, f[0].uid, false);
-    p.reposition(f[0].uid, f[3].uid, true);
-    p.reposition(f[1].uid, f[1].uid, true);
+    f.forEach((c) => moveToZone(c.uid, "campo"));
+    reposition(f[3].uid, f[0].uid, false);
+    reposition(f[0].uid, f[3].uid, true);
+    reposition(f[1].uid, f[1].uid, true);
     expect(all().join(",")).toBe(before);
   });
 });
@@ -356,33 +380,33 @@ describe("vida, marcadores e dano de comandante", () => {
   it("a vida começa em 40, e os botões somam e subtraem", () => {
     table();
     expect(j().life).toBe(40);
-    p.adjustLife(0, -5); p.adjustLife(0, 1);
+    adjustLife(0, -5); adjustLife(0, 1);
     expect(j().life).toBe(36);
   });
 
   it("marcador de jogador sobe, desce, some no zero e nunca fica negativo", () => {
     table();
-    p.adjustPlayerCounter(0, "veneno", 3);
+    adjustPlayerCounter(0, "veneno", 3);
     const three = j().counters.veneno;
-    p.adjustPlayerCounter(0, "veneno", -3);
+    adjustPlayerCounter(0, "veneno", -3);
     expect([three, Object.keys(j().counters).length]).toEqual([3, 0]);
-    p.adjustPlayerCounter(0, "energia", 1); p.adjustPlayerCounter(0, "energia", -5);
+    adjustPlayerCounter(0, "energia", 1); adjustPlayerCounter(0, "energia", -5);
     expect(Object.keys(j().counters)).toHaveLength(0);
   });
 
   it("marcador de carta mora na carta e some quando ela sai do campo", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const uid = j().mao[0].uid;
-    p.moveToZone(uid, "campo");
-    p.adjustCardCounter(uid, "+1/+1", 2);
+    moveToZone(uid, "campo");
+    adjustCardCounter(uid, "+1/+1", 2);
     expect(p.cardByUid(uid).counters["+1/+1"]).toBe(2);
-    p.moveToZone(uid, "cemiterio");
+    moveToZone(uid, "cemiterio");
     expect(Object.keys(p.cardByUid(uid).counters)).toHaveLength(0);
   });
 
   it("dano de comandante é contado por origem", () => {
-    table(); p.addSecondDeck(deck2());
-    p.adjustCommanderDamage(0, 1, 7); p.adjustCommanderDamage(0, 1, 7);
+    table(); addSecondDeck(deck2());
+    adjustCommanderDamage(0, 1, 7); adjustCommanderDamage(0, 1, 7);
     expect([j(0).commanderDamage[1], j(0).commanderDamage[0]]).toEqual([14, 0]);
   });
 });
@@ -390,54 +414,54 @@ describe("vida, marcadores e dano de comandante", () => {
 describe("fichas", () => {
   it("nasce no campo e deixa de existir ao sair dele", () => {
     // Um cemitério com três Soldados mentiria sobre o que dá pra devolver.
-    table(); p.keepHand(0);
-    p.createToken(0, { nome: "Soldado", poder: "1", resistencia: "1", cores: ["W"] }, 3);
+    table(); keepHand(0);
+    createToken(0, { nome: "Soldado", poder: "1", resistencia: "1", cores: ["W"] }, 3);
     expect([j().campo.length, j().campo[0].card.nome, j().campo[0].token]).toEqual([3, "Soldado", true]);
     const before = all().length;
-    p.moveToZone(j().campo[0].uid, "cemiterio");
+    moveToZone(j().campo[0].uid, "cemiterio");
     expect([before, all().length, j().cemiterio.length]).toEqual([IN_LIBRARY + 4, IN_LIBRARY + 3, 0]);
   });
 
   it("não entra na conta do resumo do fim", () => {
-    table(); p.keepHand(0);
-    p.createToken(0, { nome: "Soldado" }, 2);
+    table(); keepHand(0);
+    createToken(0, { nome: "Soldado" }, 2);
     expect(p.gameSummary()[0].spellsInDeck).toBe(IN_LIBRARY - 10);   // menos as florestas
   });
 });
 
 describe("carta de duas faces", () => {
   it("vira, desvira, e volta pra frente ao sair do campo", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     j().campo.push({ uid: 999, owner: 0, card: clone(DFC), backUp: false, counters: {} });
-    p.toggleFace(999);
+    toggleFace(999);
     const flipped = p.cardByUid(999).backUp;
-    p.toggleFace(999);
+    toggleFace(999);
     expect([flipped, p.cardByUid(999).backUp]).toEqual([true, false]);
-    p.toggleFace(999);
-    p.moveToZone(999, "mao");
+    toggleFace(999);
+    moveToZone(999, "mao");
     expect(p.cardByUid(999).backUp).toBe(false);
   });
 
   it("carta sem verso de papel não vira", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const uid = find("Forest")[0].uid;
-    p.moveToZone(uid, "campo"); p.toggleFace(uid);
+    moveToZone(uid, "campo"); toggleFace(uid);
     expect(p.cardByUid(uid).backUp).toBe(false);
   });
 });
 
 describe("combate", () => {
   it("atacar e bloquear são marcas; bloquear de novo desmarca; o turno limpa", () => {
-    table(); p.keepHand(0); p.addSecondDeck(deck2()); p.keepHand(1);
+    table(); keepHand(0); addSecondDeck(deck2()); keepHand(1);
     const mine = j(0).mao[0].uid, theirs = j(1).mao[0].uid;
-    p.moveToZone(mine, "campo"); p.moveToZone(theirs, "campo");
-    p.toggleAttack(mine);
-    p.setBlock(theirs, mine);
+    moveToZone(mine, "campo"); moveToZone(theirs, "campo");
+    toggleAttack(mine);
+    setBlock(theirs, mine);
     expect([p.cardByUid(mine).attacking, p.cardByUid(theirs).blocking === mine, p.attackers().length])
       .toEqual([true, true, 1]);
-    p.setBlock(theirs, mine);
+    setBlock(theirs, mine);
     expect(p.cardByUid(theirs).blocking).toBeNull();
-    p.passTurn();
+    passTurn();
     expect([p.cardByUid(mine).attacking, p.attackers().length]).toEqual([false, 0]);
   });
 });
@@ -445,54 +469,54 @@ describe("combate", () => {
 describe("conservação: nenhuma carta some nem duplica", () => {
   it("do mulligan ao cemitério, com dois decks, o multiconjunto não muda", () => {
     table();
-    p.addSecondDeck(deck2());
+    addSecondDeck(deck2());
     const initial = all();
-    p.londonMulligan(0); p.londonMulligan(0); p.londonMulligan(0);
-    p.keepHand(0);
-    p.putOnBottom(j(0).mao[0].uid);
-    p.putOnBottom(j(0).mao[0].uid);
-    p.keepHand(1);
-    p.adjustLife(0, -7);
-    p.passTurn();
-    p.moveToZone(j(1).mao[0].uid, "campo");
-    p.passTurn();
-    p.moveToZone(j(0).mao[0].uid, "campo");
-    p.moveToZone(j(0).campo[0].uid, "cemiterio");
-    p.moveToZone(j(1).mao[0].uid, "exilio");
-    p.passTurn();
-    p.castCommander(j(0).comando[0].uid);
+    londonMulligan(0); londonMulligan(0); londonMulligan(0);
+    keepHand(0);
+    putOnBottom(j(0).mao[0].uid);
+    putOnBottom(j(0).mao[0].uid);
+    keepHand(1);
+    adjustLife(0, -7);
+    passTurn();
+    moveToZone(j(1).mao[0].uid, "campo");
+    passTurn();
+    moveToZone(j(0).mao[0].uid, "campo");
+    moveToZone(j(0).campo[0].uid, "cemiterio");
+    moveToZone(j(1).mao[0].uid, "exilio");
+    passTurn();
+    castCommander(j(0).comando[0].uid);
     expect(all()).toEqual(initial);
     expect(all()).toHaveLength(IN_LIBRARY + IN_LIBRARY2 + 2);
   });
 
   it("mover nunca deixa um uid em duas zonas, nem perde carta pra zona inventada", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const uid = j().mao[0].uid;
-    p.moveToZone(uid, "campo"); p.moveToZone(uid, "cemiterio"); p.moveToZone(uid, "mao");
+    moveToZone(uid, "campo"); moveToZone(uid, "cemiterio"); moveToZone(uid, "mao");
     expect(all().filter((x: string) => x.startsWith(uid + ":"))).toHaveLength(1);
-    p.moveToZone(j().mao[0].uid, "limbo");
+    moveToZone(j().mao[0].uid, "limbo");
     expect(all()).toHaveLength(IN_LIBRARY + 1);
   });
 
   it("o imposto do comandante conta, e não cobra", () => {
-    table(); p.keepHand(0);
-    p.castCommander(j().comando[0].uid);
-    p.moveToZone(j().campo[0].uid, "comando");
-    p.castCommander(j().comando[0].uid);
+    table(); keepHand(0);
+    castCommander(j().comando[0].uid);
+    moveToZone(j().campo[0].uid, "comando");
+    castCommander(j().comando[0].uid);
     expect([j().taxPaid, j().campo.length, j().commanderTurn]).toEqual([2, 1, 1]);
   });
 });
 
 describe("desfazer", () => {
   it("devolve a carta pra mão, inteira, e a foto não leva as cartas", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     p.saveTableSnapshot();
-    p.moveToZone(j().mao[0].uid, "cemiterio");
+    moveToZone(j().mao[0].uid, "cemiterio");
     p.undoTableStep();
     expect([j().mao.length, j().cemiterio.length]).toEqual([8, 0]);
 
     p.saveTableSnapshot();
-    p.moveToZone(j().mao[0].uid, "exilio");
+    moveToZone(j().mao[0].uid, "exilio");
     p.undoTableStep();
     expect(j().mao.filter((c: Card) => c.card?.nome)).toHaveLength(8);
 
@@ -509,43 +533,43 @@ describe("desfazer", () => {
 
   it("cliques seguidos do mesmo gesto são UM passo de desfazer", () => {
     // Sete cliques pra ir de 40 a 33 não podem comer sete das vinte fotos.
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     p.state.tableUndo = [];
-    for (let i = 0; i < 3; i++) { p.saveTableSnapshot("vida0"); p.adjustLife(0, -1); }
+    for (let i = 0; i < 3; i++) { p.saveTableSnapshot("vida0"); adjustLife(0, -1); }
     expect([p.state.tableUndo.length, j().life]).toEqual([1, 37]);
     p.undoTableStep();
     expect(j().life).toBe(40);
 
     p.state.tableUndo = [];
-    p.saveTableSnapshot("vida0"); p.adjustLife(0, -1);
-    p.saveTableSnapshot(); p.draw(0, 1);
-    p.saveTableSnapshot("vida0"); p.adjustLife(0, -1);
+    p.saveTableSnapshot("vida0"); adjustLife(0, -1);
+    p.saveTableSnapshot(); draw(0, 1);
+    p.saveTableSnapshot("vida0"); adjustLife(0, -1);
     expect(p.state.tableUndo).toHaveLength(3);
   });
 });
 
 describe("log e resumo do fim", () => {
   it("o log anota as jogadas com o turno em que aconteceram", () => {
-    table(); p.keepHand(0); p.passTurn();
+    table(); keepHand(0); passTurn();
     expect([p.state.table.log.length > 2, p.state.table.log.at(-1).turn]).toEqual([true, 2]);
   });
 
   it("em que turno o comandante desceu, ou 'nunca'", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     expect(p.gameSummary()[0].commanderTurn).toBeNull();
-    p.passTurn(); p.passTurn();
-    p.castCommander(j().comando[0].uid);
+    passTurn(); passTurn();
+    castCommander(j().comando[0].uid);
     expect(p.gameSummary()[0].commanderTurn).toBe(3);
   });
 
   it("curva teórica, realizada e o que ficou no baralho", () => {
-    table(); p.keepHand(0);
+    table(); keepHand(0);
     const r0 = p.gameSummary()[0];
     // 1 Sol Ring + 4 Elves, todos de custo 1.
     expect([r0.deckCurve[1], r0.spellsInDeck, r0.deckCurve[0]]).toEqual([5, 5, 0]);
     expect([r0.neverDrawn, r0.remaining.length]).toEqual([IN_LIBRARY - 8, IN_LIBRARY - 8]);
-    p.moveToZone(find("Llanowar Elves")[0].uid, "campo");
-    p.moveToZone(find("Forest")[0].uid, "campo");
+    moveToZone(find("Llanowar Elves")[0].uid, "campo");
+    moveToZone(find("Forest")[0].uid, "campo");
     const r = p.gameSummary()[0];
     expect([r.playedCurve[1], r.spellsPlayed, r.landsPlayed]).toEqual([1, 1, 1]);
   });
@@ -554,7 +578,7 @@ describe("log e resumo do fim", () => {
 it("a mesa não vaza pro deck salvo", () => {
   // Uma mão de goldfish gravada no deck voltaria três semanas depois, em
   // outra máquina, no meio de uma edição.
-  table(); p.keepHand(0); p.passTurn();
+  table(); keepHand(0); passTurn();
   expect(Object.keys(p.deckBody()).sort()).toEqual(["cartas", "categorias", "comandantes", "maybeboard", "nome"]);
 });
 
@@ -595,14 +619,14 @@ describe("os combos na mesa", () => {
   it("cada peça vem com a zona onde está, a mais adiantada vale", () => {
     table(); p.state.combos = clone(COMBOS);
     const sol = find("Sol Ring")[0];
-    p.moveToZone(sol.uid, "campo");
-    find("Llanowar Elves").forEach((c) => p.moveToZone(c.uid, "mao"));
+    moveToZone(sol.uid, "campo");
+    find("Llanowar Elves").forEach((c) => moveToZone(c.uid, "mao"));
     expect(p.combosOf(sol)[0].pecas.map((x: any) => `${x.nome}:${x.zona}`))
       .toEqual(["Sol Ring:campo", "Llanowar Elves:mao"]);
     // Um Elfo no campo e três no cemitério é "no campo".
     const elves = find("Llanowar Elves");
-    elves.forEach((c) => p.moveToZone(c.uid, "cemiterio"));
-    p.moveToZone(elves[0].uid, "campo");
+    elves.forEach((c) => moveToZone(c.uid, "cemiterio"));
+    moveToZone(elves[0].uid, "campo");
     expect(p.combosOf(find("Sol Ring")[0])[0].pecas[1].zona).toBe("campo");
   });
 
@@ -615,16 +639,16 @@ describe("os combos na mesa", () => {
   it("o combo mais adiantado vem primeiro", () => {
     table(); p.state.combos = clone(COMBOS);
     const sol = find("Sol Ring")[0];
-    p.moveToZone(sol.uid, "campo");
-    p.moveToZone(find("Llanowar Elves")[0].uid, "campo");
+    moveToZone(sol.uid, "campo");
+    moveToZone(find("Llanowar Elves")[0].uid, "campo");
     expect(p.combosOf(sol).map((a: any) => a.combo.produz[0])).toEqual(["Mana infinita", "Vida infinita"]);
   });
 
   it("ficha não é peça, e o segundo deck nunca foi perguntado", () => {
     table(); p.state.combos = clone(COMBOS);
-    p.createToken(0, { nome: "Sol Ring", tipo: "Token Artifact" }, 1);
+    createToken(0, { nome: "Sol Ring", tipo: "Token Artifact" }, 1);
     expect(p.comboCount(j().campo.find((c: Card) => c.token))).toBe(0);
-    p.addSecondDeck(deck2());
+    addSecondDeck(deck2());
     expect(sum(j(1).baralho.map(p.comboCount))).toBe(0);
   });
 });

@@ -2591,3 +2591,24 @@ button.mb-base-grupo:hover{border-color:var(--gold);color:var(--gold-light);}
 /* O pip híbrido ("{G/W}"): as duas cores em diagonal. Elas chegam como
    variáveis no próprio elemento (ver `ui/Mana.tsx`), e o degradê mora aqui. */
 .pip.hibrido{background:linear-gradient(135deg,var(--pip-a) 50%,var(--pip-b) 50%);}
+
+/* ------------------------------------------------ a mesa online
+   A faixa entre os botões e a mesa (ver `ui/OnlineStrip.tsx`) e o ponto de
+   conexão de cada pessoa, que aparece também na barra dela. */
+.gf-online{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;
+  margin-bottom:10px;padding:8px 12px;border:1px solid var(--border);
+  border-radius:10px;background:var(--surface-2);font-size:12.5px;}
+.gf-online-titulo{color:var(--gold);}
+.gf-online-status{color:var(--text-muted);}
+.gf-online-status.espera{color:var(--gold-light);}
+.gf-online-assento{display:inline-flex;align-items:center;gap:5px;}
+.gf-online-sentar{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px 8px;}
+.gf-online-sentar select{max-width:220px;}
+.gf-online-nota{color:var(--text-muted);font-size:11.5px;}
+.gf-conexao{display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:var(--text-muted);opacity:.5;flex:none;margin-right:5px;vertical-align:middle;}
+.gf-conexao.on{background:var(--green);opacity:1;}
+.gf-deck-j{font-weight:400;color:var(--text-muted);}
+/* A carta escondida (mão e baralho dos outros) é só o verso: sem cursor de
+   clique, que ela não abre nada. */
+.gf-carta:disabled{cursor:default;}
