@@ -657,14 +657,24 @@ def pagina_de_entrar():
 
 
 @app.get("/conta")
-def conta_atual(quem: dict | None = Depends(quem_e)):
+def conta_atual(quem: dict | None = Depends(quem_e),
+                session: str | None = Cookie(default=None, alias="__session"),
+                authorization: str | None = Header(default=None)):
     """Quem está logado, ou `{"usuario": null}`.
 
     200 com `null` pra anônimo, e NÃO 401, de propósito: é a rota que toda
     página chama ao abrir, e um 401 por carregamento ensina o operador a
     ignorar o console — junto com os erros que importam.
+
+    Veio token do Clerk e ele não valeu: `clerk` diz por quê. É o caso "entrei
+    e o site não me reconhece", e o motivo (chave, origem, validade) aparece
+    na aba Rede do navegador sem precisar abrir o log da Vercel. Não conta
+    nada que quem mandou o token já não tenha.
     """
-    return {"usuario": quem}
+    if quem:
+        return {"usuario": quem}
+    _, motivo = clerk.conferir(clerk.token_do_pedido(authorization, session))
+    return {"usuario": None, **({"clerk": motivo} if motivo else {})}
 
 
 @app.post("/conta/entrar")

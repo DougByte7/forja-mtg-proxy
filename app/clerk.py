@@ -50,15 +50,30 @@ API = "https://api.clerk.com/v1"
 # em .env de uma linha só, vem com `\n` escrito — os dois servem.
 _CHAVE = os.environ.get("CLERK_JWT_KEY", "").strip().replace("\\n", "\n")
 
+# As URLs que a própria Vercel diz que são deste deploy (variáveis de sistema,
+# sem "https://"): a do deploy, a da branch e a de produção. Entram sozinhas
+# porque o endereço `*.vercel.app` muda a cada prévia — e esquecer uma delas
+# é o "entrei e o site não me reconhece".
+_VERCEL_URLS = ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL")
+
+
+def origens_permitidas(env=os.environ) -> set[str]:
+    """`CLERK_ORIGENS`, se existir; senão `PUBLIC_BASE_URL` e
+    `LOCAL_BASE_URL`. Nos dois casos, mais as URLs da Vercel. Vazio (fora da
+    Vercel, sem nada configurado) pula a conferência — o cookie é
+    SameSite=Lax e o cabeçalho não sai de outra origem sozinho."""
+    base = (env.get("CLERK_ORIGENS", "").strip()
+            or ",".join(filter(None, [env.get("PUBLIC_BASE_URL", ""),
+                                      env.get("LOCAL_BASE_URL", "")])))
+    origens = {o.strip().rstrip("/") for o in base.split(",") if o.strip()}
+    origens |= {f"https://{env[v].strip().rstrip('/')}" for v in _VERCEL_URLS
+                if env.get(v, "").strip()}
+    return origens
+
+
 # Quem pode ter pedido o token (`azp`): as origens das nossas telas. Sem isto,
-# um token emitido pra outro site da mesma instância valeria aqui. Vazio cai
-# nas mesmas bases do CORS; se nem elas existirem, a conferência é pulada —
-# o cookie é SameSite=Lax e o cabeçalho não sai de outra origem sozinho.
-_ORIGENS = {o.strip().rstrip("/") for o in (
-    os.environ.get("CLERK_ORIGENS", "").strip()
-    or ",".join(filter(None, [os.environ.get("PUBLIC_BASE_URL", ""),
-                              os.environ.get("LOCAL_BASE_URL", "")]))
-).split(",") if o.strip()}
+# um token emitido pra outro site da mesma instância valeria aqui.
+_ORIGENS = origens_permitidas()
 
 # Folga pra relógio torto entre o Clerk e a função. O token vive um minuto;
 # cinco segundos não estendem nada que importe.
@@ -83,26 +98,49 @@ def usuario(token: str) -> dict | None:
 
     Nunca levanta: token vencido, assinado por outra chave, de outra origem
     ou malformado é anônimo — a mesma resposta do `usuarios.da_sessao` pra
-    sessão que não existe.
+    sessão que não existe. O porquê sai no `conferir`.
     """
-    if not token or not ligado():
-        return None
+    return conferir(token)[0]
+
+
+def conferir(token: str) -> tuple[dict | None, str | None]:
+    """`(usuario, None)` ou `(None, motivo)` — o motivo em texto curto, pra
+    log e pro `GET /conta`. Sem token, `(None, None)`: anônimo de verdade não
+    tem o que explicar.
+
+    Token recusado vira AVISO no log, e não debug: quem manda token acha que
+    entrou, e "o site não me reconhece" sem rastro nenhum é o pior defeito
+    de investigar (aconteceu na virada).
+    """
+    if not token:
+        return None, None
+    if not ligado():
+        motivo = ("sem CLERK_JWT_KEY no servidor" if not _CHAVE
+                  else "PyJWT não instalado")
+        log.aviso("clerk", "desligado", motivo=motivo)
+        return None, motivo
     try:
         claims = jwt.decode(
             token, _CHAVE, algorithms=["RS256"], leeway=FOLGA_SEGUNDOS,
             options={"require": ["exp", "nbf", "sub"]})
     except jwt.PyJWTError as e:
-        log.debug("clerk", "token-recusado", motivo=type(e).__name__)
-        return None
-    if _ORIGENS and claims.get("azp") and \
-            claims["azp"].rstrip("/") not in _ORIGENS:
-        log.aviso("clerk", "origem-recusada", azp=claims["azp"])
-        return None
+        motivo = f"token recusado: {type(e).__name__}: {e}"
+        log.aviso("clerk", "token-recusado", motivo=motivo)
+        return None, motivo
+    azp = str(claims.get("azp") or "").rstrip("/")
+    if _ORIGENS and azp and azp not in _ORIGENS:
+        motivo = (f"origem {azp} fora de CLERK_ORIGENS "
+                  f"({', '.join(sorted(_ORIGENS))})")
+        log.aviso("clerk", "origem-recusada", motivo=motivo)
+        return None, motivo
     # `pending` é sessão que ainda deve um passo (ex.: escolher organização).
     # Não usamos organizações, mas a regra é do Clerk: não vale como entrada.
     if claims.get("sts") == "pending":
-        return None
+        return None, "sessão pendente no Clerk"
+    return _do_token(claims), None
 
+
+def _do_token(claims: dict) -> dict:
     email = str(claims.get("email") or "").strip().lower()
     perfil = claims.get("role")
     return {

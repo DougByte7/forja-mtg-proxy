@@ -156,10 +156,48 @@ try:
        conta(f"{cabeca}.{carga}.{assinatura}"), None)
     eq("lixo", conta("isto.nao.e-jwt"), None)
 
+    def motivo(tok):
+        return TestClient(app).get(
+            "/conta", headers={"Authorization": f"Bearer {tok}"}).json().get("clerk")
+
+    check("/conta diz que o token venceu",
+          "Expired" in (motivo(token(exp=agora - 60)) or ""))
+    check("e que a origem não é das nossas",
+          "malvado.test" in (motivo(token(azp="https://malvado.test")) or ""))
+    check("e que a assinatura não confere",
+          "Signature" in (motivo(token(chave=OUTRA_CHAVE)) or ""))
+    eq("sem token não há o que explicar",
+       "clerk" in TestClient(app).get("/conta").json(), False)
+    eq("token bom não traz motivo", "clerk" in TestClient(app).get(
+        "/conta", headers={"Authorization": f"Bearer {token()}"}).json(), False)
+
     salvo = clerk._CHAVE
     clerk._CHAVE = ""
     eq("sem CLERK_JWT_KEY o Clerk fica desligado", conta(token()), None)
+    eq("e o /conta diz isso", motivo(token()), "sem CLERK_JWT_KEY no servidor")
     clerk._CHAVE = salvo
+
+    # =====================================================================
+    print("\n--- origens ---")
+    # =====================================================================
+
+    eq("sem nada, nenhuma (e a conferência é pulada)",
+       clerk.origens_permitidas({}), set())
+    eq("as bases do .env, sem barra no fim",
+       clerk.origens_permitidas({"PUBLIC_BASE_URL": "https://forja.app/",
+                                 "LOCAL_BASE_URL": "http://192.168.1.10:8000"}),
+       {"https://forja.app", "http://192.168.1.10:8000"})
+    eq("CLERK_ORIGENS manda sobre as bases",
+       clerk.origens_permitidas({"CLERK_ORIGENS": "https://a.test, https://b.test",
+                                 "PUBLIC_BASE_URL": "https://forja.app"}),
+       {"https://a.test", "https://b.test"})
+    eq("as URLs da Vercel entram sozinhas",
+       clerk.origens_permitidas({"PUBLIC_BASE_URL": "https://forja.app",
+                                 "VERCEL_URL": "forja-abc123.vercel.app",
+                                 "VERCEL_BRANCH_URL": "forja-git-main.vercel.app",
+                                 "VERCEL_PROJECT_PRODUCTION_URL": "forja.vercel.app"}),
+       {"https://forja.app", "https://forja-abc123.vercel.app",
+        "https://forja-git-main.vercel.app", "https://forja.vercel.app"})
 
     # =====================================================================
     print("\n--- perfil e dono ---")
