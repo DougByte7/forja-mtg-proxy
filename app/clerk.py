@@ -20,7 +20,11 @@ O QUE O TOKEN TRAZ. Além do padrão (`sub`, `exp`, `nbf`, `azp`...), o token
     {"role": "{{user.public_metadata.role}}",
      "forja_id": "{{user.public_metadata.forja_id}}",
      "email": "{{user.primary_email_address}}",
-     "name": "{{user.full_name}}"}
+     "name": "{{user.first_name}}"}
+
+`name` é só o primeiro nome, e não o `full_name`: na importação o nome de
+usuário antigo foi pro First name, e o login pelo Google acrescenta o
+sobrenome — com `full_name` a pessoa deixaria de ver o nome que escolheu.
 
 `forja_id` é o id que a conta tinha antes do Clerk (ver `importar`): é ele
 que continua sendo o `dono` nos decks e pedidos já gravados, e é por isso que
