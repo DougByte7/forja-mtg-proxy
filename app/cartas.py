@@ -1204,20 +1204,36 @@ def por_nomes(nomes: list[str]) -> dict[str, dict]:
 
 def _linhas_por_nome(conn, nomes: list[str]) -> "dict":
     """O casamento de nome, cru. `por_nomes` e `tokens_de` usam o mesmo — o
-    deck guarda nome e as duas precisam chegar na mesma linha por ele."""
+    deck guarda nome e as duas precisam chegar na mesma linha por ele.
+
+    Em lote, e não uma consulta por nome: no Turso cada consulta é uma ida
+    pela rede, e um deck de cem cartas virava duzentas idas — quase meio
+    minuto pra abrir um deck. A ordem de preferência é a mesma de sempre:
+    nome inteiro, depois a face da frente com o nome inteiro, depois a face
+    da frente com só a frente do nome pedido.
+    """
+    alvos = {nome: normalizar(nome) for nome in nomes}
+    frentes = {nome: normalizar(face_da_frente(nome)) for nome in nomes}
+    procurados = sorted({a for a in alvos.values() if a} |
+                        {f for f in frentes.values() if f})
+    por_busca: dict = {}
+    por_frente: dict = {}
+    for comeco in range(0, len(procurados), 400):
+        pedaco = procurados[comeco:comeco + 400]
+        vagas = ",".join("?" * len(pedaco))
+        for linha in conn.execute(
+                f"SELECT {_COLUNAS} FROM cartas WHERE busca IN ({vagas}) "
+                f"OR busca_frente IN ({vagas})", (*pedaco, *pedaco)).fetchall():
+            por_busca.setdefault(linha["busca"], linha)
+            por_frente.setdefault(linha["busca_frente"], linha)
+
     achadas: dict = {}
     for nome in nomes:
-        alvo = normalizar(nome)
+        alvo = alvos[nome]
         if not alvo:
             continue
-        linha = conn.execute(
-            f"SELECT {_COLUNAS} FROM cartas WHERE busca = ? "
-            f"OR busca_frente = ? ORDER BY (busca = ?) DESC LIMIT 1",
-            (alvo, alvo, alvo)).fetchone()
-        if linha is None:
-            linha = conn.execute(
-                f"SELECT {_COLUNAS} FROM cartas WHERE busca_frente = ? "
-                f"LIMIT 1", (normalizar(face_da_frente(nome)),)).fetchone()
+        linha = (por_busca.get(alvo) or por_frente.get(alvo)
+                 or por_frente.get(frentes[nome]))
         if linha is not None:
             achadas[nome] = linha
     return achadas
