@@ -170,6 +170,25 @@ describe("o que cada um pode fazer", () => {
     expect([room.state.looking, viewOf("ana").looking]).toEqual([[], false]);
   });
 
+  it("olhando o topo, vê só aquelas cartas, mesmo depois de mandar uma pro fundo", () => {
+    const top = ids(player(0).baralho.slice(0, 2));
+    expect(room.handle("ana", { type: "peek", n: 2 })).toBeNull();
+    const seen = () => viewOf("ana").table!.players[0].baralho.filter((c) => c.uid > 0).map((c) => c.uid);
+    expect([seen(), viewOf("bia").table!.players[0].baralho.every((c) => c.uid < 0)]).toEqual([top, true]);
+    expect(act("ana", { type: "move", uid: top[0], to: "baralho", toTop: false })).toBeNull();
+    expect(seen().sort()).toEqual([...top].sort());
+    // A terceira, que agora está no topo, não foi olhada.
+    expect(act("ana", { type: "move", uid: player(0).baralho[1].uid, to: "mao" })).toEqual(expect.any(String));
+    room.handle("ana", { type: "peek", n: 0 });
+    expect([seen(), room.state.peeking]).toEqual([[], {}]);
+  });
+
+  it("moer é do dono do baralho", () => {
+    expect(act("bia", { type: "mill", player: 0, n: 2, to: "cemiterio" })).toEqual(expect.any(String));
+    expect(act("ana", { type: "mill", player: 0, n: 2, to: "cemiterio" })).toBeNull();
+    expect(player(0).cemiterio).toHaveLength(2);
+  });
+
   it("cair procurando no baralho embaralha e encerra a busca", () => {
     room.handle("ana", { type: "look" });
     const order = ids(player(0).baralho).join();
@@ -249,7 +268,10 @@ describe("a forma das mensagens", () => {
 
   it("aceita as jogadas com a forma certa", () => {
     expect([parse({ type: "act", action: { type: "life", player: 0, n: -3 } }),
-            parse({ type: "sit", deckId: "a1b2c3d4e5f6" }), parse({ type: "undo" })].every(Boolean)).toBe(true);
+            parse({ type: "sit", deckId: "a1b2c3d4e5f6" }), parse({ type: "undo" }), parse({ type: "peek", n: 3 }),
+            parse({ type: "act", action: { type: "mill", player: 0, n: 3, to: "exilio" } }),
+            parse({ type: "act", action: { type: "untapAll", player: 0 } }),
+            parse({ type: "act", action: { type: "attackAll", player: 1 } })].every(Boolean)).toBe(true);
   });
 
   it("recusa número que é texto, ficha com imagem, sentar por jogada e lixo", () => {
@@ -260,6 +282,8 @@ describe("a forma das mensagens", () => {
       { type: "act", action: { type: "join", deck: deck("x") } },
       { type: "act", action: { type: "cardCounter", uid: 1, name: "x".repeat(41), n: 1 } },
       { type: "sit", deckId: "../admin" },
+      { type: "act", action: { type: "mill", player: 0, n: 3, to: "mao" } },
+      { type: "peek", n: 99 },
       { type: "explodir" },
     ];
     expect(bad.map(parse)).toEqual(bad.map(() => null));

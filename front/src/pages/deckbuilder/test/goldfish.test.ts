@@ -466,6 +466,45 @@ describe("combate", () => {
   });
 });
 
+describe("gestos de tabuleiro inteiro", () => {
+  it("atacar com todas leva só as criaturas em pé; endireitar tudo desvira o campo", () => {
+    table(); keepHand(0);
+    const elves = find("Llanowar Elves").slice(0, 3).map((c) => c.uid);
+    const forest = forests(1)[0].uid;
+    for (const uid of [...elves, forest]) moveToZone(uid, "campo");
+    act({ type: "tap", uid: elves[0] });
+    act({ type: "tap", uid: forest });
+    expect(act({ type: "attackAll", player: 0 })).toBe(true);
+    expect(elves.map((uid) => p.cardByUid(uid).attacking)).toEqual([false, true, true]);
+    expect(p.cardByUid(forest).attacking).toBe(false);
+    // Ninguém mais pra atacar: a jogada é vazia.
+    expect(act({ type: "attackAll", player: 0 })).toBe(false);
+    expect(act({ type: "untapAll", player: 0 })).toBe(true);
+    expect(j().campo.some((c: Card) => c.tapped)).toBe(false);
+    expect(act({ type: "untapAll", player: 0 })).toBe(false);
+  });
+});
+
+describe("moer e o topo da busca", () => {
+  it("moer leva as de cima, na ordem, e diz cada uma no log", () => {
+    table(); keepHand(0);
+    const top = j().baralho.slice(0, 3).map((c: Card) => c.uid);
+    const before = all();
+    expect(act({ type: "mill", player: 0, n: 3, to: "cemiterio" })).toBe(true);
+    expect([j().cemiterio.map((c: Card) => c.uid), all()]).toEqual([[...top].reverse(), before]);
+    expect(p.state.table.log.at(-1).text).toContain("Baralho → Cemitério");
+    expect(act({ type: "mill", player: 0, n: 2, to: "mao" })).toBe(false);
+  });
+
+  it("embaralhar com keepTop embaralha e só depois põe as escolhidas no topo", () => {
+    table(); keepHand(0);
+    const chosen = j().baralho.slice(-2).map((c: Card) => c.uid);
+    const before = all();
+    act({ type: "shuffle", player: 0, keepTop: [...chosen, 99999] });
+    expect([j().baralho.slice(0, 2).map((c: Card) => c.uid), all()]).toEqual([chosen, before]);
+  });
+});
+
 describe("conservação: nenhuma carta some nem duplica", () => {
   it("do mulligan ao cemitério, com dois decks, o multiconjunto não muda", () => {
     table();

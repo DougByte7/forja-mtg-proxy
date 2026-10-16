@@ -167,8 +167,9 @@ export type TokenModel = {
 export type Action =
   | { type: "join"; deck: TableDeck }
   | { type: "leave" }
-  | { type: "shuffle"; player: number }
+  | { type: "shuffle"; player: number; keepTop?: number[] }
   | { type: "draw"; player: number; n: number }
+  | { type: "mill"; player: number; n: number; to: "cemiterio" | "exilio" }
   | { type: "mulligan"; player: number }
   | { type: "keep"; player: number }
   | { type: "bottom"; uid: number }
@@ -186,6 +187,8 @@ export type Action =
   | { type: "attack"; uid: number }
   | { type: "block"; uid: number; target: number }
   | { type: "endCombat" }
+  | { type: "untapAll"; player: number }
+  | { type: "attackAll"; player: number }
   | { type: "token"; player: number; model: TokenModel; count: number | string };
 
 export type Random = () => number;
@@ -275,9 +278,16 @@ function shuffle<T>(items: T[], random: Random) {
   return items;
 }
 
-function shuffleLibrary(t: Table, player: Player, random: Random) {
+/* `keepTop` são as cartas que a busca escolheu pro topo: o tutor que diz
+   "embaralhe e ponha a carta no topo" põe DEPOIS de embaralhar, e pôr antes
+   seria embaralhar a escolha junto. Ficam na ordem em que vieram, a primeira
+   em cima. Só vale carta deste baralho. */
+function shuffleLibrary(t: Table, player: Player, random: Random, keepTop: number[] = []) {
+  const kept = keepTop.map((uid) => player.baralho.find((c) => c.uid === uid))
+    .filter((c, i, all): c is TableCard => !!c && all.indexOf(c) === i);
   shuffle(player.baralho, random);
-  log(t, `${player.name}: baralho reembaralhado`);
+  player.baralho = kept.concat(player.baralho.filter((c) => !kept.includes(c)));
+  log(t, `${player.name}: baralho reembaralhado` + (kept.length ? `, ${kept.length} no topo` : ""));
 }
 
 /* --------------------------------------------------------------- a mesa */
@@ -346,6 +356,16 @@ function draw(t: Table, player: Player, n: number) {
   const drawn = player.mao.length - before;
   if (drawn) log(t, `${player.name}: comprou ${drawn}`);
   else log(t, `${player.name}: baralho vazio, nada a comprar`);
+}
+
+/* Moer: as N de cima do baralho, uma a uma, pro cemitério ou pro exílio. Uma
+   a uma pelo mesmo `moveToZone` de todo o resto, pra o invariante das zonas
+   ter um lugar só — e o log diz cada carta, que é o que a mesa viu cair. */
+function mill(t: Table, player: Player, n: number, to: Zone) {
+  if (to !== "cemiterio" && to !== "exilio") return false;
+  const top = player.baralho.slice(0, n);
+  if (!top.length) return false;
+  for (const c of top) moveToZone(t, c.uid, to);
 }
 
 /* ------------------------------------------------------------- mulligan */
@@ -629,6 +649,24 @@ function setBlock(t: Table, c: TableCard, target: number) {
   log(t, `${logName(t, c)}: ${whom ? "bloqueia " + whom : "não bloqueia mais"}`);
 }
 
+/* Os dois gestos de mesa que se fazem com o tabuleiro inteiro: endireitar
+   tudo (a carta que entrou deitada, o efeito que desvira) e atacar com todas
+   as criaturas em pé. Atacar não deita — `toggleAttack` também não: quem tem
+   vigilância é quem joga que sabe. */
+function untapAll(t: Table, player: Player) {
+  const tapped = player.campo.filter((c) => c.tapped);
+  if (!tapped.length) return false;
+  for (const c of tapped) c.tapped = false;
+  log(t, `${player.name}: endireitou tudo`);
+}
+
+function attackAll(t: Table, player: Player) {
+  const ready = player.campo.filter((c) => !c.tapped && !c.attacking && fieldRow(c) === "Criaturas");
+  if (!ready.length) return false;
+  for (const c of ready) { c.attacking = true; c.blocking = null; }
+  log(t, `${player.name}: ataca com ${ready.length}`);
+}
+
 function clearCombat(t: Table) {
   for (const player of t.players) {
     for (const c of player.campo) { c.attacking = false; c.blocking = null; }
@@ -684,8 +722,9 @@ export function apply(t: Table, action: Action, random: Random = Math.random): b
   switch (action.type) {
     case "join": result = addPlayer(t, action.deck, random); break;
     case "leave": result = removeSecondDeck(t); break;
-    case "shuffle": result = shuffleLibrary(t, player!, random); break;
+    case "shuffle": result = shuffleLibrary(t, player!, random, action.keepTop); break;
     case "draw": result = draw(t, player!, action.n); break;
+    case "mill": result = mill(t, player!, action.n, action.to); break;
     case "mulligan": result = londonMulligan(t, player!, random); break;
     case "keep": result = keepHand(t, player!); break;
     case "bottom": result = putOnBottom(t, action.uid); break;
@@ -703,6 +742,8 @@ export function apply(t: Table, action: Action, random: Random = Math.random): b
     case "attack": result = toggleAttack(t, card!); break;
     case "block": result = setBlock(t, card!, action.target); break;
     case "endCombat": result = clearCombat(t); break;
+    case "untapAll": result = untapAll(t, player!); break;
+    case "attackAll": result = attackAll(t, player!); break;
     case "token": result = createToken(t, player!, action.model, action.count); break;
     default: return false;   // tipo desconhecido, vindo de fora
   }

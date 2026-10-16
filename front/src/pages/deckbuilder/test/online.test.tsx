@@ -147,6 +147,22 @@ describe("jogar online", () => {
     expect(sock().sent.at(-1)).toEqual({ type: "act", action: { type: "draw", player: 1, n: 1 } });
   });
 
+  it("olhar o topo pede pra sala, e fechar avisa que parou de olhar", async () => {
+    await joined();
+    p.peekTop(0, 3);
+    expect(sock().sent.at(-1)).toEqual({ type: "peek", n: 3 });
+    p.closeTableModal();
+    expect(sock().sent.at(-1)).toEqual({ type: "peek", n: 0 });
+  });
+
+  it("a carta dos outros no clique abre o menu, em vez de jogar por eles", async () => {
+    await joined();
+    const theirs = p.state.table.players[1].comando[0].uid;
+    const sent = sock().sent.length;
+    p.clickCard(theirs, document.body);
+    expect([sock().sent.length, p.tableMenu.value?.kind]).toEqual([sent, "card"]);
+  });
+
   it("buscar no próprio baralho pede pra sala abrir ele", async () => {
     await joined();
     p.openTableModal({ kind: "search", player: 0, zone: "baralho" });
@@ -197,7 +213,7 @@ describe("a mesa na tela", () => {
   it("manter e mulligan só aparecem pra quem decide a mão", async () => {
     const { sections } = await panel(0);
     const buttons = (s: HTMLElement) => [...s.querySelectorAll(".gf-mulligan button")].map((b) => b.textContent);
-    expect([buttons(sections[0]), buttons(sections[1])]).toEqual([[], ["Manter esta mão", "Mulligan"]]);
+    expect([buttons(sections[0]), buttons(sections[1])]).toEqual([[], ["Manter fica com 8", "Mulligan grátis, fica com 7"]]);
     expect(sections[0].querySelector(".gf-mulligan")!.textContent).toContain("Decidindo a mão");
   });
 
@@ -211,7 +227,7 @@ describe("a mesa na tela", () => {
   it("quem não sentou escolhe o deck na faixa; os botões da mesa local somem", async () => {
     const { root } = await panel(null);
     expect([!!root.querySelector("#gf-online-faixa"), !!root.querySelector("#gf-segundo"),
-            !!root.querySelector("#gf-encerrar"), root.querySelector("#gf-embaralhar")!.textContent])
+            !!root.querySelector("#gf-encerrar"), root.querySelector("#gf-embaralhar")!.textContent!.trim()])
       .toEqual([true, false, false, "Recomeçar"]);
   });
 });

@@ -950,15 +950,32 @@ select.campo option{background:var(--surface-2);color:var(--text);}
    grupo porque aquele só é estilizado como `.grupo h3 .traco` — aqui fora
    ele é um span de largura zero, e os botões ficavam colados no título. */
 .gf-espaco{flex:1;min-width:8px;}
+.gf-topo .btn{display:inline-flex;align-items:center;gap:6px;}
+.gf-topo .btn small,.gf-acoes .btn small{font-weight:400;opacity:.8;margin-left:2px;}
+/* A última jogada, ao lado do Desfazer: é o que o Ctrl+Z levaria. */
+.gf-ultima{font-size:11.5px;color:var(--text-muted);max-width:260px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+/* Os botões de mesa (resumo, segundo deck, online, tela cheia) perdem o nome
+   em tela estreita e ficam só com o ícone — o `title` e o `aria-label` ficam. */
+@media (max-width:1280px){
+  .gf-ferramenta .rotulo{display:none;}
+  .gf-ferramenta{padding:8px 10px;}
+}
+@media (max-width:700px){ .gf-ultima{display:none;} }
+/* A mesa vazia: o botão de começar no lugar onde a mesa vai estar. */
+.gf-comecar{display:flex;flex-direction:column;align-items:center;gap:10px;padding:56px 16px;}
+.gf-comecar .nota{max-width:420px;text-align:center;}
+.btn.grande{font-size:14px;padding:12px 24px;display:inline-flex;align-items:center;gap:8px;}
+.gf-online .btn,.gf-online-titulo{display:inline-flex;align-items:center;gap:6px;}
 .gf-turno{font-family:'IBM Plex Mono',monospace;font-size:12px;
   color:var(--gold-light);white-space:nowrap;}
 
 /* A dica do título: o aviso de que aqui não tem juiz. Abre no hover e no
    foco, pra quem chega pelo teclado ler também. */
 .gf-dica{position:relative;display:inline-flex;}
-.gf-dica-botao{width:18px;height:18px;border-radius:50%;padding:0;
+.gf-dica-botao{width:24px;height:24px;border-radius:50%;padding:0;
   border:1px solid var(--border);background:none;color:var(--text-muted);
-  font:inherit;font-size:11px;font-weight:700;line-height:1;cursor:help;}
+  display:inline-flex;align-items:center;justify-content:center;cursor:help;}
 .gf-dica-botao:hover,.gf-dica-botao:focus-visible{border-color:var(--gold);
   color:var(--gold-light);outline:none;}
 .gf-dica-texto{position:absolute;left:-8px;top:calc(100% + 8px);z-index:65;
@@ -967,6 +984,10 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   box-shadow:0 14px 30px -10px rgba(0,0,0,.8);font-size:12px;line-height:1.5;
   color:var(--text-muted);opacity:0;visibility:hidden;transition:opacity .12s;}
 .gf-dica-texto b{color:var(--text);}
+.gf-dica-secao{display:block;margin:10px 0 4px;font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text);}
+.gf-dica-lista{display:flex;flex-direction:column;gap:4px;}
+.gf-dica-lista .ico{color:var(--gold-light);}
 .gf-dica:hover .gf-dica-texto,.gf-dica:focus-within .gf-dica-texto{
   opacity:1;visibility:visible;}
 
@@ -1013,6 +1034,10 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   text-transform:uppercase;color:var(--text-muted);white-space:nowrap;
   line-height:16px;}
 .gf-area-titulo b{font-family:'IBM Plex Mono',monospace;color:var(--text);}
+.gf-area-titulo > .ico,.gf-area-titulo .ico:first-child{width:12px;height:12px;margin-right:4px;vertical-align:-.15em;}
+/* A área vazia é o ícone da zona, apagado, no meio do contorno. */
+.gf-vazio-zona{display:flex;align-items:center;justify-content:center;opacity:.3;}
+.gf-vazio-zona .ico{width:30px;height:30px;}
 .gf-area-titulo kbd{margin-left:4px;}
 .gf-area-corpo{min-height:var(--gf-carta-a);display:flex;flex-direction:column;
   justify-content:center;gap:6px;}
@@ -1040,6 +1065,24 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   border:1px solid var(--border);color:var(--text);font-size:11px;font-weight:700;
   line-height:18px;font-family:'IBM Plex Mono',monospace;}
 .gf-lado + .gf-lado{border-left:1px dashed var(--border);}
+/* Os gestos do campo inteiro, numa coluna de ícones na ponta dele (ver
+   `FieldTools`). */
+.gf-campo-acoes{display:flex;flex-direction:column;justify-content:center;gap:6px;
+  padding:0 8px;border-left:1px dashed var(--border);flex:none;}
+.gf-icone{width:32px;height:32px;border-radius:50%;padding:0;border:1px solid var(--border);
+  background:var(--surface);color:var(--text-muted);display:inline-flex;align-items:center;
+  justify-content:center;cursor:pointer;}
+.gf-icone .ico{width:16px;height:16px;}
+.gf-icone:hover:not(:disabled){border-color:var(--gold);color:var(--gold-light);}
+.gf-icone:disabled{opacity:.3;cursor:default;}
+/* O combate em curso, entre os dois lados da mesa, com o botão que o fecha. */
+.gf-combate-faixa{align-self:center;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  justify-content:center;padding:5px 6px 5px 14px;border:1px solid var(--red);border-radius:999px;
+  background:rgba(217,99,74,.08);font-size:12px;color:var(--text);}
+.gf-combate-faixa > .ico{color:var(--red);}
+.gf-combate-faixa b{font-family:'IBM Plex Mono',monospace;}
+.gf-combate-faixa .nota{margin:0;font-size:11px;}
+.gf-combate-faixa .btn{padding:5px 12px;display:inline-flex;align-items:center;gap:5px;}
 
 /* Duas linhas numa grade: comando, terrenos e exílio; deck, mão e cemitério.
    As laterais têm a largura do que guardam, e a do meio fica com o resto. */
@@ -1063,7 +1106,9 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .gf-pilha:hover{border-color:var(--gold);}
 .gf-pilha.verso{background:repeating-linear-gradient(45deg,var(--surface-2),
   var(--surface-2) 4px,var(--inset) 4px,var(--inset) 8px);}
-.gf-pilha.vazia{border-style:dashed;background:none;}
+.gf-pilha.vazia{border-style:dashed;background:none;display:flex;align-items:center;justify-content:center;}
+.gf-pilha.vazia .ico{width:30px;height:30px;opacity:.35;}
+.gf-pilha{position:relative;}
 .gf-pilha.arrastando{opacity:.45;}
 
 kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
@@ -1088,7 +1133,7 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
    ocupando a altura dela enquanto DESENHA a largura. A margem vertical cobre
    metade da diferença em cima e embaixo, senão ela invade a fila de baixo.
    A opacidade é o que se vê de longe: essa já foi usada. */
-.gf-carta.deitada{transform:rotate(90deg);opacity:.5;
+.gf-carta.deitada{transform:rotate(90deg);opacity:.62;
   margin:calc((var(--gf-carta-l) - var(--gf-carta-a)) / 2) 0;}
 .gf-carta.deitada:hover{transform:rotate(90deg) translateY(-6px);}
 .gf-carta.virada{background-image:none;
@@ -1115,8 +1160,11 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   font-family:'IBM Plex Mono',monospace;}
 /* Atacante e bloqueador: a marca fica no canto de baixo pra não brigar com os
    marcadores, e a borda colorida é o que se vê sem ler. */
-.gf-carta .gf-combate{position:absolute;bottom:4px;left:4px;font-size:18px;
-  line-height:1;text-shadow:0 1px 3px #000;}
+.gf-carta .gf-combate{position:absolute;bottom:4px;left:4px;width:22px;height:22px;
+  border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;
+  justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.6);}
+.gf-carta .gf-combate .ico{width:14px;height:14px;}
+.gf-carta.bloqueando .gf-combate{background:var(--gold);color:var(--sobre-gold);}
 .gf-carta.atacando{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
 .gf-carta.bloqueando{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
 /* O selo de peça de combo, no canto de cima à esquerda — o único canto livre
@@ -1127,39 +1175,46 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   height:18px;border-radius:50%;background:var(--purple);color:#fff;
   font-size:10.5px;font-weight:700;line-height:18px;text-align:center;
   font-family:'IBM Plex Mono',monospace;box-shadow:0 1px 3px rgba(0,0,0,.6);}
-/* Deitar e endireitar num clique, sem passar pelo menu (ver `gfCartaHTML`).
-   Vai no canto de baixo à direita, o único que sobra: marcadores em cima à
-   direita, selo de combo em cima à esquerda, marca de combate embaixo à
-   esquerda. Aparece sempre, apagado, e fica sólido com o mouse na carta —
-   ícone que só existe no hover ninguém descobre, e ícone opaco em quarenta
-   cartas é ruído. */
-.gf-carta .gf-tap{position:absolute;right:4px;bottom:4px;width:20px;height:20px;
+/* O ⋯ da carta: o menu com todas as outras jogadas (o clique faz a
+   principal, ver `clickCard`). Vai no canto de baixo à direita, o único que
+   sobra: marcadores em cima à direita, selo de combo em cima à esquerda,
+   marca de combate embaixo à esquerda. Aparece sempre, apagado, e fica
+   sólido com o mouse na carta — ícone que só existe no hover ninguém
+   descobre, e ícone opaco em quarenta cartas é ruído. */
+.gf-pontos{position:absolute;right:4px;bottom:4px;width:22px;height:22px;
   border-radius:50%;background:rgba(15,13,23,.72);color:var(--text);
-  font-size:13px;line-height:20px;text-align:center;opacity:.5;
+  display:flex;align-items:center;justify-content:center;opacity:.55;
   transition:opacity .12s,background .12s,transform .12s;}
-.gf-carta:hover .gf-tap{opacity:1;background:var(--purple);color:#fff;}
-.gf-carta .gf-tap:hover{transform:scale(1.15);}
+.gf-pontos .ico{width:16px;height:16px;}
+.gf-carta:hover .gf-pontos,.gf-pilha:hover .gf-pontos{opacity:1;background:var(--purple);color:#fff;}
+.gf-pontos:hover{transform:scale(1.15);}
+/* Na carta da mão o pé é do nome: o ⋯ sobe pro meio da borda direita. */
+.gf-area-mao .gf-carta .gf-pontos{bottom:auto;top:calc(50% - 11px);}
 /* A carta deitada é desenhada girada, e o ícone gira junto: o giro ao
-   contrário é o que deixa a seta em pé pra quem lê. Deitada a carta ainda
-   perde metade da opacidade, e o ícone apagado sumiria — mas endireitar é o
-   que se faz com carta deitada, então ali ele é o cheio: o que sobra da
-   translucidez da carta já é a dose certa. */
-.gf-carta.deitada .gf-tap{transform:rotate(-90deg);opacity:1;
-  background:var(--purple);color:#fff;}
-.gf-carta.deitada .gf-tap:hover{transform:rotate(-90deg) scale(1.15);}
-/* No monte, o canto de baixo à direita é da contagem (`×4`), que passa por
-   cima de qualquer carta: o ícone anda pra dentro pra caber ao lado dela. */
-.gf-monte .gf-carta .gf-tap{right:40px;}
-/* E só a carta da frente do monte traz o ícone: nove terrenos deitados dariam
-   nove ícones em fileira, e a pergunta que se faz ao monte é uma só
-   ("endireita um"). A carta que o mouse levanta traz o dela, que é como se
-   escolhe qual. */
-.gf-monte .gf-carta:not(:last-of-type):not(:hover) .gf-tap{display:none;}
+   contrário é o que deixa os pontos deitados pra quem lê. */
+.gf-carta.deitada .gf-pontos{transform:rotate(-90deg);}
+/* No monte, o canto de baixo à direita é da contagem (`×4`): o ícone anda pra
+   dentro, e só a carta da frente (ou a que o mouse levanta) traz o dela —
+   nove terrenos dariam nove ícones em fileira. */
+.gf-monte .gf-carta .gf-pontos{right:40px;}
+.gf-monte .gf-carta:not(:last-of-type):not(:hover) .gf-pontos{display:none;}
 /* Sem mouse não há hover pra revelar nada: no toque o ícone fica sempre
-   legível, que é onde ele mais serve. */
+   legível, que é onde ele mais serve (o toque longo nem sempre abre menu). */
 @media (hover:none){
-  .gf-carta .gf-tap{opacity:.95;background:rgba(15,13,23,.88);}
+  .gf-pontos{opacity:.95;background:rgba(15,13,23,.88);}
 }
+/* A carta que acabou de chegar à mão (ver `useFresh`): um halo dourado e o
+   selo no alto, até a mão mudar de novo. */
+.gf-carta.nova{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 14px -2px rgba(233,199,101,.7);}
+.gf-nova-selo{position:absolute;top:4px;left:50%;transform:translateX(-50%);
+  padding:0 6px;border-radius:999px;background:var(--gold);color:var(--sobre-gold);
+  font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  line-height:16px;box-shadow:0 1px 3px rgba(0,0,0,.6);}
+/* Na fase de fundo a mão é uma escolha: a área e as cartas acendem em roxo,
+   a cor do que se clica nesta mesa. */
+.gf-area-mao.escolhendo{border-color:var(--purple);}
+.gf-carta.escolhe{border-color:var(--purple);border-style:dashed;}
+.gf-carta.escolhe:hover{box-shadow:0 0 0 2px var(--purple);}
 /* Ficha não é carta: a borda tracejada diz que ela some quando sair do campo. */
 .gf-carta.ficha{border-style:dashed;}
 .gf-carta.arrastando{opacity:.45;}
@@ -1257,15 +1312,6 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
 .gf-combo-precisa b{color:var(--text);font-weight:600;}
 .gf-combo-produz{font-size:11px;color:#A8D8BC;margin-top:4px;line-height:1.45;}
 .gf-combo-velho{font-size:11px;color:var(--gold-light);margin-bottom:6px;}
-/* Os atalhos da mesa. Fora da tela cheia eles vão numa linha embaixo da
-   mesa; na tela cheia, no pé da coluna do painel. */
-.gf-atalhos{margin-top:10px;font-size:11.5px;color:var(--text-muted);}
-.gf-atalhos-titulo{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
-  margin-bottom:4px;}
-.gf-atalhos dl{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0;}
-.gf-atalhos dt{color:var(--text);}
-.gf-atalhos dd{margin:0 0 0 -8px;}
-
 /* A coluna do painel só existe na tela cheia; fora dela o painel flutua e os
    atalhos seguem a mesa. */
 .gf-coluna{display:contents;}
@@ -1296,16 +1342,13 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   body.gf-cheia .gf-detalhe{position:static;flex:1 1 auto;min-height:0;
     width:auto;max-height:none;background:none;border-color:transparent;
     box-shadow:none;pointer-events:auto;}
-  body.gf-cheia .gf-atalhos,body.gf-cheia .gf-log,
+  body.gf-cheia .gf-log,
   body.gf-cheia .gf-nota-combos{flex:none;margin:0;
     padding:10px 12px 12px;border-top:1px dashed var(--border);}
   body.gf-cheia .gf-log{padding-bottom:10px;}
-  body.gf-cheia .gf-atalhos dl{display:grid;grid-template-columns:max-content 1fr;
-    gap:5px 10px;}
-  body.gf-cheia .gf-atalhos dd{margin:0;}
 }
 @media (hover:none){
-  .gf-detalhe,.gf-atalhos{display:none;}
+  .gf-detalhe{display:none;}
 }
 
 /* Menu de uma carta da mesa: pra onde ela vai. */
@@ -1317,6 +1360,39 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   border-radius:6px;cursor:pointer;}
 .gf-menu button:hover{background:var(--inset);color:var(--gold-light);}
 .gf-menu hr{border:none;border-top:1px solid var(--border);margin:3px 0;}
+.gf-menu{min-width:230px;max-width:280px;}
+.gf-menu .gf-menu-item{display:flex;align-items:center;gap:8px;}
+.gf-menu .gf-menu-item .ico{color:var(--text-muted);}
+.gf-menu .gf-menu-item:hover .ico{color:inherit;}
+.gf-menu .gf-menu-item.ligado{color:var(--gold-light);}
+/* A cabeça diz DE QUE carta é o menu: aberto pelo botão direito longe da
+   carta, ou na mão de oito, ele não tinha nome. */
+.gf-menu-cabeca{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:6px 9px 4px;font-size:13px;color:var(--text);}
+.gf-menu-cabeca b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gf-menu-sub{font-size:11px;color:var(--text-muted);}
+/* As jogadas rápidas da carta, em ícones numa fila: são as que se repetem. */
+.gf-menu-rapido{display:flex;gap:4px;padding:2px 6px 6px;border-bottom:1px solid var(--border);
+  margin-bottom:2px;}
+.gf-menu .gf-menu-icone{width:34px;height:32px;padding:0;display:inline-flex;
+  align-items:center;justify-content:center;border:1px solid var(--border);border-radius:8px;}
+.gf-menu .gf-menu-icone .ico{width:17px;height:17px;}
+.gf-menu .gf-menu-icone.ligado{border-color:var(--gold);color:var(--gold-light);
+  background:rgba(233,199,101,.08);}
+.gf-menu .gf-menu-icone:disabled{opacity:.35;cursor:default;}
+.gf-menu-titulo .ico{width:12px;height:12px;vertical-align:-.15em;margin-right:2px;}
+.gf-menu-chips{display:flex;flex-wrap:wrap;gap:4px;padding:3px 9px;}
+.gf-menu .gf-menu-chips .chip{width:auto;display:inline-flex;padding:2px 8px;
+  border:1px solid var(--border);border-radius:999px;font-size:11.5px;}
+.gf-menu-novo{display:flex;gap:4px;padding:4px 9px 6px;}
+.gf-menu-novo .campo{flex:1;min-width:0;padding:4px 8px;font-size:12px;}
+.gf-menu .gf-menu-novo .gf-menu-icone{width:30px;height:28px;flex:none;}
+/* Os destinos numa grade de ícones com o nome embaixo. */
+.gf-destinos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:2px 6px 6px;}
+.gf-menu .gf-destino{display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:7px 2px;text-align:center;border:1px solid var(--inset);border-radius:8px;
+  font-size:11px;}
+.gf-menu .gf-destino .ico{width:18px;height:18px;}
 
 /* ---- um bloco por jogador ----
    Empilhados, e não lado a lado: a mesa tem a largura da tela, e dividir ao
@@ -1348,12 +1424,26 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
    número entre dois passos redondos. A vida é o número maior da barra. */
 .gf-vida,.gf-marca,.gf-dano{display:inline-flex;align-items:center;gap:5px;
   white-space:nowrap;}
-.gf-passo{width:20px;height:20px;border-radius:50%;padding:0;flex:none;
+.gf-passo{width:22px;height:22px;border-radius:50%;padding:0;flex:none;
   border:1px solid var(--border);background:none;color:var(--text-muted);
-  font:inherit;font-size:13px;line-height:1;cursor:pointer;}
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}
+.gf-passo .ico{width:12px;height:12px;}
+.gf-passo:disabled{opacity:.35;cursor:default;}
 .gf-passo:hover{border-color:var(--gold);color:var(--gold-light);}
-.gf-vida b{font-family:'IBM Plex Mono',monospace;font-size:17px;
-  color:var(--text);min-width:26px;text-align:center;}
+.gf-vida > .ico{color:var(--red);width:16px;height:16px;}
+.gf-vida-valor{background:none;border:1px solid transparent;border-radius:6px;padding:0 3px;
+  cursor:text;font:inherit;}
+.gf-vida-valor:hover{border-color:var(--border);}
+.gf-vida b{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:20px;
+  color:var(--text);min-width:30px;text-align:center;}
+.gf-vida-campo{width:64px;padding:2px 6px;border-radius:6px;border:1px solid var(--gold);
+  background:var(--inset);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:16px;
+  text-align:center;}
+.gf-dano > .ico,.gf-marca > .ico{color:var(--text-muted);width:13px;height:13px;}
+.gf-dano-de{max-width:84px;overflow:hidden;text-overflow:ellipsis;}
+.gf-alerta{margin-left:8px;color:var(--gold-light);}
+.gf-alerta .ico{width:13px;height:13px;}
+.gf-fatos-j .ico{width:14px;height:14px;}
 .gf-marca b,.gf-dano b{font-family:'IBM Plex Mono',monospace;font-size:13px;
   color:var(--text);min-width:18px;text-align:center;}
 /* 21 de dano de comandante mata. O número que mata não pode ter a mesma cara
@@ -1361,7 +1451,8 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
 .gf-dano.letal b{color:var(--red);}
 .gf-botao{border:1px solid var(--border);border-radius:999px;background:none;
   color:var(--text);font:inherit;font-size:11.5px;padding:3px 11px;
-  cursor:pointer;white-space:nowrap;}
+  cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;}
+.gf-botao .ico{width:12px;height:12px;}
 .gf-botao:hover{border-color:var(--gold);color:var(--gold-light);}
 
 /* ---- log ----
@@ -1395,8 +1486,10 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
 .gf-menu .gf-linha{display:flex;align-items:center;gap:4px;padding:2px 9px;
   font-size:12.5px;color:var(--text);}
 .gf-menu .gf-linha span{flex:1;}
-.gf-menu .gf-linha button{width:22px;padding:2px 0;text-align:center;
-  border:1px solid var(--border);border-radius:6px;}
+.gf-menu .gf-linha button{width:24px;height:22px;padding:0;display:inline-flex;
+  align-items:center;justify-content:center;border:1px solid var(--border);border-radius:6px;}
+.gf-menu .gf-linha button:disabled{opacity:.35;cursor:default;}
+.gf-menu .gf-linha .ico{width:12px;height:12px;}
 .gf-menu .gf-linha b{min-width:16px;text-align:center;
   font-family:'IBM Plex Mono',monospace;}
 
@@ -1413,6 +1506,27 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
   border-bottom:1px solid var(--border);}
 .gf-modal-topo h3{margin:0;font-size:14px;}
 .gf-modal-corpo{padding:12px 14px;overflow-y:auto;}
+.gf-modal.larga{width:min(880px,100%);}
+.gf-modal-pe{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--border);}
+.gf-modal-pe .nota{margin:0;}
+.gf-modal-pe .btn,.gf-acoes .btn{display:inline-flex;align-items:center;gap:6px;}
+/* A busca é uma grade de cartas: a arte se reconhece de relance, o nome numa
+   lista se lê um por um. Os destinos são ícones embaixo de cada carta. */
+.gf-busca-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:12px 10px;}
+.gf-busca-grade > .gf-vazio{grid-column:1 / -1;}
+.gf-busca-carta{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.gf-busca-arte{position:relative;aspect-ratio:488/680;border-radius:8px;
+  background:var(--inset) top/cover no-repeat;border:1px solid var(--border);}
+.gf-busca-carta.marcada .gf-busca-arte{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
+.gf-busca-pos,.gf-busca-marca{position:absolute;top:5px;left:5px;padding:0 7px;
+  border-radius:999px;background:rgba(15,13,23,.88);color:var(--text);font-size:11px;
+  font-weight:700;line-height:18px;font-family:'IBM Plex Mono',monospace;}
+.gf-busca-marca{left:auto;right:5px;background:var(--gold);color:var(--sobre-gold);}
+.gf-busca-nome{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gf-busca-destinos{display:flex;flex-wrap:wrap;gap:3px;}
+.gf-busca-destinos .mini{width:26px;height:24px;}
+.gf-busca-destinos .mini .ico{width:14px;height:14px;}
 .gf-filtro{width:100%;margin-bottom:8px;}
 .gf-lista{display:flex;flex-direction:column;}
 .gf-lista-linha{display:flex;align-items:center;gap:6px;padding:4px 0;
@@ -1433,6 +1547,25 @@ kbd{display:inline-block;min-width:16px;padding:0 4px;border-radius:4px;
 .gf-cor-btn{background:none;border:1px solid var(--border);border-radius:8px;
   padding:4px 6px;cursor:pointer;opacity:.45;}
 .gf-cor-btn.ativa{opacity:1;border-color:var(--gold);}
+.gf-quantas{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-muted);}
+.gf-quantas b{font-family:'IBM Plex Mono',monospace;color:var(--text);min-width:20px;text-align:center;font-size:14px;}
+.gf-ficha-montar{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;}
+.gf-forma-cores{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text-muted);}
+.gf-forma-cores .gf-cores-escolha{margin:0;}
+/* A prévia da ficha: um quadro com a borda da cor, o nome, o tipo e o corpo —
+   o que a ficha vai mostrar na mesa, antes de criar. */
+.gf-ficha-previa{width:104px;aspect-ratio:488/680;flex:none;border-radius:8px;
+  border:2px dashed var(--border);background:var(--inset);padding:8px;display:flex;
+  flex-direction:column;gap:3px;font-size:11px;color:var(--text-muted);position:relative;}
+.gf-ficha-previa b{color:var(--text);font-size:12px;word-break:break-word;}
+.gf-ficha-pt{position:absolute;right:6px;bottom:6px;padding:0 6px;border:1px solid var(--border);
+  border-radius:5px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-weight:700;}
+.gf-ficha-previa.cor-W{border-color:var(--mana-W);}
+.gf-ficha-previa.cor-U{border-color:var(--mana-U);}
+.gf-ficha-previa.cor-B{border-color:var(--mana-B);}
+.gf-ficha-previa.cor-R{border-color:var(--mana-R);}
+.gf-ficha-previa.cor-G{border-color:var(--mana-G);}
+.gf-ficha-previa.cor-M{border-color:var(--gold);}
 
 /* ---- resumo do fim ----
    As duas curvas uma embaixo da outra, na mesma escala: é a comparação que a

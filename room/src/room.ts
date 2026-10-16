@@ -31,11 +31,13 @@ export interface RoomState {
   table: Table | null;
   /** Os assentos que estão procurando no próprio baralho. */
   looking: number[];
+  /** As cartas do topo que cada assento está olhando, pelo `uid` (ver `peek`). */
+  peeking: Record<number, number[]>;
   /** A última jogada, de quem foi e a mesa de antes dela (ver `undoable`). */
   undo: { seat: number; photo: string } | null;
 }
 
-export const emptyRoom = (): RoomState => ({ seats: [], table: null, looking: [], undo: null });
+export const emptyRoom = (): RoomState => ({ seats: [], table: null, looking: [], peeking: {}, undo: null });
 
 /** Uma conexão aberta: de quem é e quais cartas ela já recebeu. */
 export interface Connection {
@@ -44,7 +46,7 @@ export interface Connection {
 }
 
 /* Jogadas que mexem no baralho de ALGUÉM: só o dono. */
-const OWN_LIBRARY = new Set<Action["type"]>(["shuffle", "draw", "mulligan", "keep"]);
+const OWN_LIBRARY = new Set<Action["type"]>(["shuffle", "draw", "mill", "mulligan", "keep"]);
 
 export class Room {
   constructor(public state: RoomState, private random: Random) {}
@@ -78,12 +80,13 @@ export class Room {
     if (decks.length !== this.state.seats.length) return "Não deu pra buscar todos os decks.";
     this.state.table = newTable(decks, this.random);
     this.state.looking = [];
+    this.state.peeking = {};
     this.state.undo = null;
     return null;
   }
 
   /** As mensagens de mesa: jogar, olhar o baralho, desfazer. */
-  handle(userId: string, msg: Extract<ClientMessage, { type: "act" | "look" | "undo" }>): string | null {
+  handle(userId: string, msg: Extract<ClientMessage, { type: "act" | "look" | "peek" | "undo" }>): string | null {
     const seat = this.seatOf(userId);
     const t = this.state.table;
     if (seat === null || !t) return "Sente-se à mesa pra jogar.";
@@ -91,6 +94,7 @@ export class Room {
       if (!this.state.looking.includes(seat)) this.state.looking.push(seat);
       return null;
     }
+    if (msg.type === "peek") return this.peek(seat, msg.n);
     if (msg.type === "undo") return this.undo(seat);
     return this.act(seat, msg.action);
   }
@@ -103,7 +107,7 @@ export class Room {
     if (action.type === "pass" && t.active !== seat) return "Só quem está na vez passa o turno.";
     for (const uid of citedCards(action)) {
       const found = findCard(t, uid);
-      if (!found || !canSee(seat, found.zone, found.card, this.state.looking.includes(seat))) {
+      if (!found || !canSee(seat, found.zone, found.card, this.state.looking.includes(seat), this.peeked(seat))) {
         return "Essa carta não está ao seu alcance.";
       }
     }
@@ -114,6 +118,22 @@ export class Room {
     if (action.type === "shuffle") this.state.looking = this.state.looking.filter((x) => x !== seat);
     this.state.undo = undoable(libraries, t) ? { seat, photo: before } : null;
     return null;
+  }
+
+  /* Olhar as de cima (vidência, "olhe as três do topo"): o dono passa a ver
+     ESTAS cartas, e não "as N de cima" — mandar uma pro fundo traria a
+     seguinte pra dentro da janela, e ele veria uma carta que não comprou o
+     direito de ver. Não embaralha ao fim, ao contrário da busca: olhar o
+     topo e devolver na ordem é a jogada. */
+  private peek(seat: number, n: number): string | null {
+    const t = this.state.table!;
+    if (n) this.state.peeking[seat] = t.players[seat].baralho.slice(0, n).map((c) => c.uid);
+    else delete this.state.peeking[seat];
+    return null;
+  }
+
+  private peeked(seat: number | null): ReadonlySet<number> {
+    return new Set(seat === null ? [] : this.state.peeking[seat] || []);
   }
 
   /* Desfazer é da ÚLTIMA jogada da mesa, e só pra quem a fez: o Ctrl+Z de um
@@ -132,6 +152,7 @@ export class Room {
      busca termina como terminaria fechando a janela. */
   release(userId: string) {
     const seat = this.seatOf(userId);
+    if (seat !== null && this.state.peeking[seat]) delete this.state.peeking[seat];
     if (seat === null || !this.state.looking.includes(seat) || !this.state.table) return false;
     apply(this.state.table, { type: "shuffle", player: seat }, this.random);
     this.state.looking = this.state.looking.filter((x) => x !== seat);
@@ -147,7 +168,7 @@ export class Room {
     const seats: SeatInfo[] = s.seats.map((x) => ({ name: x.name, connected: connected.has(x.userId) }));
     const looking = seat !== null && s.looking.includes(seat);
     if (!s.table) return { type: "view", seat, seats, table: null, cards: {}, looking, canUndo: false };
-    const { view, visible } = viewFor(s.table, seat, looking);
+    const { view, visible } = viewFor(s.table, seat, looking, this.peeked(seat));
     const cards: Record<number, Card> = {};
     for (const [uid, card] of visible) {
       if (conn.known.has(uid)) continue;
@@ -167,6 +188,7 @@ function citedCards(action: Action): number[] {
   const out: number[] = [];
   if ("uid" in action) out.push(action.uid);
   if ("target" in action) out.push(action.target);
+  if (action.type === "shuffle") out.push(...action.keepTop || []);
   return out;
 }
 

@@ -16,6 +16,9 @@ export type ClientMessage =
   | { type: "act"; action: Action }
   /** Olhar o próprio baralho inteiro. Termina num embaralhamento. */
   | { type: "look" }
+  /** Olhar as `n` de cima do próprio baralho, sem embaralhar depois; `0` para
+      de olhar. As que se viu continuam à vista até lá, onde estiverem. */
+  | { type: "peek"; n: number }
   /** Desfazer a própria última jogada, se ninguém jogou depois. */
   | { type: "undo" }
   /** Partida nova com os mesmos decks. */
@@ -63,6 +66,7 @@ const isIndex = (x: unknown) => Number.isInteger(x) && (x as number) >= 0 && (x 
 const isUid = (x: unknown) => Number.isInteger(x) && (x as number) > 0;
 const isAdjust = (x: unknown) => Number.isInteger(x) && Math.abs(x as number) <= ADJUST_LIMIT;
 const isName = (x: unknown) => typeof x === "string" && x.trim().length > 0 && x.length <= NAME_LIMIT;
+const isCount = (x: unknown) => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 20;
 const isFlag = (x: unknown) => x === undefined || typeof x === "boolean";
 
 function isTokenModel(x: unknown): x is TokenModel {
@@ -85,8 +89,10 @@ function isTokenModel(x: unknown): x is TokenModel {
 /* Cada tipo com os campos que ele usa. `join` e `leave` não estão aqui:
    quem senta e quem sai é a sala que decide (ver `sit`), e não uma jogada. */
 const ACTION_SHAPES: Record<string, (a: Record<string, unknown>) => boolean> = {
-  shuffle: (a) => isIndex(a.player),
-  draw: (a) => isIndex(a.player) && Number.isInteger(a.n) && (a.n as number) >= 1 && (a.n as number) <= 20,
+  shuffle: (a) => isIndex(a.player) && (a.keepTop === undefined ||
+    (Array.isArray(a.keepTop) && a.keepTop.length <= 20 && a.keepTop.every(isUid))),
+  draw: (a) => isIndex(a.player) && isCount(a.n),
+  mill: (a) => isIndex(a.player) && isCount(a.n) && (a.to === "cemiterio" || a.to === "exilio"),
   mulligan: (a) => isIndex(a.player),
   keep: (a) => isIndex(a.player),
   bottom: (a) => isUid(a.uid),
@@ -104,6 +110,8 @@ const ACTION_SHAPES: Record<string, (a: Record<string, unknown>) => boolean> = {
   attack: (a) => isUid(a.uid),
   block: (a) => isUid(a.uid) && isUid(a.target),
   endCombat: () => true,
+  untapAll: (a) => isIndex(a.player),
+  attackAll: (a) => isIndex(a.player),
   token: (a) => isIndex(a.player) && isTokenModel(a.model) &&
                 Number.isInteger(a.count) && (a.count as number) >= 1 && (a.count as number) <= 20,
 };
@@ -125,6 +133,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         ? { type: "sit", deckId: data.deckId } : null;
     case "act":
       return isAction(data.action) ? { type: "act", action: data.action } : null;
+    case "peek":
+      return Number.isInteger(data.n) && (data.n as number) >= 0 && (data.n as number) <= 20
+        ? { type: "peek", n: data.n as number } : null;
     case "look": case "undo": case "restart":
       return { type: data.type };
     default:

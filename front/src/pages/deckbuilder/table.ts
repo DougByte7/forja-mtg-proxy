@@ -21,7 +21,7 @@ import { fetchCardInfo } from "./cardDetail";
 import { countedCards } from "./deck";
 import {
   act, cardByUid, deckFromResponse, fitsInRow, saveTableSnapshot, screenDeck, setUpTable,
-  undoTableStep, type Action, type TokenModel, type Zone,
+  undoTableStep, zoneOf, type Action, type TokenModel, type Zone,
 } from "./goldfish";
 import { readLocalDecks } from "../../shared/localDecks";
 import { isOnline, joinRoom, mySeat, newRoomId, online, onlineDeps, send, setRoomInUrl } from "./online";
@@ -78,7 +78,7 @@ export function tableShortcut(e: KeyboardEvent) {
   closeTableMenu();
   // Online, o D compra pra quem aperta, que é o único baralho dele.
   const drawer = isOnline() ? mySeat() : state.table.active;
-  if (space) play({ type: "pass" });
+  if (space) passTheTurn();
   else if (drawer !== null) play({ type: "draw", player: drawer, n: 1 });
   return true;
 }
@@ -93,6 +93,9 @@ export function shuffleUp() {
     return;
   }
   if (!countedCards().length && !state.commanders.length) return toast("Monte o deck primeiro.");
+  // Com uma partida na mesa, embaralhar de novo joga ela fora — e o desfazer
+  // não volta de uma mesa nova.
+  if (state.table && !confirm("Começar uma partida nova? A mesa de agora se perde.")) return;
   hideDetail();   // os uids recomeçam do 1 na mesa nova
   setUpTable([screenDeck()]);
   touchTable();
@@ -108,8 +111,23 @@ export function startOnline() {
   joinRoom(roomId);
 }
 
-export const passTheTurn = () => play({ type: "pass" });
+/* Quem está na vez ainda decidindo a mão não passa: a compra do turno dele
+   vem com a mão confirmada (ver `confirmHand`), e passar agora a pularia. O
+   botão já fica desligado; isto segura o Espaço. */
+export function passTheTurn() {
+  const t = state.table;
+  if (t && t.players[t.active].phase !== "jogo") return toast("Decida a mão antes de passar o turno.");
+  play({ type: "pass" });
+}
 export const endCombat = () => play({ type: "endCombat" });
+export const untapAll = (player: number) => play({ type: "untapAll", player });
+export const attackAll = (player: number) => play({ type: "attackAll", player });
+
+/* Esta tela decide pelo jogador? Na mesa local, por todos (é ela dos dois
+   lados); online, só pelo assento dela. */
+export function isMine(player: number) {
+  return !isOnline() || mySeat() === player;
+}
 
 /* Abrir o log não é jogada: não passa pelo `saveTableSnapshot`. */
 export function toggleLog() {
@@ -150,28 +168,74 @@ export function changeCommanderDamage(player: number, from: number, n: number) {
   play({ type: "commanderDamage", player, from, n }, "dano" + player + from);
 }
 
+/* A vida digitada: a jogada continua sendo um ajuste (`life` com a
+   diferença), que é o que o log conta e o que a sala aceita. */
+export function setLife(player: number, value: number) {
+  const p = state.table?.players[player];
+  if (!p || !Number.isFinite(value)) return;
+  const n = Math.round(value) - p.life;
+  if (n) play({ type: "life", player, n });
+}
+
 export const keep = (player: number) => play({ type: "keep", player });
 export const mulligan = (player: number) => play({ type: "mulligan", player });
 
-/* O ícone de deitar age na hora, antes de a carta virar menu: ele existe
-   justamente pra o gesto mais repetido da mesa não passar pelo menu. */
-export function tapFromIcon(uid: number) {
-  closeTableMenu();
-  play({ type: "tap", uid });
-}
+/* O clique faz a jogada PRINCIPAL da zona, e o resto mora no menu (botão
+   direito, toque longo ou o ⋯ da carta). Antes todo clique abria o menu, e
+   as quatro jogadas que são quase a partida inteira — baixar, deitar,
+   lançar o comandante, comprar — custavam dois cliques e uma leitura cada.
 
-/* Na fase de mandar pro fundo, clicar na mão é ESCOLHER — não abrir menu. */
+   Na mão, baixar: o terreno cai na fila dos terrenos sozinho (ver
+   `fieldRow`). No campo, deitar e endireitar. No comando, lançar com o
+   imposto. Na fase de fundo, clicar na mão é ESCOLHER. Ainda decidindo a
+   mão, ou na carta dos outros online, o clique abre o menu: ali não há
+   jogada principal que faça sentido. */
 export function clickCard(uid: number, anchor: Element) {
   if (uid < 0) return;   // carta escondida (ver `online.ts`): não tem o que fazer com ela
   const c = cardByUid(uid);
-  if (c && state.table!.players[c.owner].phase === "fundo" && zoneOfHand(uid)) {
-    return play({ type: "bottom", uid });
-  }
-  openTableMenu({ kind: "card", uid }, anchor);
+  if (!c) return;
+  const zone = zoneOf(uid);
+  const phase = state.table!.players[c.owner].phase;
+  if (zone === "mao" && phase === "fundo") return play({ type: "bottom", uid });
+  const primary: Action | null = !isMine(c.owner) ? null
+    : zone === "mao" && phase === "jogo" ? { type: "move", uid, to: "campo" }
+    : zone === "campo" ? { type: "tap", uid }
+    : zone === "comando" ? { type: "cast", uid }
+    : null;
+  if (!primary) return openTableMenu({ kind: "card", uid }, anchor);
+  closeTableMenu();
+  play(primary);
 }
 
-function zoneOfHand(uid: number) {
-  return state.table!.players.some((p) => p.mao.some((c) => c.uid === uid));
+/** O que o clique numa carta faz, pra dizer no `title` antes do clique.
+    `own` vem de quem desenha, e não de `isMine`: lido aqui, o sinal da mesa
+    online faria a carta parar de se redesenhar (ver `Who` em `Goldfish.tsx`). */
+export function primaryLabel(uid: number, own: boolean) {
+  const c = cardByUid(uid);
+  if (!c || !own) return "";
+  const zone = zoneOf(uid);
+  const phase = state.table!.players[c.owner].phase;
+  if (zone === "mao") return phase === "fundo" ? "mandar pro fundo" : phase === "jogo" ? "baixar" : "";
+  if (zone === "campo") return c.tapped ? "endireitar" : "deitar";
+  if (zone === "comando") return "lançar";
+  return "";
+}
+
+/* O clique no deck compra uma, pra quem é dono dele. Buscar, olhar o topo
+   e moer ficam no menu do deck. */
+export function clickDeck(player: number, anchor: Element) {
+  if (!isMine(player)) return;
+  if (state.table!.players[player].phase !== "jogo") return openTableMenu({ kind: "deck", player }, anchor);
+  closeTableMenu();
+  play({ type: "draw", player, n: 1 });
+}
+
+export function drawCards(player: number, n: number) {
+  play({ type: "draw", player, n });
+}
+
+export function millCards(player: number, n: number, to: "cemiterio" | "exilio") {
+  play({ type: "mill", player, n, to });
 }
 
 /* ------------------------------------------------------------------ menus */
@@ -183,12 +247,22 @@ export type TableMenu =
 
 /* O menu aberto e onde. Um item que `fica` não fecha o menu: ele se redesenha
    no mesmo lugar, com o número novo, que é o que faz clicar três vezes em
-   "+1/+1" ser um gesto só em vez de três aberturas de menu. */
-export const tableMenu = signal<(TableMenu & { x: number; y: number }) | null>(null);
+   "+1/+1" ser um gesto só em vez de três aberturas de menu.
+
+   `top` é a borda de cima de quem abriu: o menu que não cabe embaixo (a mão
+   mora no pé da tela) abre pra cima dela, em vez de ser empurrado por cima
+   da carta que ele está descrevendo. */
+export const tableMenu = signal<(TableMenu & { x: number; y: number; top: number }) | null>(null);
 
 export function openTableMenu(menu: TableMenu, anchor: Element) {
   const r = anchor.getBoundingClientRect();
-  tableMenu.value = { ...menu, x: r.left, y: r.bottom + 4 };
+  tableMenu.value = { ...menu, x: r.left, y: r.bottom + 4, top: r.top - 4 };
+}
+
+/* O menu pelo botão direito (ou o toque longo, que o navegador entrega como
+   `contextmenu`): abre onde o ponteiro está. */
+export function openTableMenuAt(menu: TableMenu, x: number, y: number) {
+  tableMenu.value = { ...menu, x, y, top: y };
 }
 
 export function closeTableMenu() {
@@ -204,7 +278,8 @@ export function runMenuItem(action: Action, { stay = false, gesture = undefined 
 /* ----------------------------------------------------------------- modais */
 
 export type TableModal =
-  | { kind: "search"; player: number; zone: Zone }
+  | { kind: "search"; player: number; zone: Zone; keepTop?: number[] }
+  | { kind: "peek"; player: number; uids: number[] }
   | { kind: "token"; player: number }
   | { kind: "second" }
   | { kind: "summary" };
@@ -219,6 +294,23 @@ export function openTableModal(modal: TableModal) {
   if (isOnline() && modal.kind === "search" && modal.zone === "baralho") send({ type: "look" });
 }
 
+/* Olhar as N de cima. Na mesa local a modal guarda QUAIS cartas foram vistas
+   (mandar uma pro fundo não traz a seguinte pra janela); online, quem guarda
+   é a sala, e as vistas são as que chegam com carta (ver `room.ts`). */
+export function peekTop(player: number, n: number) {
+  closeTableMenu();
+  const library = state.table?.players[player].baralho || [];
+  if (!library.length) return toast("O baralho está vazio.");
+  openTableModal({ kind: "peek", player, uids: isOnline() ? [] : library.slice(0, n).map((c) => c.uid) });
+  if (isOnline()) send({ type: "peek", n });
+}
+
+/** As cartas da modal de olhar o topo, na ordem em que estão no baralho. */
+export function peekedCards(modal: Extract<TableModal, { kind: "peek" }>) {
+  const library = state.table?.players[modal.player].baralho || [];
+  return isOnline() ? library.filter((c) => c.uid > 0 && c.card) : library.filter((c) => modal.uids.includes(c.uid));
+}
+
 export function isTableModalOpen() {
   return !!tableModal.value;
 }
@@ -231,12 +323,26 @@ export function closeTableModal() {
   if (!modal) return;
   tableModal.value = null;
   if (modal.kind === "search" && modal.zone === "baralho") {
-    play({ type: "shuffle", player: modal.player });
+    const keepTop = (modal.keepTop || []).slice().reverse();   // a última escolhida fica em cima
+    play(keepTop.length ? { type: "shuffle", player: modal.player, keepTop } : { type: "shuffle", player: modal.player });
   }
+  if (modal.kind === "peek" && isOnline()) send({ type: "peek", n: 0 });
 }
 
-export function sendFromSearch(uid: number, zone: Zone) {
-  play({ type: "move", uid, to: zone });
+/* Destino `topo`/`fundo` é o baralho do dono. Da busca NO baralho, o topo
+   espera o fechar (ver `closeTableModal`): pôr agora seria embaralhar junto. */
+export type Destination = Zone | "topo" | "fundo";
+
+export function sendFromSearch(uid: number, to: Destination) {
+  const modal = tableModal.value;
+  if (to === "topo" && modal?.kind === "search" && modal.zone === "baralho") {
+    const keepTop = (modal.keepTop || []).filter((x) => x !== uid).concat(uid);
+    tableModal.value = { ...modal, keepTop };
+    return;
+  }
+  play(to === "topo" || to === "fundo"
+    ? { type: "move", uid, to: "baralho", toTop: to === "topo" }
+    : { type: "move", uid, to });
 }
 
 /* Os modelos de ficha que a pessoa monta ficam no navegador: uma mesa de

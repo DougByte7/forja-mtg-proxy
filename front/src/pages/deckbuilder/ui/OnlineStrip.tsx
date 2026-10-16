@@ -6,6 +6,7 @@ import { MAX_PLAYERS } from "../tableRules";
 import { leaveRoom, online, roomLink, send, setRoomInUrl } from "../online";
 import { state } from "../state";
 import { listDecks, type DeckOption } from "../table";
+import { SpriteIcon } from "./SpriteIcon";
 import { toast } from "./toast";
 
 function copyLink(roomId: string) {
@@ -60,7 +61,7 @@ export function OnlineStrip() {
     : `${o.seats.length} de ${MAX_PLAYERS} na mesa`;
   return (
     <div class="gf-online" id="gf-online-faixa">
-      <b class="gf-online-titulo">Mesa online</b>
+      <b class="gf-online-titulo"><SpriteIcon name="globe" /> Mesa online</b>
       <span class={"gf-online-status" + (o.status === "aberta" ? "" : " espera")}>{status}</span>
       {o.seats.map((seat) => (
         <span class="gf-online-assento">
@@ -69,8 +70,8 @@ export function OnlineStrip() {
       ))}
       {o.status === "aberta" && o.seat === null && o.seats.length < MAX_PLAYERS && <SitChooser />}
       <span class="gf-espaco" />
-      <button class="btn" id="gf-online-link" onClick={() => copyLink(o.roomId)}>Copiar o link</button>
-      <button class="btn" id="gf-online-sair" onClick={leave}>Sair da mesa</button>
+      <button class="btn" id="gf-online-link" onClick={() => copyLink(o.roomId)}><SpriteIcon name="link" /> Copiar o link</button>
+      <button class="btn" id="gf-online-sair" onClick={leave}><SpriteIcon name="sign-out" /> Sair da mesa</button>
     </div>
   );
 }
