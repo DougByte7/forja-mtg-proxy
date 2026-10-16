@@ -27,6 +27,10 @@ async function checkCardBase() {
   } catch { /* a busca vai avisar sozinha se estiver fora do ar */ }
 }
 
+/* O deck do link ainda a caminho. Sem isso, os segundos da requisição
+   mostram a página de deck vazio, pedindo um comandante que o deck já tem. */
+export const deckLoading = signal(new URLSearchParams(location.search).has("deck"));
+
 async function loadDeckFromLink() {
   const id = new URLSearchParams(location.search).get("deck");
   if (!id) return;
@@ -47,6 +51,8 @@ async function loadDeckFromLink() {
   } catch (e) {
     toast("Não achei esse deck: " + (e as Error).message);
     history.replaceState(null, "", location.pathname);
+  } finally {
+    deckLoading.value = false;
   }
 }
 
@@ -79,11 +85,12 @@ export async function boot() {
   // O foco na busca só faz sentido onde ela está sempre à vista: no celular
   // ela é uma folha fechada, e focar dentro dela abriria o teclado sobre uma
   // superfície invisível.
-  if (state.commanders.length) {
-    search();
-    if (window.innerWidth > 900) document.getElementById("busca")?.focus();
-  } else {
-    searchCommander();
-    document.getElementById("busca-cmd")?.focus();
-  }
+  if (state.commanders.length) search();
+  else searchCommander();
+  // Num quadro depois: a caixa que recebe o foco só existe na tela quando o
+  // carregando do deck sai dela.
+  requestAnimationFrame(() => {
+    if (!state.commanders.length) document.getElementById("busca-cmd")?.focus();
+    else if (window.innerWidth > 900) document.getElementById("busca")?.focus();
+  });
 }

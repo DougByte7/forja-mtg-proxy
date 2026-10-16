@@ -2,7 +2,7 @@
    as respostas sobre o deck em abas. */
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef } from "preact/hooks";
-import { cardBase } from "../boot";
+import { cardBase, deckLoading } from "../boot";
 import { createCategory, commanderPick } from "../editing";
 import { importPastedLink } from "../importExport";
 import { openDrawer } from "../drawers";
@@ -59,6 +59,14 @@ function importFromCommanderBox() {
    inteira é essa única pergunta. */
 function CommanderHero() {
   const state = useDeck();
+  if (deckLoading.value) {
+    return (
+      <div class="painel heroi carregando-deck" id="heroi" role="status">
+        <span class="girando" aria-hidden="true" />
+        <p>Abrindo o deck…</p>
+      </div>
+    );
+  }
   if (state.commanders.length && !commanderPick.partner) return null;
   return (
     <div class="painel heroi" id="heroi">
