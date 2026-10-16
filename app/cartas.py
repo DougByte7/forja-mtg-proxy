@@ -1218,12 +1218,17 @@ def _linhas_por_nome(conn, nomes: list[str]) -> "dict":
                         {f for f in frentes.values() if f})
     por_busca: dict = {}
     por_frente: dict = {}
+    # Nome não é único: carta de playtest do Mystery Booster 2 tem o mesmo
+    # nome de carta de verdade ("Pick Your Poison" da cmb2 e da MKM), com
+    # outro oracle_id e `not_legal`. Como fica a primeira linha de cada nome,
+    # a legal vem primeiro — senão o deck acusa "não é legal" numa carta que é.
     for comeco in range(0, len(procurados), 400):
         pedaco = procurados[comeco:comeco + 400]
         vagas = ",".join("?" * len(pedaco))
         for linha in conn.execute(
                 f"SELECT {_COLUNAS} FROM cartas WHERE busca IN ({vagas}) "
-                f"OR busca_frente IN ({vagas})", (*pedaco, *pedaco)).fetchall():
+                f"OR busca_frente IN ({vagas}) ORDER BY legal DESC",
+                (*pedaco, *pedaco)).fetchall():
             por_busca.setdefault(linha["busca"], linha)
             por_frente.setdefault(linha["busca_frente"], linha)
 
