@@ -42,6 +42,22 @@ export interface Online {
 
 export const online = signal<Online | null>(null);
 
+/* O MODO MESA: a página aberta pelo link de convite (`?mesa=` sem `?deck=`).
+   Quem chega por ele vem JOGAR, não montar — e o deckbuilder em volta da mesa
+   (busca de comandante, abas, cabeçalho de deck vazio) dizia o contrário: sem
+   comandante na tela, a área das abas nem aparece. No modo mesa a página é só
+   a mesa (ver `App`), e sair dela leva pros decks da pessoa.
+
+   Quem abre a mesa pelo "Jogar online" do próprio deck continua no
+   deckbuilder: a URL dele tem o deck junto. Lido uma vez, antes do primeiro
+   desenho — a página não entra nem sai do modo sem recarregar. */
+const params = new URLSearchParams(location.search);
+export const tableMode = signal(params.has("mesa") && !params.has("deck"));
+
+/* Quem não sentou e escolheu só olhar: a mesa aparece no lugar do lobby (ver
+   `TableLobby`). Volta a ser falso ao trocar de sala. */
+export const watching = signal(false);
+
 /* O que os testes trocam: de onde vem o token e qual WebSocket abrir. */
 export const onlineDeps = {
   token: sessionToken as () => Promise<string | null>,
@@ -83,6 +99,7 @@ export function setRoomInUrl(roomId: string | null) {
 export function joinRoom(roomId: string) {
   leaveRoom(false);
   online.value = { roomId, status: "conectando", seat: null, seats: [], looking: false, canUndo: false };
+  watching.value = false;
   state.table = null;
   state.tableUndo = [];
   onlineDeps.changed();

@@ -1602,6 +1602,61 @@ body.gf-cheia #painel-goldfish{padding:10px 14px;}
 body.gf-cheia .gf-topo{margin-bottom:6px;}
 body.gf-cheia .gf-jogador{gap:6px;}
 
+/* ---------------- modo mesa ----------------
+   A página aberta pelo link de convite é só a mesa (ver `TableModePage`):
+   uma coluna, a largura toda, e um cabeçalho que diz onde a pessoa está. */
+.corpo.modo-mesa{grid-template-columns:minmax(0,1fr);max-width:1600px;}
+.mesa-titulo{display:flex;flex-direction:column;gap:1px;}
+.mesa-titulo b{font-family:'Cinzel',serif;font-size:17px;color:var(--text);}
+.mesa-titulo span{font-size:11.5px;color:var(--text-muted);}
+.mesa-topo .acoes .btn{display:inline-flex;align-items:center;gap:6px;}
+/* O lobby: quem está na mesa em cima, os decks em cartões, e o "só
+   assistir" no pé. */
+.mesa-lobby{display:flex;flex-direction:column;gap:16px;padding:6px 0 4px;}
+.lobby-cabeca{display:flex;flex-direction:column;gap:8px;}
+.lobby-cabeca h2{margin:0;font-family:'Cinzel',serif;font-size:19px;color:var(--text);font-weight:600;}
+.lobby-sentados{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;}
+.lobby-sentado{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--border);background:var(--surface-2);font-size:12.5px;color:var(--text);}
+.lobby-deck-de{color:var(--text-muted);}
+.lobby-sentados .nota{margin:0;}
+.lobby-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
+.lobby-deck{display:flex;flex-direction:column;text-align:left;padding:0;overflow:hidden;cursor:pointer;
+  border:1px solid var(--border);border-radius:12px;background:var(--surface-2);color:var(--text);font:inherit;
+  transition:border-color .12s,transform .12s,box-shadow .12s;}
+.lobby-deck:hover:not(:disabled),.lobby-deck:focus-visible{border-color:var(--gold);transform:translateY(-2px);
+  box-shadow:0 12px 26px -14px rgba(0,0,0,.8);outline:none;}
+.lobby-deck:disabled{cursor:default;}
+.lobby-deck:disabled:not(.sentando){opacity:.5;}
+.lobby-deck.atual{border-color:rgba(233,199,101,.55);}
+.lobby-capa{position:relative;display:flex;align-items:center;justify-content:center;height:118px;
+  background:var(--inset);color:var(--text-muted);overflow:hidden;}
+.lobby-capa img{width:100%;height:100%;object-fit:cover;object-position:center 22%;}
+.lobby-capa > .ico{width:34px;height:34px;opacity:.35;}
+.lobby-selo{position:absolute;top:8px;left:8px;padding:1px 8px;border-radius:999px;background:var(--gold);
+  color:var(--sobre-gold);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;}
+.lobby-miolo{display:flex;flex-direction:column;gap:3px;padding:10px 12px 4px;min-width:0;}
+.lobby-nome{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lobby-cmd{font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lobby-info{display:flex;align-items:center;gap:10px;font-size:11.5px;margin-top:2px;
+  font-family:'IBM Plex Mono',monospace;}
+.lobby-info .cores{display:inline-flex;gap:2px;}
+.lobby-info .completo{color:var(--green);}
+.lobby-info .falta{color:var(--gold-light);}
+.lobby-sentar{display:flex;align-items:center;gap:6px;padding:8px 12px 11px;font-size:12.5px;
+  font-weight:600;color:var(--gold-light);}
+.lobby-deck.sentando .lobby-sentar{color:var(--text-muted);}
+.lobby-vazio{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;
+  padding:40px 16px;color:var(--text-muted);font-size:13px;line-height:1.55;}
+.lobby-vazio > .ico{width:34px;height:34px;opacity:.5;}
+.lobby-vazio p{max-width:440px;margin:0;}
+.lobby-vazio .gf-acoes{justify-content:center;}
+.lobby-vazio .btn{display:inline-flex;align-items:center;gap:6px;}
+.lobby-nota{margin:0;}
+.lobby-nota .link{background:none;border:none;padding:0;font:inherit;color:var(--gold-light);
+  cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
+.lobby-pe{display:flex;gap:8px;border-top:1px solid var(--border);padding-top:12px;}
+.lobby-pe .btn{display:inline-flex;align-items:center;gap:6px;}
 /* ---------------- oferta de reclamar deck órfão ---------------- */
 .orfao-fundo{position:fixed;inset:0;background:rgba(15,13,23,.72);
   display:grid;place-items:center;z-index:60;padding:20px;}

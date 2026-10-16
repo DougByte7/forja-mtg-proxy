@@ -10,6 +10,7 @@ import { closeDrawer, drawer, type DrawerId } from "../drawers";
 import { clearFilters } from "../filters";
 import { importForm, runImport, setImportField } from "../importExport";
 import { onPageKey } from "../keyboard";
+import { tableMode } from "../online";
 import { closeSheet, maybeCollapsed, openSheet, sheetOpen, switchTab, toggleMaybeColumn } from "../layout";
 import { filterList, MIN_FOR_TOOLS } from "../lists";
 import { bindHoverPreview } from "../hoverPreview";
@@ -19,6 +20,7 @@ import { CardModal } from "./CardModal";
 import { DeckArea } from "./DeckArea";
 import { BoardList, MaybeCount } from "./DeckList";
 import { FilterFields } from "./Filters";
+import { GoldfishPanel } from "./Goldfish";
 import { TableOverlays } from "./GoldfishOverlays";
 import { Header } from "./Header";
 import { ImportNotice } from "./ImportNotice";
@@ -197,7 +199,47 @@ function AccountDialogs() {
   );
 }
 
+/* A página no modo mesa (ver `tableMode`): o cabeçalho diz onde a pessoa
+   está e leva pros decks dela, e o corpo é só a mesa — sem busca, sem abas,
+   sem o "escolha seu comandante" de um deck que ninguém está montando. */
+function TableModePage() {
+  useEffect(() => {
+    document.addEventListener("keydown", onPageKey);
+    return () => document.removeEventListener("keydown", onPageKey);
+  }, []);
+  return (
+    <>
+      <header class="topo mesa-topo">
+        <div class="topo-in">
+          <a class="rune" href="/" title="Meus decks"><span>⌘</span></a>
+          <div class="mesa-titulo">
+            <b>Mesa online</b>
+            <span>Commander, até 4 na mesa</span>
+          </div>
+          <div class="espaco" />
+          <div class="acoes"><a class="btn" href="/"><SpriteIcon name="cards" /> Meus decks</a></div>
+        </div>
+      </header>
+      <main class="corpo modo-mesa" id="corpo">
+        <section class="principal">
+          <div class="painel" id="painel-goldfish"><GoldfishPanel /></div>
+        </section>
+      </main>
+      <TableOverlays />
+      <CardModal />
+      <Toast />
+    </>
+  );
+}
+
+/* As duas páginas são componentes separados, e não um `if` no meio de uma:
+   o modo pode cair no `boot` (link de mesa quebrado), e trocar de página
+   no meio dos hooks de outra quebraria a ordem deles. */
 export function App() {
+  return tableMode.value ? <TableModePage /> : <DeckbuilderPage />;
+}
+
+function DeckbuilderPage() {
   const state = useDeck();
   useEffect(() => {
     bindHoverPreview();

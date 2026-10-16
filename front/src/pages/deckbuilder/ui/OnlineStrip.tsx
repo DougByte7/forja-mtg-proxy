@@ -1,11 +1,9 @@
 /* A faixa da mesa online, entre os botões e a mesa: em que pé está a
-   conexão, quem está sentado, o link pra chamar os outros, sentar e sair.
+   conexão, quem está sentado, o link pra chamar os outros e sair. Sentar é
+   no lobby (`TableLobby`), que ocupa o lugar da mesa até a pessoa sentar.
    Só existe com a mesa online (ver `online.ts`). */
-import { useEffect, useState } from "preact/hooks";
 import { MAX_PLAYERS } from "../tableRules";
-import { leaveRoom, online, roomLink, send, setRoomInUrl } from "../online";
-import { state } from "../state";
-import { listDecks, type DeckOption } from "../table";
+import { leaveRoom, online, roomLink, setRoomInUrl, tableMode, watching } from "../online";
 import { SpriteIcon } from "./SpriteIcon";
 import { toast } from "./toast";
 
@@ -18,39 +16,16 @@ function copyLink(roomId: string) {
   navigator.clipboard.writeText(link).then(() => toast("Link da mesa copiado."), byHand);
 }
 
+/* No modo mesa a página é só a mesa: sair leva pros decks da pessoa, que é
+   de onde ela partiria pra outra coisa. Fora dele, volta pro deck aberto. */
 function leave() {
+  if (tableMode.value) {
+    leaveRoom(false);
+    location.assign("/");
+    return;
+  }
   leaveRoom();
   setRoomInUrl(null);
-}
-
-/* Sentar é escolher um deck SALVO: a sala busca o deck no site pelo id, e
-   não aceita as cartas desta tela (ver `room/src/durable.ts`). O deck aberto
-   na tela vem escolhido, quando ele já foi salvo. */
-function SitChooser() {
-  const [decks, setDecks] = useState<DeckOption[] | null>(null);
-  const [chosen, setChosen] = useState("");
-  useEffect(() => {
-    let alive = true;
-    listDecks().then((list) => {
-      if (!alive) return;
-      setDecks(list);
-      setChosen(list.some((d) => d.id === state.id) ? state.id! : list[0]?.id || "");
-    });
-    return () => { alive = false; };
-  }, []);
-  if (!decks) return <span class="gf-online-nota">carregando seus decks…</span>;
-  if (!decks.length) return <span class="gf-online-nota">Salve um deck pra poder sentar.</span>;
-  return (
-    <span class="gf-online-sentar">
-      <select class="campo" id="gf-online-deck" aria-label="Deck pra sentar" value={chosen}
-              onChange={(e) => setChosen(e.currentTarget.value)}>
-        {decks.map((d) => <option value={d.id}>{d.nome}</option>)}
-      </select>
-      <button class="btn ouro" id="gf-online-sentar" disabled={!chosen}
-              onClick={() => send({ type: "sit", deckId: chosen })}>Sentar</button>
-      <span class="gf-online-nota">A mesa usa o deck como está salvo no site.</span>
-    </span>
-  );
 }
 
 export function OnlineStrip() {
@@ -68,7 +43,11 @@ export function OnlineStrip() {
           <span class={"gf-conexao" + (seat.connected ? " on" : "")} aria-hidden="true" />{seat.name}
         </span>
       ))}
-      {o.status === "aberta" && o.seat === null && o.seats.length < MAX_PLAYERS && <SitChooser />}
+      {/* Quem escolheu só assistir volta ao lobby por aqui (ver `TableLobby`). */}
+      {o.status === "aberta" && o.seat === null && watching.value && o.seats.length < MAX_PLAYERS && (
+        <button class="btn ouro" id="gf-online-sentar" onClick={() => { watching.value = false; }}>
+          <SpriteIcon name="cards" /> Escolher deck e sentar</button>
+      )}
       <span class="gf-espaco" />
       <button class="btn" id="gf-online-link" onClick={() => copyLink(o.roomId)}><SpriteIcon name="link" /> Copiar o link</button>
       <button class="btn" id="gf-online-sair" onClick={leave}><SpriteIcon name="sign-out" /> Sair da mesa</button>

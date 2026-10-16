@@ -224,11 +224,118 @@ describe("a mesa na tela", () => {
     expect(sections[0].querySelector(".gf-conexao.on")).toBeNull();
   });
 
-  it("quem não sentou escolhe o deck na faixa; os botões da mesa local somem", async () => {
+  it("quem só assiste vê a mesa sem os botões da mesa local, e volta ao lobby pela faixa", async () => {
     const { root } = await panel(null);
+    act(() => { (root.querySelector("#lobby-assistir") as HTMLButtonElement).click(); });
     expect([!!root.querySelector("#gf-online-faixa"), !!root.querySelector("#gf-segundo"),
-            !!root.querySelector("#gf-encerrar"), root.querySelector("#gf-embaralhar")!.textContent!.trim()])
-      .toEqual([true, false, false, "Recomeçar"]);
+            !!root.querySelector("#gf-encerrar"), root.querySelector("#gf-embaralhar")!.textContent!.trim(),
+            !!root.querySelector("#mesa-lobby")])
+      .toEqual([true, false, false, "Recomeçar", false]);
+    act(() => { (root.querySelector("#gf-online-sentar") as HTMLButtonElement).click(); });
+    expect(root.querySelector("#mesa-lobby")).not.toBeNull();
+  });
+});
+
+describe("o lobby de quem não sentou", () => {
+  const summary = (id: string, nome: string, extra: object = {}) =>
+    ({ id, nome, comandantes: ["Atraxa"], identidade: "WUBG", total: 100, atualizado_em: 1, arte: null, ...extra });
+
+  /* A rede de mentira responde a lista de decks; o resto fica pendurado. */
+  function decksOnTheServer(mine: object[], local: object[] = []) {
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      const body = url.endsWith("/decks/meus") ? { decks: mine }
+        : url.endsWith("/decks/resumo") ? { decks: local, desconhecidos: [] } : null;
+      if (!body) return new Promise(() => {});
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }));
+  }
+
+  async function lobby(seat: number | null, mine: object[] | null = null) {
+    await setUp();
+    if (mine) decksOnTheServer(mine);
+    p.state.user = { login: "caio" };
+    p.joinRoom("sala-teste-123");
+    await flush();
+    receive(viewFor(seat));
+    const root = document.createElement("div");
+    document.body.append(root);
+    act(() => render(<p.GoldfishPanel />, root));
+    await act(async () => { await flush(); await flush(); });
+    return root;
+  }
+
+  it("mostra quem está na mesa e os decks em cartões, o mais mexido primeiro; o clique senta", async () => {
+    const root = await lobby(null, [summary("aaa111", "Velho", { atualizado_em: 1 }),
+                                    summary("bbb222", "Novo", { atualizado_em: 9, total: 92 })]);
+    expect([root.querySelector("#gf-mesa"), root.querySelector(".lobby-sentados")!.textContent])
+      .toEqual([null, expect.stringContaining("Ana· Elfos")]);
+    const cards = [...root.querySelectorAll("[data-lobby-deck]")] as HTMLButtonElement[];
+    expect(cards.map((c) => [c.dataset.lobbyDeck, c.querySelector(".lobby-info")!.textContent]))
+      .toEqual([["bbb222", "92/100"], ["aaa111", "100/100"]]);
+    act(() => { cards[1].click(); });
+    expect([sock().sent.at(-1), cards.every((c) => c.disabled)]).toEqual([{ type: "sit", deckId: "aaa111" }, true]);
+  });
+
+  it("sem deck salvo, chama pra montar um numa aba nova", async () => {
+    const root = await lobby(null, []);
+    const make = root.querySelector('.lobby-vazio a[href="/deckbuilder"]') as HTMLAnchorElement;
+    expect([make.target, root.querySelector(".lobby-vazio")!.textContent]).toEqual(["_blank", expect.stringContaining("esta mesa espera")]);
+  });
+
+  it("sem conta, o lobby é o convite pra entrar, e o login volta pra mesa", async () => {
+    await setUp();
+    p.onlineDeps.token = async () => null;
+    history.replaceState(null, "", "/deckbuilder?mesa=sala-teste-123");
+    p.joinRoom("sala-teste-123");
+    await flush();
+    const root = document.createElement("div");
+    document.body.append(root);
+    act(() => render(<p.GoldfishPanel />, root));
+    expect(root.querySelector("#lobby-entrar")!.getAttribute("href"))
+      .toBe("/entrar?voltar=" + encodeURIComponent("/deckbuilder?mesa=sala-teste-123"));
+    history.replaceState(null, "", "/");
+  });
+
+  it("quem já sentou vê a mesa, não o lobby", async () => {
+    const root = await lobby(0);
+    expect([!!root.querySelector("#gf-mesa"), !!root.querySelector("#mesa-lobby")]).toEqual([true, false]);
+  });
+});
+
+describe("o modo mesa (o link de convite)", () => {
+  async function openPage(search: string) {
+    history.replaceState(null, "", "/deckbuilder" + search);
+    await setUp();
+    const root = document.createElement("div");
+    document.body.append(root);
+    act(() => render(<p.App />, root));
+    history.replaceState(null, "", "/");
+    return root;
+  }
+
+  it("o link só com a mesa abre a página da mesa, sem nada de montar deck", async () => {
+    const root = await openPage("?mesa=sala-teste-123");
+    expect([p.tableMode.value, !!root.querySelector("#painel-goldfish"), !!root.querySelector("#area-deck"),
+            !!root.querySelector("#lateral"), root.querySelector(".mesa-titulo b")!.textContent])
+      .toEqual([true, true, false, false, "Mesa online"]);
+  });
+
+  it("com o deck junto (quem abriu a mesa do próprio deck), continua o deckbuilder", async () => {
+    const root = await openPage("?deck=abc123&mesa=sala-teste-123");
+    expect([p.tableMode.value, !!root.querySelector("#painel-goldfish .mesa-titulo"), !!root.querySelector("#lateral")])
+      .toEqual([false, false, true]);
+  });
+
+  it("sair da mesa no modo mesa leva pros decks da pessoa", async () => {
+    await joined();
+    p.tableMode.value = true;
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...location, assign, search: "", pathname: "/deckbuilder", origin: location.origin });
+    const root = document.createElement("div");
+    document.body.append(root);
+    act(() => render(<p.OnlineStrip />, root));
+    act(() => { (root.querySelector("#gf-online-sair") as HTMLButtonElement).click(); });
+    expect([assign.mock.calls, p.online.value]).toEqual([[["/"]], null]);
   });
 });
 

@@ -377,21 +377,45 @@ export function makeToken(player: number, model: TokenModel, howMany: number | s
   play({ type: "token", player, model: isOnline() ? noImage : model, count: Math.max(1, Math.min(20, Number(howMany) || 1)) });
 }
 
-export type DeckOption = { id: string; nome: string; de: string };
+export type DeckOption = {
+  id: string; nome: string; de: string;
+  /* O resumo do servidor, quando ele respondeu: a capa (arte do comandante),
+     quem comanda, as cores e quantas cartas. É o que faz o lobby da mesa
+     mostrar decks reconhecíveis, e não uma lista de nomes. */
+  arte?: string | null; comandantes?: string[]; identidade?: string; total?: number; atualizado?: number;
+};
 
-/* Os decks vêm de dois lugares porque a conta é opcional nesta página: o
-   navegador lembra o que foi montado aqui, e quem entrou tem os seus em
-   qualquer aparelho. A união dos dois é a lista que a pessoa reconhece. */
+type DeckSummary = {
+  id: string; nome?: string; arte?: string | null; comandantes?: string[]; identidade?: string;
+  total?: number; atualizado_em?: number;
+};
+
+const fromSummary = (d: DeckSummary, de: string): DeckOption => ({
+  id: d.id, nome: d.nome || "Deck sem nome", de, arte: d.arte ?? null, comandantes: d.comandantes || [],
+  identidade: d.identidade || "", total: d.total, atualizado: d.atualizado_em || 0,
+});
+
+/* Os decks desta pessoa: os da conta e os que este navegador lembra, com o
+   resumo de cada um (o dos lembrados vem de `/decks/resumo`, numa ida só). O
+   mais mexido primeiro — é com ele que se quer jogar. Sem rede, fica o que o
+   navegador lembra, só com o nome. */
 export async function listDecks(): Promise<DeckOption[]> {
   const byId = new Map<string, DeckOption>();
-  for (const d of readLocalDecks()) byId.set(d.id, { id: d.id, nome: d.nome, de: "neste navegador" });
+  const local = readLocalDecks();
+  for (const d of local) byId.set(d.id, { id: d.id, nome: d.nome || "Deck sem nome", de: "neste navegador" });
+  if (local.length) {
+    try {
+      const r = await api("/decks/resumo", { body: { ids: local.map((d) => d.id).slice(0, 60) }, noStore: true });
+      for (const d of (r.decks || []) as DeckSummary[]) byId.set(d.id, fromSummary(d, "neste navegador"));
+    } catch { /* sem rede: os nomes que o navegador lembra */ }
+  }
   if (state.user) {
     try {
-      const r = await api("/decks/meus");
-      for (const d of r.decks || []) byId.set(d.id, { id: d.id, nome: d.nome || "Deck sem nome", de: "da sua conta" });
+      const r = await api("/decks/meus", { noStore: true });
+      for (const d of (r.decks || []) as DeckSummary[]) byId.set(d.id, fromSummary(d, "da sua conta"));
     } catch { /* sem rede, fica o que o navegador lembra */ }
   }
-  return [...byId.values()];
+  return [...byId.values()].sort((a, b) => (b.atualizado || 0) - (a.atualizado || 0));
 }
 
 /* Devolve se o deck entrou; o erro já foi dito. */

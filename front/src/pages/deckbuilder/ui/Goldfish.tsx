@@ -28,7 +28,7 @@ import {
   isLand, playerArts, ZONE_NAMES, type Player, type Table, type TableCard, type Zone,
 } from "../goldfish";
 import type { SeatInfo } from "../../../../../room/src/protocol";
-import { isOnline, mySeat, online } from "../online";
+import { isOnline, mySeat, online, tableMode, watching } from "../online";
 import { COLOR_NAMES, COLORS, deckRevision, state } from "../state";
 import {
   attackAll, bindTableDocument, changeCommanderDamage, changeLife, changePlayerCounter, clickCard, clickDeck,
@@ -40,6 +40,7 @@ import {
 import { OnlineStrip } from "./OnlineStrip";
 import { ManaCost, ManaText } from "./Mana";
 import { SpriteIcon } from "./SpriteIcon";
+import { TableLobby } from "./TableLobby";
 
 /** A mesa, de dentro de um componente: redesenha a cada jogada e a cada
     mudança do deck (as artes e os combos da mesa vêm dele). */
@@ -913,10 +914,20 @@ export function GoldfishPanel() {
   const canUndo = o ? o.canUndo : state.tableUndo.length > 0;
   const deciding = !!m && m.players[m.active].phase !== "jogo";
   const last = m?.log.at(-1)?.text;
+  // Quem não sentou, e não escolheu só olhar, vê o lobby no lugar da mesa:
+  // os botões de jogo não têm o que fazer por ele ainda.
+  if (o && o.seat === null && !watching.value) {
+    return (
+      <>
+        <OnlineStrip />
+        <TableLobby />
+      </>
+    );
+  }
   return (
     <>
       <div class="gf-topo">
-        <h2 class="secao" style={{ margin: 0 }}>Goldfish</h2>
+        <h2 class="secao" style={{ margin: 0 }}>{o ? "Mesa online" : "Goldfish"}</h2>
         <Help />
         <span class="gf-turno" id="gf-turno">{m ? turnTitle(m) : ""}</span>
         <button class="btn ouro" id="gf-passar" disabled={!m || deciding || (!!o && m.active !== o.seat)}
@@ -959,7 +970,8 @@ export function GoldfishPanel() {
         <TableView />
         <div class="gf-coluna">
           <CardDetail />
-          <CombosNote m={m} online={!!o} />
+          {/* No modo mesa não há aba de combos pra onde a nota mandaria. */}
+          {!tableMode.value && <CombosNote m={m} online={!!o} />}
           <Log m={m} />
         </div>
       </div>

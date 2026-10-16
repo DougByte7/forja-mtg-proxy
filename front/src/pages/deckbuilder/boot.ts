@@ -6,7 +6,7 @@ import { signal } from "@preact/signals";
 import { greetAccount, loadAccount } from "./account";
 import { loadArts } from "./art";
 import { switchTab } from "./layout";
-import { joinRoom } from "./online";
+import { joinRoom, tableMode } from "./online";
 import { loadExchangeRate } from "./price";
 import { redrawAll } from "./redraw";
 import { api, rememberDeck, setSaveStatus } from "./save";
@@ -67,12 +67,24 @@ export async function boot() {
   await loadDeckFromLink();
   redrawAll();
   // A mesa online do link (`?mesa=`, ver `online.ts`): a página abre na aba
-  // do goldfish, já entrando nela.
+  // do goldfish, já entrando nela. No modo mesa (o link de convite), a conta
+  // vem antes: o lobby lista os decks dela, e sem ela listaria só os que o
+  // navegador lembra.
   const room = new URLSearchParams(location.search).get("mesa");
   if (room && /^[A-Za-z0-9_-]{8,64}$/.test(room)) {
+    if (tableMode.value) {
+      document.title = "Mesa online · Forja";
+      await account;
+    }
     switchTab("goldfish");
     joinRoom(room);
+  } else if (tableMode.value) {
+    // Link de mesa quebrado: a página volta a ser o deckbuilder, com aviso.
+    tableMode.value = false;
+    toast("Esse link de mesa não está completo. Peça o link de novo a quem chamou.");
   }
+  // O resto é de quem monta deck: no modo mesa não há busca nem deck à vista.
+  if (tableMode.value) return;
   // Depois do deck, de propósito: a oferta de reclamar precisa saber se este
   // deck tem dono, e o convite, se há deck aberto.
   account.then(greetAccount);
