@@ -980,10 +980,11 @@ select.campo option{background:var(--surface-2);color:var(--text);}
    foco, pra quem chega pelo teclado ler também. */
 .gf-dica{position:relative;display:inline-flex;}
 .gf-dica-botao{width:24px;height:24px;border-radius:50%;padding:0;
-  border:1px solid var(--border);background:none;color:var(--text-muted);
+  border:0;background:none;color:var(--text-muted);
   display:inline-flex;align-items:center;justify-content:center;cursor:help;}
-.gf-dica-botao:hover,.gf-dica-botao:focus-visible{border-color:var(--gold);
-  color:var(--gold-light);outline:none;}
+/* O ícone já é um círculo com a interrogação: ele mesmo ocupa o botão todo. */
+.gf-dica-botao .ico{width:24px;height:24px;}
+.gf-dica-botao:hover,.gf-dica-botao:focus-visible{color:var(--gold-light);outline:none;}
 .gf-dica-texto{position:absolute;left:-8px;top:calc(100% + 8px);z-index:65;
   width:min(360px,calc(100vw - 32px));padding:10px 12px;border-radius:10px;
   background:var(--surface-2);border:1px solid var(--border);
