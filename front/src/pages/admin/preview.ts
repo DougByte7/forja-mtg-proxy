@@ -5,8 +5,9 @@
    viram uma fila corrida e só a última folha do conjunto sai incompleta.
 
    O que a barra mostra é o SLOT EM BRANCO que deixou de existir, não só a
-   folha: a folha é o branco arredondado pra baixo (nove brancos = uma folha),
-   e por isso dois pedidos nunca economizam mais que uma.
+   folha: a folha é o branco arredondado pra baixo (nove brancos = uma folha;
+   oito no foil, que imprime 8 cartas deitadas), e por isso dois pedidos
+   nunca economizam mais que uma.
 
    É uma PRÉVIA, feita com o que a listagem já trouxe, pra barra responder na
    hora que se marca uma caixinha. Quem decide de verdade é o backend
@@ -17,21 +18,28 @@
 import type { Order } from "./types";
 
 export const SHEET_CARD_COUNT = 9;
+export const SHEET_CARD_COUNT_FOIL = 8;
 
-type Sized = Pick<Order, "pages" | "blanks">;
+/** Cartas por folha de um acabamento — a mesma regra do `calc.cartas_por_folha`. */
+export const sheetCardCount = (lamination?: string) =>
+  lamination === "foil" ? SHEET_CARD_COUNT_FOIL : SHEET_CARD_COUNT;
 
-/** Quantas cartas o pedido põe na fila. `pages * 9 - blanks` é exatamente o
-    que o backend gravou como qty + versos na hora de cobrar. */
+type Sized = Pick<Order, "pages" | "blanks"> & Partial<Pick<Order, "lamination">>;
+
+/** Quantas cartas o pedido põe na fila. `pages * cartas por folha - blanks` é
+    exatamente o que o backend gravou como qty + versos na hora de cobrar. */
 export const slotsOf = (p: Sized) =>
-  Math.max(0, (Number(p.pages) || 0) * SHEET_CARD_COUNT - (Number(p.blanks) || 0));
+  Math.max(0, (Number(p.pages) || 0) * sheetCardCount(p.lamination) - (Number(p.blanks) || 0));
 
 export function localSummary(list: Sized[]) {
+  // Só se combina pedido do mesmo acabamento, então o primeiro fala por todos.
+  const perSheet = sheetCardCount(list[0]?.lamination);
   const cards = list.reduce((n, p) => n + slotsOf(p), 0);
   const separate = list.reduce((n, p) => n + (Number(p.pages) || 0), 0);
   const separateBlanks = list.reduce((n, p) => n + Math.max(0, Number(p.blanks) || 0), 0);
-  const combined = Math.ceil(cards / SHEET_CARD_COUNT);
-  const rest = cards % SHEET_CARD_COUNT;
-  const blanks = rest ? SHEET_CARD_COUNT - rest : 0;
+  const combined = Math.ceil(cards / perSheet);
+  const rest = cards % perSheet;
+  const blanks = rest ? perSheet - rest : 0;
   return {
     cards, separate, combined, separateBlanks, blanks,
     blanksSaved: Math.max(0, separateBlanks - blanks),

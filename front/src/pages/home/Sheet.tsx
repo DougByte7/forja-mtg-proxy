@@ -3,11 +3,8 @@
    leitura, porque ali o pedido já virou cobrança). */
 import { useState } from "preact/hooks";
 import { artSources, cardTitle } from "./art";
-import {
-  CARD_H_MM, CARD_W_MM, COLS, GUIDES, MARGIN_X_MM, MARGIN_Y_MM, PAGE_H_MM, PAGE_W_MM,
-  pagesOf, type Group,
-} from "./sheet";
-import { CARDS_PER_PAGE } from "./totals";
+import { gridOf, PAGE_H_MM, PAGE_W_MM, pagesOf, type Group } from "./sheet";
+import type { Lamination } from "./totals";
 import type { CardMeta, Slot } from "./xml";
 
 /** A miniatura, tentando cada endereço; se todos falharem, o nome da carta
@@ -100,28 +97,41 @@ export type SlotControls = {
   removeBack: (frontKey: string, backId: string) => void;
 };
 
-/** As páginas como saem do PDF. Sem `controls`, a mesma folha sem os + e −. */
-export function SheetPages({ slots, controls }: { slots: Slot[]; controls?: SlotControls }) {
-  const pages = pagesOf(slots);
+/* Carta deitada (foil): a arte em pé, girada 90° no sentido anti-horário pra
+   caber no slot 88x63 — o mesmo giro do `_draw_card` do pdf_generator. */
+const ROTATED_ART = {
+  left: "50%", top: "50%",
+  width: (63 / 88 * 100).toFixed(4) + "%", height: (88 / 63 * 100).toFixed(4) + "%",
+  transform: "translate(-50%, -50%) rotate(-90deg)",
+};
+
+/** As páginas como saem do PDF. Sem `controls`, a mesma folha sem os + e −.
+    `lam` escolhe a grade: o foil sai com 8 cartas deitadas. */
+export function SheetPages({ slots, lam, controls }:
+  { slots: Slot[]; lam?: Lamination; controls?: SlotControls }) {
+  const grid = gridOf(lam);
+  const pages = pagesOf(slots, grid.perPage);
   return (
     <>
       {pages.map((items, p) => (
         <div class="pg-wrap" key={p}>
           <div class="pg-label">Página {p + 1} de {pages.length}</div>
           <div class="pg">
-            {Array.from({ length: CARDS_PER_PAGE }, (_, i) => {
+            {Array.from({ length: grid.perPage }, (_, i) => {
               const item = items[i];
               const style = {
-                left: pct(MARGIN_X_MM + (i % COLS) * CARD_W_MM, PAGE_W_MM),
-                top: pct(MARGIN_Y_MM + Math.floor(i / COLS) * CARD_H_MM, PAGE_H_MM),
-                width: pct(CARD_W_MM, PAGE_W_MM),
-                height: pct(CARD_H_MM, PAGE_H_MM),
+                left: pct(grid.marginX + (i % grid.cols) * grid.slotW, PAGE_W_MM),
+                top: pct(grid.marginY + Math.floor(i / grid.cols) * grid.slotH, PAGE_H_MM),
+                width: pct(grid.slotW, PAGE_W_MM),
+                height: pct(grid.slotH, PAGE_H_MM),
               };
               if (!item) return <div class="pg-slot empty" style={style}><span>livre</span></div>;
               const title = cardTitle(item.meta);
               return (
                 <div class="pg-slot" style={style}>
-                  <CardArt meta={item.meta} width={400} />
+                  {grid.rotated
+                    ? <div class="pg-rot" style={ROTATED_ART}><CardArt meta={item.meta} width={400} /></div>
+                    : <CardArt meta={item.meta} width={400} />}
                   {item.kind === "back" && <span class="pg-badge">VERSO</span>}
                   {controls && (
                     <div class="pg-ctrl">
@@ -152,7 +162,7 @@ export function SheetPages({ slots, controls }: { slots: Slot[]; controls?: Slot
               );
             })}
             <svg class="pg-guides" viewBox={`0 0 ${PAGE_W_MM} ${PAGE_H_MM}`} aria-hidden="true">
-              {GUIDES.map((l) => <line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke={l.color} stroke-width="0.2" />)}
+              {grid.guides.map((l) => <line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke={l.color} stroke-width="0.2" />)}
             </svg>
           </div>
         </div>

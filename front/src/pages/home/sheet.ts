@@ -8,7 +8,7 @@
    Cada edição devolve `{slots}` quando mudou a folha e/ou `{message}` quando
    tem algo a dizer no rodapé (inclusive o motivo de NÃO ter mudado).
    ------------------------------------------------------------------------- */
-import { CARDS_PER_PAGE } from "./totals";
+import { CARDS_PER_PAGE, type Lamination } from "./totals";
 import type { CardMeta, Slot } from "./xml";
 
 /** Verso conhecido de cada frente: frontId -> (backId -> meta). Mora à parte
@@ -166,40 +166,55 @@ export function printQueue(slots: Slot[]): QueueItem[] {
   return queue;
 }
 
-/** A fila cortada em páginas de 9 (sempre pelo menos uma). */
-export function pagesOf(slots: Slot[]) {
+/** A fila cortada em páginas de `perPage` (sempre pelo menos uma). */
+export function pagesOf(slots: Slot[], perPage = CARDS_PER_PAGE) {
   const queue = printQueue(slots);
-  const count = Math.max(1, Math.ceil(queue.length / CARDS_PER_PAGE));
-  return Array.from({ length: count }, (_, p) => queue.slice(p * CARDS_PER_PAGE, (p + 1) * CARDS_PER_PAGE));
+  const count = Math.max(1, Math.ceil(queue.length / perPage));
+  return Array.from({ length: count }, (_, p) => queue.slice(p * perPage, (p + 1) * perPage));
 }
 
-/* A geometria do `app/pdf_generator.py`: A4, cartas de 63x88 mm numa grade
-   3x3 centrada, marcas de corte nas margens e cruzes verdes nos cantos. */
+/* A geometria do `app/pdf_generator.py`: A4 em pé, cartas de 63x88 mm numa
+   grade centrada, marcas de corte nas margens e cruzes verdes nos cantos. */
 export const PAGE_W_MM = 210, PAGE_H_MM = 297;
 export const CARD_W_MM = 63, CARD_H_MM = 88;
-export const COLS = 3, ROWS = 3;
-export const MARGIN_X_MM = (PAGE_W_MM - CARD_W_MM * COLS) / 2;   // 10,5 mm
-export const MARGIN_Y_MM = (PAGE_H_MM - CARD_H_MM * ROWS) / 2;   // 16,5 mm
 const CROSS_ARM_MM = 3;
 
 export type GuideLine = { x1: number; y1: number; x2: number; y2: number; color: string };
 
+/** A `Grade` do pdf_generator. `rotated` deita a carta: o slot fica 88x63 e
+    a arte entra com o topo virado pra esquerda. */
+export type Grid = {
+  cols: number; rows: number; rotated: boolean;
+  slotW: number; slotH: number; marginX: number; marginY: number; perPage: number;
+  guides: GuideLine[];
+};
+
+function makeGrid(cols: number, rows: number, rotated: boolean): Grid {
+  const slotW = rotated ? CARD_H_MM : CARD_W_MM;
+  const slotH = rotated ? CARD_W_MM : CARD_H_MM;
+  const marginX = (PAGE_W_MM - slotW * cols) / 2;
+  const marginY = (PAGE_H_MM - slotH * rows) / 2;
+  return { cols, rows, rotated, slotW, slotH, marginX, marginY, perPage: cols * rows,
+           guides: guidesOf(cols, rows, slotW, slotH, marginX, marginY) };
+}
+
 /** Guias de corte e cruzes, nas mesmas coordenadas em mm que o reportlab usa. */
-export const GUIDES: GuideLine[] = (() => {
+function guidesOf(cols: number, rows: number, slotW: number, slotH: number,
+                  marginX: number, marginY: number): GuideLine[] {
   const xs: number[] = [], ys: number[] = [];
-  for (let i = 0; i <= COLS; i++) xs.push(MARGIN_X_MM + i * CARD_W_MM);
-  for (let i = 0; i <= ROWS; i++) ys.push(MARGIN_Y_MM + i * CARD_H_MM);
+  for (let i = 0; i <= cols; i++) xs.push(marginX + i * slotW);
+  for (let i = 0; i <= rows; i++) ys.push(marginY + i * slotH);
   const lines: GuideLine[] = [];
   const line = (x1: number, y1: number, x2: number, y2: number, color: string) =>
     lines.push({ x1, y1, x2, y2, color });
   // marcas de corte: só nas margens, indo até a borda do papel
   xs.forEach((x) => {
-    line(x, 0, x, MARGIN_Y_MM, "#000");
-    line(x, PAGE_H_MM - MARGIN_Y_MM, x, PAGE_H_MM, "#000");
+    line(x, 0, x, marginY, "#000");
+    line(x, PAGE_H_MM - marginY, x, PAGE_H_MM, "#000");
   });
   ys.forEach((y) => {
-    line(0, y, MARGIN_X_MM, y, "#000");
-    line(PAGE_W_MM - MARGIN_X_MM, y, PAGE_W_MM, y, "#000");
+    line(0, y, marginX, y, "#000");
+    line(PAGE_W_MM - marginX, y, PAGE_W_MM, y, "#000");
   });
   // cruzes verdes em cada canto de carta, por cima da arte
   xs.forEach((x) => ys.forEach((y) => {
@@ -207,4 +222,10 @@ export const GUIDES: GuideLine[] = (() => {
     line(x, y - CROSS_ARM_MM, x, y + CROSS_ARM_MM, "#8aff0c");
   }));
   return lines;
-})();
+}
+
+export const GRID: Grid = makeGrid(3, 3, false);
+/** Foil: 8 cartas deitadas, 2 por fileira em 4 fileiras com a folha em pé —
+    ou 4 por linha com a folha de lado. Ver `pdf_generator.GRADE_FOIL`. */
+export const GRID_FOIL: Grid = makeGrid(2, 4, true);
+export const gridOf = (lam?: Lamination | string) => (lam === "foil" ? GRID_FOIL : GRID);

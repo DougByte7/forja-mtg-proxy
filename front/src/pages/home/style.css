@@ -420,6 +420,7 @@ table.cot tr.grupo .qtd{color:var(--text-muted);letter-spacing:0;text-transform:
 }
 .pg-slot{position:absolute;overflow:hidden;}
 .pg-slot .art{position:absolute;inset:0;}
+.pg-rot{position:absolute;}
 .pg-slot.empty{
   border:1px dashed #C4BEAF;display:flex;align-items:center;justify-content:center;
 }

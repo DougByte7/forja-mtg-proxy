@@ -8,7 +8,7 @@ import {
   applyEdit, cancelReview, catalog, confirmReview, footMessage, history, lamination,
   prices, reviewOpen, slots, undo,
 } from "./store";
-import { brl, computeTotals } from "./totals";
+import { brl, cardsPerPage, computeTotals } from "./totals";
 
 const copies: SlotControls = {
   addCopy: (k) => applyEdit((s, c) => edit.addCopy(s, c, k)),
@@ -69,7 +69,7 @@ export function ReviewModal() {
       <div class="modal-box">
         <div class="modal-head">
           <h2 id="reviewTitle">Revisar o pedido
-            <span class="sub">Confira as cartas e ajuste as quantidades. Cada página leva 9 cartas.</span>
+            <span class="sub">Confira as cartas e ajuste as quantidades. Cada página leva {cardsPerPage(lamination.value)} cartas.</span>
           </h2>
           <button class="icon-btn" disabled={!history.value.length} onClick={undo}
                   title="Desfazer a última ação (Ctrl+Z)">↶ Desfazer</button>
@@ -83,7 +83,7 @@ export function ReviewModal() {
               <div><CardList groups={edit.sheetGroups(current, catalog.value)} controls={rows} /></div>
             </div>
             <div class="sheet-pane" ref={pane}>
-              <div><SheetPages slots={current} controls={copies} /></div>
+              <div><SheetPages slots={current} lam={lamination.value} controls={copies} /></div>
             </div>
           </div>
         )}

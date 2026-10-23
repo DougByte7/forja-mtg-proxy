@@ -34,9 +34,21 @@ LP_OPTIONS = os.environ.get(
 )
 
 
-def _lp_options() -> list[str]:
+# Papel do foil. O vinil holográfico escorrega no fim da folha, e o perfil
+# Premium Glossy puxa o papel de outro jeito — por isso o foil troca SÓ o
+# `MediaType` das opções acima e mantém o resto (tamanho, escala, qualidade).
+# É o nome do PPD da fila: confira com `lpoptions -p FILA -l | grep MediaType`
+# qual dos valores aparece como Premium Glossy na L4260.
+FOIL_MEDIA_TYPE = os.environ.get("FOIL_MEDIA_TYPE", "PhotographicHighGloss")
+
+
+def _lp_options(lamination: str | None = None) -> list[str]:
+    opcoes = LP_OPTIONS.split()
+    if lamination == "foil" and FOIL_MEDIA_TYPE:
+        opcoes = [o for o in opcoes if not o.startswith("MediaType=")]
+        opcoes.append(f"MediaType={FOIL_MEDIA_TYPE}")
     args = []
-    for opt in LP_OPTIONS.split():
+    for opt in opcoes:
         args += ["-o", opt]
     return args
 
@@ -96,10 +108,11 @@ def list_queues() -> dict:
     }
 
 
-def print_pdf(pdf_path: str) -> str:
+def print_pdf(pdf_path: str, lamination: str | None = None) -> str:
     """
     Manda o PDF pra fila. Devolve uma frase curta com o que aconteceu, e
-    levanta PrintError se o lp falhar.
+    levanta PrintError se o lp falhar. `lamination` escolhe o papel
+    (`FOIL_MEDIA_TYPE` no foil).
     """
     if not PRINTER_QUEUE:
         msg = "PRINTER_QUEUE não configurada — impressão automática desligada."
@@ -109,7 +122,7 @@ def print_pdf(pdf_path: str) -> str:
     cmd = ["lp"]
     if CUPS_HOST:
         cmd += ["-h", CUPS_HOST]
-    cmd += ["-d", PRINTER_QUEUE] + _lp_options() + [pdf_path]
+    cmd += ["-d", PRINTER_QUEUE] + _lp_options(lamination) + [pdf_path]
 
     try:
         r = subprocess.run(cmd, check=True, capture_output=True, text=True,

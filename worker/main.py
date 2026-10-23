@@ -136,7 +136,22 @@ def _anotar(tipo: str, item_id: str, **campos) -> None:
         _montagens.setdefault(_chave(tipo, item_id), {}).update(campos)
 
 
-def montar(api: Api, tipo: str, item_id: str) -> tuple[str, int]:
+def _dados(api: Api, tipo: str, item_id: str) -> dict:
+    """O pedido (ou a combinação, com os pedidos dela), com XML."""
+    return api.get(f"/worker/{_ROTA[tipo]}/{item_id}")
+
+
+def _laminacao(tipo: str, dados: dict) -> str | None:
+    """A laminação decide a grade da folha e o papel. Combinação só junta
+    pedidos da mesma laminação, então o primeiro fala por todos."""
+    if tipo == "pedido":
+        return dados.get("lamination")
+    pedidos = dados.get("pedidos") or []
+    return pedidos[0].get("lamination") if pedidos else None
+
+
+def montar(api: Api, tipo: str, item_id: str,
+           dados: dict | None = None) -> tuple[str, int]:
     """Monta a folha a partir do que o site devolve. `(caminho, falhas)`."""
     _anotar(tipo, item_id, estado="montando", feitas=0, total=0,
             inicio=time.time(), detalhe=None)
@@ -145,14 +160,14 @@ def montar(api: Api, tipo: str, item_id: str) -> tuple[str, int]:
         _anotar(tipo, item_id, feitas=feitas, total=total)
 
     try:
+        dados = dados or _dados(api, tipo, item_id)
         if tipo == "pedido":
-            pedido = api.get(f"/worker/pedidos/{item_id}")
             path, falhas = pdf_generator.generate_pdf(
-                pedido["xml_text"], order_id=item_id, on_progress=andou)
+                dados["xml_text"], order_id=item_id, on_progress=andou,
+                lamination=dados.get("lamination"))
         else:
-            combo = api.get(f"/worker/combos/{item_id}")
             path, falhas, _mapa = pdf_generator.generate_combined_pdf(
-                combo["pedidos"], combo_id=item_id, on_progress=andou)
+                dados["pedidos"], combo_id=item_id, on_progress=andou)
     except Exception as e:
         _anotar(tipo, item_id, estado="erro", detalhe=f"{e}")
         raise
@@ -195,11 +210,12 @@ def atender_painel(api: Api) -> None:
                       motivo=f"{type(e).__name__}: {e}")
 
 
-def garantir(api: Api, tipo: str, item_id: str) -> tuple[str, int]:
+def garantir(api: Api, tipo: str, item_id: str,
+             dados: dict | None = None) -> tuple[str, int]:
     """O PDF pronto no disco, ou montado agora."""
     if _pronto(tipo, item_id):
         return _caminho(tipo, item_id), 0
-    return montar(api, tipo, item_id)
+    return montar(api, tipo, item_id, dados)
 
 
 # --------------------------------------------------------------------------
@@ -242,8 +258,11 @@ def imprimir(api: Api, tipo: str, item_id: str) -> None:
     log.evento("worker", "imprimindo", tipo=tipo, id=item_id)
 
     try:
-        path, falhas = garantir(api, tipo, item_id)
-        resposta = printer.print_pdf(path)
+        # Mesmo com o PDF já no disco, o pedido vem do site: é a laminação
+        # dele que escolhe o papel na impressora.
+        dados = _dados(api, tipo, item_id)
+        path, falhas = garantir(api, tipo, item_id, dados)
+        resposta = printer.print_pdf(path, _laminacao(tipo, dados))
     except Exception as e:
         # PrintError já traz a dica do `printer._hint`. Qualquer outra coisa
         # (Drive fora, pedido apagado no meio) também vira erro_impressao:

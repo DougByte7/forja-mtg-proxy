@@ -7,7 +7,7 @@ import { reason } from "./Summary";
 import {
   commander, customerName, deckId, deckVersion, failXml, lamination, loadXml, prices, summary,
 } from "./store";
-import { brl, LAMINATION_LABELS, type Lamination } from "./totals";
+import { brl, cardsPerPage, LAMINATION_LABELS, type Lamination } from "./totals";
 
 export function OrderForm() {
   const s = summary.value;
@@ -39,7 +39,7 @@ export function OrderForm() {
               <input type="radio" name="lam" value={lam} checked={lamination.value === lam}
                      onChange={() => { lamination.value = lam; }} />
               <div class="t">{LAMINATION_LABELS[lam]}</div>
-              <div class="p">R$ {brl(prices.value[lam])} / pág</div>
+              <div class="p">R$ {brl(prices.value[lam])} / pág · {cardsPerPage(lam)} cartas</div>
             </label>
           ))}
         </div>

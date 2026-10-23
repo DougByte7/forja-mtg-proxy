@@ -167,7 +167,7 @@ function OrderDetail({ order: o }: { order: SavedOrder | null }) {
               virou cobrança, então não há mais o que ajustar. */}
           <div><CardList groups={sheetGroups(slots, catalogFrom([]))} /></div>
           <p class="pane-title">Como sai na folha</p>
-          <div><SheetPages slots={slots} /></div>
+          <div><SheetPages slots={slots} lam={o.lam} /></div>
         </>
       )}
     </div>

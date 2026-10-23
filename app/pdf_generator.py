@@ -1,5 +1,5 @@
 """
-Monta o PDF A4 (3x3 por página) pra impressão, buscando as imagens pelos ids
+Monta o PDF A4 (3x3 por página, ou 8 deitadas no foil) pra impressão, buscando as imagens pelos ids
 que estão no XML do pedido: no Google Drive (MPC Fill), na Scryfall ou no
 disco, quando a pessoa enviou o arquivo (ver `arte_id`).
 
@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -49,8 +50,50 @@ rl_config.useA85 = 0
 
 CARD_W = 63 * mm
 CARD_H = 88 * mm
-COLS, ROWS = 3, 3
 PAGE_W, PAGE_H = A4
+
+
+@dataclass(frozen=True)
+class Grade:
+    """Como as cartas se arrumam na folha A4 em pé.
+
+    `deitada` gira cada carta 90°: o slot fica 88 mm de largura por 63 de
+    altura, e a arte entra com o topo virado pra esquerda da folha.
+    """
+    cols: int
+    rows: int
+    deitada: bool = False
+
+    @property
+    def slot_w(self) -> float:
+        return CARD_H if self.deitada else CARD_W
+
+    @property
+    def slot_h(self) -> float:
+        return CARD_W if self.deitada else CARD_H
+
+    @property
+    def por_folha(self) -> int:
+        return self.cols * self.rows
+
+
+GRADE_PADRAO = Grade(cols=3, rows=3)
+# O foil sai em vinil holográfico, que escorrega no fim da folha e distorce o
+# fundo das últimas cartas. Deitadas, 4 fileiras de 63 mm ocupam 252 mm da
+# folha contra os 264 mm das 3 de 88 mm, e a margem do fim cresce de 16,5 pra
+# 22,5 mm — as cartas terminam antes do trecho onde o vinil escorrega. Com a
+# folha virada de lado são 4 cartas por linha, em 2 linhas.
+#
+# A página continua A4 EM PÉ, com a arte girada dentro dela: uma página
+# deitada seria girada de volta pelo CUPS, e é justamente esse tipo de ajuste
+# automático que tira a carta dos 63x88 mm (ver `printer.LP_OPTIONS`).
+GRADE_FOIL = Grade(cols=2, rows=4, deitada=True)
+
+
+def grade_de(lamination: str | None) -> Grade:
+    """A grade de um acabamento. Tem que casar com `calc.cartas_por_folha`,
+    que é quem cobra as folhas."""
+    return GRADE_FOIL if lamination == "foil" else GRADE_PADRAO
 OUTPUT_DIR = os.environ.get("PDF_OUTPUT_DIR", "/tmp")
 # De onde vem a arte que o cliente ENVIOU. Vazio = do disco deste processo
 # (`artes_enviadas.caminho`), que é o caso do site. O worker da impressora não
@@ -108,7 +151,7 @@ USER_AGENT = ident.do_ambiente("SCRYFALL_USER_AGENT", "PDF de impressão")
 
 # --- Guias de corte (mesma ideia do proxyprint.taxiera.net) ---
 # As marcas ficam FORA das cartas, nas margens da folha, alinhadas com cada
-# divisa da grade 3x3. A régua (ou o refile) apoia em duas marcas opostas e
+# divisa da grade. A régua (ou o refile) apoia em duas marcas opostas e
 # corta a folha inteira de uma vez, sem tinta nenhuma na carta.
 #
 # GUIDE_LENGTH_MM: comprimento de cada marca. 0 = automático, que estende a
@@ -137,7 +180,7 @@ CROSS_THICKNESS_MM = float(os.environ.get("CROSS_THICKNESS_MM", "0.2"))
 CORNER_CROSSES = os.environ.get("CORNER_CROSSES", "1") == "1"
 
 # --- Legenda da folha combinada ---
-# Numa folha combinada as 9 cartas podem ser de clientes diferentes, e depois
+# Numa folha combinada as cartas podem ser de clientes diferentes, e depois
 # do corte vira um monte de carta solta sem dono. A legenda é uma linha de
 # texto miúdo na margem de BAIXO — fora das cartas, na tira de papel que o
 # refile joga fora — dizendo qual pedido ocupa quais posições daquela folha.
@@ -154,23 +197,23 @@ COMBO_LABEL_Y_MM = float(os.environ.get("COMBO_LABEL_Y_MM", "4"))
 COMBO_LABEL_NOME = int(os.environ.get("COMBO_LABEL_NOME", "16"))
 
 
-def _margins():
-    margin_x = (PAGE_W - CARD_W * COLS) / 2
-    margin_y = (PAGE_H - CARD_H * ROWS) / 2
+def _margins(grade: Grade):
+    margin_x = (PAGE_W - grade.slot_w * grade.cols) / 2
+    margin_y = (PAGE_H - grade.slot_h * grade.rows) / 2
     return margin_x, margin_y
 
 
-def _grid_lines():
-    """Coordenadas das divisas da grade: 4 verticais e 4 horizontais."""
-    margin_x, margin_y = _margins()
-    xs = [margin_x + i * CARD_W for i in range(COLS + 1)]
-    ys = [margin_y + i * CARD_H for i in range(ROWS + 1)]
+def _grid_lines(grade: Grade):
+    """Coordenadas das divisas da grade: uma a mais que colunas e linhas."""
+    margin_x, margin_y = _margins(grade)
+    xs = [margin_x + i * grade.slot_w for i in range(grade.cols + 1)]
+    ys = [margin_y + i * grade.slot_h for i in range(grade.rows + 1)]
     return xs, ys
 
 
-def _draw_cut_guides(c):
+def _draw_cut_guides(c, grade: Grade):
     """Marcas de corte nas margens, alinhadas com cada divisa da grade."""
-    xs, ys = _grid_lines()
+    xs, ys = _grid_lines(grade)
     left, right = xs[0], xs[-1]
     bottom, top = ys[0], ys[-1]
     length = GUIDE_LENGTH_MM * mm
@@ -190,9 +233,9 @@ def _draw_cut_guides(c):
     c.restoreState()
 
 
-def _draw_corner_crosses(c):
+def _draw_corner_crosses(c, grade: Grade):
     """Cruz-guia em cada canto de carta (todo cruzamento da grade)."""
-    xs, ys = _grid_lines()
+    xs, ys = _grid_lines(grade)
     arm = CROSS_ARM_MM * mm
 
     c.saveState()
@@ -473,33 +516,50 @@ def _build_print_queue(root: ET.Element):
             + [drive_id for _, drive_id in back_items])
 
 
-def _draw_failure(c, x, y, drive_id: str):
+def _draw_failure(c, x, y, w, h, drive_id: str):
     """Carta que não baixou. Fica bem visível de propósito: esse PDF é
     conferido na tela antes de ir pro papel, então a falha tem que saltar
     aos olhos em vez de virar um quadrado quase vazio."""
     c.saveState()
     c.setFillColorRGB(0.98, 0.90, 0.88)
-    c.rect(x, y, CARD_W, CARD_H, stroke=0, fill=1)
+    c.rect(x, y, w, h, stroke=0, fill=1)
     c.setFillColorRGB(0.75, 0.20, 0.10)
     c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(x + CARD_W / 2, y + CARD_H / 2 + 6, "FALHA NO DOWNLOAD")
+    c.drawCentredString(x + w / 2, y + h / 2 + 6, "FALHA NO DOWNLOAD")
     # O id vai INTEIRO: é com ele que se acha a carta no XML e se testa o
     # link do Drive, e um id cortado parece válido mas não bate com nada.
     # Encolhe a fonte até caber na largura da carta em vez de truncar.
-    tamanho, largura_max = 6, CARD_W - 4 * mm
+    tamanho, largura_max = 6, w - 4 * mm
     while tamanho > 3 and c.stringWidth(drive_id, "Helvetica", tamanho) > largura_max:
         tamanho -= 0.25
     c.setFont("Helvetica", tamanho)
-    c.drawCentredString(x + CARD_W / 2, y + CARD_H / 2 - 8, drive_id)
+    c.drawCentredString(x + w / 2, y + h / 2 - 8, drive_id)
+    c.restoreState()
+
+
+def _draw_card(c, path: str, x, y, grade: Grade):
+    """A arte no slot cujo canto de baixo à esquerda é `(x, y)`."""
+    if not grade.deitada:
+        c.drawImage(path, x, y, width=CARD_W, height=CARD_H)
+        return
+    # Gira 90° no sentido anti-horário em volta do canto de baixo à DIREITA
+    # do slot: a base da carta encosta no lado direito e o topo aponta pra
+    # esquerda, ocupando exatamente os 88 x 63 mm do slot.
+    c.saveState()
+    c.translate(x + grade.slot_w, y)
+    c.rotate(90)
+    c.drawImage(path, 0, 0, width=CARD_W, height=CARD_H)
     c.restoreState()
 
 
 def _render_queue(print_queue: list[str], out_path: str, titulo: str,
-                  cache_dir: str, on_progress=None, rotulo=None) -> int:
+                  cache_dir: str, on_progress=None, rotulo=None,
+                  grade: Grade = GRADE_PADRAO) -> int:
     """Baixa as artes da fila e desenha as folhas. Devolve quantas falharam.
 
     `print_queue` é uma lista achatada de drive_ids na ordem em que as cartas
-    entram no papel — 9 por folha, esquerda pra direita, de cima pra baixo. É
+    entram no papel — `grade.por_folha` por folha, esquerda pra direita, de
+    cima pra baixo. É
     o único lugar que sabe desenhar uma folha, e é por isso que o PDF de um
     pedido só e o PDF combinado saem idênticos em tudo que é impressão:
     tamanho da carta, guias de corte e cruzes vêm daqui pros dois.
@@ -513,17 +573,18 @@ def _render_queue(print_queue: list[str], out_path: str, titulo: str,
 
     c = canvas.Canvas(out_path, pagesize=A4)
     c.setTitle(titulo)
-    margin_x, margin_y = _margins()
-    per_page = COLS * ROWS
+    margin_x, margin_y = _margins(grade)
+    per_page = grade.por_folha
+    slot_w, slot_h = grade.slot_w, grade.slot_h
     total_paginas = max(1, -(-len(print_queue) // per_page))
     failures = 0
 
     for page_start in range(0, len(print_queue), per_page):
         page_items = print_queue[page_start:page_start + per_page]
         for i, drive_id in enumerate(page_items):
-            col, row = i % COLS, i // COLS
-            x = margin_x + col * CARD_W
-            y = PAGE_H - margin_y - (row + 1) * CARD_H
+            col, row = i % grade.cols, i // grade.cols
+            x = margin_x + col * slot_w
+            y = PAGE_H - margin_y - (row + 1) * slot_h
             result = images.get(drive_id)
             if isinstance(result, str):
                 try:
@@ -539,19 +600,19 @@ def _render_queue(print_queue: list[str], out_path: str, titulo: str,
                     # A imagem já veio sem sangria de `_crop_bleed`, ou
                     # seja, é a carta de 63 x 88 mm inteira e nada mais:
                     # esticar até o slot é o tamanho certo, não um zoom.
-                    c.drawImage(result, x, y, width=CARD_W, height=CARD_H)
+                    _draw_card(c, result, x, y, grade)
                 except Exception as e:
                     failures += 1
-                    _draw_failure(c, x, y, drive_id)
+                    _draw_failure(c, x, y, slot_w, slot_h, drive_id)
                     print(f"[pdf_generator] erro desenhando {drive_id}: {e}")
             else:
                 failures += 1
-                _draw_failure(c, x, y, drive_id)
+                _draw_failure(c, x, y, slot_w, slot_h, drive_id)
             if CARD_OUTLINE:
-                c.rect(x, y, CARD_W, CARD_H)
-        _draw_cut_guides(c)
+                c.rect(x, y, slot_w, slot_h)
+        _draw_cut_guides(c, grade)
         if CORNER_CROSSES:
-            _draw_corner_crosses(c)
+            _draw_corner_crosses(c, grade)
         if rotulo:
             _draw_page_label(c, rotulo(page_start // per_page + 1,
                                        total_paginas, page_start,
@@ -562,8 +623,10 @@ def _render_queue(print_queue: list[str], out_path: str, titulo: str,
     return failures
 
 
-def generate_pdf(xml_text: str, order_id: str, on_progress=None) -> tuple[str, int]:
-    """Monta o PDF e devolve `(caminho, quantidade_de_imagens_que_falharam)`."""
+def generate_pdf(xml_text: str, order_id: str, on_progress=None,
+                 lamination: str | None = None) -> tuple[str, int]:
+    """Monta o PDF e devolve `(caminho, quantidade_de_imagens_que_falharam)`.
+    `lamination` escolhe a grade (`grade_de`)."""
     root = ET.fromstring(xml_text)
     print_queue = _build_print_queue(root)
 
@@ -578,7 +641,8 @@ def generate_pdf(xml_text: str, order_id: str, on_progress=None) -> tuple[str, i
     try:
         failures = _render_queue(print_queue, out_path,
                                  f"Forja de Proxies \u2014 pedido {order_id}",
-                                 cache_dir, on_progress)
+                                 cache_dir, on_progress,
+                                 grade=grade_de(lamination))
         print(f"[pdf_generator] pedido {order_id} pronto em "
               f"{time.monotonic() - inicio:.0f}s \u2014 "
               f"{os.path.getsize(out_path) / 1e6:.0f} MB, "
@@ -615,7 +679,7 @@ def _rotulo_combinado(combo_id: str, mapa: list[dict]):
             b = min(pedido["fim"], ultimo)
             if a > b:
                 continue   # este pedido não põe carta nesta folha
-            # Posição DENTRO da folha (1 a 9), que é o que quem separa a
+            # Posição DENTRO da folha (1 a 9, ou 8 no foil), que é o que quem separa a
             # pilha tem na mão — a posição na fila inteira não ajuda em nada.
             de, ate = a - inicio, b - inicio
             faixa = f"{de}" if de == ate else f"{de}-{ate}"
@@ -632,7 +696,8 @@ def generate_combined_pdf(pedidos: list[dict], combo_id: str,
                           on_progress=None) -> tuple[str, int, list[dict]]:
     """Monta UMA folha corrida com as cartas de vários pedidos.
 
-    `pedidos` é `[{"id", "customer_name", "xml_text"}, ...]` e a ORDEM da
+    `pedidos` é `[{"id", "customer_name", "lamination", "xml_text"}, ...]` e
+    a ORDEM da
     lista é a ordem de impressão: pedido 1, depois pedido 2, sem folha nova
     entre eles. Devolve `(caminho, falhas, mapa)`, onde `mapa` diz em que
     posições e páginas cada pedido caiu — o mesmo que sai impresso na margem.
@@ -641,6 +706,9 @@ def generate_combined_pdf(pedidos: list[dict], combo_id: str,
     guardado no banco: se um pedido antigo tiver contagem divergente, o que
     vale é o que foi pro papel.
     """
+    # Só se combina pedido do mesmo acabamento (ver `main`), então a grade do
+    # primeiro vale pra folha toda.
+    grade = grade_de(pedidos[0].get("lamination") if pedidos else None)
     fila: list[str] = []
     mapa: list[dict] = []
     for pedido in pedidos:
@@ -651,9 +719,9 @@ def generate_combined_pdf(pedidos: list[dict], combo_id: str,
             "cartas": len(queue),
             "inicio": len(fila) + 1,
             "fim": len(fila) + len(queue),
-            "primeira_pagina": len(fila) // (COLS * ROWS) + 1,
+            "primeira_pagina": len(fila) // grade.por_folha + 1,
             "ultima_pagina": (max(len(fila), len(fila) + len(queue) - 1)
-                              // (COLS * ROWS) + 1),
+                              // grade.por_folha + 1),
         })
         fila.extend(queue)
 
@@ -665,7 +733,8 @@ def generate_combined_pdf(pedidos: list[dict], combo_id: str,
         rotulo = _rotulo_combinado(combo_id, mapa) if COMBO_LABEL else None
         failures = _render_queue(fila, out_path,
                                  f"Forja de Proxies \u2014 combinado {combo_id}",
-                                 cache_dir, on_progress, rotulo=rotulo)
+                                 cache_dir, on_progress, rotulo=rotulo,
+                                 grade=grade)
         print(f"[pdf_generator] combinado {combo_id} pronto em "
               f"{time.monotonic() - inicio:.0f}s \u2014 "
               f"{os.path.getsize(out_path) / 1e6:.0f} MB, "

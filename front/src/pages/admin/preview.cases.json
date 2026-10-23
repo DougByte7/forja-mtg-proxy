@@ -142,5 +142,34 @@
       "brancos": 0,
       "brancos_evitados": 18
     }
+  },
+  {
+    "caso": "foil: folhas de 8",
+    "pedidos": [
+      {
+        "pages": 1,
+        "blanks": 5,
+        "lamination": "foil"
+      },
+      {
+        "pages": 2,
+        "blanks": 0,
+        "lamination": "foil"
+      },
+      {
+        "pages": 1,
+        "blanks": 6,
+        "lamination": "foil"
+      }
+    ],
+    "esperado": {
+      "cartas": 21,
+      "paginas_separadas": 4,
+      "paginas_combinadas": 3,
+      "folhas_economizadas": 1,
+      "brancos_separados": 11,
+      "brancos": 3,
+      "brancos_evitados": 8
+    }
   }
 ]

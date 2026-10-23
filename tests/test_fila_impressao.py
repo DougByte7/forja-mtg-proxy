@@ -77,14 +77,16 @@ def _fetch_falso(drive_ids, cache_dir, on_progress=None):
 pdf_generator._fetch_all = _fetch_falso
 
 impressos = []          # o que foi pro "CUPS", na ordem
+laminacoes = []         # com que laminação cada um foi (escolhe o papel)
 recusar = []            # quantas recusas o CUPS ainda vai dar
 
 
-def _print_falso(caminho):
+def _print_falso(caminho, lamination=None):
     if recusar:
         recusar.pop()
         raise printer.PrintError("a fila está pausada (dublê)")
     impressos.append(os.path.basename(caminho))
+    laminacoes.append(lamination)
     return "request id is fila-de-teste-1"
 
 
@@ -97,9 +99,9 @@ def xml_de(n, prefixo):
     return f"<order><fronts>{cartas}</fronts></order>"
 
 
-def semear(nome, deck, cartas=4):
-    resultado = calc.compute_cost(cartas, 0, "single")
-    return storage.create_order(xml_de(cartas, deck), "single", nome, deck,
+def semear(nome, deck, cartas=4, laminacao="single"):
+    resultado = calc.compute_cost(cartas, 0, laminacao)
+    return storage.create_order(xml_de(cartas, deck), laminacao, nome, deck,
                                 resultado)[0]
 
 
@@ -251,6 +253,29 @@ check("o site ainda acha que está imprimindo", status_de(davi) == "imprimindo")
 worker.uma_volta(api)
 check("na volta seguinte o relato chega", status_de(davi) == "impresso")
 check("sem imprimir de novo", len(impressos) == antes + 1, impressos)
+
+# --- 8b. foil: outra grade e outro papel ----------------------------------------
+# O vinil holográfico escorrega no fim da folha: o foil sai com 8 cartas
+# deitadas por folha e no MediaType próprio (`printer.FOIL_MEDIA_TYPE`).
+helena = semear("Helena Foil", "hf", 9, laminacao="foil")
+check("foil cobra folha de 8", storage.get_order(helena)["pages"] == 2)
+cliente.post(f"/admin/pedidos/{helena}/imprimir", headers=AUTH)
+antes = len(impressos)
+worker.uma_volta(api)
+check("o foil vai pra impressora dizendo que é foil",
+      impressos[antes:] == [f"pedido-{helena}.pdf"] and laminacoes[-1] == "foil",
+      (impressos[antes:], laminacoes[-1:]))
+with open(os.path.join(pdf_generator.OUTPUT_DIR, f"pedido-{helena}.pdf"), "rb") as f:
+    paginas = f.read().count(b"/Type /Page\n")
+check("9 cartas foil ocupam 2 folhas no PDF", paginas == 2, paginas)
+check("e o pedido comum segue sem laminação especial", laminacoes[0] == "single")
+opcoes = printer._lp_options("foil")
+check("o foil troca só o MediaType",
+      opcoes.count("MediaType=" + printer.FOIL_MEDIA_TYPE) == 1
+      and sum(o.startswith("MediaType=") for o in opcoes) == 1
+      and "print-scaling=none" in opcoes, opcoes)
+check("os outros não mudam de papel",
+      printer._lp_options("double") == printer._lp_options(), printer._lp_options())
 
 # --- 9. folha combinada -----------------------------------------------------------
 eva, fabio = semear("Eva Souza", "ee", 4), semear("Fabio Dias", "ff", 2)

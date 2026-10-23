@@ -179,7 +179,7 @@ def saldo_foil():
 
 cliente.post("/admin/estoque/papel_foil/entrada", headers=AUTH,
              json={"quantidade": 50})
-foil = semear("Lia Castro", 18, laminacao="foil")   # 2 folhas, foil
+foil = semear("Lia Castro", 16, laminacao="foil")   # 2 folhas de 8, foil
 status(foil, "impresso")
 check("foil tira do papel foil, não do fotográfico",
       saldo_foil() == 48 and saldo() == (500, 98), (saldo_foil(), saldo()))

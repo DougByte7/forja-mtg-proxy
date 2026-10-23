@@ -8,6 +8,10 @@ import math
 import xml.etree.ElementTree as ET
 
 CARDS_PER_PAGE = 9
+# O foil sai em vinil holográfico, que escorrega no fim da folha e distorce o
+# fundo das últimas cartas. Por isso ele imprime em outra grade (ver
+# `pdf_generator.GRADE_FOIL`): 8 cartas deitadas, e a folha é cobrada assim.
+CARDS_PER_PAGE_FOIL = 8
 # Preço padrão por página. O que a cobrança usa é o da aba Estoque do admin
 # (`estoque.precos_por_pagina`), que nasce com estes valores.
 PRICE_SINGLE_SIDE = 2.50
@@ -85,6 +89,11 @@ def compute_deck_hash(xml_text: str) -> str:
     return digest[:8].upper()
 
 
+def cartas_por_folha(lamination: str | None) -> int:
+    """Quantas cartas cabem numa folha desse acabamento."""
+    return CARDS_PER_PAGE_FOIL if lamination == "foil" else CARDS_PER_PAGE
+
+
 def compute_cost(qty: int, backs_count: int, lamination: str,
                  precos: dict | None = None) -> dict:
     """`precos` é `{"single", "double", "foil"}` em reais por página; sem
@@ -92,10 +101,11 @@ def compute_cost(qty: int, backs_count: int, lamination: str,
     if lamination not in LAMINACOES:
         raise ValueError("lamination precisa ser 'single', 'double' ou 'foil'")
 
+    por_folha = cartas_por_folha(lamination)
     slots_needed = qty + backs_count
-    pages = math.ceil(slots_needed / CARDS_PER_PAGE)
-    last_filled = slots_needed % CARDS_PER_PAGE or CARDS_PER_PAGE
-    blanks = 0 if slots_needed % CARDS_PER_PAGE == 0 else CARDS_PER_PAGE - last_filled
+    pages = math.ceil(slots_needed / por_folha)
+    last_filled = slots_needed % por_folha or por_folha
+    blanks = 0 if slots_needed % por_folha == 0 else por_folha - last_filled
 
     precos = precos or {"single": PRICE_SINGLE_SIDE,
                         "double": PRICE_DOUBLE_SIDE_PER_PAGE,
@@ -184,9 +194,9 @@ def parse_card_list(xml_text: str) -> list[dict]:
 #   que descreve o ganho de verdade, e cresce com cada pedido marcado.
 #
 #   `folhas_economizadas` — o mesmo ganho convertido em papel. Só que folha
-#   inteira: `brancos_evitados` é sempre múltiplo de 9 (o branco do meio de
-#   uma folha só some quando a folha inteira some), então esse número é
-#   exatamente `brancos_evitados / 9` e é sempre GROSSO — dois pedidos nunca
+#   inteira: `brancos_evitados` é sempre múltiplo das cartas por folha (9, ou
+#   8 no foil — o branco do meio de uma folha só some quando a folha inteira
+#   some), então esse número é exatamente essa divisão e é sempre GROSSO — dois pedidos nunca
 #   economizam mais que uma folha, por mais migalha que sejam.
 #
 # E `brancos`, o que ainda sobra vazio na última folha do conjunto, é quanta
@@ -194,15 +204,17 @@ def parse_card_list(xml_text: str) -> list[dict]:
 # pedido antes de mandar imprimir.
 
 
-def slots_do_pedido(pages, blanks) -> int:
+def slots_do_pedido(pages, blanks, lamination: str | None = None) -> int:
     """Quantos slots de carta o pedido ocupa, a partir do que está guardado.
 
     `pages` e `blanks` são gravados na criação do pedido pelo `compute_cost`,
-    e por construção `pages * 9 - blanks` é exatamente `qty + backs_count` —
-    ou seja, o tamanho da fila de impressão. Sai daqui em vez de reabrir o
-    XML só pra contar slot: a tela pede esse número pra cada pedido da lista.
+    e por construção `pages * cartas_por_folha - blanks` é exatamente
+    `qty + backs_count` — ou seja, o tamanho da fila de impressão. Sai daqui
+    em vez de reabrir o XML só pra contar slot: a tela pede esse número pra
+    cada pedido da lista.
     """
-    return max(0, int(pages or 0) * CARDS_PER_PAGE - int(blanks or 0))
+    return max(0, int(pages or 0) * cartas_por_folha(lamination)
+               - int(blanks or 0))
 
 
 def resumo_combinado(pedidos: list[dict]) -> dict:
@@ -218,12 +230,16 @@ def resumo_combinado(pedidos: list[dict]) -> dict:
     tela — sem ele, quem corta uma folha com dois pedidos não sabe qual carta
     é de quem.
     """
+    # A combinação só junta pedidos do mesmo acabamento (`main`), então a
+    # grade de um vale pra todos.
+    por_folha = cartas_por_folha(pedidos[0].get("lamination") if pedidos else None)
     mapa = []
     posicao = 0
     paginas_separadas = 0
     brancos_separados = 0
     for pedido in pedidos:
-        cartas = slots_do_pedido(pedido.get("pages"), pedido.get("blanks"))
+        cartas = slots_do_pedido(pedido.get("pages"), pedido.get("blanks"),
+                                 pedido.get("lamination"))
         paginas_separadas += int(pedido.get("pages") or 0)
         brancos_separados += max(0, int(pedido.get("blanks") or 0))
         mapa.append({
@@ -232,15 +248,15 @@ def resumo_combinado(pedidos: list[dict]) -> dict:
             "cartas": cartas,
             "inicio": posicao + 1,
             "fim": posicao + cartas,
-            "primeira_pagina": posicao // CARDS_PER_PAGE + 1,
-            "ultima_pagina": max(posicao, posicao + cartas - 1) // CARDS_PER_PAGE + 1,
+            "primeira_pagina": posicao // por_folha + 1,
+            "ultima_pagina": max(posicao, posicao + cartas - 1) // por_folha + 1,
         })
         posicao += cartas
 
     total = posicao
-    paginas = math.ceil(total / CARDS_PER_PAGE) if total else 0
-    sobra = total % CARDS_PER_PAGE
-    brancos = (CARDS_PER_PAGE - sobra) if sobra else 0
+    paginas = math.ceil(total / por_folha) if total else 0
+    sobra = total % por_folha
+    brancos = (por_folha - sobra) if sobra else 0
     return {
         "cartas": total,
         "paginas_separadas": paginas_separadas,
