@@ -5,6 +5,8 @@
 import { signal } from "@preact/signals";
 import { greetAccount, loadAccount } from "./account";
 import { loadArts } from "./art";
+import { openDrawer } from "./drawers";
+import { importPastedLink } from "./importExport";
 import { switchTab } from "./layout";
 import { joinRoom, tableMode } from "./online";
 import { loadExchangeRate } from "./price";
@@ -99,6 +101,17 @@ export async function boot() {
   // superfície invisível.
   if (state.commanders.length) search();
   else searchCommander();
+  // O link do Archidekt ou do Moxfield colado em Meus decks (`?importar=`):
+  // a importação roda na gaveta, que é onde fica o recado do que não veio, e
+  // o foco fica com ela. O parâmetro sai do endereço antes, pra um F5 não
+  // importar de novo.
+  const link = new URLSearchParams(location.search).get("importar");
+  if (link) {
+    history.replaceState(null, "", location.pathname);
+    openDrawer("gaveta-importar");
+    importPastedLink(link);
+    return;
+  }
   // Num quadro depois: a caixa que recebe o foco só existe na tela quando o
   // carregando do deck sai dela.
   requestAnimationFrame(() => {

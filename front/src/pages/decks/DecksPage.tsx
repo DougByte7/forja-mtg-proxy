@@ -6,6 +6,7 @@ import { api, apiText } from "../../shared/api";
 import { Icon } from "../../shared/Icon";
 import { forgetLocalDeck, readLocalDecks, rememberLocalDeck } from "../../shared/localDecks";
 import { Toast, toast } from "../../shared/toast";
+import { deckLinkSource } from "../deckbuilder/text";
 import { DeckCard } from "./DeckCard";
 import { deckIdFromText, deckListQuery, fetchSummary, type DeckList, type DeckSummary } from "./data";
 
@@ -71,8 +72,18 @@ export function DecksPage() {
   });
 
   function submitAdopt() {
+    /* Link do Archidekt ou do Moxfield não é deck daqui: é deck a importar.
+       Quem importa é o deckbuilder (ver `importExport.ts`) — ele cria o deck
+       novo e diz o que não veio, e repetir isso nesta tela seria ter duas
+       importações pra manter. */
+    if (deckLinkSource(adoptText)) {
+      location.href = "/deckbuilder?importar=" + encodeURIComponent(adoptText.trim());
+      return;
+    }
     const id = deckIdFromText(adoptText);
-    if (!id) return toast("Não reconheci um id de deck aí. Cole o link inteiro.");
+    if (!id) {
+      return toast("Não reconheci esse link. Vale um link de deck da Forja, do Archidekt ou do Moxfield.");
+    }
     if (readLocalDecks().some((d) => d.id === id)) return toast("Esse deck já está na lista.");
     adopt.mutate(id);
   }
@@ -166,14 +177,17 @@ export function DecksPage() {
           </div>
         )}
 
-        <div class="aviso">Tem o link de um deck? Cole aqui pra acrescentá-lo a esta lista.
+        <div class="aviso">Tem o link de um deck? Cole aqui. Link da Forja entra nesta lista;
+          link do <b>Archidekt</b> ou do <b>Moxfield</b> vira um deck novo aqui, com comandante, as 99 e
+          o maybeboard.
           <div class="adotar">
-            <input class="campo" placeholder="link do deck, ou só o id" autocomplete="off"
+            <input class="campo" placeholder="link da Forja, archidekt.com/decks/…  ou  moxfield.com/decks/…"
+                   autocomplete="off"
                    spellcheck={false} aria-label="Link ou id do deck" value={adoptText}
                    onInput={(e) => setAdoptText(e.currentTarget.value)}
                    onKeyDown={(e) => { if (e.key === "Enter") submitAdopt(); }} />
             <button class="btn" onClick={submitAdopt} disabled={adopt.isPending}>
-              <Icon name="plus" /> Acrescentar
+              <Icon name="plus" /> {deckLinkSource(adoptText) ? "Importar" : "Acrescentar"}
             </button>
           </div>
         </div>

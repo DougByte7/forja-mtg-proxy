@@ -84,6 +84,25 @@ describe("DecksPage", () => {
     expect(sentBody(fetch, "POST", "/decks/resumo")).toEqual({ ids: ["abcdef123456"] });
   });
 
+  it("link do Archidekt ou do Moxfield leva pra importar no deckbuilder", async () => {
+    mockFetch((_, url) => url === "/conta" ? [200, { usuario: null }] : [200, { decks: [], desconhecidos: [] }]);
+    const original = window.location;
+    Object.defineProperty(window, "location", { configurable: true, value: { ...original, href: "" } });
+    try {
+      renderWithQuery(<DecksPage />);
+      await screen.findByText("Nenhum deck neste navegador ainda.");
+
+      fireEvent.input(screen.getByLabelText("Link ou id do deck"),
+        { target: { value: " https://moxfield.com/decks/Ab_c-12 " } });
+      fireEvent.click(screen.getByText("Importar"));
+
+      expect(window.location.href)
+        .toBe("/deckbuilder?importar=" + encodeURIComponent("https://moxfield.com/decks/Ab_c-12"));
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: original });
+    }
+  });
+
   it("id que o servidor não conhece aparece com o botão de tirar", async () => {
     rememberLocalDeck("sumido1");
     mockFetch((_, url) => url === "/conta" ? [200, { usuario: null }]
