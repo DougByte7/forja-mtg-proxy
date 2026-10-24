@@ -10,7 +10,10 @@ import { defineConfig } from "vite";
 import preact from "@preact/preset-vite";
 import { resolve } from "node:path";
 
-const PAGES = ["login", "signup", "decks", "admin", "home", "deckbuilder"];
+// A tela de pedidos (`admin`) é do painel do worker, na rede de casa
+// (`worker/painel.py`): no build da Vercel ela nem é gerada.
+const PAGES = ["login", "signup", "decks", "admin", "home", "deckbuilder"]
+  .filter((p) => !(process.env.VERCEL && p === "admin"));
 
 export default defineConfig({
   plugins: [preact()],

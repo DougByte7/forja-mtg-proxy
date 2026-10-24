@@ -153,7 +153,7 @@ function Footer({ tab }: { tab: Tab }) {
     <p class="rodape">
       <b>Imprimir</b> confirma o Pix e põe o pedido na fila da impressora — é a única ação que gasta papel.<br />
       Marque dois ou mais pedidos pra juntá-los numa folha só e aproveitar o papel.<br />
-      A folha se confere no painel do worker, na rede de casa — o site não monta PDF.<br />
+      A folha se confere em <a href="/">Conferir folhas</a>, aqui mesmo no worker — o site não monta PDF.<br />
       Conferir o Pix no app do banco continua sendo com você.
     </p>
   );

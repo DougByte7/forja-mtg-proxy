@@ -1,0 +1,10 @@
+# O que não entra na imagem. O build do front é feito dentro dela (ver o
+# Dockerfile), então nem as dependências nem o build local vão junto.
+front/node_modules/
+app/static/dist/
+**/__pycache__/
+.venv/
+data/
+.env
+.env.*
+.git/

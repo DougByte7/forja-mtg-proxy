@@ -653,7 +653,7 @@ def get_cotacao(job_id: str):
 
 @app.get("/deckbuilder", response_class=HTMLResponse)
 def deckbuilder_page():
-    """A página do deckbuilder. Igual ao /admin: fica antes do mount estático
+    """A página do deckbuilder. Igual ao /entrar: fica antes do mount estático
     pra a URL ser /deckbuilder, sem o .html."""
     return frontend.page("deckbuilder")
 
@@ -1642,20 +1642,11 @@ def list_visitas(x_admin_token: str | None = Header(default=None),
     }
 
 
-# --- Tela de pedidos (front/src/pages/admin) -------------------------------
+# --- Rotas da tela de pedidos (front/src/pages/admin) ---------------------
 #
-# A página em si é só a casca: HTML, CSS e JS, sem nenhum dado de pedido
-# dentro. TUDO que ela mostra vem das rotas abaixo, e todas passam pelo
-# `_check_admin` — quem abrir /admin sem o token não vê pedido nenhum, só o
-# pedido de token. É por isso que servir o arquivo estático publicamente não
-# é problema: o que se protege é o dado, não o layout.
-
-
-@app.get("/admin", response_class=HTMLResponse)
-def admin_page():
-    """Serve a tela de pedidos (`front/src/pages/admin`). Fica antes do mount
-    estático pra a URL ser /admin, sem o .html."""
-    return frontend.page("admin")
+# A tela em si não mora aqui: quem a serve é o painel do worker, na rede de
+# casa (`worker/painel.py`), que repassa as chamadas pra estas rotas. Todas
+# passam pelo `_check_admin`.
 
 
 @app.get("/admin/sessao")

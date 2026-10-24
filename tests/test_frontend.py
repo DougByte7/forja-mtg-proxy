@@ -72,7 +72,7 @@ check("com no-cache", r.headers.get("cache-control") == "no-cache",
 # Cada rota aponta pra tela certa do build: trocar o nome de um entry no
 # vite.config.ts sem trocar aqui é tela em branco (503) só naquela rota.
 TELAS = {"/entrar": "login", "/cadastro": "signup", "/": "decks",
-         "/admin": "admin", "/pedido": "home", "/deckbuilder": "deckbuilder"}
+         "/pedido": "home", "/deckbuilder": "deckbuilder"}
 for nome in TELAS.values():
     (frontend.DIST / "pages" / f"{nome}.html").write_text(
         f"<!DOCTYPE html><title>{nome}</title>", encoding="utf-8")
@@ -91,6 +91,12 @@ check("/?deck= do link antigo vai pra tela de pedido", r.status_code == 301
 r = c.get("/?deck=a%26b%3Dc", follow_redirects=False)
 check("e o id vai escapado", r.headers.get("location") == "/pedido?deck=a%26b%3Dc",
       r.headers.get("location"))
+
+# A tela de pedidos mora só no painel do worker (worker/painel.py).
+(frontend.DIST / "pages" / "admin.html").write_text(
+    "<!DOCTYPE html><title>admin</title>", encoding="utf-8")
+check("/admin não é servida pelo site", c.get("/admin").status_code == 404,
+      c.get("/admin").status_code)
 
 for antigo in ("entrar.html", "cadastro.html", "decks.html", "admin.html",
                "index.html", "deckbuilder.html", "deckbuilder/abertura.js"):

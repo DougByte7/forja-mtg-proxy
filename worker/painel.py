@@ -14,6 +14,12 @@ Este painel NÃO monta nada sozinho: "Montar" e "Refazer" deixam um pedido na
 fila do laço do worker (`main.pedir_montagem`), que é o único que monta. Duas
 montagens do mesmo arquivo ao mesmo tempo corrompiam a folha.
 
+A tela de pedidos (`front/src/pages/admin`) também mora aqui, em `/admin`, e
+só aqui: o site tem a API (`/admin/*`, atrás da `ADMIN_TOKEN`), mas não serve
+a tela. O navegador fala com este painel, e o painel repassa as chamadas pro
+site (`_repassar`) com o `X-Admin-Token` que o operador digitou — a conversa
+continua sendo sempre daqui pra lá.
+
 Senha: com `WORKER_PAINEL_SENHA` no ambiente, o navegador pede usuário e senha
 (qualquer usuário, essa senha). Sem ela o painel fica aberto pra quem estiver
 na rede — que é a rede de casa, mas a lista tem nome de cliente.
@@ -24,9 +30,14 @@ import os
 import re
 import time
 
+import requests
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
+
+from app import frontend
 
 from . import entrega
 from . import main as worker
@@ -46,6 +57,10 @@ ESTADOS = {
 LAMINACAO = {"single": "Um lado", "double": "Dois lados", "foil": "Foil"}
 
 _basic = HTTPBasic(auto_error=False)
+
+# O que passa do navegador pro site, nas chamadas da tela de pedidos. O
+# `Authorization` fica de fora: é a senha deste painel, não é do site.
+_CABECALHOS = ("x-admin-token", "content-type", "accept")
 
 
 def _porta(credenciais: HTTPBasicCredentials | None = Depends(_basic)) -> None:
@@ -192,11 +207,12 @@ def _pagina(lista: dict | None, erro: str | None) -> str:
   .aviso{{border:1px solid var(--red);color:#F2AFA1;border-radius:10px;
          padding:10px 12px;font-size:13px;}}
   .vazio{{color:var(--muted);font-size:13px;}}
+  a{{color:var(--gold);}}
 </style></head>
 <body><main>
   <h1>Conferir folhas</h1>
   <p class="sub">A folha é montada aqui, ao lado da impressora. Confira antes
-  de mandar imprimir pelo site.</p>
+  de mandar imprimir pela <a href="/admin">tela de pedidos</a>.</p>
   {"".join(blocos)}
 </main></body></html>"""
 
@@ -230,5 +246,48 @@ def criar_app(api) -> FastAPI:
         _validar(tipo, item_id)
         worker.pedir_montagem(tipo, item_id, refazer=bool(refazer))
         return RedirectResponse("/", status_code=303)
+
+    # --- A tela de pedidos -------------------------------------------------
+
+    @app.get("/admin", response_class=HTMLResponse)
+    def tela_de_pedidos():
+        return frontend.page("admin")
+
+    async def _repassar(request: Request) -> Response:
+        """A chamada da tela, feita no site. Uma requisição por vez, sem a
+        `Session` do laço: ela leva o `WORKER_TOKEN`, e quem fala aqui é o
+        operador, com o token dele."""
+        corpo = await request.body()
+        cabecalhos = {k: v for k, v in request.headers.items()
+                      if k.lower() in _CABECALHOS}
+        cabecalhos["User-Agent"] = "forja-worker/1.0"
+        try:
+            r = await run_in_threadpool(
+                requests.request, request.method,
+                api.base + request.url.path, params=request.url.query or None,
+                data=corpo or None, headers=cabecalhos, timeout=worker.TIMEOUT)
+        except requests.RequestException as e:
+            return Response(f"Não consegui falar com o site: {type(e).__name__}",
+                            status_code=502, media_type="text/plain")
+        return Response(r.content, status_code=r.status_code,
+                        media_type=r.headers.get("content-type"))
+
+    app.add_api_route("/admin/{resto:path}", _repassar,
+                      methods=["GET", "POST", "DELETE"])
+    # Apagar um deck, da aba Baralhos: a rota é a mesma do dono.
+    app.add_api_route("/decks/{deck_id}", _repassar, methods=["DELETE"])
+
+    @app.get("/deckbuilder")
+    def deckbuilder(request: Request):
+        """O Abrir da aba Baralhos: o deckbuilder é do site, não daqui."""
+        destino = api.base + "/deckbuilder"
+        if request.url.query:
+            destino += "?" + request.url.query
+        return RedirectResponse(destino, status_code=302)
+
+    # Os assets do build, com hash no nome (ver `app/frontend.py`). Sem o
+    # build, `check_dir=False` deixa o painel subir e o /admin responde 503.
+    app.mount("/dist", StaticFiles(directory=frontend.DIST, check_dir=False),
+              name="dist")
 
     return app

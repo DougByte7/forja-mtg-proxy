@@ -115,8 +115,8 @@ novo e recarregue o navegador.
 
 Todas as telas são Preact + TypeScript em `front/`, com build no Vite: a
 página inicial com a lista de decks (`/`), a tela de pedido (`/pedido`), o
-login (`/entrar`), o cadastro (`/cadastro`), o admin (`/admin`) e o
-deckbuilder (`/deckbuilder`).
+login (`/entrar`), o cadastro (`/cadastro`), o admin (`/admin`, servido só
+pelo painel do worker) e o deckbuilder (`/deckbuilder`).
 Elas saem do build, em `app/static/dist/` (fora do git), e sem ele a rota
 responde 503 dizendo o comando que falta.
 Precisa de Node 22 ou mais novo e do pnpm (a versão está no `packageManager`
@@ -152,7 +152,8 @@ notas, seleção pra combinar, confirmação aberta), vai pra uma store de
 `http://localhost:8000/` (ou o IP/domínio de onde estiver rodando) já é a Forja
 de Proxies completa, falando com a API na mesma origem: a página inicial é a
 lista de decks, `/deckbuilder` é a tela de montar deck, `/pedido` a de
-orçamento e cobrança (só pra perfil `amigo`) e `/admin`, a de pedidos.
+orçamento e cobrança (só pra perfil `amigo`). A de pedidos (`/admin`) fica no
+painel do worker, na rede de casa — ver *Tela de pedidos (admin)*.
 
 Na primeira subida, a base de cartas da Scryfall (uns 30 MB) se monta em
 segundo plano — veja *A base de cartas é uma cópia local da Scryfall*. Até ela
@@ -429,13 +430,13 @@ cancelamento fica no log (`pedido cancelado-pelo-cliente`) e no histórico.
   `app/frontend.py` serve o HTML de cada tela com `no-cache`; os assets têm
   hash no nome e vão pelo mount estático. São a lista de decks (`/`, a
   página inicial), a tela de pedido (`/pedido`), login (`/entrar`),
-  cadastro (`/cadastro`), o admin (`/admin`) e o deckbuilder
-  (`/deckbuilder`). Ver *As telas em Preact*.
+  cadastro (`/cadastro`), o admin (`/admin`, no painel do worker) e o
+  deckbuilder (`/deckbuilder`). Ver *As telas em Preact*.
 - `front/src/pages/home/` — a tela de pedido, em `/pedido`: orçamento,
   revisão da folha, cotação e cobrança Pix, só pra perfil `amigo`. A lógica pura (XML, folha, totais, cotação,
   "Meus Pedidos") mora em módulos `.ts` com testes ao lado.
-- `front/src/pages/admin/` — a tela de pedidos do operador, em `/admin`. Ver
-  *Tela de pedidos (admin)*.
+- `front/src/pages/admin/` — a tela de pedidos do operador, em `/admin` do
+  painel do worker. Ver *Tela de pedidos (admin)*.
 - `front/pages/deckbuilder.html` + `front/src/pages/deckbuilder/` — a tela
   de montar deck de Commander, em `/deckbuilder`. Três colunas (maybeboard,
   deck, busca), categorias próprias e as análises embaixo do deck. Ver
@@ -540,6 +541,9 @@ cancelamento fica no log (`pedido cancelado-pelo-cliente`) e no histórico.
   `python tests/test_visitas.py`.
 - `tests/test_scryfall_lote.py` — o `<query>` do MPC casando com o nome
   canônico, dupla-face inclusive: `python tests/test_scryfall_lote.py`.
+- `tests/test_painel_admin.py` — a tela de pedidos no painel do worker: o
+  `/admin` servido lá, e o repasse pro site levando o `X-Admin-Token` e não a
+  senha do painel. Precisa do fastapi: `python tests/test_painel_admin.py`.
 - `tests/test_admin_pedidos.py` — a tela de pedidos: cada rota `/admin/pedidos`
   barrando quem não tem token, o XML do deck não vazando na listagem, e o que
   cancelar / reabrir / apagar fazem de fato. Precisa do fastapi instalado:
@@ -629,7 +633,6 @@ cancelamento fica no log (`pedido cancelado-pelo-cliente`) e no histórico.
 | `POST /orders/{id}/cancel` | tela **Meus Pedidos** | **pede amigo**. O cliente desiste. Só vale em `pending`; depois do aviso volta 409. Não apaga: vira `cancelado` no histórico |
 | `GET /orders/{id}/print?token=…` | botão **Imprimir** | confirma o Pix, põe na fila da impressora e redireciona pra página abaixo |
 | `GET /orders/{id}/impressao?token=…` | depois do **Imprimir** | onde o pedido está na fila. Só lê, e se atualiza sozinha até sair |
-| `GET /admin` | você, no navegador | a tela de pedidos (é só HTML: os dados vêm das rotas abaixo, todas com token) |
 | `GET /admin/sessao` | tela de pedidos | diz se o token vale, pra tela saber se mostra a lista ou o formulário de entrada |
 | `GET /admin/pedidos` | tela de pedidos | todos os pedidos, do mais novo pro mais antigo, com contagem por estado. Aceita `status=` e `busca=` |
 | `GET /admin/pedidos/{id}` | tela de pedidos | um pedido só |
@@ -696,7 +699,15 @@ cancelamento fica no log (`pedido cancelado-pelo-cliente`) e no histórico.
 
 ## Tela de pedidos (admin)
 
-`https://SEU-BACKEND/admin` — a mesma coisa que os links do e-mail fazem, só
+`http://IP-DO-HOMELAB:8001/admin` — no painel do worker, na rede de casa, e
+só lá: o site (Vercel) tem as rotas `/admin/...`, mas não serve a tela, e o
+build da Vercel (`VERCEL=1`) nem a gera. O painel serve o HTML e os assets do
+build (que a imagem do worker faz no `Dockerfile`) e repassa as chamadas da
+tela pro site, levando só o `X-Admin-Token` — a senha do painel
+(`WORKER_PAINEL_SENHA`) fica nele. O **Abrir** da aba Baralhos manda pro
+deckbuilder do site.
+
+É a mesma coisa que os links do e-mail fazem, só
 que numa lista, sem depender de achar o e-mail certo na caixa de entrada. É o
 que se abre no celular quando alguém manda mensagem perguntando do pedido.
 
@@ -706,8 +717,8 @@ Ela pede o `ADMIN_TOKEN` do `.env` na primeira vez e guarda no navegador
 (no `sessionStorage`, que some quando a aba fecha; marcando *"Lembrar neste
 navegador"*, no `localStorage`, que fica). O botão **Sair** apaga os dois.
 
-**Onde mora a proteção:** a página do admin é servida como qualquer
-outro estático — quem digitar o endereço vê a tela. O que ele **não** vê é
+**Onde mora a proteção:** a página do admin é só a casca — quem chegar no
+painel vê a tela. O que ele **não** vê é
 pedido nenhum: a página nasce vazia e todo dado vem das rotas `/admin/...`,
 que exigem o header `X-Admin-Token`. Sem o token, a tela é uma caixa de texto
 pedindo o token, e é isso. É o mesmo modelo dos links do e-mail: o que se

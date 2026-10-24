@@ -100,11 +100,12 @@ check("e o pedido não mudou", storage.get_order(ana)["status"] == "pending")
 check("sessão com o token certo abre",
       cliente.get("/admin/sessao", headers=AUTH).status_code == 200)
 
-# A página em si é pública (é só HTML), mas não pode trazer dado dentro.
+# A tela em si mora no painel do worker (ver `test_painel_admin.py`): o site
+# só tem as rotas, e o /admin sozinho não é nada aqui.
 pagina = cliente.get("/admin")
-# 503 é a rota certa sem o build do front (ver `test_frontend.py`).
-check("a página /admin tem rota", pagina.status_code in (200, 503), pagina.status_code)
-check("a página não carrega pedido nenhum embutido",
+check("o site não serve a página /admin", pagina.status_code == 404,
+      pagina.status_code)
+check("nem traz pedido nenhum",
       "Bruno Lima" not in pagina.text and "def456" not in pagina.text)
 
 # --- 2. o que a listagem devolve ----------------------------------------
