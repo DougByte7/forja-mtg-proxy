@@ -36,8 +36,8 @@ o id morrer.
 FOIL É DA CÓPIA, NÃO DA ARTE. Cada cópia de papel pode sair no foil
 (`cartas_foil`), e a marca mora numa tabela própria pra trocar a arte não
 desmarcar o foil. É por cópia e não por face: frente e verso são a mesma
-folha. E carta com verso não sai em foil — o vinil holográfico só vai de um
-lado —, então a marca nela é ignorada no pedido (ver `_montar`).
+carta, e a carta de duas faces marcada no foil leva o verso junto pro pedido
+foil (ver `_montar`).
 """
 import hashlib
 import json
@@ -501,16 +501,15 @@ def _montar(deck_id: str, linhas: list[tuple[str, int, int]], fichas: list[dict]
     saida = {"xml": _xml(impressos, escolhas) if pronto else None,
              "faltando": faltando, "artes": artes_total, "cartas": cartas}
 
-    # A parte foil: as cópias marcadas, fora as de carta com verso, que o
-    # vinil não cobre (a tela nem deixa marcar; uma marca de antes de a carta
-    # ganhar verso não pode virar folha errada).
-    def no_foil(chave, consultas, n):
-        return len(consultas) == 1 and n in foil.get(_chave(chave), ())
-    foils = [(c, r, q, [n for n in copias if no_foil(c, q, n)], f)
+    # A parte foil: as cópias marcadas. A de duas faces vai inteira, com o
+    # verso nos mesmos slots, como em qualquer pedido.
+    def no_foil(chave, n):
+        return n in foil.get(_chave(chave), ())
+    foils = [(c, r, q, [n for n in copias if no_foil(c, n)], f)
              for c, r, q, copias, f in impressos]
     no_foil_total = sum(len(copias) for *_, copias, _ in foils)
     if no_foil_total:
-        padrao = [(c, r, q, [n for n in copias if not no_foil(c, q, n)], f)
+        padrao = [(c, r, q, [n for n in copias if not no_foil(c, n)], f)
                   for c, r, q, copias, f in impressos]
         saida.update(
             cartas_foil=no_foil_total, cartas_padrao=cartas - no_foil_total,

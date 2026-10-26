@@ -227,18 +227,35 @@ describe("o foil", () => {
     expect(host.querySelector(".acabamento-conta")!.textContent).toMatch(/padrão · ✦ 1 foil/);
   });
 
-  it("carta com verso: ✦ apagado na frente, e nenhum no verso", async () => {
+  it("carta de duas faces: o foil se marca na frente, e o verso acompanha travado", async () => {
     const p = await page();
     p.state.id = "abc123";
     p.state.cards.push({ carta: DELVER, quantidade: 1, categoria: "" });
     const host = drawn(p.Gallery);
-    const items = [...host.querySelectorAll(`[data-arte-carta="${DELVER.nome}"]`)].map((b) => b.parentElement!);
-    const front = items[0].querySelector<HTMLButtonElement>(".foil-btn")!;
-    expect([front.disabled, front.title]).toEqual([true, p.NO_FOIL_REASON]);
-    expect(items[1].querySelector(".foil-btn")).toBeNull();
-    // Nem uma marca antiga põe a carta com verso no foil.
-    p.artState.foil["delver of secrets insectile aberration"] = [1];
-    expect(p.foilCopies(DELVER)).toEqual([]);
+    const sides = () => [...host.querySelectorAll(`[data-arte-carta="${DELVER.nome}"]`)]
+      .map((b) => b.parentElement!.querySelector<HTMLButtonElement>(".foil-btn")!);
+    const [front, back] = sides();
+    expect([front.disabled, back.disabled, back.title]).toEqual([false, true, p.BACK_FOLLOWS_FRONT]);
+
+    act(() => front.click());
+    expect(p.artState.foil["delver of secrets insectile aberration"]).toEqual([1]);
+    const [, lit] = sides();
+    expect([lit.disabled, lit.classList.contains("ligado")]).toEqual([true, true]);
+    expect([...host.querySelectorAll(`[data-arte-carta="${DELVER.nome}"] .galeria-selo`)].map((s) => s.textContent))
+      .toEqual(["Padrão · frente · Foil", "Padrão · verso · Foil"]);
+  });
+
+  it("na modal, o acabamento trava no verso", async () => {
+    const p = await page();
+    p.state.id = "abc123";
+    p.state.cards.push({ carta: DELVER, quantidade: 1, categoria: "" });
+    const host = drawn(p.ArtPicker);
+    await act(() => p.openArtPicker(DELVER.nome, "verso"));
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>("#arte-acabamento button")];
+    expect(buttons.map((b) => b.disabled)).toEqual([true, true]);
+    await act(() => p.openArtPicker(DELVER.nome, "frente"));
+    expect([...host.querySelectorAll<HTMLButtonElement>("#arte-acabamento button")].map((b) => b.disabled))
+      .toEqual([false, false]);
   });
 
   it("várias cópias: o contador vale pras cópias do quadro, e o pedido avisa que parte em dois", async () => {

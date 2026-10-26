@@ -7,31 +7,27 @@
    que se escolhe aqui é QUAIS cópias vão pro foil; a laminação do resto se
    escolhe na tela do pedido.
 
-   POR CÓPIA, E NÃO POR FACE. Frente e verso são a mesma folha, e o vinil só
-   vai de um lado: carta com verso não sai no foil, e a tela nem deixa marcar
-   (`canBeFoil`). Por cópia porque as 30 Florestas podem ter 3 foil — o
-   número da cópia é o mesmo da arte por cópia (ver `artes.py`).
+   POR CÓPIA, E NÃO POR FACE. Frente e verso são a mesma carta: a de duas
+   faces marcada no foil sai com os dois lados no foil. Por isso o foil se
+   marca na frente, e o verso só mostra o que a frente decidiu
+   (`BACK_FOLLOWS_FRONT`). Por cópia porque as 30 Florestas podem ter 3 foil
+   — o número da cópia é o mesmo da arte por cópia (ver `artes.py`).
 
    TABELA PRÓPRIA NO SERVIDOR (`cartas_foil`), separada das artes: trocar a
    arte não pode desmarcar o foil. O que se grava é a lista inteira das
    cópias foil de uma carta, que é o que o contador da galeria produz.
    ========================================================================= */
-import { artKey, artName, artState, hasBack, paperQuantity } from "./art";
+import { artKey, artName, artState, paperQuantity } from "./art";
 import { api } from "./save";
 import { state, touch } from "./state";
 import type { Card } from "./types";
 import { toast } from "./ui/toast";
 
-export const NO_FOIL_REASON = "Carta com verso não sai no foil: o vinil holográfico só cobre um lado.";
-
-export function canBeFoil(card: Card | null | undefined) {
-  return !!card && !hasBack(card);
-}
+export const BACK_FOLLOWS_FRONT = "O verso acompanha a frente: marque o foil na frente da carta.";
 
 /* As cópias foil da carta que ainda estão no deck: a 30ª Floresta marcada
    continua guardada quando o deck desce pra 20, mas não vai pro papel. */
 export function foilCopies(card: Card): number[] {
-  if (!canBeFoil(card)) return [];
   const quantity = paperQuantity(card);
   return (artState.foil[artKey(artName(card))] || []).filter((n) => n <= quantity);
 }
@@ -50,7 +46,6 @@ export function foilCountOf(card: Card, copies: number[]) {
    servidor recusar: o clique no ✦ tem que responder sem esperar a rede. */
 export async function setFoilCopies(card: Card, copies: number[]) {
   if (!state.id) return toast("Salve o deck antes de marcar foil.");
-  if (!canBeFoil(card)) return toast(NO_FOIL_REASON);
   const key = artKey(artName(card));
   const before = artState.foil[key] || [];
   const after = [...new Set(copies)].sort((a, b) => a - b);

@@ -572,24 +572,28 @@ try:
        artes.para_deck(ped)["foil"]["forest"], [1, 3])
     montado = artes.pedido(ped)
     eq("o pedido inteiro continua no `xml`", montado["xml"], sem_foil["xml"])
-    eq("carta com verso não entra no foil", (montado["cartas_foil"], montado["cartas_padrao"]), (3, 5))
+    eq("o foil leva as cópias marcadas, a de duas faces inclusive",
+       (montado["cartas_foil"], montado["cartas_padrao"]), (5, 3))
     raiz = ET.fromstring(montado["xml_foil"])
     eq("o foil leva as cópias marcadas, do slot 0",
        {c.findtext("id"): c.findtext("slots") for c in raiz.findall("fronts/card")},
-       {"id-atraxa": "0", "id-floresta": "1,2"})
-    eq("e não tem verso", raiz.find("backs"), None)
+       {"id-atraxa": "0", "id-floresta": "1,2", "id-delver": "3,4"})
+    eq("e o verso vai junto, nos mesmos slots da frente",
+       [(c.findtext("id"), c.findtext("slots")) for c in raiz.findall("backs/card")],
+       [("id-inseto", "3,4")])
     raiz = ET.fromstring(montado["xml_padrao"])
-    eq("o padrão leva o resto, com os versos",
-       calc.parse_order(montado["xml_padrao"]), (5, 2))
+    eq("o padrão leva o resto, sem verso nenhum",
+       calc.parse_order(montado["xml_padrao"]), (3, 0))
     eq("a Floresta que sobrou vai pro padrão",
        [c.findtext("slots") for c in raiz.findall("fronts/card")
         if c.findtext("id") == "id-floresta"], ["1"])
 
-    for nome in ("Atraxa", "Sol Ring", "Forest", "Lightning Bolt"):
-        artes.marcar_foil(ped["id"], nome, [1, 2, 3])
+    artes.marcar_foil(ped["id"], delver, [2])
     montado = artes.pedido(ped)
-    eq("só a carta com verso de fora: ela fica no padrão",
-       calc.parse_order(montado["xml_padrao"]), (2, 2))
+    eq("uma cópia de duas faces no foil e a outra no padrão, cada uma com o seu verso",
+       (calc.parse_order(montado["xml_foil"]), calc.parse_order(montado["xml_padrao"])),
+       ((4, 1), (4, 1)))
+
     todo_foil = decks.criar("Tudo foil", ["Atraxa"], [{"nome": "Sol Ring", "quantidade": 1}])
     for nome in ("Atraxa", "Sol Ring"):
         artes.escolher(todo_foil["id"], nome, "id-" + nome)
@@ -611,7 +615,7 @@ try:
             check(f"cópia {errado!r} é recusada", True)
 
     copia_ped = decks.duplicar(ped["id"])
-    eq("duplicar leva o foil", artes.foil_do_deck(copia_ped["id"])["forest"], [1, 2, 3])
+    eq("duplicar leva o foil", artes.foil_do_deck(copia_ped["id"])["forest"], [1, 3])
     artes.apagar_do_deck(copia_ped["id"])
     eq("apagar o deck leva o foil", artes.foil_do_deck(copia_ped["id"]), {})
 

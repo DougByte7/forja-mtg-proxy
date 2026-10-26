@@ -335,9 +335,6 @@ async def create_order(xml_file: UploadFile, lamination: str = Form(...),
             deck_hash = calc.compute_deck_hash(xml_text)
         except ValueError as e:
             raise HTTPException(400, str(e))
-        if xml_foil is not None and lam == "foil" and backs_count:
-            raise HTTPException(400, "Carta com verso não sai no foil: o vinil "
-                                     "holográfico só cobre um lado.")
         partes.append((xml_text, lam, deck_hash, result))
 
     criados = storage.create_group(partes, customer_name, dono=quem["id"])

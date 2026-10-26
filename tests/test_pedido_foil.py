@@ -9,8 +9,8 @@ precisa ficar travado aqui:
    o Pix pelo total, e o admin cobra cada folha pelo que ela é.
 2. **O grupo anda junto.** Avisar o pagamento de um avisa os dois (o Pix é
    um só), e cancelar um cancela os dois — metade de um Pix não se paga.
-3. **O que não pode**: o resto do pedido misto em foil, e carta com verso na
-   parte foil (o vinil holográfico só vai de um lado).
+3. **O que não pode**: o resto do pedido misto em foil. Carta com verso na
+   parte foil pode, e os versos contam nas folhas dela.
 
 Precisa do fastapi instalado (`pip install -r requirements.txt`). Rode de
 dentro da raiz do projeto:
@@ -130,8 +130,10 @@ check("cancelar um cancela o grupo", r.status_code == 200
 # --- 3. o que não pode -------------------------------------------------------
 r = pedir(xml_de(4), xml_de(2), lam="foil")
 check("o resto do pedido misto não sai em foil", r.status_code == 400, r.text[:160])
-r = pedir(xml_de(4), xml_de(2, versos=1))
-check("carta com verso não entra na parte foil", r.status_code == 400, r.text[:160])
+r = pedir(xml_de(4), xml_de(7, versos=2))
+foil = r.json()["pedidos"][1] if r.status_code == 200 else {}
+check("carta com verso entra na parte foil, e o verso ocupa espaço na folha",
+      foil.get("backs_count") == 2 and foil.get("pages") == 2, r.text[:160])
 antes = len(storage.list_orders())
 pedir(xml_de(4), "isto não é xml")
 check("parte inválida não deixa a outra criada", len(storage.list_orders()) == antes)

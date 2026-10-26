@@ -980,6 +980,9 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .foil-btn:focus-visible{outline:2px solid var(--foil);outline-offset:2px;}
 .foil-btn.ligado{color:var(--sobre-gold);border-color:transparent;background:var(--foil-arco);}
 .foil-btn:disabled{cursor:not-allowed;opacity:.45;}
+/* O do verso, ligado: mostra que sai no foil, mas apagado o bastante pra
+   não parecer que se clica ali. */
+.foil-btn.ligado:disabled{opacity:.7;}
 .foil-n{font-family:'IBM Plex Mono',monospace;font-size:10.5px;}
 @media (hover:hover){
   .foil-btn:not(.ligado){opacity:0;}

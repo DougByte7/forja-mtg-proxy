@@ -27,7 +27,7 @@
 import { canOrder } from "../../shared/account";
 import { artName, chosenArt, faceImage, hasBack, hasPerCopyArt, sideReady, type Face } from "./art";
 import { categoryOf, categoryOrder } from "./deck";
-import { canBeFoil, foilCopies, foilCountOf } from "./foil";
+import { foilCopies, foilCountOf } from "./foil";
 import { state } from "./state";
 import { deckTokens, tokenLabel } from "./tokens";
 import type { Card, Entry } from "./types";
@@ -55,7 +55,7 @@ export type GalleryFrame = {
   quantity: number;
   copies: number[];     // as cópias de papel que o quadro representa
   foil: number;         // quantas delas saem no foil
-  foilable: boolean;    // carta com verso não sai no foil
+  foilable: boolean;    // o verso não se marca: acompanha a frente
   label: string;        // o `title`/`aria-label`, sem o separador
   situation: string;
   badge: string;        // "Escolhida · verso · cópias 1–3 · Foil"
@@ -87,7 +87,7 @@ function galleryFrame(card: Card, face: Face, quantity: number, copies?: number[
     // A prévia do hover mostra ESTE lado, e não a carta inteira como na lista:
     // cada quadro já é um lado, e o outro está no quadro ao lado.
     preview: src ? faceImage(card, face, 500, null, copy) : "",
-    quantity, copies: paper, foil, foilable: canBeFoil(card),
+    quantity, copies: paper, foil, foilable: !back,
     label: (back ? "Verso de " : "") + name + which,
     situation: (choice ? "arte escolhida: " + (choice.arquivo || choice.arte_id) : "arte padrão — clique pra escolher")
       + (finish ? ` · ${finish.toLowerCase()}` : ""),

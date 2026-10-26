@@ -9,7 +9,7 @@ import {
   showFace, togglePrintingFilter, uploadArtFile, UPLOADED_ID, pickMpcArt, pickScryfallArt,
   visiblePages, goToPage, scryfallOptions, type Face, type Origin,
 } from "../art";
-import { canBeFoil, foilCopies, NO_FOIL_REASON, setAllFoil, setFoilCopies } from "../foil";
+import { BACK_FOLLOWS_FRONT, foilCopies, setAllFoil, setFoilCopies } from "../foil";
 import { tokenLabel } from "../tokens";
 import type { Card } from "../types";
 import { Frame } from "./Gallery";
@@ -71,10 +71,10 @@ const artKeyOf = (card: Card) => artKey(artName(card));
 /* Padrão ou foil, o mesmo dado do ✦ da galeria, à mão de quem já está
    escolhendo a arte. Com "Uma arte por cópia", vale pra cópia do seletor;
    sem, pra todas — e a carta com só algumas cópias foil fica sem lado aceso,
-   com a conta ao lado. Carta com verso: apagado, com o porquê. */
+   com a conta ao lado. No verso, travado: o verso acompanha a frente. */
 function Finish({ card }: { card: Card }) {
   useDeck();
-  const ok = canBeFoil(card);
+  const ok = artState.face !== "verso";
   const quantity = paperQuantity(card);
   const marked = foilCopies(card);
   const copy = artState.perCopy ? artState.copy : 0;
@@ -86,14 +86,14 @@ function Finish({ card }: { card: Card }) {
     return setFoilCopies(card, on ? [...rest, copy] : rest);
   }
   return (
-    <div class="arte-acabamento" title={ok ? undefined : NO_FOIL_REASON}>
+    <div class="arte-acabamento" title={ok ? undefined : BACK_FOLLOWS_FRONT}>
       <div class="segmento" id="arte-acabamento" role="group" aria-label="Acabamento">
-        <button type="button" data-acabamento="padrao" class={ok && standard ? "ativa" : undefined}
-                aria-pressed={ok && standard} disabled={!ok} onClick={() => choose(false)}>Padrão</button>
+        <button type="button" data-acabamento="padrao" class={standard ? "ativa" : undefined}
+                aria-pressed={standard} disabled={!ok} onClick={() => choose(false)}>Padrão</button>
         <button type="button" data-acabamento="foil" class={foil ? "ativa foil" : "foil"}
                 aria-pressed={foil} disabled={!ok} onClick={() => choose(true)}>✦ Foil</button>
       </div>
-      {ok && !copy && quantity > 1 && !foil && !standard && (
+      {!copy && quantity > 1 && !foil && !standard && (
         <span class="arte-nota">{marked.length} de {quantity} no foil</span>
       )}
     </div>

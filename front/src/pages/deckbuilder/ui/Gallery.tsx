@@ -3,7 +3,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { applyDefaultsToMissing, artState, findArtCard, openArtPicker } from "../art";
-import { NO_FOIL_REASON, setFoilCountOf } from "../foil";
+import { BACK_FOLLOWS_FRONT, setFoilCountOf } from "../foil";
 import {
   defaultsShortcutHidden, galleryCount, galleryGroups, orderLinkView, paperCount, type GalleryFrame,
 } from "../gallery";
@@ -47,7 +47,8 @@ function GalleryCard({ frame: f }: { frame: GalleryFrame }) {
 /* O ✦ do quadro. Fora do botão do quadro (botão dentro de botão não existe),
    por cima dele, no canto. Uma cópia: liga e desliga. Mais de uma: abre o
    contador, porque "3 das 30 Florestas" é um pedido comum e o ✦ sozinho só
-   diria "todas" ou "nenhuma". Carta com verso: apagado, e o porquê no title. */
+   diria "todas" ou "nenhuma". No verso, travado: ele mostra o que a frente
+   decidiu, e o title diz onde se muda. */
 function FoilToggle({ frame: f }: { frame: GalleryFrame }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -63,12 +64,10 @@ function FoilToggle({ frame: f }: { frame: GalleryFrame }) {
     };
   }, [open]);
 
-  // O verso é a mesma folha da frente: o ✦ fica só no quadro da frente.
-  if (f.face === "verso") return null;
   const card = () => findArtCard(f.artCard);
   const set = (count: number) => { const c = card(); if (c) setFoilCountOf(c, f.copies, count); };
   const many = f.quantity > 1;
-  const label = !f.foilable ? NO_FOIL_REASON
+  const label = !f.foilable ? (f.foil ? "Sai no foil junto com a frente. " : "") + BACK_FOLLOWS_FRONT
     : many ? `Foil: ${f.foil} de ${f.quantity} — clique pra mudar`
     : f.foil ? "Sai no foil — clique pra voltar ao padrão" : "Marcar como foil";
   return (
