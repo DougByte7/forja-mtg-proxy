@@ -9,6 +9,10 @@
    A cobrança e a cotação guardam a ASSINATURA do pedido que as gerou. Mudou
    o pedido, a assinatura não bate e elas deixam de valer sozinhas — é o que
    impede um QR de outro pedido de ficar na tela.
+
+   O DECK COM CARTAS FOIL vira dois pedidos num Pix só (ver `artes._montar`):
+   o `xmlText` e a folha que se revisa são os do PADRÃO, e o foil vem à parte
+   em `foilPart`, sem edição — as cartas foil se escolhem no deckbuilder.
    ------------------------------------------------------------------------- */
 import { computed, signal } from "@preact/signals";
 import { quoteName } from "./art";
@@ -30,6 +34,31 @@ export const deckVersion = signal(new URLSearchParams(location.search).get("vers
 export const xmlText = signal("");
 export const parsed = signal<{ qty: number; backsCount: number } | null>(null);
 export const xmlError = signal("");
+
+/* ------------------------------------------------------------------ foil */
+
+/** A parte foil do pedido misto, ou null. Só o deckbuilder cria uma. */
+export type FoilPart = { xml: string; qty: number; backsCount: number; slots: Slot[] };
+export const foilPart = signal<FoilPart | null>(null);
+/** O XML do deck INTEIRO, quando ele vem partido: é o que se cota (a cotação
+    é das cartas, não do papel) e o que vira o pedido no "imprimir tudo no
+    padrão". Vazio fora do pedido misto. */
+export const wholeXml = signal("");
+/** O "Imprimir tudo no padrão": ignora as marcas de foil do deckbuilder. */
+export const ignoreFoil = signal(false);
+
+export function loadFoilPart(xml: string | null) {
+  if (!xml) {
+    foilPart.value = null;
+    return;
+  }
+  try {
+    foilPart.value = { xml, ...parseOrder(xml), slots: parseSlots(xml).slots };
+  } catch (e) {
+    foilPart.value = null;
+    xmlError.value = (e as Error).message;
+  }
+}
 
 /* ----------------------------------------------------------------- folha */
 
@@ -67,6 +96,8 @@ export function loadXml(text: string) {
 
 export function failXml(message: string) {
   loadXml("");
+  foilPart.value = null;
+  wholeXml.value = "";
   xmlError.value = message;
 }
 
@@ -78,11 +109,15 @@ export const lamination = signal<Lamination>("double");
 export const declared = signal(false);
 export const prices = signal<Prices>(DEFAULT_PRICES);
 
+export type Totals = ReturnType<typeof computeTotals>;
+export type FoilTotals = { qty: number; backsCount: number } & Totals;
 export type Summary =
   | { kind: "error"; message: string }
   | { kind: "hint"; message: string }
-  | ({ kind: "ok"; qty: number; backsCount: number; lam: Lamination; name: string; signature: string }
-      & ReturnType<typeof computeTotals>);
+  | ({ kind: "ok"; qty: number; backsCount: number; lam: Lamination; name: string; signature: string;
+       /** A parte foil do pedido misto, e a soma dos dois — o valor do Pix. */
+       foil: FoilTotals | null; grandTotal: number }
+      & Totals);
 
 export const summary = computed((): Summary => {
   if (xmlError.value) return { kind: "error", message: xmlError.value };
@@ -97,21 +132,34 @@ export const summary = computed((): Summary => {
     return { kind: "hint", message: deckId.value ? "Montando o pedido do deck…" : "Falta selecionar o arquivo .xml do MPC Fill." };
   }
   if (!name) return { kind: "hint", message: "Falta escrever seu nome no passo 2." };
-  const lam = lamination.value;
+  const fp = foilPart.value;
+  // No pedido misto o resto não sai em foil: a opção nem aparece.
+  const lam = fp && lamination.value === "foil" ? "double" : lamination.value;
+  const totals = computeTotals(order.qty, order.backsCount, lam, prices.value);
+  const foil = fp ? { qty: fp.qty, backsCount: fp.backsCount,
+                      ...computeTotals(fp.qty, fp.backsCount, "foil", prices.value) } : null;
   return {
     kind: "ok", qty: order.qty, backsCount: order.backsCount, lam, name,
     // A cobrança vale só para o pedido exato que a originou.
-    signature: [order.qty, order.backsCount, lam, name, revision.value].join("|"),
-    ...computeTotals(order.qty, order.backsCount, lam, prices.value),
+    signature: [order.qty, order.backsCount, lam, name, revision.value, fp ? `foil:${fp.qty}` : ""].join("|"),
+    ...totals,
+    foil,
+    grandTotal: Math.round((totals.total + (foil?.total ?? 0)) * 100) / 100,
   };
 });
 
 /* ------------------------------------------------------------- cobrança */
 
+export type ChargedOrder = {
+  order_id: string; deck_hash: string; lamination: Lamination; amount: number;
+  qty: number; backs_count: number; pages: number; blanks: number;
+};
 export type Charge = {
   signature: string;
   order_id: string; deck_hash: string; amount: number;
   pix_copia_cola: string; pix_qr_base64: string;
+  /** Os pedidos que esta cobrança paga: dois no pedido misto. */
+  pedidos?: ChargedOrder[];
 };
 export const charge = signal<Charge | null>(null);
 export const chargeError = signal("");
@@ -131,7 +179,11 @@ export const commander = signal("");
 export const commanderOptions = computed(() => {
   const names: string[] = [];
   const seen = new Set<string>();
-  for (const g of sheetGroups(slots.value, catalog.value)) {
+  // O comandante foil está na parte foil, e continua sendo o comandante.
+  const fp = foilPart.value;
+  const groups = [...sheetGroups(slots.value, catalog.value),
+                  ...(fp ? sheetGroups(fp.slots, catalogFrom(fp.slots)) : [])];
+  for (const g of groups) {
     const name = quoteName(g.front);
     if (!name || !g.idx.length || seen.has(name.toLowerCase())) continue;
     seen.add(name.toLowerCase());
@@ -225,6 +277,9 @@ export const bumpOrders = () => { ordersVersion.value++; };
 export function resetHomeState() {
   deckId.value = "";
   deckVersion.value = "";
+  foilPart.value = null;
+  wholeXml.value = "";
+  ignoreFoil.value = false;
   loadXml("");
   xmlError.value = "";
   revision.value = 0;

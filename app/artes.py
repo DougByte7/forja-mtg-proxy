@@ -32,6 +32,12 @@ vermelho de "FALHA NO DOWNLOAD" — e descobrir isso depois de pagar é o pior
 resultado possível. `revalidar` existe pra perguntar antes, e o nome guardado
 é o que permite reconhecer a arte que a pessoa tinha escolhido mesmo depois de
 o id morrer.
+
+FOIL É DA CÓPIA, NÃO DA ARTE. Cada cópia de papel pode sair no foil
+(`cartas_foil`), e a marca mora numa tabela própria pra trocar a arte não
+desmarcar o foil. É por cópia e não por face: frente e verso são a mesma
+folha. E carta com verso não sai em foil — o vinil holográfico só vai de um
+lado —, então a marca nela é ignorada no pedido (ver `_montar`).
 """
 import hashlib
 import json
@@ -72,6 +78,17 @@ _ESQUEMA = """
     )
 """
 
+# As cópias de papel que saem no foil. Uma linha por cópia marcada, com o
+# número dela: aumentar a quantidade não põe a cópia nova no foil.
+_ESQUEMA_FOIL = """
+    CREATE TABLE IF NOT EXISTS cartas_foil (
+        deck_id TEXT,
+        nome TEXT,          -- achatado por `cartas.normalizar`
+        copia INTEGER,      -- 1 = a primeira cópia
+        PRIMARY KEY (deck_id, nome, copia)
+    )
+"""
+
 _COLUNAS = ("deck_id, nome, face, copia, arte_id, arquivo, fonte, dpi, "
             "baixa_resolucao, escolhido_em")
 
@@ -88,6 +105,7 @@ def init_db():
         if colunas and "copia" not in colunas:
             _migrar_pra_copias(conn)
         conn.execute(_ESQUEMA)
+        conn.execute(_ESQUEMA_FOIL)
         # A consulta que roda toda vez que um deck abre.
         conn.execute("CREATE INDEX IF NOT EXISTS idx_artes_deck "
                      "ON artes_escolhidas(deck_id)")
@@ -219,6 +237,50 @@ def limpar_copias(deck_id: str, nome: str) -> int:
     return cur.rowcount
 
 
+def foil_do_deck(deck_id: str) -> dict[str, list[int]]:
+    """As cópias que saem no foil: `{nome_achatado: [1, 3]}`, em ordem."""
+    conn = _conn()
+    try:
+        linhas = conn.execute(
+            "SELECT nome, copia FROM cartas_foil WHERE deck_id=? "
+            "ORDER BY nome, copia", (deck_id,)).fetchall()
+    finally:
+        conn.close()
+    saida: dict[str, list[int]] = {}
+    for l in linhas:
+        saida.setdefault(l["nome"], []).append(l["copia"])
+    return saida
+
+
+def marcar_foil(deck_id: str, nome: str, copias) -> list[int]:
+    """Troca as cópias foil de uma carta pelas de `copias` — a lista inteira,
+    e não uma por vez: o contador da galeria diz "3 das 30", e o que se grava
+    é o resultado. Lista vazia tira a carta do foil. Levanta `ValueError`
+    com a razão em português."""
+    chave = _chave(nome)
+    if not deck_id or not chave:
+        raise ValueError("Falta o deck ou o nome da carta.")
+    if not isinstance(copias, list):
+        raise ValueError("Manda as cópias foil numa lista.")
+    try:
+        numeros = sorted({int(n) for n in copias})
+    except (TypeError, ValueError):
+        raise ValueError("Cópia inválida.")
+    if any(not 1 <= n <= decks.MAX_COPIAS for n in numeros):
+        raise ValueError(f"Cópia tem que estar entre 1 e {decks.MAX_COPIAS}.")
+    conn = _conn()
+    try:
+        conn.execute("DELETE FROM cartas_foil WHERE deck_id=? AND nome=?",
+                     (deck_id, chave))
+        conn.executemany(
+            "INSERT INTO cartas_foil (deck_id, nome, copia) VALUES (?,?,?)",
+            [(deck_id, chave, n) for n in numeros])
+        conn.commit()
+    finally:
+        conn.close()
+    return numeros
+
+
 def do_deck(deck_id: str) -> dict[str, dict]:
     """As escolhas de um deck:
     `{nome_achatado: {frente: {...}, verso: {...}, copias: {"2": {frente: {...}}}}}`.
@@ -262,7 +324,7 @@ def para_deck(deck: dict) -> dict:
     nomes = list(deck.get("comandantes") or []) + \
         [c["nome"] for c in deck.get("cartas") or []]
     faltando = [n for n in nomes if _chave(n) not in escolhas]
-    return {"escolhas": escolhas, "faltando": faltando,
+    return {"escolhas": escolhas, "foil": foil_do_deck(deck["id"]), "faltando": faltando,
             "escolhidas": len(escolhas), "total": len(nomes)}
 
 
@@ -393,75 +455,107 @@ def pedido_da_versao(deck: dict, antes: dict | None, depois: dict) -> dict:
 
 def _montar(deck_id: str, linhas: list[tuple[str, int, int]], fichas: list[dict]) -> dict:
     """O XML de `linhas` — `(nome, cópias, número da primeira cópia)` — e
-    das `fichas`, uma de cada, com as artes escolhidas no deck."""
+    das `fichas`, uma de cada, com as artes escolhidas no deck.
+
+    `xml` é sempre o pedido INTEIRO. Com cópia marcada no foil, vêm também
+    `xml_padrao` e `xml_foil`, o mesmo pedido partido em dois — a laminação é
+    da folha, então foil e o resto são dois pedidos (ver `main.create_order`).
+    `xml_padrao` é nulo quando tudo é foil. O `xml` inteiro continua indo
+    junto: é o "imprimir tudo no padrão" da tela, e o que se cota."""
     escolhas = do_deck(deck_id)
+    foil = foil_do_deck(deck_id)
     conhecidas = base_cartas.por_nomes([nome for nome, _, _ in linhas])
 
     # O que vai pra folha: (chave da escolha, nome pro `faltando`, o <query>
-    # de cada face, cópias, se é ficha). O <query> é o nome, que o `calc` usa
-    # pro código do pedido e a cotação usa pra saber o que cotar; o verso leva
-    # só o nome dele, como o MPC Fill escreve, e a ficha vai com o `t:`.
+    # de cada face, os números das cópias, se é ficha). O <query> é o nome,
+    # que o `calc` usa pro código do pedido e a cotação usa pra saber o que
+    # cotar; o verso leva só o nome dele, como o MPC Fill escreve, e a ficha
+    # vai com o `t:`.
     impressos = []
     for nome, quantidade, primeira in linhas:
         carta = conhecidas.get(nome) or {}
         consultas = [nome]
         if carta.get("imagem_verso"):
             consultas.append((carta.get("nome") or nome).split(" // ")[-1].strip())
-        impressos.append((nome, nome, consultas, quantidade, primeira, False))
+        impressos.append((nome, nome, consultas,
+                          list(range(primeira, primeira + quantidade)), False))
     for ficha in fichas:
         lados = [ficha["nome"].split(" // ")[0].strip()]
         if ficha.get("imagem_verso"):
             lados.append(ficha["nome"].split(" // ")[-1].strip())
         impressos.append((ficha["chave_arte"], ficha["nome"],
-                          [calc.PREFIXO_FICHA + lado for lado in lados], 1, 1, True))
+                          [calc.PREFIXO_FICHA + lado for lado in lados], [1], True))
 
+    faltando = []
+    artes_total = 0
+    for chave, rotulo, consultas, copias, e_ficha in impressos:
+        faces = FACES[:len(consultas)]
+        artes_total += len(faces)
+        escolhidas = escolhas.get(_chave(chave), {})
+        for face in faces:
+            if not all(_da_copia(escolhidas, face, n) for n in copias):
+                faltando.append({"nome": rotulo, "face": face,
+                                 **({"ficha": True} if e_ficha else {})})
+    cartas = sum(len(copias) for *_, copias, _ in impressos)
+    pronto = cartas and not faltando
+    saida = {"xml": _xml(impressos, escolhas) if pronto else None,
+             "faltando": faltando, "artes": artes_total, "cartas": cartas}
+
+    # A parte foil: as cópias marcadas, fora as de carta com verso, que o
+    # vinil não cobre (a tela nem deixa marcar; uma marca de antes de a carta
+    # ganhar verso não pode virar folha errada).
+    def no_foil(chave, consultas, n):
+        return len(consultas) == 1 and n in foil.get(_chave(chave), ())
+    foils = [(c, r, q, [n for n in copias if no_foil(c, q, n)], f)
+             for c, r, q, copias, f in impressos]
+    no_foil_total = sum(len(copias) for *_, copias, _ in foils)
+    if no_foil_total:
+        padrao = [(c, r, q, [n for n in copias if not no_foil(c, q, n)], f)
+                  for c, r, q, copias, f in impressos]
+        saida.update(
+            cartas_foil=no_foil_total, cartas_padrao=cartas - no_foil_total,
+            xml_foil=_xml(foils, escolhas) if pronto else None,
+            xml_padrao=_xml(padrao, escolhas) if pronto and cartas > no_foil_total else None)
+    return saida
+
+
+def _xml(impressos: list[tuple], escolhas: dict) -> str | None:
+    """O XML do MPC Fill de `impressos`, com toda cópia já coberta por uma
+    escolha (quem chama conferiu). Nulo se não há cópia nenhuma."""
     # Agrupado por (arte, <query>), e não só pela arte: o mesmo arquivo
     # enviado pra duas cartas diferentes são dois <card>, cada um com o nome
     # da sua carta — é pelo <query> que a cotação sabe o que cotar.
     frentes: dict[tuple, dict] = {}
     versos: dict[tuple, dict] = {}
-    faltando = []
-    artes_total = 0
     proximo = 0
-    for chave, rotulo, consultas, quantidade, primeira, e_ficha in impressos:
-        faces = FACES[:len(consultas)]
-        artes_total += len(faces)
+    for chave, _rotulo, consultas, copias, _ficha in impressos:
         escolhidas = escolhas.get(_chave(chave), {})
-        for face, consulta, destino in zip(faces, consultas, (frentes, versos)):
-            faltou = False
-            for n in range(quantidade):
-                escolha = _da_copia(escolhidas, face, primeira + n)
-                if not escolha:
-                    faltou = True
-                    continue
+        for face, consulta, destino in zip(FACES, consultas, (frentes, versos)):
+            for i, n in enumerate(copias):
+                escolha = _da_copia(escolhidas, face, n)
                 grupo = destino.setdefault((escolha["arte_id"], consulta), {
                     "arquivo": escolha["arquivo"], "slots": []})
-                grupo["slots"].append(proximo + n)
-            if faltou:
-                faltando.append({"nome": rotulo, "face": face,
-                                 **({"ficha": True} if e_ficha else {})})
-        proximo += quantidade
+                grupo["slots"].append(proximo + i)
+        proximo += len(copias)
+    if not proximo:
+        return None
 
-    xml = None
-    if proximo and not faltando:
-        raiz = ET.Element("order")
-        ET.SubElement(ET.SubElement(raiz, "details"), "quantity").text = str(proximo)
-        for secao, grupos in (("fronts", frentes), ("backs", versos)):
-            if not grupos:
-                continue
-            el = ET.SubElement(raiz, secao)
-            for (arte_id, consulta), grupo in grupos.items():
-                card = ET.SubElement(el, "card")
-                ET.SubElement(card, "id").text = arte_id
-                ET.SubElement(card, "slots").text = ",".join(map(str, grupo["slots"]))
-                if grupo["arquivo"]:
-                    ET.SubElement(card, "name").text = grupo["arquivo"]
-                ET.SubElement(card, "query").text = consulta
-        ET.indent(raiz, space="    ")
-        xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
-               + ET.tostring(raiz, encoding="unicode") + "\n")
-    return {"xml": xml, "faltando": faltando, "artes": artes_total,
-            "cartas": proximo}
+    raiz = ET.Element("order")
+    ET.SubElement(ET.SubElement(raiz, "details"), "quantity").text = str(proximo)
+    for secao, grupos in (("fronts", frentes), ("backs", versos)):
+        if not grupos:
+            continue
+        el = ET.SubElement(raiz, secao)
+        for (arte_id, consulta), grupo in grupos.items():
+            card = ET.SubElement(el, "card")
+            ET.SubElement(card, "id").text = arte_id
+            ET.SubElement(card, "slots").text = ",".join(map(str, grupo["slots"]))
+            if grupo["arquivo"]:
+                ET.SubElement(card, "name").text = grupo["arquivo"]
+            ET.SubElement(card, "query").text = consulta
+    ET.indent(raiz, space="    ")
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            + ET.tostring(raiz, encoding="unicode") + "\n")
 
 
 def aplicar_padrao(deck: dict) -> dict:
@@ -538,8 +632,11 @@ def apagar_do_deck(deck_id: str) -> int:
     Tolera a tabela não existir: isto é um efeito colateral de apagar deck,
     e um banco no meio da migração não pode fazer APAGAR UM DECK falhar. Sem tabela não há o que apagar.
 
-    O arquivo enviado não sai do disco junto (ver `artes_enviadas`).
+    O arquivo enviado não sai do disco junto (ver `artes_enviadas`). As
+    marcas de foil saem, pelo mesmo motivo das artes.
     """
+    _mexer("DELETE FROM cartas_foil WHERE deck_id=?", (deck_id,),
+           acao="apagar-foil")
     return _mexer("DELETE FROM artes_escolhidas WHERE deck_id=?", (deck_id,),
                   acao="apagar")
 
@@ -548,8 +645,12 @@ def copiar(de_deck: str, para_deck_id: str) -> int:
     """Leva as escolhas na duplicação de um deck.
 
     É claramente o que se quer: quem duplica um deck com arte escolhida quer a
-    cópia igual — inclusive as artes, que foram o trabalho mais chato.
+    cópia igual — inclusive as artes, que foram o trabalho mais chato. E o
+    foil junto.
     """
+    _mexer("INSERT OR REPLACE INTO cartas_foil (deck_id, nome, copia) "
+           "SELECT ?, nome, copia FROM cartas_foil WHERE deck_id=?",
+           (para_deck_id, de_deck), acao="copiar-foil")
     return _mexer(
         f"INSERT OR REPLACE INTO artes_escolhidas ({_COLUNAS}) "
         "SELECT ?, nome, face, copia, arte_id, arquivo, fonte, dpi, "

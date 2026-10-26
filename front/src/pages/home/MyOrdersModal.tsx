@@ -3,7 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { api } from "../../shared/api";
 import { copyText } from "../../shared/clipboard";
 import {
-  forgetOrder, readableDate, readOrders, refreshStatuses, setOrderStatus, stateInfo,
+  forgetOrder, groupOf, readableDate, readOrders, refreshStatuses, setOrderStatus, stateInfo,
   type SavedOrder,
 } from "./myOrders";
 import { CardList, SheetPages } from "./Sheet";
@@ -87,7 +87,9 @@ export function MyOrdersModal() {
                     <div class={"oi" + (sel ? " sel" : "")} key={o.id}>
                       <button type="button" class="oi-open" aria-pressed={sel} onClick={() => select(o.id)}>
                         <div class="oi-info">
-                          <div class="oi-name">{o.nome || "Pedido"}</div>
+                          <div class="oi-name">{o.nome || "Pedido"}
+                            {o.grupo && <span class={"oi-parte" + (o.lam === "foil" ? " foil" : "")}>
+                              {o.lam === "foil" ? "✦ Foil" : "Padrão"}</span>}</div>
                           <div class="oi-meta">{readableDate(o.criado_em)} · R$ {brl(o.valor)} · {o.qty}
                             {o.qty === 1 ? " carta" : " cartas"}</div>
                         </div>
@@ -122,6 +124,8 @@ function OrderDetail({ order: o }: { order: SavedOrder | null }) {
   if (!o) return <p class="od-vazio">Escolha um pedido na lista pra ver as cartas e o andamento.</p>;
 
   const info = stateInfo(o.status);
+  const group = groupOf(o);
+  const pixValue = o.grupoValor ?? o.valor;
   let slots: ReturnType<typeof parseSlots>["slots"] = [];
   try { slots = parseSlots(o.xml || "").slots; } catch { slots = []; }
 
@@ -141,15 +145,21 @@ function OrderDetail({ order: o }: { order: SavedOrder | null }) {
         {!!o.blanks && <Row label="Espaços livres na última página" value={o.blanks} />}
         <Row label="Laminação" value={o.lamLabel} />
         <Row label="Código do pedido" value={o.deck_hash} />
-        <Row label="Total" value={"R$ " + brl(o.valor)} />
+        <Row label={o.grupo ? "Valor deste pedido" : "Total"} value={"R$ " + brl(o.valor)} />
+        {o.grupo && <Row label="Pix (os dois pedidos)" value={"R$ " + brl(pixValue)} />}
       </div>
+      {o.grupo && (
+        <p class="od-recado">Este pedido sai junto {o.lam === "foil" ? "do padrão" : "do foil"}, num Pix
+          só{group.length > 1 ? "" : " (o outro foi tirado da lista deste navegador)"}. Avisar o pagamento
+          ou cancelar vale pros dois.</p>
+      )}
 
       {/* O QR só faz sentido enquanto ninguém avisou nada: depois do aviso o
           Pix já foi pago, e mostrar o código de novo é convite pra pagar duas. */}
       {o.status === "pending" && (o.qr || o.pix) && (
         <div class="od-pix">
           {o.qr && <img src={"data:image/png;base64," + o.qr} alt="QR code Pix deste pedido" />}
-          <p>Valor desta cobrança: R$ {brl(o.valor)}</p>
+          <p>Valor desta cobrança: R$ {brl(pixValue)}{o.grupo ? " — paga os dois pedidos" : ""}</p>
           {o.pix && (
             <button type="button" class="sec-btn" title="Copiar o código Pix deste pedido"
                     onClick={async () => flash((await copyText(o.pix)) ? "Copiado!" : "Selecione o código e copie")}>
@@ -197,7 +207,7 @@ function OrdersFoot({ order: o }: { order: SavedOrder | null }) {
       const path = kind === "notify" ? "notify-payment" : "cancel";
       const data = await api<{ message?: string }>(`/orders/${encodeURIComponent(o.id)}/${path}`, { method: "POST" });
       text = data?.message || (kind === "notify" ? "Aviso enviado." : "Pedido cancelado.");
-      if (kind === "cancel") setOrderStatus(o.id, "cancelado");
+      if (kind === "cancel") for (const p of groupOf(o)) setOrderStatus(p.id, "cancelado");
     } catch (e) {
       tone = "ruim";
       const r = reason(e);
@@ -206,7 +216,7 @@ function OrdersFoot({ order: o }: { order: SavedOrder | null }) {
           + " Tenta de novo em instantes — se insistir, me chama pelo contato de sempre."
         : "Não deu pra cancelar." + (r ? " " + r : "") + " Tenta de novo em instantes.";
     }
-    await refreshStatuses([o.id]);
+    await refreshStatuses(groupOf(o).map((p) => p.id));
     setBusy("");
     setCancelArmed(false);
     bumpOrders();

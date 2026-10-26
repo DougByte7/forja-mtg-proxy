@@ -20,6 +20,8 @@ export type Order = {
   impressao_em?: number | null;
   impressao_msg?: string | null;
   impressao_falhas?: number;
+  /** O pedido do mesmo Pix (padrão + foil): o id do primeiro, ou null. */
+  grupo?: string | null;
 };
 
 export type OrderList = { pedidos: Order[]; contagem: Record<string, number> };

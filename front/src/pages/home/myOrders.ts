@@ -30,6 +30,10 @@ export type SavedOrder = {
   qr: string;
   status: string;
   criado_em: number;
+  /** O pedido misto (padrão + foil) são dois pedidos num Pix só: o `grupo`
+      é o id do primeiro, e `grupoValor` o valor do Pix, a soma dos dois. */
+  grupo?: string;
+  grupoValor?: number;
 };
 
 const KEY = "forja.pedidos.v1";
@@ -68,6 +72,11 @@ export function setOrderStatus(id: string, status: string) {
   if (!order) return;
   order.status = status;
   write(list);
+}
+
+/** Os pedidos guardados da mesma cobrança que `order`, ele incluído. */
+export function groupOf(order: SavedOrder, list = readOrders()) {
+  return order.grupo ? list.filter((p) => p.grupo === order.grupo) : [order];
 }
 
 export function forgetOrder(id: string) {

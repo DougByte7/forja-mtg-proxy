@@ -1,11 +1,14 @@
 /* Os três passos do pedido: o XML (ou o deck do deckbuilder), o nome e a
-   laminação — mais o erro ou a dica do que falta. */
+   laminação — mais o erro ou a dica do que falta. No deck com cartas foil, o
+   passo 3 vira dois blocos: o do resto, que se escolhe aqui, e o do foil,
+   que já veio escolhido do deckbuilder. */
 import { useQuery } from "@tanstack/preact-query";
 import { useEffect, useState } from "preact/hooks";
 import { deckOrderQuery, type DeckOrder } from "./queries";
 import { reason } from "./Summary";
 import {
-  commander, customerName, deckId, deckVersion, failXml, lamination, loadXml, prices, summary,
+  commander, customerName, deckId, deckVersion, failXml, foilPart, ignoreFoil, lamination, loadFoilPart,
+  loadXml, prices, summary, wholeXml,
 } from "./store";
 import { brl, cardsPerPage, LAMINATION_LABELS, type Lamination } from "./totals";
 
@@ -33,22 +36,61 @@ export function OrderForm() {
       <div class="step">
         <span class="step-label">Passo 3</span>
         <h3>Tipo de laminação</h3>
-        <div class="lam-options">
-          {(["single", "double", "foil"] as Lamination[]).map((lam) => (
-            <label class={"lam-opt" + (lamination.value === lam ? " active" : "")}>
-              <input type="radio" name="lam" value={lam} checked={lamination.value === lam}
-                     onChange={() => { lamination.value = lam; }} />
-              <div class="t">{LAMINATION_LABELS[lam]}</div>
-              <div class="p">R$ {brl(prices.value[lam])} / pág · {cardsPerPage(lam)} cartas</div>
-            </label>
-          ))}
-        </div>
+        {foilPart.value ? <MixedLamination /> : <LaminationOptions options={["single", "double", "foil"]} />}
+        {ignoreFoil.value && (
+          <p class="lam-nota">As marcas de foil do deckbuilder estão sendo ignoradas.{" "}
+            <button type="button" class="link-btn" onClick={() => { ignoreFoil.value = false; }}>
+              Voltar a separar o foil</button></p>
+        )}
       </div>
 
       <div class={"error" + (s.kind === "error" ? " show" : "")} role={s.kind === "error" ? "alert" : undefined}>
         {s.kind === "error" ? s.message : ""}</div>
       <div class={"hint" + (s.kind === "hint" ? "" : " hide")}>{s.kind === "hint" ? s.message : ""}</div>
     </>
+  );
+}
+
+function LaminationOptions({ options }: { options: Lamination[] }) {
+  return (
+    <div class="lam-options">
+      {options.map((lam) => (
+        <label class={"lam-opt" + (lamination.value === lam ? " active" : "")}>
+          <input type="radio" name="lam" value={lam} checked={lamination.value === lam}
+                 onChange={() => { lamination.value = lam; }} />
+          <div class="t">{LAMINATION_LABELS[lam]}</div>
+          <div class="p">R$ {brl(prices.value[lam])} / pág · {cardsPerPage(lam)} cartas</div>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/* O pedido misto: o resto escolhe entre um e dois lados — foil ele não é,
+   senão seria um pedido só —, e o foil aparece como está, com o caminho de
+   volta pro deckbuilder pra quem quer mudar quais cartas são. */
+function MixedLamination() {
+  const fp = foilPart.value!;
+  const s = summary.value;
+  const standard = s.kind === "ok" ? s.qty : null;
+  return (
+    <div class="lam-misto">
+      <div class="lam-bloco">
+        <div class="lam-bloco-tit">Cartas padrão{standard != null && <> · <b>{standard}</b></>}</div>
+        <LaminationOptions options={["double", "single"]} />
+      </div>
+      <div class="lam-bloco foil">
+        <div class="lam-bloco-tit"><span class="foil-cor">✦</span> Cartas foil · <b>{fp.qty}</b></div>
+        <p class="lam-bloco-txt">Foil · {cardsPerPage("foil")} cartas deitadas por folha ·
+          R$ {brl(prices.value.foil)} / pág</p>
+        <p class="lam-bloco-txt sub">Escolhidas no deckbuilder.{" "}
+          <a href={`/deckbuilder?deck=${encodeURIComponent(deckId.value)}`}>Alterar</a></p>
+      </div>
+      <p class="lam-nota">A laminação é da folha inteira, então o foil sai num pedido à parte —
+        pago no mesmo Pix.{" "}
+        <button type="button" class="link-btn" onClick={() => { ignoreFoil.value = true; }}>
+          Imprimir tudo no padrão</button></p>
+    </div>
   );
 }
 
@@ -71,6 +113,30 @@ function XmlUpload() {
       <span class="file-name">{fileName}</span>
     </div>
   );
+}
+
+/* O pedido do deck na tela. Com cartas foil, o que se revisa e cobra como
+   "o pedido" é o padrão, e o foil vai à parte (`foilPart`); com tudo no
+   foil, é um pedido só, em foil. `ignore` é o "imprimir tudo no padrão". */
+export function loadDeckOrder(data: DeckOrder, ignore: boolean) {
+  const split = !ignore && !!data.xml_foil;
+  if (split && data.xml_padrao) {
+    loadXml(data.xml_padrao);
+    loadFoilPart(data.xml_foil!);
+    wholeXml.value = data.xml!;
+    if (lamination.value === "foil") lamination.value = "double";
+  } else if (split) {
+    loadXml(data.xml_foil!);
+    loadFoilPart(null);
+    wholeXml.value = "";
+    lamination.value = "foil";
+  } else {
+    loadXml(data.xml!);
+    loadFoilPart(null);
+    wholeXml.value = "";
+    // Voltar do "tudo foil" pro padrão não pode deixar o foil escolhido.
+    if (ignore && lamination.value === "foil") lamination.value = "double";
+  }
 }
 
 /* O verso aparece como verso: numa carta de duas faces a frente pode estar
@@ -106,12 +172,12 @@ function DeckFromBuilder({ id, version }: { id: string; version: string }) {
         + `${missingArts(q.data.faltando)}. A arte padrão não vai pro papel; escolha as que `
         + `faltam na aba Artes do deckbuilder.`);
     } else if (q.data?.xml) {
-      loadXml(q.data.xml);
+      loadDeckOrder(q.data, ignoreFoil.value);
       // A cotação já sabe quem é o comandante: é o do deck.
       const cmd = q.data.deck.comandantes?.[0];
       if (cmd) commander.value = cmd;
     }
-  }, [q.data, q.error]);
+  }, [q.data, q.error, ignoreFoil.value]);
 
   // A saída pro upload fica sempre à vista: quem chegou pelo link e prefere
   // o XML do MPC Fill não pode ficar preso aqui.
@@ -143,6 +209,10 @@ function DeckFromBuilder({ id, version }: { id: string; version: string }) {
           </div>
           {q.data!.versao != null && (
             <p class="deck-nota">Só o que entrou na v{q.data!.versao}: {q.data!.cartas} carta(s).</p>
+          )}
+          {!!q.data!.cartas_foil && !ignoreFoil.value && (
+            <p class="deck-nota deck-divisao"><b>{q.data!.cartas_padrao}</b> padrão ·{" "}
+              <b class="foil-cor">✦ {q.data!.cartas_foil}</b> foil</p>
           )}
         </div>
       </div>

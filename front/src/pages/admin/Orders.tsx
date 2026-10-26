@@ -58,7 +58,11 @@ function OrderCard({ order: p, actions }: { order: Order; actions: Actions }) {
       </div>
       <div class="p-meta">
         <b>#{p.id}</b>{sep}deck {p.deck_hash || "?"}{sep}{Number(p.qty)} carta(s)
-        {sep}{Number(p.pages)} pág.{sep}{LAMINATION[p.lamination] || p.lamination}<br />
+        {sep}{Number(p.pages)} pág.{sep}{LAMINATION[p.lamination] || p.lamination}
+        {/* O Pix que chega é a soma dos dois: sem isto, o valor não bate
+            com nenhum pedido sozinho. */}
+        {p.grupo && <>{sep}<span title="Pago num Pix só com o outro pedido do grupo">
+          mesmo Pix de #{p.grupo}{p.grupo === p.id ? " (este + foil)" : ""}</span></>}<br />
         criado {when(p.created_at)}
         {p.notified_at && <>{sep}avisou {when(p.notified_at)}</>}
         {p.impresso_em && <>{sep}impresso {when(p.impresso_em)}</>}

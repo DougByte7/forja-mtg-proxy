@@ -45,7 +45,7 @@ _COLUNAS_ORDERS = (
     ("notified_at", "REAL"), ("dono", "TEXT"),
     ("impressao_em", "REAL"), ("impresso_em", "REAL"),
     ("impressao_msg", "TEXT"), ("impressao_falhas", "INTEGER"),
-    ("impressao_combo", "TEXT"),
+    ("impressao_combo", "TEXT"), ("grupo", "TEXT"),
 )
 _COLUNAS_COMBOS = (
     ("status", "TEXT"), ("impressao_em", "REAL"), ("impresso_em", "REAL"),
@@ -88,6 +88,9 @@ def init_db():
     # o CUPS aceitou, o que respondeu e quantas cartas saíram como quadro de
     # falha. `impressao_combo` marca o pedido que está na fila DENTRO de uma
     # folha combinada — esse o worker não pega sozinho, só junto do combo.
+    #
+    # `grupo` junta os pedidos que nasceram de uma cobrança só (ver
+    # `create_group`): é o id do primeiro deles, e NULL no pedido sozinho.
     for coluna, tipo in _COLUNAS_ORDERS:
         if coluna not in cols:
             conn.execute(f"ALTER TABLE orders ADD COLUMN {coluna} {tipo}")
@@ -130,33 +133,66 @@ def init_db():
 
 def create_order(xml_text: str, lamination: str, customer_name: str,
                   deck_hash: str, calc_result: dict, dono: str | None = None):
+    return create_group([(xml_text, lamination, deck_hash, calc_result)],
+                        customer_name, dono)[0]
+
+
+def create_group(partes: list[tuple], customer_name: str,
+                 dono: str | None = None) -> list[tuple[str, float]]:
+    """Os pedidos de uma cobrança só, cada parte `(xml, laminação, código do
+    deck, conta do calc)`. Devolve `[(id, valor)]` na ordem das partes.
+
+    Mais de uma parte é o deck com cartas foil: a laminação é da FOLHA, então
+    foil e o resto são pedidos separados — cada um com a sua fila, o seu PDF e
+    o seu papel —, pagos num Pix só. O `grupo` de todos é o id do primeiro,
+    que é também o txid do Pix. Numa transação: ou entram todos, ou nenhum.
+    """
+    ids = [uuid.uuid4().hex[:8] for _ in partes]
+    grupo = ids[0] if len(partes) > 1 else None
+    agora = time.time()
     conn = _conn()
-    order_id = uuid.uuid4().hex[:8]
-    amount = calc_result["total"]
-    conn.execute(
-        """INSERT INTO orders
-               (id, xml_text, lamination, customer_name, deck_hash, qty,
-                backs_count, pages, blanks, amount, status, created_at, dono)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (
-            order_id,
-            xml_text,
-            lamination,
-            customer_name,
-            deck_hash,
-            calc_result["qty"],
-            calc_result["backs_count"],
-            calc_result["pages"],
-            calc_result["blanks"],
-            amount,
-            "pending",
-            time.time(),
-            dono or None,
-        ),
-    )
-    conn.commit()
+    try:
+        for order_id, (xml_text, lamination, deck_hash, calc_result) in zip(ids, partes):
+            conn.execute(
+                """INSERT INTO orders
+                       (id, xml_text, lamination, customer_name, deck_hash, qty,
+                        backs_count, pages, blanks, amount, status, created_at,
+                        dono, grupo)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    order_id,
+                    xml_text,
+                    lamination,
+                    customer_name,
+                    deck_hash,
+                    calc_result["qty"],
+                    calc_result["backs_count"],
+                    calc_result["pages"],
+                    calc_result["blanks"],
+                    calc_result["total"],
+                    "pending",
+                    agora,
+                    dono or None,
+                    grupo,
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return [(i, partes[k][3]["total"]) for k, i in enumerate(ids)]
+
+
+def do_grupo(order: dict) -> list[dict]:
+    """Os pedidos da mesma cobrança que `order`, ele incluído, na ordem em que
+    nasceram. Pedido sozinho é a lista dele só."""
+    if not order.get("grupo"):
+        return [order]
+    conn = _conn()
+    rows = conn.execute(
+        f"SELECT {','.join(_CAMPOS_LISTA)} FROM orders WHERE grupo=? "
+        f"ORDER BY (id=grupo) DESC, created_at, id", (order["grupo"],)).fetchall()
     conn.close()
-    return order_id, amount
+    return [dict(zip(_CAMPOS_LISTA, r)) for r in rows] or [order]
 
 
 def mark_notified(order_id: str):
@@ -243,7 +279,7 @@ STATUS_MANUAIS = ("pending", "notified", "impresso", "cancelado")
 _CAMPOS_LISTA = ["id", "status", "customer_name", "deck_hash", "amount", "qty",
                  "pages", "blanks", "lamination", "created_at", "notified_at",
                  "dono", "impressao_em", "impresso_em", "impressao_msg",
-                 "impressao_falhas", "impressao_combo"]
+                 "impressao_falhas", "impressao_combo", "grupo"]
 
 
 def list_orders(status: str | None = None, busca: str | None = None,

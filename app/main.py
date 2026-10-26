@@ -4,7 +4,7 @@ import threading
 import time
 from urllib.parse import quote
 
-from fastapi import (Body, Cookie, Depends, FastAPI, Form, Header,
+from fastapi import (Body, Cookie, Depends, FastAPI, File, Form, Header,
                      HTTPException, Request, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
@@ -304,38 +304,57 @@ def startup():
 @app.post("/orders")
 async def create_order(xml_file: UploadFile, lamination: str = Form(...),
                         customer_name: str = Form(default=""),
+                        xml_foil: UploadFile | None = File(default=None),
                         quem: dict = Depends(exige_amigo)):
     """Cria o pedido e a cobrança Pix. Só amigo (`exige_amigo`), e o pedido
     já nasce dele. O nome digitado continua valendo (pode ser pra outra
-    pessoa); em branco, vai o da conta."""
+    pessoa); em branco, vai o da conta.
+
+    Com `xml_foil`, é o deck com parte das cartas no foil: saem DOIS pedidos
+    (`storage.create_group`), o de `xml_file` com `lamination` e o foil, e
+    uma cobrança só com a soma. `pedidos` diz o que coube a cada um."""
     if not PIX_KEY:
         raise HTTPException(500, "PIX_KEY não configurada no backend (.env).")
     customer_name = customer_name.strip() or quem.get("nome", "").strip()
     if not customer_name:
         raise HTTPException(400, "Informe o nome de quem está pedindo.")
 
-    xml_text = (await xml_file.read()).decode("utf-8")
-    try:
-        qty, backs_count = calc.parse_order(xml_text)
-        result = calc.compute_cost(qty, backs_count, lamination,
-                                   estoque.precos_por_pagina())
-        deck_hash = calc.compute_deck_hash(xml_text)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+    arquivos = [(xml_file, lamination)]
+    if xml_foil is not None:
+        if lamination == "foil":
+            raise HTTPException(400, "No pedido com parte foil, o resto sai em "
+                                     "um lado ou em dois lados.")
+        arquivos.append((xml_foil, "foil"))
+    partes = []
+    precos = estoque.precos_por_pagina()
+    for arquivo, lam in arquivos:
+        xml_text = (await arquivo.read()).decode("utf-8")
+        try:
+            qty, backs_count = calc.parse_order(xml_text)
+            result = calc.compute_cost(qty, backs_count, lam, precos)
+            deck_hash = calc.compute_deck_hash(xml_text)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if xml_foil is not None and lam == "foil" and backs_count:
+            raise HTTPException(400, "Carta com verso não sai no foil: o vinil "
+                                     "holográfico só cobre um lado.")
+        partes.append((xml_text, lam, deck_hash, result))
 
-    order_id, amount = storage.create_order(
-        xml_text, lamination, customer_name, deck_hash, result,
-        dono=quem["id"])
+    criados = storage.create_group(partes, customer_name, dono=quem["id"])
+    order_id = criados[0][0]
+    amount = round(sum(valor for _, valor in criados), 2)
     payload = pix.build_payload(PIX_KEY, MERCHANT_NAME, MERCHANT_CITY, amount, txid=order_id)
     qr_b64 = pix.build_qr_base64(payload)
 
     return {
         "order_id": order_id,
-        "deck_hash": deck_hash,
-        **result,
+        "deck_hash": partes[0][2],
+        **partes[0][3],
         "amount": amount,
         "pix_copia_cola": payload,
         "pix_qr_base64": qr_b64,
+        "pedidos": [{"order_id": i, "deck_hash": parte[2], **parte[3], "amount": valor}
+                    for (i, valor), parte in zip(criados, partes)],
     }
 
 
@@ -395,6 +414,9 @@ def notify_payment(order_id: str, quem: dict = Depends(exige_amigo)):
 
     A folha não é montada aqui: o pedido em `notified` aparece na fila do
     worker da impressora, que adianta o PDF dele do lado de lá.
+
+    Pedido de um grupo (padrão + foil, um Pix só) avisa o grupo inteiro: o
+    Pix pago é um, e o e-mail traz um "Imprimir" por pedido.
     """
     order = _pedido_de(order_id, quem)
     if order["status"] in storage.STATUS_PAGOS:
@@ -406,22 +428,26 @@ def notify_payment(order_id: str, quem: dict = Depends(exige_amigo)):
         return {"status": "already_sent",
                 "message": "O aviso já foi enviado — aguarde a confirmação."}
 
+    grupo = [p for p in storage.do_grupo(order)
+             if p["status"] in ("pending", "notified")] or [order]
     if not notify.is_configured():
         raise HTTPException(500, "SMTP não configurado no backend (.env).")
     try:
-        link_imprimir = fulfillment.print_url(order_id)
+        links = [fulfillment.print_url(p["id"]) for p in grupo]
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
     try:
-        notify.send_payment_claim_email(order, link_imprimir)
+        notify.send_payment_claim_email(grupo, links)
     except Exception as e:
         raise HTTPException(502, f"Não consegui enviar o e-mail de aviso: {e}")
 
-    storage.mark_notified(order_id)
+    for p in grupo:
+        storage.mark_notified(p["id"])
     return {"status": "sent",
             "message": "Aviso enviado. Assim que o pagamento for conferido, "
-                       "seu pedido vai pra impressão."}
+                       + ("seus pedidos vão" if len(grupo) > 1 else "seu pedido vai")
+                       + " pra impressão."}
 
 
 @app.post("/orders/{order_id}/cancel")
@@ -441,22 +467,29 @@ def cancel_order(order_id: str, quem: dict = Depends(exige_amigo)):
     Pede amigo, e pedido com dono só o dono (e o admin) cancela — a regra do
     `_pedido_de`, a mesma do notify-payment. Pedido sem dono (de antes da
     conta) qualquer amigo cancela: são poucos e ficam no histórico do admin.
+
+    Pedido de um grupo cancela o grupo: a cobrança é uma só, e metade dela
+    paga não tem como sair do Pix.
     """
     order = _pedido_de(order_id, quem)
     if order["status"] == "cancelado":
         return {"status": "cancelado",
                 "message": "Esse pedido já estava cancelado."}
-    if order["status"] != "pending":
+    grupo = [p for p in storage.do_grupo(order) if p["status"] != "cancelado"]
+    if any(p["status"] != "pending" for p in grupo):
         raise HTTPException(
             409,
             "Esse pedido já saiu do aguardando pagamento, então não dá mais "
             "pra cancelar por aqui — me chama pelo contato de sempre.")
 
-    storage.set_status(order_id, "cancelado")
-    log.evento("pedido", "cancelado-pelo-cliente", pedido=order_id,
-               cliente=order["customer_name"], deck=order["deck_hash"])
+    for p in grupo:
+        storage.set_status(p["id"], "cancelado")
+        log.evento("pedido", "cancelado-pelo-cliente", pedido=p["id"],
+                   cliente=p["customer_name"], deck=p["deck_hash"])
     return {"status": "cancelado",
-            "message": "Pedido cancelado. Nada foi enviado pra impressão."}
+            "message": ("Os dois pedidos (padrão e foil) foram cancelados."
+                        if len(grupo) > 1 else "Pedido cancelado.")
+                       + " Nada foi enviado pra impressão."}
 
 
 def _authorize(purpose: str, order_id: str, token: str | None,
@@ -1127,6 +1160,21 @@ def limpar_copias_da_arte(deck_id: str, nome: str,
     """Desliga o "uma arte por cópia" de uma carta: fica a arte de todas."""
     _deck_das_artes(deck_id, quem)
     return {"apagadas": artes.limpar_copias(deck_id, nome)}
+
+
+@app.put("/decks/{deck_id}/foil")
+def marcar_foil(deck_id: str, corpo: dict = Body(default={}),
+                quem: dict = Depends(exige_login_no_deck)):
+    """Quais cópias de uma carta saem no foil: `{nome, copias: [1, 2]}`, a
+    lista inteira (ver `artes.marcar_foil`). Mesma regra de quem mexe nas
+    artes: o acabamento também é editar o deck."""
+    _deck_das_artes(deck_id, quem)
+    try:
+        copias = artes.marcar_foil(deck_id, corpo.get("nome", ""), corpo.get("copias"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log.evento("artes", "foil", deck=deck_id, carta=corpo.get("nome", ""), copias=len(copias))
+    return {"copias": copias}
 
 
 @app.post("/decks/{deck_id}/artes/padrao")

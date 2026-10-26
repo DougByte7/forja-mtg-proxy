@@ -9,6 +9,7 @@ import {
   showFace, togglePrintingFilter, uploadArtFile, UPLOADED_ID, pickMpcArt, pickScryfallArt,
   visiblePages, goToPage, scryfallOptions, type Face, type Origin,
 } from "../art";
+import { canBeFoil, foilCopies, NO_FOIL_REASON, setAllFoil, setFoilCopies } from "../foil";
 import { tokenLabel } from "../tokens";
 import type { Card } from "../types";
 import { Frame } from "./Gallery";
@@ -66,6 +67,38 @@ function Copies({ card }: { card: Card }) {
 }
 
 const artKeyOf = (card: Card) => artKey(artName(card));
+
+/* Padrão ou foil, o mesmo dado do ✦ da galeria, à mão de quem já está
+   escolhendo a arte. Com "Uma arte por cópia", vale pra cópia do seletor;
+   sem, pra todas — e a carta com só algumas cópias foil fica sem lado aceso,
+   com a conta ao lado. Carta com verso: apagado, com o porquê. */
+function Finish({ card }: { card: Card }) {
+  useDeck();
+  const ok = canBeFoil(card);
+  const quantity = paperQuantity(card);
+  const marked = foilCopies(card);
+  const copy = artState.perCopy ? artState.copy : 0;
+  const foil = copy ? marked.includes(copy) : marked.length > 0 && marked.length === quantity;
+  const standard = copy ? !foil : marked.length === 0;
+  function choose(on: boolean) {
+    if (!copy) return setAllFoil(card, on);
+    const rest = marked.filter((n) => n !== copy);
+    return setFoilCopies(card, on ? [...rest, copy] : rest);
+  }
+  return (
+    <div class="arte-acabamento" title={ok ? undefined : NO_FOIL_REASON}>
+      <div class="segmento" id="arte-acabamento" role="group" aria-label="Acabamento">
+        <button type="button" data-acabamento="padrao" class={ok && standard ? "ativa" : undefined}
+                aria-pressed={ok && standard} disabled={!ok} onClick={() => choose(false)}>Padrão</button>
+        <button type="button" data-acabamento="foil" class={foil ? "ativa foil" : "foil"}
+                aria-pressed={foil} disabled={!ok} onClick={() => choose(true)}>✦ Foil</button>
+      </div>
+      {ok && !copy && quantity > 1 && !foil && !standard && (
+        <span class="arte-nota">{marked.length} de {quantity} no foil</span>
+      )}
+    </div>
+  );
+}
 
 /* No lugar da tira de impressões, a ficha que o deck cria, com o que está
    escrito nela. É o que separa um arquivo certo de um quase certo: a grade de
@@ -269,6 +302,7 @@ function Picker({ card }: { card: Card }) {
           <h3 id="arte-titulo">{card.ficha ? tokenLabel(card) : card.nome}</h3>
           <Faces card={card} />
           <Copies card={card} />
+          <Finish card={card} />
           <span class="gf-espaco" />
           <button class="mini sai" id="arte-fechar" title="Fechar" aria-label="Fechar" onClick={closeArtPicker}>✕</button>
         </div>

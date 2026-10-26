@@ -557,6 +557,64 @@ try:
 
     print("\n--- revalidar confere cada origem do seu jeito ---")
 
+    print("\n--- o foil é um pedido à parte ---")
+
+    sem_foil = artes.pedido(ped)
+    check("sem foil marcado, o pedido não se parte",
+          "xml_foil" not in sem_foil and "xml_padrao" not in sem_foil)
+    eq("a marca é guardada por cópia, em ordem",
+       artes.marcar_foil(ped["id"], "forest", [3, 1]), [1, 3])
+    artes.marcar_foil(ped["id"], "Atraxa", [1])
+    artes.marcar_foil(ped["id"], delver, [1, 2])
+    eq("e lida pelo nome achatado", artes.foil_do_deck(ped["id"]),
+       {"atraxa": [1], "forest": [1, 3], cartas.normalizar(delver): [1, 2]})
+    eq("a tela recebe o foil junto das escolhas",
+       artes.para_deck(ped)["foil"]["forest"], [1, 3])
+    montado = artes.pedido(ped)
+    eq("o pedido inteiro continua no `xml`", montado["xml"], sem_foil["xml"])
+    eq("carta com verso não entra no foil", (montado["cartas_foil"], montado["cartas_padrao"]), (3, 5))
+    raiz = ET.fromstring(montado["xml_foil"])
+    eq("o foil leva as cópias marcadas, do slot 0",
+       {c.findtext("id"): c.findtext("slots") for c in raiz.findall("fronts/card")},
+       {"id-atraxa": "0", "id-floresta": "1,2"})
+    eq("e não tem verso", raiz.find("backs"), None)
+    raiz = ET.fromstring(montado["xml_padrao"])
+    eq("o padrão leva o resto, com os versos",
+       calc.parse_order(montado["xml_padrao"]), (5, 2))
+    eq("a Floresta que sobrou vai pro padrão",
+       [c.findtext("slots") for c in raiz.findall("fronts/card")
+        if c.findtext("id") == "id-floresta"], ["1"])
+
+    for nome in ("Atraxa", "Sol Ring", "Forest", "Lightning Bolt"):
+        artes.marcar_foil(ped["id"], nome, [1, 2, 3])
+    montado = artes.pedido(ped)
+    eq("só a carta com verso de fora: ela fica no padrão",
+       calc.parse_order(montado["xml_padrao"]), (2, 2))
+    todo_foil = decks.criar("Tudo foil", ["Atraxa"], [{"nome": "Sol Ring", "quantidade": 1}])
+    for nome in ("Atraxa", "Sol Ring"):
+        artes.escolher(todo_foil["id"], nome, "id-" + nome)
+        artes.marcar_foil(todo_foil["id"], nome, [1])
+    montado = artes.pedido(todo_foil)
+    eq("tudo no foil: o padrão é nulo", montado["xml_padrao"], None)
+    eq("e o foil é o deck inteiro", calc.parse_order(montado["xml_foil"]), (2, 0))
+
+    artes.limpar(ped["id"], "Sol Ring")
+    montado = artes.pedido(ped)
+    check("arte faltando segura as duas partes",
+          montado["xml_foil"] is None and montado["xml"] is None)
+
+    for errado in ([0], [decks.MAX_COPIAS + 1], ["x"], "1"):
+        try:
+            artes.marcar_foil(ped["id"], "Forest", errado)
+            check(f"cópia {errado!r} é recusada", False)
+        except ValueError:
+            check(f"cópia {errado!r} é recusada", True)
+
+    copia_ped = decks.duplicar(ped["id"])
+    eq("duplicar leva o foil", artes.foil_do_deck(copia_ped["id"])["forest"], [1, 2, 3])
+    artes.apagar_do_deck(copia_ped["id"])
+    eq("apagar o deck leva o foil", artes.foil_do_deck(copia_ped["id"]), {})
+
     png = io.BytesIO()
     Image.new("RGB", (745, 1040), (0, 0, 255)).save(png, format="PNG")
     enviada = artes_enviadas.guardar(png.getvalue())["arte_id"]

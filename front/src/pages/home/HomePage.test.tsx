@@ -171,6 +171,67 @@ describe("HomePage", () => {
     expect(screen.getByText("Escolher as artes no deckbuilder").getAttribute("href")).toBe("/deckbuilder?deck=d1");
   });
 
+  it("deck com cartas foil: dois pedidos no resumo, um Pix, e o caminho de volta pro padrão", async () => {
+    const FOIL = `<order><details><quantity>3</quantity></details><fronts>
+      <card><id>atraxa</id><slots>0</slots><query>Atraxa</query></card>
+      <card><id>forest</id><slots>1,2</slots><query>Forest</query></card></fronts></order>`;
+    deckId.value = "d1";
+    const fetch = backend((_, url) =>
+      url === "/decks/d1/pedido" ? [200, {
+        deck: { nome: "Atraxa", comandantes: ["Atraxa"], identidade: "WUBG", total: 7 },
+        xml: SAMPLE, xml_padrao: SAMPLE, xml_foil: FOIL, cartas: 7, cartas_padrao: 4, cartas_foil: 3,
+        faltando: [] }]
+      : url === "/orders" ? [200, { ...CHARGE, amount: 13, pedidos: [
+          { order_id: "ord1", deck_hash: "abc123", lamination: "double", amount: 4, qty: 4, backs_count: 1, pages: 1, blanks: 4 },
+          { order_id: "ord2", deck_hash: "fff999", lamination: "foil", amount: 9, qty: 3, backs_count: 0, pages: 1, blanks: 5 },
+        ] }]
+      : undefined);
+    await renderHome();
+    typeName("Ana");
+
+    expect(await screen.findByText("Cartas foil", { exact: false, selector: ".lam-bloco-tit" })).toBeTruthy();
+    // O resto não sai em foil: sem a opção, senão seria um pedido só.
+    expect(screen.queryByText("Foil", { selector: ".lam-opt .t" })).toBeNull();
+    const result = document.querySelector(".result.show") as HTMLElement;
+    await waitFor(() => expect(result.textContent).toContain("R$ 13,00"));
+    expect(result.textContent).toContain("Pedido 1 · Padrão");
+    expect(result.textContent).toContain("Pedido 2 · ✦ Foil");
+    expect(result.textContent).toContain("Páginas (8 cartas por página)1");
+    expect(result.textContent).toContain("Cabem mais 5 carta(s) foil");
+
+    fireEvent.click(screen.getByLabelText("Declaro que conheço o dono do sistema."));
+    fireEvent.click(screen.getByRole("button", { name: "Gerar cobrança Pix" }));
+    expect(await screen.findByText("Paga os dois pedidos: o padrão e o foil.")).toBeTruthy();
+    const sent = sentBody(fetch, "POST", "/orders");
+    expect(sent.lamination).toBe("double");
+    expect(sent.xml_foil).toBeInstanceOf(File);
+    expect(readOrders().map((o) => [o.id, o.lam, o.valor, o.grupo, o.grupoValor])).toEqual([
+      ["ord1", "double", 4, "ord1", 13], ["ord2", "foil", 9, "ord1", 13]]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Imprimir tudo no padrão" }));
+    await waitFor(() => expect(result.textContent).not.toContain("Pedido 2"));
+    expect(screen.getByText(/As marcas de foil do deckbuilder estão sendo ignoradas/)).toBeTruthy();
+  });
+
+  it("deck todo foil: um pedido só, já em foil", async () => {
+    const FOIL = `<order><details><quantity>2</quantity></details><fronts>
+      <card><id>atraxa</id><slots>0</slots><query>Atraxa</query></card>
+      <card><id>sol</id><slots>1</slots><query>Sol Ring</query></card></fronts></order>`;
+    deckId.value = "d1";
+    backend((_, url) => url === "/decks/d1/pedido" ? [200, {
+      deck: { nome: "Atraxa", comandantes: ["Atraxa"], identidade: "WUBG", total: 2 },
+      xml: FOIL, xml_padrao: null, xml_foil: FOIL, cartas: 2, cartas_padrao: 0, cartas_foil: 2, faltando: [] }]
+      : undefined);
+    await renderHome();
+    typeName("Ana");
+    const result = await waitFor(() => {
+      const el = document.querySelector(".result.show") as HTMLElement;
+      expect(el.textContent).toContain("LaminaçãoFoil");
+      return el;
+    });
+    expect(result.textContent).not.toContain("Pedido 2");
+  });
+
   it("anônimo vê o convite pra entrar no lugar do formulário", async () => {
     backend((_, url) => url === "/conta" ? [200, { usuario: null }] : undefined);
     renderWithQuery(<HomePage />);

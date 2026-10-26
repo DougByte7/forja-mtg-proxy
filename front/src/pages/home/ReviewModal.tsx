@@ -1,11 +1,15 @@
 /* Revisão da folha: prévia do PDF e editor de cópias, 100% no navegador.
-   O que sai daqui é o XML revisado (ver `confirmReview`). */
+   O que sai daqui é o XML revisado (ver `confirmReview`).
+
+   No pedido misto, o que se edita é o padrão. O foil aparece embaixo, como
+   vai sair, sem os + e −: quais cartas são foil se escolhe no deckbuilder, e
+   mexer aqui seria uma segunda resposta pra mesma pergunta. */
 import { useEffect, useRef } from "preact/hooks";
 import { cardTitle } from "./art";
 import { CardList, SheetPages, type GroupControls, type SlotControls } from "./Sheet";
 import * as edit from "./sheet";
 import {
-  applyEdit, cancelReview, catalog, confirmReview, footMessage, history, lamination,
+  applyEdit, cancelReview, catalog, confirmReview, foilPart, footMessage, history, lamination,
   prices, reviewOpen, slots, undo,
 } from "./store";
 import { brl, cardsPerPage, computeTotals } from "./totals";
@@ -60,8 +64,10 @@ export function ReviewModal() {
   }, [open]);
 
   const current = slots.value;
+  const fp = foilPart.value;
+  const lam = fp && lamination.value === "foil" ? "double" : lamination.value;
   const backs = current.filter((s) => s.back).length;
-  const t = computeTotals(current.length, backs, lamination.value, prices.value);
+  const t = computeTotals(current.length, backs, lam, prices.value);
 
   return (
     <div class={"modal" + (open ? " show" : "")} role="dialog" aria-modal="true" aria-labelledby="reviewTitle"
@@ -69,7 +75,8 @@ export function ReviewModal() {
       <div class="modal-box">
         <div class="modal-head">
           <h2 id="reviewTitle">Revisar o pedido
-            <span class="sub">Confira as cartas e ajuste as quantidades. Cada página leva {cardsPerPage(lamination.value)} cartas.</span>
+            <span class="sub">Confira as cartas e ajuste as quantidades. Cada página leva {cardsPerPage(lam)} cartas
+              {fp && <> — e a foil, {cardsPerPage("foil")}</>}.</span>
           </h2>
           <button class="icon-btn" disabled={!history.value.length} onClick={undo}
                   title="Desfazer a última ação (Ctrl+Z)">↶ Desfazer</button>
@@ -79,11 +86,23 @@ export function ReviewModal() {
         {open && (
           <div class="modal-body">
             <div class="deck-pane">
-              <p class="pane-title">Cartas do pedido</p>
+              <p class="pane-title">{fp ? "Cartas padrão" : "Cartas do pedido"}</p>
               <div><CardList groups={edit.sheetGroups(current, catalog.value)} controls={rows} /></div>
+              {fp && (
+                <>
+                  <p class="pane-title foil-tit">✦ Cartas foil · pedido à parte</p>
+                  <div><CardList groups={edit.sheetGroups(fp.slots, edit.catalogFrom(fp.slots))} /></div>
+                </>
+              )}
             </div>
             <div class="sheet-pane" ref={pane}>
-              <div><SheetPages slots={current} lam={lamination.value} controls={copies} /></div>
+              <div><SheetPages slots={current} lam={lam} controls={copies} /></div>
+              {fp && (
+                <>
+                  <p class="pane-title foil-tit">✦ Folhas foil — escolhidas no deckbuilder</p>
+                  <div><SheetPages slots={fp.slots} lam="foil" /></div>
+                </>
+              )}
             </div>
           </div>
         )}

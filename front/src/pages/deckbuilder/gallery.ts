@@ -19,10 +19,15 @@
    As fichas entram no fim, uma de cada (ver `deckTokens`): vão pro papel
    junto com o deck, e são a parte que se esquece de escolher.
 
+   O FOIL SE MARCA AQUI TAMBÉM (ver `foil.ts`), no ✦ de cada quadro: é aqui
+   que se vê o deck como ele sai do papel, e o foil é parte disso. O quadro
+   conta as cópias que ele representa, e o contador vale pra elas.
+
    Aqui ficam as contas; o desenho é `ui/Gallery.tsx`. */
 import { canOrder } from "../../shared/account";
 import { artName, chosenArt, faceImage, hasBack, hasPerCopyArt, sideReady, type Face } from "./art";
 import { categoryOf, categoryOrder } from "./deck";
+import { canBeFoil, foilCopies, foilCountOf } from "./foil";
 import { state } from "./state";
 import { deckTokens, tokenLabel } from "./tokens";
 import type { Card, Entry } from "./types";
@@ -48,10 +53,19 @@ export type GalleryFrame = {
   src: string;
   preview: string;      // a prévia do hover: ESTE lado, maior
   quantity: number;
+  copies: number[];     // as cópias de papel que o quadro representa
+  foil: number;         // quantas delas saem no foil
+  foilable: boolean;    // carta com verso não sai no foil
   label: string;        // o `title`/`aria-label`, sem o separador
   situation: string;
-  badge: string;        // "Escolhida · verso · cópias 1–3"
+  badge: string;        // "Escolhida · verso · cópias 1–3 · Foil"
 };
+
+/* "Foil", "3 foil" ou nada: o pedaço do selo que diz o acabamento. */
+export function foilText(foil: number, quantity: number) {
+  if (!foil) return "";
+  return foil === quantity ? "Foil" : `${foil} foil`;
+}
 
 /* `copies` é a lista de cópias que o quadro representa, na carta com arte
    por cópia; sem ela, o quadro é o da arte de todas. */
@@ -64,16 +78,21 @@ function galleryFrame(card: Card, face: Face, quantity: number, copies?: number[
   const back = face === "verso";
   const src = faceImage(card, face, 400, null, copy);
   const which = copies ? ` · ${copies.length > 1 ? "cópias" : "cópia"} ${copiesText(copies)}` : "";
+  const paper = copies || Array.from({ length: quantity }, (_, i) => i + 1);
+  const foil = foilCountOf(card, paper);
+  const finish = foilText(foil, quantity);
   return {
     key: `${artName(card)}|${face}|${copy}`,
     artCard: artName(card), face, copy, chosen: !!choice, lying: !!card.deitada, src,
     // A prévia do hover mostra ESTE lado, e não a carta inteira como na lista:
     // cada quadro já é um lado, e o outro está no quadro ao lado.
     preview: src ? faceImage(card, face, 500, null, copy) : "",
-    quantity,
+    quantity, copies: paper, foil, foilable: canBeFoil(card),
     label: (back ? "Verso de " : "") + name + which,
-    situation: choice ? "arte escolhida: " + (choice.arquivo || choice.arte_id) : "arte padrão — clique pra escolher",
-    badge: (choice ? "Escolhida" : "Padrão") + (back ? " · verso" : hasBack(card) ? " · frente" : "") + which,
+    situation: (choice ? "arte escolhida: " + (choice.arquivo || choice.arte_id) : "arte padrão — clique pra escolher")
+      + (finish ? ` · ${finish.toLowerCase()}` : ""),
+    badge: (choice ? "Escolhida" : "Padrão") + (back ? " · verso" : hasBack(card) ? " · frente" : "") + which
+      + (finish ? ` · ${finish}` : ""),
   };
 }
 
@@ -118,6 +137,22 @@ export function galleryCount() {
   return { total, chosen };
 }
 
+/* As cartas de papel do deck, e quantas saem no foil — a linha "88 padrão ·
+   12 foil" da aba, e o que o "Gerar pedido" diz que vai partir em dois. */
+export function paperCount() {
+  const entries: [Card, number][] = [
+    ...state.commanders.map((c): [Card, number] => [c, 1]),
+    ...state.cards.map((e): [Card, number] => [e.carta, e.quantidade]),
+    ...deckTokens().map((f): [Card, number] => [f, 1]),
+  ];
+  let total = 0, foil = 0;
+  for (const [card, quantity] of entries) {
+    total += quantity;
+    foil += foilCopies(card).length;
+  }
+  return { total, foil, standard: total - foil };
+}
+
 /* Os grupos da galeria: comandante, as categorias na ordem e com o desempate
    da lista (a pessoa acha a carta aqui onde ela já sabe que a carta mora lá),
    e as fichas no fim. */
@@ -154,10 +189,13 @@ export function galleryGroups() {
 export function orderLinkView() {
   const { total, chosen } = galleryCount();
   const ready = !!state.id && total > 0 && chosen === total;
+  const paper = paperCount();
+  const split = paper.foil > 0 && paper.standard > 0;
   return {
     hidden: !state.id || !canOrder(state.user),
     href: ready ? `/pedido?deck=${encodeURIComponent(state.id!)}` : undefined,
-    title: ready ? "Levar este deck pra tela de orçamento"
+    title: ready && split ? `Vai gerar 2 pedidos, num Pix só: padrão (${paper.standard}) e foil (${paper.foil})`
+      : ready ? "Levar este deck pra tela de orçamento"
       : total ? `Faltam ${total - chosen} arte(s) — escolha na aba Artes`
       : "O deck ainda não tem carta",
   };

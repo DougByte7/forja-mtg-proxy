@@ -10,6 +10,9 @@
   --purple:#8B6BFF;
   --green:#4C9A6B;
   --red:#D9634A;
+  /* O foil: a mesma cor e o mesmo arco-íris do deckbuilder. */
+  --foil:#9FE3FF;
+  --foil-arco:conic-gradient(from 200deg, #ff8ad8, #8ad4ff, #9dffb0, #ffe58a, #ff8ad8);
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -140,6 +143,24 @@ input:focus-visible, button:focus-visible{
 .lam-opt input{display:none;}
 .lam-opt .t{font-weight:600;font-size:13px;}
 .lam-opt .p{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gold-light);margin-top:4px;}
+/* Passo 3 do pedido misto: o bloco do resto, com a escolha, e o do foil, que
+   já veio escolhido do deckbuilder. */
+.lam-misto{display:flex;flex-direction:column;gap:10px;}
+.lam-misto .lam-options{grid-template-columns:1fr 1fr;}
+.lam-bloco-tit{font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;}
+.lam-bloco-tit b{color:var(--text);font-family:'IBM Plex Mono',monospace;}
+.lam-bloco.foil{border:1px solid transparent;border-radius:10px;padding:12px;
+  background:linear-gradient(var(--surface-2),var(--surface-2)) padding-box, var(--foil-arco) border-box;}
+.lam-bloco.foil .lam-bloco-tit{margin-bottom:4px;}
+.lam-bloco-txt{margin:0;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--foil);}
+.lam-bloco-txt.sub{margin-top:4px;font-family:'Inter',sans-serif;color:var(--text-muted);}
+.lam-bloco-txt a{color:var(--purple);}
+.lam-nota{font-size:12px;color:var(--text-muted);line-height:1.5;margin:10px 0 0;}
+.link-btn{background:none;border:none;padding:0;color:var(--purple);font:inherit;
+  text-decoration:underline;cursor:pointer;}
+.link-btn:hover{color:var(--gold-light);}
+.deck-divisao b{color:var(--text);font-family:'IBM Plex Mono',monospace;}
+.deck-divisao b.foil-cor{color:var(--foil);}
 
 .hint{
   margin-top:18px;padding:12px 14px;border:1px dashed var(--border);border-radius:9px;
@@ -170,6 +191,24 @@ input:focus-visible, button:focus-visible{
 .slot{width:16px;height:16px;border-radius:2px;}
 .slot.filled{background:var(--gold);}
 .slot.blank{border:1px dashed var(--text-muted);background:transparent;}
+/* A folha foil: virada de lado, 4 cartas deitadas por linha em 2 linhas
+   (ver `pdf_generator.GRADE_FOIL`). */
+.grid-preview.foil{grid-template-columns:repeat(4,16px);}
+.grid-preview.foil .slot{height:12px;}
+.grid-preview.foil .slot.filled{background:var(--foil-arco);}
+
+/* O pedido misto: uma caixa por pedido, e o total embaixo. */
+.parte{border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-top:10px;
+  background:var(--surface-2);}
+.parte.foil{border:1px solid transparent;
+  background:linear-gradient(var(--surface-2),var(--surface-2)) padding-box, var(--foil-arco) border-box;}
+.parte-tit{font-family:'Cinzel',serif;font-size:12px;letter-spacing:.05em;color:var(--gold-light);
+  padding:2px 0 4px;}
+.parte.foil .parte-tit{color:var(--foil);}
+.receipt-row.subtotal{border-top:1px dashed var(--border);margin-top:4px;}
+.parte-dica{margin:0 0 4px;font-size:11px;color:var(--foil);}
+.total-nota{margin-top:6px;}
+.foil-cor{color:var(--foil);}
 
 .total-row{
   display:flex;justify-content:space-between;align-items:baseline;
@@ -365,6 +404,7 @@ table.cot tr.grupo .qtd{color:var(--text-muted);letter-spacing:0;text-transform:
   font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--gold-light);margin:0 0 10px;
 }
+.pane-title.foil-tit{color:var(--foil);margin-top:18px;}
 
 .ci{
   display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--border);
@@ -464,6 +504,9 @@ table.cot tr.grupo .qtd{color:var(--text-muted);letter-spacing:0;text-transform:
 .oi.sel{border-color:var(--gold);background:rgba(201,162,39,0.08);}
 .oi-info{flex:1;min-width:0;}
 .oi-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.oi-parte{margin-left:6px;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9px;
+  border:1px solid var(--border);color:var(--text-muted);}
+.oi-parte.foil{color:var(--foil);border-color:var(--foil);}
 .oi-meta{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:3px;}
 .chip{
   display:inline-block;flex-shrink:0;font-size:10px;letter-spacing:.02em;

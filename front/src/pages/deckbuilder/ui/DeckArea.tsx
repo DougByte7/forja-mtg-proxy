@@ -229,7 +229,8 @@ export function DeckArea() {
           <h2 class="secao">Artes do deck</h2>
           <p class="nota">Uma imagem por arte que vai pro papel — carta de duas faces aparece duas vezes, frente e
             verso, e os tokens que o deck cria vêm no fim, um de cada. Clique numa pra escolher a arte que imprime;
-            as de contorno dourado já têm arte escolhida, as outras saem com a arte padrão.</p>
+            as de contorno dourado já têm arte escolhida, as outras saem com a arte padrão. O ✦ no canto marca a
+            carta como foil.</p>
           <div class="galeria-acoes"><DefaultArtsButton /></div>
           <div id="galeria-resultado" style={{ marginTop: "12px" }}><Gallery /></div>
         </Panel>

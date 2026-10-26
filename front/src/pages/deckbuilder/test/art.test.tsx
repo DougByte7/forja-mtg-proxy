@@ -206,6 +206,83 @@ describe('o "Gerar pedido"', () => {
   });
 });
 
+describe("o foil", () => {
+  const foilButton = (host: HTMLElement, name: string) =>
+    host.querySelector(`[data-arte-carta="${name}"]`)!.parentElement!.querySelector<HTMLButtonElement>(".foil-btn");
+
+  it("o ✦ liga o foil da cópia, grava a lista e o quadro diz", async () => {
+    const p = await page();
+    p.state.id = "abc123";
+    p.state.cards.push({ carta: DELVER, quantidade: 1, categoria: "" });
+    const host = drawn(p.Gallery);
+    const sol = foilButton(host, "Sol Ring")!;
+    expect(sol.getAttribute("aria-pressed")).toBe("false");
+    act(() => sol.click());
+
+    const call = (fetch as any).mock.calls.find(([u]: [string]) => u.endsWith("/decks/abc123/foil"));
+    expect([call[1].method, JSON.parse(call[1].body)]).toEqual(["PUT", { nome: "Sol Ring", copias: [1] }]);
+    expect(p.artState.foil["sol ring"]).toEqual([1]);
+    expect(host.innerHTML).toMatch(/class="galeria-carta foil"\s+data-arte-carta="Sol Ring"/);
+    expect(host.querySelector('[data-arte-carta="Sol Ring"] .galeria-selo')!.textContent).toBe("Padrão · Foil");
+    expect(host.querySelector(".acabamento-conta")!.textContent).toMatch(/padrão · ✦ 1 foil/);
+  });
+
+  it("carta com verso: ✦ apagado na frente, e nenhum no verso", async () => {
+    const p = await page();
+    p.state.id = "abc123";
+    p.state.cards.push({ carta: DELVER, quantidade: 1, categoria: "" });
+    const host = drawn(p.Gallery);
+    const items = [...host.querySelectorAll(`[data-arte-carta="${DELVER.nome}"]`)].map((b) => b.parentElement!);
+    const front = items[0].querySelector<HTMLButtonElement>(".foil-btn")!;
+    expect([front.disabled, front.title]).toEqual([true, p.NO_FOIL_REASON]);
+    expect(items[1].querySelector(".foil-btn")).toBeNull();
+    // Nem uma marca antiga põe a carta com verso no foil.
+    p.artState.foil["delver of secrets insectile aberration"] = [1];
+    expect(p.foilCopies(DELVER)).toEqual([]);
+  });
+
+  it("várias cópias: o contador vale pras cópias do quadro, e o pedido avisa que parte em dois", async () => {
+    const p = await page();
+    p.state.id = "abc123";
+    p.state.user = AMIGO;
+    p.artState.choices = {
+      "atraxa": { frente: { arte_id: "a" } }, "sol ring": { frente: { arte_id: "s" } },
+      "ashnods altar": { frente: { arte_id: "t" } }, "llanowar elves": { frente: { arte_id: "e" } },
+      "swords to plowshares": { frente: { arte_id: "p" } },
+      "forest": { frente: { arte_id: "todas" }, copias: { 2: { frente: { arte_id: "outra" } } } },
+    };
+    p.artState.foil = { forest: [2, 5] };
+    const host = drawn(p.Gallery);
+    // Os quadros: a 2 sozinha (foil) e as outras nove (a 5 foil).
+    expect([...host.querySelectorAll('[data-arte-carta="Forest"] .galeria-selo')].map((s) => s.textContent))
+      .toEqual(["Escolhida · cópias 1, 3–10 · 1 foil", "Escolhida · cópia 2 · Foil"]);
+    // O contador das nove leva as primeiras delas: 2 foil são a 1 e a 3.
+    act(() => foilButton(host, "Forest")!.click());
+    const more = host.querySelector<HTMLButtonElement>('[aria-label="Uma a mais no foil"]')!;
+    act(() => more.click());
+    expect(p.artState.foil.forest).toEqual([1, 2, 3]);
+    expect(orderLink(p)[2]).toBe("Vai gerar 2 pedidos, num Pix só: padrão (12) e foil (3)");
+  });
+
+  it("na modal, o acabamento vale pra carta toda — ou pra cópia do seletor", async () => {
+    const p = await page();
+    p.state.id = "abc123";
+    const host = drawn(p.ArtPicker);
+    await act(() => p.openArtPicker("Forest"));
+    const pressed = () => [...host.querySelectorAll<HTMLElement>("#arte-acabamento button")]
+      .map((b) => b.getAttribute("aria-pressed"));
+    expect(pressed()).toEqual(["true", "false"]);
+    act(() => host.querySelector<HTMLElement>('[data-acabamento="foil"]')!.click());
+    expect(p.artState.foil.forest).toHaveLength(10);
+    expect(pressed()).toEqual(["false", "true"]);
+
+    await act(() => p.openArtPicker("Forest", "frente", 4));
+    act(() => host.querySelector<HTMLElement>('[data-acabamento="padrao"]')!.click());
+    expect(p.artState.foil.forest).not.toContain(4);
+    expect(p.artState.foil.forest).toHaveLength(9);
+  });
+});
+
 describe("a modal de escolher a arte", () => {
   it("abre na carta, troca de origem e some ao fechar", async () => {
     const p = await page();

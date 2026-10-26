@@ -18,6 +18,10 @@
   --purple:#8B6BFF;
   --green:#4C9A6B;
   --red:#D9634A;
+  /* O foil: o arco-íris do vinil holográfico, em tons que ainda leem sobre
+     o fundo escuro. `--foil` é a cor única do ✦ e do texto "foil". */
+  --foil:#9FE3FF;
+  --foil-arco:conic-gradient(from 200deg, #ff8ad8, #8ad4ff, #9dffb0, #ffe58a, #ff8ad8);
   /* Cores de mana. Tons pastéis do próprio jogo, que só precisam ser
      distinguíveis a 12px de diâmetro. */
   --mana-W:#F5F0D8; --mana-U:#9FC7E8; --mana-B:#3b3540;
@@ -777,6 +781,11 @@ select.campo option{background:var(--surface-2);color:var(--text);}
   align-items:center;gap:4px;}
 /* De onde vem a arte. Também do tamanho do que diz, encostado à esquerda,
    logo abaixo do título: é a primeira decisão da modal. */
+.arte-acabamento{display:flex;align-items:center;gap:8px;flex:none;}
+.arte-acabamento .segmento{flex:none;}
+.arte-acabamento .segmento button{flex:none;padding:5px 12px;}
+.arte-acabamento .segmento button:disabled{cursor:not-allowed;opacity:.5;}
+.arte-acabamento .segmento button.foil.ativa{background:var(--foil-arco);color:var(--sobre-gold);}
 .segmento.arte-origens{flex:none;align-self:flex-start;max-width:100%;}
 .segmento.arte-origens button{flex:none;padding:5px 14px;}
 .arte-copias{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
@@ -922,31 +931,86 @@ select.campo option{background:var(--surface-2);color:var(--text);}
 .galeria-grupo h3{margin:0 0 8px;font-size:12px;font-weight:600;
   color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 .galeria-grade{display:flex;flex-wrap:wrap;gap:10px;}
-.galeria-carta{width:140px;flex:none;padding:4px;border-radius:9px;cursor:pointer;
+/* O quadro e o ✦ dele: o ✦ fica fora do botão do quadro (botão não entra em
+   botão), por cima dele, e é o item que leva a largura. */
+.galeria-item{position:relative;width:140px;flex:none;}
+.galeria-item.deitada{width:196px;}
+.galeria-carta{display:block;width:100%;padding:4px;border-radius:9px;cursor:pointer;
   background:var(--inset);border:1px dashed var(--border);color:inherit;
   font:inherit;text-align:center;transition:border-color .12s,transform .12s;}
-.galeria-carta.deitada{width:196px;}
 .galeria-carta:hover{border-color:var(--purple);transform:translateY(-2px);}
 /* Escolhida = contorno dourado cheio, o ✓ no canto e o selo dourado; padrão
    = tracejado e selo apagado. Três sinais e não um, porque a pergunta que a
    aba responde é justamente "o que falta?", e ela tem que se ler de longe. */
 .galeria-carta.tem-arte{border:1px solid var(--gold);box-shadow:0 0 0 1px var(--gold);}
+/* Foil = contorno de arco-íris no lugar do dourado, e o brilho passando
+   pela arte. Tem que se ler de longe, rolando a galeria. */
+.galeria-carta.foil{border:2px solid transparent;box-shadow:none;
+  background:linear-gradient(var(--inset),var(--inset)) padding-box, var(--foil-arco) border-box;}
+.galeria-carta.foil .quadro::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg, transparent 25%, rgba(255,255,255,.28) 42%,
+    rgba(140,212,255,.22) 50%, rgba(255,138,216,.2) 58%, transparent 75%);
+  background-size:300% 300%;mix-blend-mode:screen;animation:foil-brilho 5s linear infinite;}
+@keyframes foil-brilho{from{background-position:100% 100%;}to{background-position:0% 0%;}}
+@media (prefers-reduced-motion:reduce){
+  .galeria-carta.foil .quadro::after{animation:none;background-position:50% 50%;}
+}
+.galeria-carta.foil .galeria-selo{color:var(--foil);font-weight:600;}
 .galeria-marca{position:absolute;top:5px;left:5px;width:22px;height:22px;
   border-radius:50%;background:var(--gold);color:var(--sobre-gold);
   display:grid;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.5);}
 .galeria-marca .ico{width:13px;height:13px;}
-.galeria-qtd{position:absolute;top:5px;right:5px;font-family:'IBM Plex Mono',monospace;
+/* A quantidade desce pro pé da arte: o canto de cima é do ✦. */
+.galeria-qtd{position:absolute;bottom:5px;right:5px;font-family:'IBM Plex Mono',monospace;
   font-size:10.5px;font-weight:700;background:rgba(15,13,23,.86);color:var(--text);
   border-radius:999px;padding:2px 6px;}
 .galeria-selo{display:block;margin-top:4px;font-size:10.5px;line-height:1.3;
   color:var(--text-muted);}
 .galeria-carta.tem-arte .galeria-selo{color:var(--gold-light);font-weight:600;}
+.galeria-carta.foil.tem-arte .galeria-selo{color:var(--foil);}
+
+/* O ✦. Apagado até o mouse passar (no celular, sempre à vista); ligado, fica
+   sempre, com o arco-íris. */
+.foil-ctrl{position:absolute;top:9px;right:9px;z-index:2;}
+.foil-btn{display:inline-flex;align-items:center;gap:3px;height:24px;min-width:24px;padding:0 6px;
+  border-radius:999px;border:1px solid var(--border);background:rgba(15,13,23,.86);
+  color:var(--text-muted);font:700 12px/1 'Inter',sans-serif;cursor:pointer;
+  box-shadow:0 2px 6px rgba(0,0,0,.5);transition:opacity .12s,color .12s,border-color .12s;}
+.foil-btn:hover:not(:disabled){color:var(--foil);border-color:var(--foil);}
+.foil-btn:focus-visible{outline:2px solid var(--foil);outline-offset:2px;}
+.foil-btn.ligado{color:var(--sobre-gold);border-color:transparent;background:var(--foil-arco);}
+.foil-btn:disabled{cursor:not-allowed;opacity:.45;}
+.foil-n{font-family:'IBM Plex Mono',monospace;font-size:10.5px;}
+@media (hover:hover){
+  .foil-btn:not(.ligado){opacity:0;}
+  .galeria-item:hover .foil-btn:not(.ligado):not(:disabled),
+  .foil-btn:focus-visible,.foil-btn[aria-expanded="true"]{opacity:1;}
+  .galeria-item:hover .foil-btn:disabled{opacity:.45;}
+}
+.foil-pop{position:absolute;top:30px;right:0;width:168px;padding:10px;border-radius:10px;
+  background:var(--surface-2);border:1px solid var(--border);box-shadow:0 8px 24px rgba(0,0,0,.55);
+  display:flex;flex-direction:column;gap:8px;text-align:center;}
+.foil-pop-tit{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--foil);}
+.foil-passo{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--text-muted);}
+.foil-passo b{font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--text);}
+.foil-atalhos{display:flex;gap:6px;}
+.foil-atalhos .btn{flex:1;padding:5px 6px;font-size:11.5px;justify-content:center;}
+
+/* "88 padrão · 12 foil" e o filtro, entre o progresso e a galeria. */
+.acabamento-linha{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:-4px 0 12px;
+  font-size:12.5px;color:var(--text-muted);}
+.acabamento-conta b{color:var(--text);font-family:'IBM Plex Mono',monospace;}
+.foil-cor,.acabamento-conta b.foil-cor{color:var(--foil);}
+.segmento.acabamento-filtro{flex:none;}
+.segmento.acabamento-filtro button{flex:none;padding:4px 12px;}
+.acabamento-nota{margin:-6px 0 14px;}
+
 @media (max-width:600px){
   .galeria-grade{gap:8px;}
-  .galeria-carta{width:calc(50% - 4px);}
+  .galeria-item{width:calc(50% - 4px);}
   /* A carta de lado tem a largura da altura da em pé: 1,4 vez a meia
      linha, uns 70%. */
-  .galeria-carta.deitada{width:70%;}
+  .galeria-item.deitada{width:70%;}
 }
 
 /* ---------------- goldfish ---------------- */
@@ -1987,6 +2051,8 @@ body.gf-cheia .gf-jogador{gap:6px;}
   flex:1;min-width:0;font-size:13px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
+.linha .foil-marca,.ver .foil-marca{margin-left:6px;font-size:11px;font-weight:700;color:var(--foil);
+  font-family:'IBM Plex Mono',monospace;}
 .linha .porque{
   font-size:10px;color:#F2AFA1;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;max-width:100%;

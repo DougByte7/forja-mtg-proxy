@@ -27,8 +27,13 @@ export type DeckSummary = {
 };
 export type DeckOrder = {
   deck: DeckSummary;
+  /** O deck inteiro. Com cópia foil, vem também partido em dois. */
   xml?: string | null;
+  xml_padrao?: string | null;   // nulo quando tudo é foil
+  xml_foil?: string | null;
   cartas: number;
+  cartas_padrao?: number;
+  cartas_foil?: number;
   versao?: number;
   faltando: { nome: string; ficha?: boolean; face?: string }[];
 };

@@ -11,7 +11,7 @@ import { copyText } from "../../shared/clipboard";
 import { quoteView, VISIBLE, DISCREPANCY, type QuoteResult, type Row } from "./quote";
 import { quoteJobQuery, type QuoteJob } from "./queries";
 import {
-  commander, commanderOptions, effectiveCommander, loadedSignature, quote, quoteCurrent, xmlText,
+  commander, commanderOptions, effectiveCommander, loadedSignature, quote, quoteCurrent, wholeXml, xmlText,
 } from "./store";
 import { useFlash } from "./useFlash";
 
@@ -53,7 +53,8 @@ export function useStartQuote() {
       const signature = loadedSignature.value, cmd = effectiveCommander.value;
       quote.value = { signature, commander: cmd };
       try {
-        const data = await api<QuoteJob>("/cotacao", { body: form(xmlText.value, cmd) });
+        // No pedido misto, cota o deck inteiro: o foil também é carta.
+        const data = await api<QuoteJob>("/cotacao", { body: form(wholeXml.value || xmlText.value, cmd) });
         // Um resultado ainda fresco volta pronto na hora: o backend reaproveita
         // a cotação do mesmo deck em vez de varrer tudo de novo.
         quote.value = data.estado === "pronto"

@@ -93,6 +93,7 @@ export const artState = {
   filter: { text: "", source: "", dpi: 0, printing: null as { k: number; sigla: string; artista: string } | null },
   printings: null as Printing[] | null | false,   // null = buscando, false = não deu, array = ok
   choices: {} as Record<string, CardChoices>,      // nome achatado -> escolhas
+  foil: {} as Record<string, number[]>,            // nome achatado -> cópias foil (ver `foil.ts`)
   sources: [] as { nome: string }[],
   // Os ids de arte já buscados, pelo nome que foi perguntado. `null` = ainda
   // não busquei nada; `buscandoDeck` segura a busca do deck inteiro em voo,
@@ -272,6 +273,7 @@ export async function loadArts() {
   try {
     const r = await api(`/decks/${state.id}/artes`);
     artState.choices = r.escolhas || {};
+    artState.foil = r.foil || {};
   } catch {
     return;   // sem isto a lista mostra todos no padrão, que é o que eles são
   }

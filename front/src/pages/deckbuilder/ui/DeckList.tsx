@@ -11,7 +11,7 @@ import { suggestFromCard } from "../suggestions";
 import { boardView, rowProblem, toggleGroup, type GroupView } from "../lists";
 import { subtotalText, subtotalTitle } from "../budget";
 import type { Board, Entry } from "../types";
-import { ArtButton, PriceCell, UnreleasedTag } from "./CardBits";
+import { ArtButton, FoilMark, PriceCell, UnreleasedTag } from "./CardBits";
 import { GuardedInput } from "./GuardedInput";
 import { ManaCost } from "./Mana";
 import { previewProps } from "./preview";
@@ -86,6 +86,7 @@ function CardRow({ entry, identity, board }: { entry: Entry; identity: string; b
          onClick={() => openCard(c)} onContextMenu={(e) => rowMenu(e, c.nome, board)}>
       <QuantityInput name={c.nome} quantity={entry.quantidade} board={board} />
       <span class="nome" {...previewProps(c)}>{c.nome}
+        {!narrow && <FoilMark card={c} quantity={entry.quantidade} />}
         {why && <span class="porque">· {why}</span>}</span>
       <UnreleasedTag card={c} />
       <ManaCost cost={c.mana_cost} />
@@ -173,7 +174,7 @@ export function CommanderBox() {
           {i > 0 && <div style={{ width: "100%", height: "1px", background: "var(--border)" }} />}
           <button class="ver" {...previewProps(c)} title={`Ver ${c.nome} inteira`} onClick={() => openCard(c)}>
             <img src={c.imagem} alt="" loading="lazy" />
-            <span class="dados"><b>{c.nome}</b><small>{c.tipo}</small></span>
+            <span class="dados"><b>{c.nome}<FoilMark card={c} quantity={1} /></b><small>{c.tipo}</small></span>
             <UnreleasedTag card={c} />
           </button>
           <div class="mana"><ManaCost cost={c.mana_cost} /></div>
